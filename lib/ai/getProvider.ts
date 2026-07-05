@@ -2,10 +2,13 @@ import { createAnthropicProvider } from "./providers/anthropic";
 import type { InsightProvider } from "./types";
 
 export function getInsightProvider(): InsightProvider {
-  switch (process.env.AI_PROVIDER ?? "anthropic") {
-    case "anthropic":
-      return createAnthropicProvider();
-    default:
-      return createAnthropicProvider();
+  const provider = process.env.AI_PROVIDER ?? "anthropic";
+
+  if (provider !== "anthropic") {
+    console.warn(
+      `Unknown AI provider "${provider}" — falling back to anthropic.`
+    );
   }
+
+  return createAnthropicProvider();
 }
