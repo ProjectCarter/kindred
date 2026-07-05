@@ -2,6 +2,7 @@ import {
   buildInsightUserPrompt,
   INSIGHT_SYSTEM_PROMPT,
 } from "../prompts";
+import { log } from "@/lib/logger";
 import type {
   InsightGenerationInput,
   InsightGenerationResult,
@@ -58,11 +59,10 @@ export function createAnthropicProvider(): InsightProvider {
         });
 
         if (!response.ok) {
-          console.error(
-            "Anthropic API request failed:",
-            response.status,
-            response.statusText
-          );
+          log.error("Anthropic API request failed", {
+            status: response.status,
+            statusText: response.statusText,
+          });
           return { ok: false, error: "api_error" };
         }
 
@@ -70,13 +70,15 @@ export function createAnthropicProvider(): InsightProvider {
         const body = extractText(data);
 
         if (!body) {
-          console.error("Anthropic API returned an empty insight.");
+          log.error("Anthropic API returned an empty insight");
           return { ok: false, error: "empty_response" };
         }
 
         return { ok: true, body };
       } catch (error) {
-        console.error("Anthropic API request error:", error);
+        log.error("Anthropic API request error", {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
         return { ok: false, error: "api_error" };
       }
     },
