@@ -1,55 +1,40 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import {
-  finishOnboardingInsight,
-  saveFirstItem,
-  type SaveFirstItemResult,
-} from "./actions";
+import { saveFirstItem, type SaveFirstItemResult } from "./actions";
 import { ONBOARDING_PHASE_MESSAGES } from "@/lib/insights/constants";
 
-type SubmitPhase = "idle" | "saving" | "thinking";
+type OnboardingFormProps = {
+  saveTimeoutMs: number;
+};
 
-export default function OnboardingForm() {
-  const [phase, setPhase] = useState<SubmitPhase>("idle");
+export default function OnboardingForm({ saveTimeoutMs }: OnboardingFormProps) {
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [photoWarning, setPhotoWarning] = useState<string | null>(null);
-
-  const pending = phase !== "idle";
-  const statusMessage =
-    phase === "saving"
-      ? ONBOARDING_PHASE_MESSAGES.saving
-      : phase === "thinking"
-        ? ONBOARDING_PHASE_MESSAGES.thinking
-        : null;
+  const [showRecovery, setShowRecovery] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setPhotoWarning(null);
-    setPhase("saving");
+    setShowRecovery(false);
+    setPending(true);
 
-    const formData = new FormData(e.currentTarget);
-    const result: SaveFirstItemResult = await saveFirstItem(formData);
+    const timeoutId = window.setTimeout(() => {
+      setShowRecovery(true);
+    }, saveTimeoutMs);
 
-    if ("error" in result) {
-      setPhase("idle");
-      setError(result.error);
-      return;
+    try {
+      const formData = new FormData(e.currentTarget);
+      const result: SaveFirstItemResult = await saveFirstItem(formData);
+
+      if (result && "error" in result) {
+        setError(result.error);
+        setPending(false);
+      }
+    } finally {
+      window.clearTimeout(timeoutId);
     }
-
-    if (result.photoWarning) {
-      setPhotoWarning(result.photoWarning);
-    }
-
-    setPhase("thinking");
-
-    await finishOnboardingInsight({
-      itemId: result.itemId,
-      description: result.description,
-      hasPhoto: result.hasPhoto,
-    });
-    // On success, finishOnboardingInsight redirects on the server.
   }
 
   return (
@@ -76,17 +61,11 @@ export default function OnboardingForm() {
           id="photo"
           type="file"
           name="photo"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/gif"
           disabled={pending}
           className="w-full text-sm text-ink/70 file:mr-3 file:rounded-md file:border-0 file:bg-ink/5 file:px-3 file:py-1.5 file:text-sm file:text-ink/80"
         />
       </div>
-
-      {photoWarning && (
-        <p className="text-sm text-ink/70" role="status">
-          {photoWarning}
-        </p>
-      )}
 
       {error && (
         <p className="text-sm text-terracotta" role="alert">
@@ -94,9 +73,19 @@ export default function OnboardingForm() {
         </p>
       )}
 
-      {statusMessage && (
+      {pending && (
         <p className="text-sm text-ink/70" role="status" aria-live="polite">
-          {statusMessage}
+          {ONBOARDING_PHASE_MESSAGES.saving}
+        </p>
+      )}
+
+      {showRecovery && pending && (
+        <p className="text-sm text-ink/70" role="status">
+          This is taking longer than expected. If nothing happens, you can{" "}
+          <Link href="/home" className="underline">
+            continue to home
+          </Link>
+          .
         </p>
       )}
 
@@ -106,7 +95,7 @@ export default function OnboardingForm() {
         aria-busy={pending}
         className="btn-primary w-full"
       >
-        {pending ? statusMessage ?? "One moment…" : "Tell Kindred"}
+        {pending ? ONBOARDING_PHASE_MESSAGES.saving : "Tell Kindred"}
       </button>
     </form>
   );

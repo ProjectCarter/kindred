@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/requireUser";
 import { userHasItems } from "@/lib/items/hasItems";
+import { getEnv } from "@/lib/env";
 import OnboardingForm from "./OnboardingForm";
 
 export default async function OnboardingPage() {
   const { supabase, user } = await requireUser();
+  const { ONBOARDING_SAVE_TIMEOUT_MS } = getEnv();
 
   if (await userHasItems(supabase, user.id)) {
     redirect("/home");
@@ -21,7 +23,7 @@ export default async function OnboardingPage() {
           Tell me about something in your garage, closet, or storage that you
           don&apos;t use much.
         </p>
-        <OnboardingForm />
+        <OnboardingForm saveTimeoutMs={ONBOARDING_SAVE_TIMEOUT_MS} />
       </div>
     </main>
   );

@@ -1,20 +1,14 @@
 "use server";
 
 import { requireUser } from "@/lib/auth/requireUser";
-import { ensureInsightForItem } from "@/lib/insights/ensureInsightForItem";
+import { enqueueInsightJob } from "@/lib/insights/enqueueInsightJob";
 import { PHOTO_UPLOAD_WARNING } from "@/lib/insights/constants";
+import { validatePhoto } from "@/lib/uploads/validatePhoto";
 import { redirect } from "next/navigation";
 
 type SaveFirstItemError = { error: string };
 
-type SaveFirstItemSuccess = {
-  itemId: string;
-  description: string;
-  hasPhoto: boolean;
-  photoWarning?: string;
-};
-
-export type SaveFirstItemResult = SaveFirstItemError | SaveFirstItemSuccess;
+export type SaveFirstItemResult = SaveFirstItemError | void;
 
 export async function saveFirstItem(
   formData: FormData
@@ -28,11 +22,16 @@ export async function saveFirstItem(
   }
 
   const photo = formData.get("photo") as File | null;
-  const hasPhoto = !!(photo && photo.size > 0);
   let photoPath: string | null = null;
   let photoWarning: string | undefined;
 
   if (photo && photo.size > 0) {
+    const validation = await validatePhoto(photo);
+
+    if (!validation.ok) {
+      return { error: validation.error };
+    }
+
     const fileExt = photo.name.split(".").pop() || "jpg";
     const path = `${user.id}/${Date.now()}.${fileExt}`;
 
@@ -61,31 +60,14 @@ export async function saveFirstItem(
     return { error: "Something went wrong saving that — try again." };
   }
 
-  return {
-    itemId: item.id,
-    description,
-    hasPhoto,
-    photoWarning,
-  };
-}
-
-type FinishOnboardingParams = {
-  itemId: string;
-  description: string;
-  hasPhoto: boolean;
-};
-
-export async function finishOnboardingInsight(
-  params: FinishOnboardingParams
-): Promise<void> {
-  const { supabase, user } = await requireUser();
-
-  await ensureInsightForItem(supabase, {
+  await enqueueInsightJob(supabase, {
     userId: user.id,
-    itemId: params.itemId,
-    description: params.description,
-    hasPhoto: params.hasPhoto,
+    itemId: item.id,
   });
+
+  if (photoWarning) {
+    redirect(`/home?photoWarning=1`);
+  }
 
   redirect("/home");
 }

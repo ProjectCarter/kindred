@@ -3,7 +3,6 @@ export const INSIGHT_FALLBACK =
 
 export const ONBOARDING_PHASE_MESSAGES = {
   saving: "Saving what you told me…",
-  thinking: "Kindred is thinking…",
 } as const;
 
 export const PHOTO_UPLOAD_WARNING =
