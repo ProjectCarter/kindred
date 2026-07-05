@@ -15,16 +15,38 @@ vi.mock("@/lib/insights/rateLimit", () => ({
   recordGenerationAttempt: vi.fn().mockResolvedValue(undefined),
 }));
 
-const job: InsightJob = {
+const pendingJob: InsightJob = {
   id: "job-1",
   user_id: "user-1",
   item_id: "item-1",
   status: "pending",
   attempts: 0,
   last_error: null,
+  updated_at: new Date().toISOString(),
 };
 
-function createSupabaseMock() {
+function createClaimChain(claimedJob: InsightJob) {
+  const terminal = {
+    maybeSingle: vi.fn().mockResolvedValue({ data: claimedJob }),
+  };
+
+  const chain: {
+    eq: ReturnType<typeof vi.fn>;
+    lt: ReturnType<typeof vi.fn>;
+    select: ReturnType<typeof vi.fn>;
+  } = {
+    eq: vi.fn(),
+    lt: vi.fn(),
+    select: vi.fn(() => terminal),
+  };
+
+  chain.eq.mockReturnValue(chain);
+  chain.lt.mockReturnValue(chain);
+
+  return chain;
+}
+
+function createSupabaseMock(claimedJob: InsightJob) {
   const updates: Array<Record<string, unknown>> = [];
 
   const supabase = {
@@ -60,6 +82,15 @@ function createSupabaseMock() {
         return {
           update: vi.fn((payload: Record<string, unknown>) => {
             updates.push(payload);
+
+            if (payload.status === "processing") {
+              return createClaimChain({
+                ...claimedJob,
+                attempts: Number(payload.attempts),
+                status: "processing",
+              });
+            }
+
             return {
               eq: vi.fn().mockResolvedValue({ error: null }),
             };
@@ -80,14 +111,18 @@ describe("processInsightJob", () => {
     resetEnvCacheForTests();
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
+    process.env.INSIGHT_PROCESSING_STALE_MS = "60000";
     vi.clearAllMocks();
   });
 
   it("loads item data from the database and completes the job", async () => {
-    const supabase = createSupabaseMock();
+    const supabase = createSupabaseMock({
+      ...pendingJob,
+      attempts: 1,
+    });
     const { generateInsight } = await import("@/lib/ai/generateInsight");
 
-    const result = await processInsightJob(supabase as never, job);
+    const result = await processInsightJob(supabase as never, pendingJob);
 
     expect(result).toBe("completed");
     expect(generateInsight).toHaveBeenCalledWith({
@@ -95,5 +130,39 @@ describe("processInsightJob", () => {
       hasPhoto: false,
     });
     expect(supabase.updates.at(-1)).toMatchObject({ status: "completed" });
+  });
+
+  it("skips fresh processing jobs", async () => {
+    const supabase = createSupabaseMock(pendingJob);
+    const { generateInsight } = await import("@/lib/ai/generateInsight");
+
+    const result = await processInsightJob(supabase as never, {
+      ...pendingJob,
+      status: "processing",
+      attempts: 1,
+      updated_at: new Date().toISOString(),
+    });
+
+    expect(result).toBe("skipped");
+    expect(generateInsight).not.toHaveBeenCalled();
+  });
+
+  it("retries stale processing jobs", async () => {
+    const supabase = createSupabaseMock({
+      ...pendingJob,
+      status: "processing",
+      attempts: 1,
+    });
+    const { generateInsight } = await import("@/lib/ai/generateInsight");
+
+    const result = await processInsightJob(supabase as never, {
+      ...pendingJob,
+      status: "processing",
+      attempts: 1,
+      updated_at: new Date(Date.now() - 120_000).toISOString(),
+    });
+
+    expect(result).toBe("completed");
+    expect(generateInsight).toHaveBeenCalled();
   });
 });

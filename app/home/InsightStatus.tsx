@@ -27,28 +27,34 @@ export default function InsightStatus({
     let stopped = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    async function triggerProcessing() {
-      await fetch("/api/insights/process", { method: "POST" });
-    }
-
     function stopPolling() {
       stopped = true;
       if (intervalId) {
         clearInterval(intervalId);
+        intervalId = null;
       }
     }
 
-    void triggerProcessing();
-    router.refresh();
-
-    intervalId = setInterval(() => {
+    async function pollOnce() {
       if (stopped || attempts >= pollMaxAttempts) {
         stopPolling();
         return;
       }
 
       attempts += 1;
+
+      try {
+        await fetch("/api/insights/process", { method: "POST" });
+      } catch {
+        // Network failures should not stop polling from retrying processing.
+      }
+
       router.refresh();
+    }
+
+    void pollOnce();
+    intervalId = setInterval(() => {
+      void pollOnce();
     }, pollIntervalMs);
 
     const timeoutId = setTimeout(stopPolling, pollTimeoutMs);
@@ -57,13 +63,7 @@ export default function InsightStatus({
       stopPolling();
       clearTimeout(timeoutId);
     };
-  }, [
-    pending,
-    pollIntervalMs,
-    pollMaxAttempts,
-    pollTimeoutMs,
-    router,
-  ]);
+  }, [pending, pollIntervalMs, pollMaxAttempts, pollTimeoutMs, router]);
 
   return null;
 }

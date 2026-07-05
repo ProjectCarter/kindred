@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { InsightJob } from "./types";
+import { INSIGHT_JOB_SELECT } from "./types";
 
 type EnqueueParams = {
   userId: string;
@@ -14,7 +15,7 @@ export async function enqueueInsightJob(
 
   const { data: existingJob } = await supabase
     .from("insight_jobs")
-    .select("id, user_id, item_id, status, attempts, last_error")
+    .select(INSIGHT_JOB_SELECT)
     .eq("item_id", itemId)
     .maybeSingle();
 
@@ -29,13 +30,13 @@ export async function enqueueInsightJob(
       item_id: itemId,
       status: "pending",
     })
-    .select("id, user_id, item_id, status, attempts, last_error")
+    .select(INSIGHT_JOB_SELECT)
     .single();
 
   if (error) {
     const { data: raced } = await supabase
       .from("insight_jobs")
-      .select("id, user_id, item_id, status, attempts, last_error")
+      .select(INSIGHT_JOB_SELECT)
       .eq("item_id", itemId)
       .maybeSingle();
 

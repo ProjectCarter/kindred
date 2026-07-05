@@ -18,6 +18,11 @@ const envSchema = z.object({
   INSIGHT_POLL_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   ONBOARDING_SAVE_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   PHOTO_MAX_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
+  INSIGHT_PROCESSING_STALE_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(120000),
 });
 
 export type Env = z.infer<typeof envSchema>;
