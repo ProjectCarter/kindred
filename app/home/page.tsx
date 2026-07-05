@@ -1,21 +1,13 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { userHasItems } from "@/lib/items/hasItems";
+import { getItemPhotoUrl } from "@/lib/items/getItemPhotoUrl";
 import { ensureInsightForItem } from "@/lib/insights/ensureInsightForItem";
-
-const INSIGHT_FALLBACK =
-  "Kindred is still thinking about this item.";
+import { INSIGHT_FALLBACK } from "@/lib/insights/constants";
+import SignOutButton from "@/app/components/SignOutButton";
 
 export default async function HomePage() {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { supabase, user } = await requireUser();
 
   if (!(await userHasItems(supabase, user.id))) {
     redirect("/onboarding");
@@ -24,19 +16,12 @@ export default async function HomePage() {
   const { data: items } = await supabase
     .from("items")
     .select("id, description, photo_path, created_at")
-    .eq("user_id", user!.id)
+    .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
   const itemsWithDetails = await Promise.all(
     (items ?? []).map(async (item) => {
-      let photoUrl: string | null = null;
-
-      if (item.photo_path) {
-        const { data } = await supabase.storage
-          .from("item-photos")
-          .createSignedUrl(item.photo_path, 3600);
-        photoUrl = data?.signedUrl ?? null;
-      }
+      const photoUrl = await getItemPhotoUrl(supabase, item.photo_path);
 
       const { body: insightBody } = await ensureInsightForItem(supabase, {
         userId: user.id,
@@ -60,23 +45,32 @@ export default async function HomePage() {
   return (
     <main className="min-h-screen px-6 py-12">
       <div className="mx-auto max-w-md space-y-8">
-        <header>
-          <h1 className="font-serif text-2xl">Kindred</h1>
-          <p className="text-sm text-ink/50">{today}</p>
+        <header className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-serif text-2xl">Kindred</h1>
+            <p className="text-sm text-ink/50">{today}</p>
+          </div>
+          <SignOutButton />
         </header>
 
-        <div className="rounded-xl border border-ink/10 bg-white p-6">
+        <section
+          className="rounded-xl border border-ink/10 bg-white p-6"
+          aria-label="Kindred's reflection"
+        >
           <p className="text-ink/80">
             {primaryInsight ?? INSIGHT_FALLBACK}
           </p>
-        </div>
+        </section>
 
-        <section className="space-y-4">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-ink/50">
+        <section className="space-y-4" aria-labelledby="items-heading">
+          <h2
+            id="items-heading"
+            className="text-sm font-medium uppercase tracking-wide text-ink/50"
+          >
             What I know so far
           </h2>
           {itemsWithDetails.map((item) => (
-            <div
+            <article
               key={item.id}
               className="rounded-xl border border-ink/10 bg-white p-4"
             >
@@ -89,7 +83,7 @@ export default async function HomePage() {
                 />
               )}
               <p className="text-ink/80">{item.description}</p>
-            </div>
+            </article>
           ))}
         </section>
       </div>

@@ -1,18 +1,10 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth/requireUser";
 import { userHasItems } from "@/lib/items/hasItems";
 import OnboardingForm from "./OnboardingForm";
 
 export default async function OnboardingPage() {
-  const supabase = createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
+  const { supabase, user } = await requireUser();
 
   if (await userHasItems(supabase, user.id)) {
     redirect("/home");

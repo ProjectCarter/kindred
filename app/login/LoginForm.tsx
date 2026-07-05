@@ -59,25 +59,44 @@ export default function LoginForm({ authError }: LoginFormProps) {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm space-y-4"
+        aria-busy={pending}
+      >
         <h1 className="font-serif text-3xl">Kindred</h1>
         <p className="text-ink/70">
           Hi. Let&apos;s get started — what&apos;s your email?
         </p>
-        <input
-          type="email"
-          required
-          autoFocus
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="w-full rounded-lg border border-ink/20 bg-white px-4 py-3 outline-none focus:border-terracotta"
-        />
-        {error && <p className="text-sm text-terracotta">{error}</p>}
+        <div>
+          <label htmlFor="email" className="sr-only">
+            Email address
+          </label>
+          <input
+            id="email"
+            type="email"
+            name="email"
+            required
+            autoFocus
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="input-field"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "login-error" : undefined}
+          />
+        </div>
+        {error && (
+          <p id="login-error" className="text-sm text-terracotta" role="alert">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-lg bg-ink px-4 py-3 text-cream transition disabled:opacity-50"
+          aria-busy={pending}
+          className="btn-primary w-full"
         >
           {pending ? "Sending…" : "Continue"}
         </button>
