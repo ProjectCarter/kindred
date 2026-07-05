@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { userHasItems } from "@/lib/items/hasItems";
 
 export default async function HomePage() {
   const supabase = createClient();
@@ -10,6 +11,10 @@ export default async function HomePage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (!(await userHasItems(supabase, user.id))) {
+    redirect("/onboarding");
   }
 
   const { data: items } = await supabase

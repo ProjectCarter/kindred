@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { userHasItems } from "@/lib/items/hasItems";
 import OnboardingForm from "./OnboardingForm";
 
 export default async function OnboardingPage() {
@@ -11,6 +12,10 @@ export default async function OnboardingPage() {
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (await userHasItems(supabase, user.id)) {
+    redirect("/home");
   }
 
   return (
