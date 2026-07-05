@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { userHasItems } from "@/lib/items/hasItems";
+import { ensureInsightForItem } from "@/lib/insights/ensureInsightForItem";
+
+const INSIGHT_FALLBACK =
+  "Kindred is still thinking about this item.";
 
 export default async function HomePage() {
   const supabase = createClient();
@@ -23,7 +27,7 @@ export default async function HomePage() {
     .eq("user_id", user!.id)
     .order("created_at", { ascending: false });
 
-  const itemsWithPhotos = await Promise.all(
+  const itemsWithDetails = await Promise.all(
     (items ?? []).map(async (item) => {
       let photoUrl: string | null = null;
 
@@ -34,9 +38,18 @@ export default async function HomePage() {
         photoUrl = data?.signedUrl ?? null;
       }
 
-      return { ...item, photoUrl };
+      const { body: insightBody } = await ensureInsightForItem(supabase, {
+        userId: user.id,
+        itemId: item.id,
+        description: item.description,
+        hasPhoto: !!item.photo_path,
+      });
+
+      return { ...item, photoUrl, insightBody };
     })
   );
+
+  const primaryInsight = itemsWithDetails[0]?.insightBody ?? null;
 
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -54,8 +67,7 @@ export default async function HomePage() {
 
         <div className="rounded-xl border border-ink/10 bg-white p-6">
           <p className="text-ink/80">
-            Nothing new since you told me about this. That&apos;s normal —
-            I&apos;m mostly quiet until I have something real to say.
+            {primaryInsight ?? INSIGHT_FALLBACK}
           </p>
         </div>
 
@@ -63,7 +75,7 @@ export default async function HomePage() {
           <h2 className="text-sm font-medium uppercase tracking-wide text-ink/50">
             What I know so far
           </h2>
-          {itemsWithPhotos.map((item) => (
+          {itemsWithDetails.map((item) => (
             <div
               key={item.id}
               className="rounded-xl border border-ink/10 bg-white p-4"

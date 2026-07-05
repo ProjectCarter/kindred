@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { ensureInsightForItem } from "@/lib/insights/ensureInsightForItem";
 import { redirect } from "next/navigation";
 
 type ActionResult = { error: string } | void;
@@ -25,6 +26,7 @@ export async function submitFirstItem(
   }
 
   const photo = formData.get("photo") as File | null;
+  const hasPhoto = !!(photo && photo.size > 0);
   let photoPath: string | null = null;
 
   if (photo && photo.size > 0) {
@@ -42,15 +44,26 @@ export async function submitFirstItem(
     // A missing photo is not worth blocking someone's first interaction with Kindred.
   }
 
-  const { error: insertError } = await supabase.from("items").insert({
-    user_id: user!.id,
-    description,
-    photo_path: photoPath,
-  });
+  const { data: item, error: insertError } = await supabase
+    .from("items")
+    .insert({
+      user_id: user!.id,
+      description,
+      photo_path: photoPath,
+    })
+    .select("id")
+    .single();
 
-  if (insertError) {
+  if (insertError || !item) {
     return { error: "Something went wrong saving that — try again." };
   }
+
+  await ensureInsightForItem(supabase, {
+    userId: user.id,
+    itemId: item.id,
+    description,
+    hasPhoto,
+  });
 
   redirect("/home");
 }
