@@ -10,7 +10,7 @@ export type InsightGenerationError =
 
 export type InsightGenerationResult =
   | { ok: true; body: string }
-  | { ok: false; error: InsightGenerationError };
+  | { ok: false; error: InsightGenerationError; detail: string };
 
 export interface InsightProvider {
   generate(input: InsightGenerationInput): Promise<InsightGenerationResult>;

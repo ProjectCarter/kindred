@@ -204,11 +204,12 @@ export async function processInsightJob(
 
   if (!generated.ok) {
     const failed = claimed.attempts >= INSIGHT_MAX_JOB_ATTEMPTS;
+    const lastError = `${generated.error}: ${generated.detail}`;
 
     await markJob(supabase, claimed.id, {
       status: failed ? "failed" : "pending",
       attempts: claimed.attempts,
-      last_error: generated.error,
+      last_error: lastError,
     });
 
     log.error("Insight generation failed", {
@@ -216,7 +217,9 @@ export async function processInsightJob(
       itemId: claimed.item_id,
       jobId: claimed.id,
       error: generated.error,
+      detail: generated.detail,
     });
+    console.error(`[Kindred] Insight generation failed: ${lastError}`);
 
     return "failed";
   }

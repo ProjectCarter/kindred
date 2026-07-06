@@ -10,13 +10,41 @@ import type {
 } from "../types";
 
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const MAX_TOKENS = 300;
 
 type AnthropicMessageResponse = {
   content?: Array<{ type: string; text?: string }>;
   error?: { type: string; message: string };
 };
+
+async function readAnthropicErrorDetail(response: Response): Promise<string> {
+  const raw = await response.text();
+
+  if (!raw) {
+    return `${response.status} ${response.statusText}`;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: { type?: string; message?: string };
+      type?: string;
+      message?: string;
+    };
+    const nested = parsed.error?.message ?? parsed.message;
+    const nestedType = parsed.error?.type ?? parsed.type;
+
+    if (nested) {
+      return nestedType
+        ? `${response.status} ${response.statusText}: ${nestedType} — ${nested}`
+        : `${response.status} ${response.statusText}: ${nested}`;
+    }
+  } catch {
+    // Fall through with raw body.
+  }
+
+  return `${response.status} ${response.statusText}: ${raw}`;
+}
 
 function extractText(response: AnthropicMessageResponse): string | null {
   const block = response.content?.find(
@@ -32,7 +60,11 @@ export function createAnthropicProvider(): InsightProvider {
       const apiKey = process.env.ANTHROPIC_API_KEY;
 
       if (!apiKey) {
-        return { ok: false, error: "config_error" };
+        return {
+          ok: false,
+          error: "config_error",
+          detail: "ANTHROPIC_API_KEY is not set",
+        };
       }
 
       const model = process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL;
@@ -59,27 +91,41 @@ export function createAnthropicProvider(): InsightProvider {
         });
 
         if (!response.ok) {
+          const detail = await readAnthropicErrorDetail(response);
+
           log.error("Anthropic API request failed", {
             status: response.status,
             statusText: response.statusText,
+            model,
+            detail,
           });
-          return { ok: false, error: "api_error" };
+          console.error(`[Kindred] Anthropic API error: ${detail}`);
+
+          return { ok: false, error: "api_error", detail };
         }
 
         const data = (await response.json()) as AnthropicMessageResponse;
         const body = extractText(data);
 
         if (!body) {
-          log.error("Anthropic API returned an empty insight");
-          return { ok: false, error: "empty_response" };
+          const detail = "Anthropic API returned an empty insight body";
+          log.error("Anthropic API returned an empty insight", { model, detail });
+          console.error(`[Kindred] Anthropic API error: ${detail}`);
+          return { ok: false, error: "empty_response", detail };
         }
 
         return { ok: true, body };
       } catch (error) {
+        const detail =
+          error instanceof Error ? error.message : "Unknown Anthropic request error";
+
         log.error("Anthropic API request error", {
-          error: error instanceof Error ? error.message : "Unknown error",
+          model,
+          detail,
         });
-        return { ok: false, error: "api_error" };
+        console.error(`[Kindred] Anthropic API error: ${detail}`);
+
+        return { ok: false, error: "api_error", detail };
       }
     },
   };

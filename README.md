@@ -46,7 +46,7 @@ Fill in `.env.local` (see [Environment variables](#environment-variables) below)
 | `ANTHROPIC_API_KEY` | Yes* | Anthropic API key — server-only, never exposed to the browser |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Required only for Vercel cron backup processing |
 | `CRON_SECRET` | No | Secures `/api/cron/process-insights` on Vercel |
-| `ANTHROPIC_MODEL` | No | Defaults to `claude-sonnet-4-20250514` |
+| `ANTHROPIC_MODEL` | No | Defaults to `claude-sonnet-4-6` |
 | `AI_PROVIDER` | No | Defaults to `anthropic` |
 | `INSIGHT_RATE_LIMIT_PER_HOUR` | No | Defaults to `10` |
 | `INSIGHT_MAX_JOB_ATTEMPTS` | No | Defaults to `3` |
