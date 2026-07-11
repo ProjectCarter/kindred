@@ -43,9 +43,20 @@ export function parseLocalEventsBody(
   try {
     const parsed = JSON.parse(body) as LocalEventsBody;
     if (!parsed || !Array.isArray(parsed.events)) return null;
-    return parsed.events.filter(
-      (e) => e && typeof e.name === "string" && e.name.length > 0
-    );
+    return parsed.events
+      .filter((e) => e && typeof e.name === "string" && e.name.trim().length > 0)
+      .map((e) => ({
+        name: e.name.trim(),
+        date: typeof e.date === "string" && e.date.trim() ? e.date.trim() : "Date TBA",
+        time: typeof e.time === "string" && e.time.trim() ? e.time.trim() : "Time TBA",
+        venue: typeof e.venue === "string" ? e.venue.trim() : "",
+        city: typeof e.city === "string" ? e.city.trim() : "",
+        sourceUrl: typeof e.sourceUrl === "string" ? e.sourceUrl.trim() : "",
+        sourceName:
+          typeof e.sourceName === "string" && e.sourceName.trim()
+            ? e.sourceName.trim()
+            : "Listing",
+      }));
   } catch {
     return null;
   }

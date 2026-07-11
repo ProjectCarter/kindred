@@ -1,0 +1,215 @@
+import { sourceQualityPrior } from "./sources.ts";
+import {
+  interestToDiscoveryCategories,
+  seasonForDate,
+  weatherBucket,
+} from "./taxonomy.ts";
+import type {
+  DiscoveryItem,
+  DiscoveryRankingContext,
+  DiscoveryReason,
+  RankedDiscoveryItem,
+} from "./types.ts";
+
+function normalize(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function parseEditionDate(editionDate: string, fallback: Date): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(editionDate)) {
+    const [y, m, d] = editionDate.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return fallback;
+}
+
+/**
+ * Score a discovery candidate the way an editorial desk would —
+ * quality first, then place, season, weather, taste, uniqueness.
+ */
+export function scoreDiscoveryItem(
+  item: DiscoveryItem,
+  ctx: DiscoveryRankingContext
+): RankedDiscoveryItem {
+  const now = ctx.now ?? new Date();
+  const date = parseEditionDate(ctx.editionDate, now);
+  const season = ctx.season ?? seasonForDate(date);
+  const weather = weatherBucket(ctx.weatherSummary);
+  const reasons: DiscoveryReason[] = [];
+  let score = 0;
+
+  // Editorial quality
+  const quality = item.quality * 22;
+  score += quality;
+  reasons.push({
+    code: "editorial_quality",
+    label: "Editorial quality worthy of a magazine desk",
+    weight: quality,
+  });
+
+  // Trusted source
+  const trusted = sourceQualityPrior(item.source.name);
+  const trustScore = trusted.score * 14;
+  score += trustScore;
+  if (trusted.score >= 0.85) {
+    reasons.push({
+      code: "trusted_source",
+      label: `Trusted source (${item.source.name})`,
+      weight: trustScore,
+    });
+  }
+
+  // Reader interests / affinities
+  const interestCats = new Set([
+    ...interestToDiscoveryCategories(ctx.interests),
+    ...interestToDiscoveryCategories(ctx.followedTopics),
+  ]);
+  if (interestCats.has(item.category)) {
+    score += 12;
+    reasons.push({
+      code: "reader_interest",
+      label: "Matches what you tend to care about",
+      weight: 12,
+    });
+  }
+  const hay = normalize(`${item.title} ${item.dek} ${item.tags.join(" ")}`);
+  for (const topic of ctx.followedTopics.slice(0, 6)) {
+    const t = normalize(topic);
+    if (t.length >= 3 && hay.includes(t)) {
+      score += 8;
+      reasons.push({
+        code: "followed_topic",
+        label: `Echoes a topic you follow`,
+        weight: 8,
+      });
+      break;
+    }
+  }
+
+  // Location
+  if (ctx.city) {
+    const city = normalize(ctx.city);
+    const itemCity = normalize(item.place?.city ?? "");
+    if (item.tags.includes("local") || item.localExpertise >= 0.7) {
+      score += 10;
+      reasons.push({
+        code: "local_expertise",
+        label: `Local character for ${ctx.city}`,
+        weight: 10,
+      });
+    }
+    if (itemCity && city && (itemCity.includes(city) || city.includes(itemCity))) {
+      score += 14;
+      reasons.push({
+        code: "location_match",
+        label: "Fits your place",
+        weight: 14,
+      });
+    }
+  }
+
+  // Season
+  if (
+    item.seasons.includes("anytime") ||
+    item.seasons.includes(season) ||
+    (season === "autumn" && item.seasons.includes("fall"))
+  ) {
+    score += 8;
+    reasons.push({
+      code: "season_fit",
+      label: `In season for ${season}`,
+      weight: 8,
+    });
+  } else {
+    score -= 6;
+    reasons.push({
+      code: "season_mismatch",
+      label: "Off-season for this recommendation",
+      weight: -6,
+    });
+  }
+
+  // Weather
+  if (
+    item.weatherFit.includes("any") ||
+    item.weatherFit.includes(weather)
+  ) {
+    score += 7;
+    if (weather !== "any") {
+      reasons.push({
+        code: "weather_fit",
+        label: "Suits today’s weather",
+        weight: 7,
+      });
+    }
+  } else if (weather === "rainy" && item.tags.includes("outdoors")) {
+    score -= 10;
+    reasons.push({
+      code: "weather_mismatch",
+      label: "Outdoor pick held back for wet weather",
+      weight: -10,
+    });
+  }
+
+  // Popularity — soft; never dominate uniqueness
+  score += item.popularity * 4;
+
+  // Uniqueness / hidden gem
+  const uniq = item.uniqueness * 10;
+  score += uniq;
+  if (item.uniqueness >= 0.75) {
+    reasons.push({
+      code: "uniqueness",
+      label: "A quieter find — uniqueness over hype",
+      weight: uniq,
+    });
+  }
+
+  // Local expertise
+  score += item.localExpertise * 8;
+
+  // Freshness — events get a boost; evergreen catalog is stable
+  if (item.tags.includes("local_event")) {
+    score += 9;
+    reasons.push({
+      code: "freshness",
+      label: "Happening soon — fresh for this edition",
+      weight: 9,
+    });
+  }
+
+  // Weekend preference for outing tags
+  if (ctx.isWeekend && (item.tags.includes("weekend") || item.tags.includes("outdoors"))) {
+    score += 6;
+    reasons.push({
+      code: "weekend_fit",
+      label: "Suits a weekend edition",
+      weight: 6,
+    });
+  }
+
+  // Anti-repetition
+  const recent = ctx.recentKeys ?? [];
+  const titleKey = normalize(item.title).slice(0, 60);
+  if (
+    recent.some(
+      (r) =>
+        normalize(r).slice(0, 60) === titleKey ||
+        normalize(r) === normalize(item.id)
+    )
+  ) {
+    score -= 20;
+    reasons.push({
+      code: "repetition",
+      label: "Recently recommended — held for variety",
+      weight: -20,
+    });
+  }
+
+  return {
+    item,
+    score,
+    reasons: reasons.sort((a, b) => b.weight - a.weight),
+    surfaces: [],
+  };
+}

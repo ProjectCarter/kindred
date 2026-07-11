@@ -1,0 +1,306 @@
+import { useRef, useState } from "react";
+import {
+  Text,
+  View,
+  Image,
+  StyleSheet,
+  Pressable,
+  Animated,
+} from "react-native";
+import type { LeadStory } from "../lib/edition/LeadStory";
+import { paper, press, shadow, type } from "../lib/edition/newspaperTheme";
+import { EditorialNote } from "./EditorialNote";
+
+type Props = {
+  lead: LeadStory;
+  /** Opens the shared native article reader (same as every other section). */
+  onContinueReading?: (lead: LeadStory) => void;
+  /** Knowledge Engine — why this story matters. */
+  whyThisMatters?: string | null;
+  /** Personalization / editorial — why it earned the front page. */
+  whyChosen?: string | null;
+};
+
+const ROLE_KICKER: Record<string, string> = {
+  local: "Local",
+  national: "National",
+  world: "World",
+  breaking: "Developing",
+};
+
+function formatPublicationTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (sameDay) return `Published ${time}`;
+
+  const day = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `Published ${day}, ${time}`;
+}
+
+/** Estimate from the front-page brief when full article body isn’t available. */
+function estimateReadMinutes(lead: LeadStory): number | null {
+  const text = `${lead.headline} ${lead.summary}`.trim();
+  const words = text.split(/\s+/).filter(Boolean).length;
+  if (words < 40) return null;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function publicationByline(source: string): string {
+  const trimmed = source.trim();
+  if (!trimmed || trimmed.toLowerCase() === "unknown") {
+    return "From the wires";
+  }
+  return `From ${trimmed}`;
+}
+
+function leadWhyChosen(lead: LeadStory, override?: string | null): string | null {
+  if (override?.trim()) return override.trim();
+  const reasons = lead.selection?.reasons ?? [];
+  const top = reasons
+    .filter(
+      (r) =>
+        r.weight > 0 &&
+        !r.code.startsWith("role_") &&
+        !/score|algorithm|boost|rank|weight/i.test(r.label) &&
+        !/score|algorithm|boost|rank/i.test(r.code)
+    )
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 2)
+    .map((r) => r.label.replace(/\.$/, ""));
+  if (!top.length) return null;
+  return top.join(". ") + ".";
+}
+
+/**
+ * Front Page Lead — cover-story presentation for Kindred’s morning paper.
+ */
+export function LeadStorySection({
+  lead,
+  onContinueReading,
+  whyThisMatters,
+  whyChosen,
+}: Props) {
+  const kicker = ROLE_KICKER[lead.role] ?? "Front Page";
+  const published = formatPublicationTime(lead.publishedAt);
+  const readMinutes = estimateReadMinutes(lead);
+  const byline = publicationByline(lead.source);
+  const chosen = leadWhyChosen(lead, whyChosen);
+  const readScale = useRef(new Animated.Value(1)).current;
+  const [heroFailed, setHeroFailed] = useState(false);
+
+  const metaParts = [
+    published,
+    readMinutes
+      ? readMinutes === 1
+        ? "A one-minute read"
+        : `About ${readMinutes} minutes`
+      : null,
+  ].filter(Boolean) as string[];
+
+  return (
+    <View style={styles.wrap} accessibilityRole="summary">
+      <View style={styles.kickerRow}>
+        <Text style={styles.kicker}>{kicker}</Text>
+        <View style={styles.kickerRule} />
+      </View>
+
+      <Text style={styles.headline} maxFontSizeMultiplier={1.35}>
+        {lead.headline}
+      </Text>
+
+      <Text style={styles.byline} maxFontSizeMultiplier={1.25}>
+        {byline}
+      </Text>
+
+      {lead.heroImage?.uri && !heroFailed ? (
+        <View style={styles.imageBlock}>
+          <View style={[styles.imageFrame, shadow.photo]}>
+            <Image
+              source={{ uri: lead.heroImage.uri }}
+              style={styles.image}
+              resizeMode="cover"
+              accessibilityLabel={lead.heroImage.alt || lead.headline}
+              onError={() => setHeroFailed(true)}
+            />
+          </View>
+          {lead.heroImage.source === "article" ? (
+            <Text style={styles.imageCredit} maxFontSizeMultiplier={1.2}>
+              Photograph via {lead.source}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {lead.summary ? (
+        <Text style={styles.summary} maxFontSizeMultiplier={1.35}>
+          {lead.summary}
+        </Text>
+      ) : null}
+
+      {whyThisMatters?.trim() ? (
+        <EditorialNote kicker="Why this matters" body={whyThisMatters} />
+      ) : null}
+
+      {chosen ? (
+        <EditorialNote
+          kicker="Why it’s on the front page"
+          body={chosen}
+          compact
+        />
+      ) : null}
+
+      {metaParts.length > 0 ? (
+        <Text style={styles.metaLine} maxFontSizeMultiplier={1.25}>
+          {metaParts.join("  ·  ")}
+        </Text>
+      ) : (
+        <Text style={styles.metaLine} maxFontSizeMultiplier={1.25}>
+          {lead.source}
+        </Text>
+      )}
+
+      {onContinueReading ? (
+        <Pressable
+          onPress={() => onContinueReading(lead)}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Read the story"
+          onPressIn={() =>
+            Animated.spring(readScale, {
+              toValue: press.scale,
+              useNativeDriver: true,
+              friction: 8,
+            }).start()
+          }
+          onPressOut={() =>
+            Animated.spring(readScale, {
+              toValue: 1,
+              useNativeDriver: true,
+              friction: 8,
+            }).start()
+          }
+          style={({ pressed }) => [
+            styles.readRow,
+            pressed && styles.linkPressed,
+          ]}
+        >
+          <Animated.Text
+            style={[styles.link, { transform: [{ scale: readScale }] }]}
+          >
+            Read the story
+          </Animated.Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    marginBottom: 44,
+    paddingBottom: 40,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
+  },
+  kickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 18,
+  },
+  kicker: {
+    ...type.kicker,
+    color: paper.terracotta,
+    letterSpacing: 2.1,
+  },
+  kickerRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkRule,
+  },
+  headline: {
+    ...type.leadHeadline,
+    color: paper.ink,
+    marginBottom: 14,
+  },
+  byline: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginBottom: 22,
+  },
+  imageBlock: {
+    marginBottom: 22,
+  },
+  imageFrame: {
+    width: "100%",
+    aspectRatio: 3 / 2,
+    borderRadius: 2,
+    overflow: "hidden",
+    backgroundColor: paper.creamDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.inkRule,
+  },
+  image: {
+    width: "100%",
+    height: "112%",
+    marginTop: "-6%",
+  },
+  imageCredit: {
+    marginTop: 12,
+    fontFamily: "Georgia",
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.25,
+    color: paper.inkFaint,
+    fontStyle: "italic",
+  },
+  summary: {
+    fontFamily: "Georgia",
+    fontSize: 18,
+    lineHeight: 30,
+    color: paper.inkBody,
+    marginBottom: 18,
+    letterSpacing: 0.05,
+  },
+  metaLine: {
+    ...type.meta,
+    color: paper.inkFaint,
+    letterSpacing: 0.3,
+    marginBottom: 18,
+    fontFamily: "Georgia",
+    fontStyle: "italic",
+  },
+  readRow: {
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+  },
+  link: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    color: paper.terracotta,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+  },
+  linkPressed: {
+    opacity: press.opacity,
+  },
+});

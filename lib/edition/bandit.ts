@@ -1,0 +1,181 @@
+import { banditDayLine } from "./morningRitual";
+
+/**
+ * Bandit — Kindred’s calm morning newspaper editor.
+ * Warm, concise, optimistic, never overwhelming.
+ *
+ * Architecture is reusable across the app:
+ * morning greetings, editorial notes, weekly recommendations,
+ * seasonal messages, birthdays, travel awareness, special editions.
+ *
+ * Generation runs at edition build time; the client displays stored moments.
+ */
+
+export type BanditOccasion =
+  | "morning"
+  | "birthday"
+  | "travel"
+  | "seasonal"
+  | "holiday"
+  | "special_edition"
+  | "weekly"
+  | "editorial_note";
+
+export type BanditMomentKind =
+  | "morning_greeting"
+  | "editorial_note"
+  | "weekly_recommendation"
+  | "seasonal_message"
+  | "birthday"
+  | "travel"
+  | "special_edition";
+
+export type BanditMoment = {
+  kind: BanditMomentKind;
+  occasion: BanditOccasion;
+  line: string;
+  notes?: string[];
+  generatedAt: string;
+};
+
+export type BanditPayload = {
+  version: 1;
+  morning: BanditMoment;
+  weekly: BanditMoment | null;
+  seasonal: BanditMoment | null;
+  editorialNotes: string[];
+  occasions: BanditOccasion[];
+};
+
+/** Context for optional client-side providers (preview / offline). */
+export type BanditGreetingContext = {
+  firstName?: string | null;
+  weatherText?: string | null;
+  hasLocalEvents?: boolean;
+  editionDate?: string | null;
+  birthdayMMDD?: string | null;
+  traveling?: boolean;
+  occasion?: BanditOccasion | null;
+};
+
+export type BanditGreetingProvider = (
+  context: BanditGreetingContext
+) => string | null | Promise<string | null>;
+
+export const BANDIT_NAME = "Bandit";
+
+/** Soft hold while Bandit’s line resolves — never technical. */
+export const BANDIT_GREETING_PLACEHOLDER = "A moment…";
+
+/** Tone examples — not shown in production. */
+export const BANDIT_GREETING_EXAMPLES = [
+  "A quiet start to the day. Your edition is ready when you are.",
+  "Looks like a gentle day outside.",
+  "I found a few things nearby you might enjoy.",
+  "Sunday morning. I've set aside a few quiet recommendations for the week.",
+  "I left the paper open for you.",
+  "Sit with this for a minute. The day can wait.",
+] as const;
+
+export const BANDIT_VOICE = {
+  warmth: "friendly without being familiar",
+  pace: "unhurried",
+  length: "one or two short sentences",
+  optimism: "quiet hope, never cheerleading",
+} as const;
+
+let activeProvider: BanditGreetingProvider | null = null;
+
+export function setBanditGreetingProvider(
+  provider: BanditGreetingProvider | null
+): void {
+  activeProvider = provider;
+}
+
+export function getBanditGreetingProvider(): BanditGreetingProvider | null {
+  return activeProvider;
+}
+
+/** Parse editions.bandit jsonb. */
+export function parseBanditPayload(value: unknown): BanditPayload | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<BanditPayload>;
+  if (raw.version !== 1 || !raw.morning?.line) return null;
+  return {
+    version: 1,
+    morning: raw.morning as BanditMoment,
+    weekly: (raw.weekly as BanditMoment | null) ?? null,
+    seasonal: (raw.seasonal as BanditMoment | null) ?? null,
+    editorialNotes: Array.isArray(raw.editorialNotes)
+      ? raw.editorialNotes
+      : [],
+    occasions: Array.isArray(raw.occasions) ? raw.occasions : [],
+  };
+}
+
+/** Morning line for MorningGreeting — from stored payload. */
+export function banditMorningLine(
+  payload: BanditPayload | null | undefined
+): string | null {
+  const line = payload?.morning?.line?.trim();
+  return line || null;
+}
+
+/**
+ * Resolve Bandit's line for the masthead.
+ * Explicit / stored line wins; then provider; then a calm day line —
+ * never a cold “coming soon” that breaks the ritual.
+ */
+export async function resolveBanditGreeting(
+  explicit: string | null | undefined,
+  context: BanditGreetingContext = {}
+): Promise<string> {
+  const trimmed = explicit?.trim();
+  if (trimmed) return trimmed;
+
+  if (activeProvider) {
+    try {
+      const fromProvider = await activeProvider(context);
+      if (fromProvider?.trim()) return fromProvider.trim();
+    } catch {
+      // Fall through to a warm day line.
+    }
+  }
+
+  return banditDayLine(context.editionDate);
+}
+
+/** Future surface helpers — reserved, no new front-page sections. */
+export function banditWeeklyLine(
+  payload: BanditPayload | null | undefined
+): string | null {
+  return payload?.weekly?.line?.trim() || null;
+}
+
+export function banditSeasonalLine(
+  payload: BanditPayload | null | undefined
+): string | null {
+  return payload?.seasonal?.line?.trim() || null;
+}
+
+export function banditHasOccasion(
+  payload: BanditPayload | null | undefined,
+  occasion: BanditOccasion
+): boolean {
+  return Boolean(payload?.occasions?.includes(occasion));
+}
+
+export const BanditService = {
+  name: BANDIT_NAME,
+  voice: BANDIT_VOICE,
+  parseBanditPayload,
+  banditMorningLine,
+  banditWeeklyLine,
+  banditSeasonalLine,
+  banditHasOccasion,
+  resolveBanditGreeting,
+  setBanditGreetingProvider,
+  getBanditGreetingProvider,
+};
+
+export default BanditService;

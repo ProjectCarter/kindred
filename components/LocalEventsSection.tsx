@@ -1,4 +1,15 @@
-import { Text, View, Pressable, StyleSheet, Linking } from "react-native";
+import {
+  Text,
+  View,
+  Pressable,
+  StyleSheet,
+  Linking,
+  useColorScheme,
+  type ColorValue,
+} from "react-native";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
+import type { SFSymbol } from "expo-symbols";
 import {
   parseLocalEventsBody,
   type LocalEventCard,
@@ -10,68 +21,244 @@ type Props = {
   sourceNote?: string | null;
 };
 
+type NewspaperColors = {
+  ink: string;
+  inkBody: string;
+  inkMuted: string;
+  inkFaint: string;
+  terracotta: string;
+  rule: string;
+};
+
+function useNewspaperColors(): NewspaperColors {
+  const scheme = useColorScheme();
+  // Cream pages stay cream; lift muted ink slightly in dark scheme for contrast.
+  const dark = scheme === "dark";
+  return {
+    ink: "#2B2620",
+    inkBody: dark ? "#2B2620EE" : "#2B2620DD",
+    inkMuted: dark ? "#2B2620AA" : "#2B262088",
+    inkFaint: dark ? "#2B262055" : "#2B262033",
+    terracotta: "#C1622D",
+    rule: dark ? "#2B262022" : "#2B262014",
+  };
+}
+
 function openMaps(event: LocalEventCard) {
   const query = [event.venue, event.city].filter(Boolean).join(", ");
   const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-  Linking.openURL(url);
+  void Linking.openURL(url).catch(() => {
+    /* Ignore — device may have no browser/handler. */
+  });
 }
 
 function openEvent(event: LocalEventCard) {
   if (event.sourceUrl) {
-    Linking.openURL(event.sourceUrl);
+    void Linking.openURL(event.sourceUrl).catch(() => {
+      /* Ignore broken / blocked URLs. */
+    });
   }
+}
+
+function MetaIcon({
+  symbol,
+  ion,
+  color,
+}: {
+  symbol: SFSymbol;
+  ion: keyof typeof Ionicons.glyphMap;
+  color: ColorValue;
+}) {
+  return (
+    <SymbolView
+      name={symbol}
+      size={12}
+      weight="regular"
+      tintColor={color}
+      style={styles.metaIcon}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+      fallback={<Ionicons name={ion} size={12} color={color} />}
+    />
+  );
+}
+
+function MetaRow({
+  symbol,
+  ion,
+  children,
+  colors,
+}: {
+  symbol: SFSymbol;
+  ion: keyof typeof Ionicons.glyphMap;
+  children: string;
+  colors: NewspaperColors;
+}) {
+  if (!children) return null;
+  return (
+    <View
+      style={styles.metaRow}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={children}
+    >
+      <MetaIcon symbol={symbol} ion={ion} color={colors.inkMuted} />
+      <Text
+        style={[styles.metaText, { color: colors.inkMuted }]}
+        maxFontSizeMultiplier={1.35}
+        accessible={false}
+      >
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+function ActionLink({
+  label,
+  onPress,
+  colors,
+}: {
+  label: string;
+  onPress: () => void;
+  colors: NewspaperColors;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.actionPressable,
+        pressed && styles.actionPressed,
+      ]}
+    >
+      <Text
+        style={[styles.actionLink, { color: colors.terracotta }]}
+        maxFontSizeMultiplier={1.3}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 export function LocalEventsSection({ headline, body, sourceNote }: Props) {
   const events = parseLocalEventsBody(body);
+  const colors = useNewspaperColors();
 
-  // Legacy paragraph editions fall back to plain text.
   if (!events) {
     return (
       <View>
-        <Text style={styles.headline}>{headline}</Text>
-        <Text style={styles.legacyBody}>{body}</Text>
-        {sourceNote ? <Text style={styles.sourceNote}>{sourceNote}</Text> : null}
+        <Text style={[styles.headline, { color: colors.ink }]}>{headline}</Text>
+        <Text style={[styles.legacyBody, { color: colors.inkBody }]}>
+          {body}
+        </Text>
+        {sourceNote ? (
+          <Text style={[styles.sourceNote, { color: colors.inkMuted }]}>
+            {sourceNote}
+          </Text>
+        ) : null}
       </View>
     );
   }
 
   return (
     <View>
-      <Text style={styles.headline}>{headline}</Text>
-      {events.map((event, index) => (
-        <View
-          key={`${event.name}-${event.date}-${index}`}
-          style={[
-            styles.eventBlock,
-            index === events.length - 1 && styles.eventBlockLast,
-          ]}
-        >
-          <Text style={styles.eventName}>{event.name}</Text>
-          <Text style={styles.eventMeta}>
-            {event.date}
-            {event.time ? `  ·  ${event.time}` : ""}
-          </Text>
-          <Text style={styles.eventVenue}>
-            {event.venue}
-            {event.city ? `, ${event.city}` : ""}
-          </Text>
-          <View style={styles.actions}>
-            <Pressable onPress={() => openMaps(event)} hitSlop={8}>
-              <Text style={styles.actionLink}>Open in Maps</Text>
-            </Pressable>
-            {event.sourceUrl ? (
-              <>
-                <Text style={styles.actionRule}>|</Text>
-                <Pressable onPress={() => openEvent(event)} hitSlop={8}>
-                  <Text style={styles.actionLink}>View Event</Text>
-                </Pressable>
-              </>
-            ) : null}
+      <Text
+        style={[styles.headline, { color: colors.ink }]}
+        maxFontSizeMultiplier={1.4}
+      >
+        {headline}
+      </Text>
+
+      {events.map((event, index) => {
+        const venueLine = [event.venue, event.city].filter(Boolean).join(", ");
+        const isLast = index === events.length - 1;
+
+        return (
+          <View
+            key={`${event.name}-${event.date}-${index}`}
+            style={[
+              styles.eventBlock,
+              { borderBottomColor: colors.rule },
+              isLast && styles.eventBlockLast,
+            ]}
+            accessible={false}
+          >
+            <Text
+              style={[styles.eventName, { color: colors.ink }]}
+              maxFontSizeMultiplier={1.4}
+            >
+              {event.name}
+            </Text>
+
+            <View style={styles.metaBlock}>
+              <MetaRow
+                symbol="calendar"
+                ion="calendar-outline"
+                colors={colors}
+              >
+                {event.date}
+              </MetaRow>
+              <MetaRow symbol="clock" ion="time-outline" colors={colors}>
+                {event.time}
+              </MetaRow>
+              <View
+                style={styles.venueRow}
+                accessible
+                accessibilityRole="text"
+                accessibilityLabel={venueLine}
+              >
+                <View style={styles.venueIconWrap}>
+                  <MetaIcon
+                    symbol="location"
+                    ion="location-outline"
+                    color={colors.inkBody}
+                  />
+                </View>
+                <Text
+                  style={[styles.venueText, { color: colors.inkBody }]}
+                  maxFontSizeMultiplier={1.35}
+                  accessible={false}
+                >
+                  {venueLine}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.actions}>
+              <ActionLink
+                label="Open in Maps"
+                onPress={() => openMaps(event)}
+                colors={colors}
+              />
+              {event.sourceUrl ? (
+                <>
+                  <Text
+                    style={[styles.actionRule, { color: colors.inkFaint }]}
+                    accessible={false}
+                  >
+                    ·
+                  </Text>
+                  <ActionLink
+                    label="View Event"
+                    onPress={() => openEvent(event)}
+                    colors={colors}
+                  />
+                </>
+              ) : null}
+            </View>
           </View>
-        </View>
-      ))}
-      {sourceNote ? <Text style={styles.sourceNote}>{sourceNote}</Text> : null}
+        );
+      })}
+
+      {sourceNote ? (
+        <Text style={[styles.sourceNote, { color: colors.inkMuted }]}>
+          {sourceNote}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -80,65 +267,95 @@ const styles = StyleSheet.create({
   headline: {
     fontSize: 19,
     fontWeight: "600",
-    color: "#2B2620",
-    marginBottom: 18,
+    marginBottom: 22,
     fontFamily: "Georgia",
+    lineHeight: 26,
   },
   legacyBody: {
     fontSize: 15,
     lineHeight: 23,
-    color: "#2B2620DD",
   },
   eventBlock: {
-    paddingBottom: 18,
-    marginBottom: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2B262012",
+    paddingBottom: 26,
+    marginBottom: 26,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   eventBlockLast: {
     borderBottomWidth: 0,
-    marginBottom: 4,
-    paddingBottom: 8,
+    marginBottom: 6,
+    paddingBottom: 10,
   },
   eventName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "600",
-    color: "#2B2620",
     fontFamily: "Georgia",
-    marginBottom: 6,
-    lineHeight: 24,
-  },
-  eventMeta: {
-    fontSize: 13,
-    letterSpacing: 0.3,
-    color: "#2B262099",
-    marginBottom: 4,
-  },
-  eventVenue: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#2B2620CC",
     marginBottom: 12,
+    lineHeight: 26,
+    letterSpacing: -0.1,
+  },
+  metaBlock: {
+    gap: 6,
+    marginBottom: 16,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  metaIcon: {
+    width: 12,
+    height: 12,
+  },
+  metaText: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    letterSpacing: 0.35,
+  },
+  venueRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 2,
+  },
+  venueIconWrap: {
+    paddingTop: 4,
+  },
+  venueText: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 14,
+    lineHeight: 21,
+    letterSpacing: 0.1,
   },
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    flexWrap: "wrap",
+    columnGap: 14,
+    rowGap: 6,
+  },
+  actionPressable: {
+    paddingVertical: 2,
+  },
+  actionPressed: {
+    opacity: 0.45,
   },
   actionLink: {
+    fontFamily: "Georgia",
     fontSize: 13,
-    color: "#C1622D",
-    fontWeight: "500",
+    fontStyle: "italic",
     letterSpacing: 0.2,
   },
   actionRule: {
     fontSize: 13,
-    color: "#2B262033",
+    lineHeight: 16,
   },
   sourceNote: {
+    fontFamily: "Georgia",
     fontSize: 12,
-    color: "#2B262066",
-    marginTop: 12,
+    marginTop: 14,
     fontStyle: "italic",
   },
 });

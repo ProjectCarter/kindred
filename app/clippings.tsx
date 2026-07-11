@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Text,
   View,
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,6 +12,8 @@ import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
 import { SECTION_LABELS } from "../lib/edition/types";
 import { LocalEventsSection } from "../components/LocalEventsSection";
+import { PaperLoading } from "../components/PaperLoading";
+import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type ClippingRow = {
   id: string;
@@ -34,44 +35,58 @@ export default function ClippingsScreen() {
   const [clippings, setClippings] = useState<ClippingRow[]>([]);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const loadGen = useRef(0);
 
   const loadClippings = useCallback(async (isRefresh = false) => {
+    const gen = ++loadGen.current;
     if (isRefresh) setRefreshing(true);
     setError(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        if (gen === loadGen.current) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+        return;
+      }
+
+      const { data, error: queryError } = await supabase
+        .from("clippings")
+        .select(
+          "id, created_at, section:edition_sections(id, section_type, headline, body, source_note, edition_id)"
+        )
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (gen !== loadGen.current) return;
+
+      if (queryError) {
+        setError("Your clippings couldn’t load. Try again in a moment.");
+        setClippings([]);
+      } else {
+        const normalized = (data ?? []).map((row) => {
+          const section = Array.isArray(row.section)
+            ? row.section[0] ?? null
+            : row.section;
+          return { ...row, section } as ClippingRow;
+        });
+        setClippings(normalized);
+      }
+    } catch {
+      if (gen === loadGen.current) {
+        setError("Your clippings couldn’t load. Try again in a moment.");
+        setClippings([]);
+      }
+    } finally {
+      if (gen === loadGen.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-
-    const { data, error: queryError } = await supabase
-      .from("clippings")
-      .select(
-        "id, created_at, section:edition_sections(id, section_type, headline, body, source_note, edition_id)"
-      )
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (queryError) {
-      setError("Couldn't load your clippings. Try again.");
-      setClippings([]);
-    } else {
-      // Supabase may return the nested relation as an object or a one-item array.
-      const normalized = (data ?? []).map((row) => {
-        const section = Array.isArray(row.section)
-          ? row.section[0] ?? null
-          : row.section;
-        return { ...row, section } as ClippingRow;
-      });
-      setClippings(normalized);
-    }
-
-    setLoading(false);
-    setRefreshing(false);
   }, []);
 
   useEffect(() => {
@@ -79,24 +94,26 @@ export default function ClippingsScreen() {
   }, [loadClippings]);
 
   async function handleRemove(clippingId: string) {
+    if (removingId) return;
     setRemovingId(clippingId);
-    const { error: deleteError } = await supabase
-      .from("clippings")
-      .delete()
-      .eq("id", clippingId);
+    try {
+      const { error: deleteError } = await supabase
+        .from("clippings")
+        .delete()
+        .eq("id", clippingId);
 
-    if (!deleteError) {
-      setClippings((prev) => prev.filter((c) => c.id !== clippingId));
+      if (!deleteError) {
+        setClippings((prev) => prev.filter((c) => c.id !== clippingId));
+      }
+    } finally {
+      setRemovingId(null);
     }
-    setRemovingId(null);
   }
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centered}>
-          <ActivityIndicator />
-        </View>
+        <PaperLoading hint="Gathering what you kept…" />
       </SafeAreaView>
     );
   }
@@ -105,28 +122,37 @@ export default function ClippingsScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => loadClippings(true)}
+            tintColor={paper.terracotta}
+            colors={[paper.terracotta]}
           />
         }
       >
-        <Pressable onPress={() => router.back()} style={styles.backLink}>
-          <Text style={styles.backText}>← Back</Text>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}
+          accessibilityRole="button"
+        >
+          <Text style={styles.backText}>← Library</Text>
         </Pressable>
 
+        <Text style={styles.kicker}>Saved for later</Text>
         <Text style={styles.title}>Clippings</Text>
         <Text style={styles.subtitle}>
-          Sections you chose to keep — a small collection, not a feed.
+          Passages you saved from your paper. Tap “Save for later” on any
+          section to add one.
         </Text>
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {clippings.length === 0 ? (
           <Text style={styles.empty}>
-            Nothing saved yet. While reading an edition, tap “Save clipping”
-            on a section you want to keep.
+            Nothing saved yet. In today’s paper, tap “Save for later” under a
+            section you want to keep.
           </Text>
         ) : (
           clippings.map((clip) => {
@@ -134,9 +160,13 @@ export default function ClippingsScreen() {
             const section = clip.section;
             return (
               <View key={clip.id} style={styles.card}>
-                <Text style={styles.label}>
-                  {SECTION_LABELS[section.section_type] ?? section.section_type}
-                </Text>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>
+                    {SECTION_LABELS[section.section_type] ??
+                      section.section_type}
+                  </Text>
+                  <View style={styles.labelRule} />
+                </View>
                 {section.section_type === "local_events" ? (
                   <LocalEventsSection
                     headline={section.headline}
@@ -148,19 +178,27 @@ export default function ClippingsScreen() {
                     <Text style={styles.headline}>{section.headline}</Text>
                     <Text style={styles.body}>{section.body}</Text>
                     {section.source_note ? (
-                      <Text style={styles.sourceNote}>{section.source_note}</Text>
+                      <Text style={styles.sourceNote}>
+                        {section.source_note}
+                      </Text>
                     ) : null}
                   </>
                 )}
                 <View style={styles.actions}>
                   <Pressable
-                    onPress={() => router.push(`/edition/${section.edition_id}`)}
+                    onPress={() =>
+                      router.push(`/edition/${section.edition_id}`)
+                    }
+                    style={({ pressed }) => pressed && styles.pressed}
+                    accessibilityRole="button"
                   >
                     <Text style={styles.actionText}>Open edition</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => handleRemove(clip.id)}
                     disabled={removingId === clip.id}
+                    style={({ pressed }) => pressed && styles.pressed}
+                    accessibilityRole="button"
                   >
                     <Text style={styles.actionTextMuted}>
                       {removingId === clip.id ? "Removing…" : "Remove"}
@@ -179,92 +217,125 @@ export default function ClippingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF6EF",
+    backgroundColor: paper.cream,
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  loadingHint: {
+    marginTop: 16,
+    fontFamily: "Georgia",
+    fontSize: 14,
+    fontStyle: "italic",
+    color: paper.inkMuted,
   },
   content: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 60,
+    paddingBottom: 72,
   },
   backLink: {
-    marginBottom: 20,
+    marginBottom: 24,
+    alignSelf: "flex-start",
+    paddingVertical: 4,
   },
   backText: {
-    fontSize: 15,
-    color: "#2B262099",
+    fontFamily: "Georgia",
+    fontSize: 14,
+    color: paper.terracotta,
+    fontStyle: "italic",
+  },
+  kicker: {
+    ...type.kicker,
+    color: paper.terracotta,
+    marginBottom: 10,
   },
   title: {
-    fontSize: 30,
-    fontWeight: "600",
-    color: "#2B2620",
-    marginBottom: 8,
-    fontFamily: "Georgia",
+    ...type.display,
+    fontSize: 32,
+    lineHeight: 38,
+    color: paper.ink,
+    marginBottom: 10,
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#2B2620CC",
-    marginBottom: 28,
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 25,
+    color: paper.inkBody,
+    marginBottom: 32,
+    maxWidth: 400,
   },
   error: {
-    color: "#C1622D",
+    fontFamily: "Georgia",
+    color: paper.terracotta,
     marginBottom: 16,
+    fontStyle: "italic",
   },
   empty: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: "#2B262099",
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 25,
+    color: paper.inkMuted,
+    fontStyle: "italic",
   },
   card: {
-    marginBottom: 28,
+    marginBottom: 32,
     paddingBottom: 28,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2B26201A",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
   },
   label: {
-    fontSize: 12,
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: "#C1622D",
-    marginBottom: 8,
-    fontWeight: "600",
+    ...type.kicker,
+    color: paper.terracotta,
+  },
+  labelRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkRule,
   },
   headline: {
-    fontSize: 19,
-    fontWeight: "600",
-    color: "#2B2620",
-    marginBottom: 6,
-    fontFamily: "Georgia",
+    ...type.sectionHeadline,
+    color: paper.ink,
+    marginBottom: 8,
   },
   body: {
-    fontSize: 15,
-    lineHeight: 23,
-    color: "#2B2620DD",
+    ...type.body,
+    color: paper.inkBody,
   },
   sourceNote: {
+    fontFamily: "Georgia",
     fontSize: 12,
-    color: "#2B262066",
-    marginTop: 8,
+    color: paper.inkFaint,
+    marginTop: 10,
     fontStyle: "italic",
   },
   actions: {
     flexDirection: "row",
-    gap: 20,
-    marginTop: 14,
+    gap: 22,
+    marginTop: 16,
   },
   actionText: {
-    fontSize: 13,
-    color: "#2B2620",
-    fontWeight: "500",
-    textDecorationLine: "underline",
+    fontFamily: "Georgia",
+    fontSize: 14,
+    color: paper.terracotta,
+    fontStyle: "italic",
   },
   actionTextMuted: {
-    fontSize: 13,
-    color: "#2B262099",
+    fontFamily: "Georgia",
+    fontSize: 14,
+    color: paper.inkMuted,
+    fontStyle: "italic",
+  },
+  pressed: {
+    opacity: press.opacity,
   },
 });

@@ -3,6 +3,22 @@
 // strictly from that data. Never invents a fact that wasn't retrieved.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { primaryNewsCategory } from "./stories/sources.ts";
+import { buildEditionEditorialContext } from "./editorial/index.ts";
+import { loadPersonalizationProfile } from "./personalization/index.ts";
+import { generateBanditPayload, loadBanditReaderProfile } from "./bandit/index.ts";
+import { runEditorialDecisions } from "./editor/index.ts";
+import { runDiscoveryDecisions } from "./discovery/index.ts";
+import type { DiscoveryPayload } from "./discovery/types.ts";
+import { runKnowledgeDecisions } from "./knowledge/index.ts";
+import type { KnowledgePayload, KnowledgeStoryInput } from "./knowledge/types.ts";
+import {
+  loadMemoryArchive,
+  runMemoryDecisions,
+} from "./memory/index.ts";
+import type { MemoryPayload, MemoryStoryInput } from "./memory/types.ts";
+import { runMorningEditionDecisions } from "./morningEdition/index.ts";
+import type { MorningEditionPayload } from "./morningEdition/types.ts";
 
 export type BuildEditionResult =
   | { ok: true; editionId: string }
@@ -15,7 +31,13 @@ type SectionInput = {
   instruction: string;
 };
 
-type Location = { lat: number; lon: number; city: string };
+type Location = {
+  lat: number;
+  lon: number;
+  city: string;
+  region?: string | null;
+  state?: string | null;
+};
 
 export type LocalEvent = {
   name: string;
@@ -30,6 +52,8 @@ const DEFAULT_LOCATION: Location = {
   lat: 37.77,
   lon: -122.42,
   city: "your area",
+  region: null,
+  state: null,
 };
 
 export async function getApproxLocation(req?: Request): Promise<Location> {
@@ -44,6 +68,8 @@ export async function getApproxLocation(req?: Request): Promise<Location> {
       lat: data.latitude ?? DEFAULT_LOCATION.lat,
       lon: data.longitude ?? DEFAULT_LOCATION.lon,
       city: data.city ?? DEFAULT_LOCATION.city,
+      region: data.region ?? data.region_code ?? null,
+      state: data.region_code ?? data.region ?? null,
     };
   } catch {
     return DEFAULT_LOCATION;
@@ -62,41 +88,6 @@ async function getWeather(lat: number, lon: number) {
     return null;
   }
   return res.json();
-}
-
-async function getTopStories(category: string, newsApiKey: string) {
-  const validCategories = [
-    "business",
-    "technology",
-    "science",
-    "health",
-    "sports",
-    "general",
-  ];
-  const cat = validCategories.includes(category) ? category : "general";
-  const res = await fetch(
-    `https://newsapi.org/v2/top-headlines?category=${cat}&language=en&pageSize=3&apiKey=${newsApiKey}`
-  );
-  const data = await res.json();
-  const articles = data.articles ?? [];
-  console.log("[buildEdition] provider NewsAPI", {
-    httpStatus: res.status,
-    ok: res.ok,
-    category: cat,
-    articleCount: articles.length,
-    apiError: typeof data.status === "string" && data.status === "error"
-      ? String(data.code ?? data.message ?? "error")
-      : null,
-  });
-  return articles.map((a: {
-    title: string;
-    source?: { name?: string };
-    description?: string;
-  }) => ({
-    title: a.title,
-    source: a.source?.name,
-    description: a.description,
-  }));
 }
 
 async function getOnThisDay() {
@@ -289,18 +280,9 @@ function buildLocalEventsBody(events: LocalEvent[]): string {
   });
 }
 
+/** @deprecated Prefer primaryNewsCategory from stories/sources — kept for callers. */
 export function interestToNewsCategory(interests: string[]): string {
-  const map: Record<string, string> = {
-    Technology: "technology",
-    Business: "business",
-    Science: "science",
-    "Health & Wellbeing": "health",
-    Sports: "sports",
-  };
-  for (const interest of interests) {
-    if (map[interest]) return map[interest];
-  }
-  return "general";
+  return primaryNewsCategory(interests);
 }
 
 function parseSectionJson(text: string): { headline: string; body: string } {
@@ -369,6 +351,63 @@ async function writeSection(
   return parsed;
 }
 
+/**
+ * Load recent front-page / lead headlines so today’s paper avoids repetition.
+ * Keys are titles, ids, and urls from the last several editions.
+ */
+async function loadRecentStoryKeys(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  limit = 5
+): Promise<string[]> {
+  const { data, error } = await supabaseAdmin
+    .from("editions")
+    .select("edition_date, lead_story, editorial_context")
+    .eq("user_id", userId)
+    .order("edition_date", { ascending: false })
+    .limit(limit);
+
+  if (error || !data?.length) {
+    if (error) {
+      console.log("[buildEdition] recent story keys lookup", {
+        error: error.message,
+      });
+    }
+    return [];
+  }
+
+  const keys: string[] = [];
+  for (const row of data) {
+    const lead = row.lead_story as {
+      id?: string;
+      headline?: string;
+      url?: string | null;
+    } | null;
+    if (lead?.headline) keys.push(lead.headline);
+    if (lead?.id) keys.push(lead.id);
+    if (lead?.url) keys.push(lead.url);
+
+    const ctx = row.editorial_context as {
+      sections?: Array<{
+        sectionType?: string;
+        items?: Array<{ title?: string; id?: string }>;
+      }>;
+    } | null;
+    const top = ctx?.sections?.find((s) => s.sectionType === "top_stories");
+    for (const item of top?.items ?? []) {
+      if (item.title) keys.push(item.title);
+      if (item.id) keys.push(item.id);
+    }
+  }
+
+  const unique = Array.from(new Set(keys.map((k) => k.trim()).filter(Boolean)));
+  console.log("[buildEdition] recent story keys", {
+    editionCount: data.length,
+    keyCount: unique.length,
+  });
+  return unique;
+}
+
 export function createServiceClient() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -399,23 +438,234 @@ export async function buildEditionForUser(
     .eq("id", userId)
     .single();
 
+  // Eligibility still based on onboarding interests.
   const interests: string[] = profile?.interests ?? [];
 
-  const [weather, topStories, onThisDay, localEvents] = await Promise.all([
-    getWeather(location.lat, location.lon),
-    getTopStories(interestToNewsCategory(interests), newsApiKey),
-    getOnThisDay(),
-    getLocalEvents(location),
+  const [recentStoryKeys, personalization, memoryArchive] = await Promise.all([
+    loadRecentStoryKeys(supabaseAdmin, userId),
+    loadPersonalizationProfile(supabaseAdmin, userId, {
+      city: location.city,
+      region: location.region,
+      state: location.state,
+      lat: location.lat,
+      lon: location.lon,
+    }),
+    loadMemoryArchive(supabaseAdmin, userId),
   ]);
+
+  const city = personalization.city;
+  const region = personalization.region;
+  const state = personalization.state;
+  const followedTopics = personalization.followedTopics;
+
+  const weatherLat =
+    location.city === "your area" && personalization.lat != null
+      ? personalization.lat
+      : location.lat;
+  const weatherLon =
+    location.city === "your area" && personalization.lon != null
+      ? personalization.lon
+      : location.lon;
+  const eventsLocation =
+    location.city === "your area" && city
+      ? { ...location, city, lat: weatherLat, lon: weatherLon, region, state }
+      : location;
+
+  // Blend edition history with stories the reader actually opened/clipped.
+  const blendedRecentKeys = Array.from(
+    new Set([
+      ...recentStoryKeys,
+      ...personalization.affinities.engagedStoryKeys.slice(0, 20),
+    ])
+  );
+
+  const editionDate = new Date().toISOString().slice(0, 10);
+
+  const [weather, onThisDay, localEvents, editorial] = await Promise.all([
+    getWeather(weatherLat, weatherLon),
+    getOnThisDay(),
+    getLocalEvents(eventsLocation),
+    runEditorialDecisions({
+      editionDate,
+      newsApiKey,
+      ranking: {
+        interests: personalization.interests.length
+          ? personalization.interests
+          : interests,
+        followedTopics,
+        city,
+        region,
+        state,
+        now: new Date(),
+        maxStories: 4,
+        recentStoryKeys: blendedRecentKeys,
+        personalization: {
+          favoriteSources: personalization.affinities.favoriteSources,
+          followedTopics: personalization.affinities.followedTopics,
+          skippedTopics: personalization.affinities.skippedTopics,
+          engagedStoryKeys: personalization.affinities.engagedStoryKeys,
+          clippedStoryKeys: personalization.affinities.clippedStoryKeys,
+          confidence: personalization.affinities.confidence,
+        },
+      },
+    }),
+  ]);
+
+  const frontPage = editorial.frontPage;
+  const topStories = frontPage.stories;
+  const leadStory = editorial.leadStory;
+
+  const weatherSummary =
+    weather?.current != null
+      ? `Current ${weather.current.temperature_2m}°C in ${city ?? "your area"}; high ${weather.daily?.temperature_2m_max?.[0] ?? "?"}° / low ${weather.daily?.temperature_2m_min?.[0] ?? "?"}°.`
+      : null;
+
+  const discovery: DiscoveryPayload = runDiscoveryDecisions({
+    editionDate,
+    now: new Date(),
+    city,
+    region,
+    state,
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    followedTopics,
+    favoriteSources: personalization.favoriteSources,
+    weatherSummary,
+    isWeekend: editorial.calendar.isWeekend,
+    isSunday: editorial.calendar.isSunday,
+    localEvents,
+    maxPerSurface: 4,
+  });
+
+  const knowledgeStories: KnowledgeStoryInput[] = [];
+  if (leadStory) {
+    knowledgeStories.push({
+      storyKey: leadStory.id,
+      section: "lead",
+      headline: leadStory.headline,
+      summary: leadStory.summary,
+      source: leadStory.source,
+      url: leadStory.url,
+      role: leadStory.role,
+      publishedAt: leadStory.publishedAt,
+      reasons: leadStory.selection.reasons,
+    });
+  }
+  for (const ranked of topStories) {
+    knowledgeStories.push({
+      storyKey: ranked.story.id,
+      section: "top_stories",
+      headline: ranked.story.title,
+      summary: ranked.story.description ?? "",
+      source: ranked.story.source,
+      url: ranked.story.url,
+      role: ranked.role,
+      category: ranked.story.category,
+      publishedAt: ranked.story.publishedAt,
+      reasons: ranked.reasons,
+    });
+  }
+
+  const knowledge: KnowledgePayload = runKnowledgeDecisions({
+    editionDate,
+    now: new Date(),
+    location: {
+      city,
+      region: region ?? null,
+      state: state ?? null,
+      lat: weatherLat,
+      lon: weatherLon,
+    },
+    stories: knowledgeStories,
+    onThisDay,
+    localEvents: localEvents.map((e) => ({
+      name: e.name,
+      venue: e.venue,
+      city: e.city,
+      startDateTime: e.startDateTime,
+    })),
+    recentStoryKeys: blendedRecentKeys,
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    followedTopics,
+    discoveryPicks: discovery.picks.map((p) => ({
+      id: p.id,
+      title: p.title,
+      category: p.category,
+      why: p.why,
+    })),
+    maxFacetsPerStory: 6,
+  });
+
+  const memoryStories: MemoryStoryInput[] = knowledgeStories.map((s) => ({
+    storyKey: s.storyKey,
+    section: s.section,
+    headline: s.headline,
+    summary: s.summary,
+    role: s.role,
+    category: s.category,
+  }));
+
+  const memory: MemoryPayload = runMemoryDecisions({
+    editionDate,
+    now: new Date(),
+    location: {
+      city,
+      region: region ?? null,
+      state: state ?? null,
+    },
+    homeLocation: memoryArchive.homeLocation,
+    travel: memoryArchive.travel,
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    followedTopics,
+    favoriteSources: personalization.favoriteSources,
+    skippedTopics: personalization.skippedTopics,
+    confidence: personalization.affinities.confidence,
+    engagedStoryKeys: personalization.affinities.engagedStoryKeys,
+    clippedStoryKeys: personalization.affinities.clippedStoryKeys,
+    todayStories: memoryStories,
+    priorEditions: memoryArchive.priorEditions,
+    unfinishedReads: memoryArchive.unfinishedReads,
+    clippings: memoryArchive.clippings.length
+      ? memoryArchive.clippings
+      : undefined,
+    localEvents: localEvents.map((e) => ({
+      name: e.name,
+      venue: e.venue,
+      city: e.city,
+      startDateTime: e.startDateTime,
+    })),
+    lastReadAt: memoryArchive.lastReadAt,
+    openDays: memoryArchive.openDays,
+    maxThreads: 14,
+  });
+
+  console.log("[buildEdition] lead story", {
+    selected: Boolean(leadStory),
+    role: leadStory?.role ?? null,
+    strategy: leadStory?.selection.strategy ?? null,
+    headline: leadStory?.headline?.slice(0, 80) ?? null,
+    hasHeroImage: Boolean(leadStory?.heroImage.uri),
+    editionMode: editorial.policy.mode,
+    discoverySurfaces: Object.keys(discovery.surfaces),
+    knowledgeStories: knowledge.selectionMeta.storyCount,
+    knowledgeFacets: knowledge.selectionMeta.facetCount,
+    memoryThreads: memory.selectionMeta.threadCount,
+    continuityDays: memory.reader.continuityDays,
+  });
 
   const sections: SectionInput[] = [];
 
   sections.push({
     section_type: "greeting",
     position: 0,
-    groundingData: `Today's date: ${new Date().toDateString()}. City: ${location.city}.`,
+    groundingData: `Today's date: ${new Date().toDateString()}. City: ${location.city}. Edition mode: ${editorial.calendar.modeLabel}.`,
     instruction:
-      "Write a short, warm one-line greeting for the top of the edition. Mention the day naturally. No exclamation points.",
+      "Write a short welcoming message for the morning edition (one or two calm sentences). Do not start with Good morning. Do not restate the full calendar date. No exclamation points.",
   });
 
   if (weather?.current) {
@@ -432,14 +682,26 @@ export async function buildEditionForUser(
     sections.push({
       section_type: "top_stories",
       position: 2,
-      groundingData: topStories
-        .map(
-          (s: { title: string; source?: string; description?: string }) =>
-            `- ${s.title} (${s.source}): ${s.description ?? ""}`
-        )
-        .join("\n"),
+      groundingData: frontPage.groundingData,
       instruction:
-        "Summarize these real headlines calmly and plainly, in your own words. Do not invent stories not listed here.",
+        "Write a calm Top Stories section for a personalized morning newspaper. " +
+        "Summarize only the listed stories, preserving the balanced mix of roles " +
+        "(national, interest, local, feature, breaking). " +
+        "Treat the slate as intentionally edited by a newspaper editor — varied sources and topics, " +
+        "local and wider world in balance, emotional balance without doomscrolling. " +
+        "Do not invent stories. Do not mention ranking scores, algorithms, or selection reasons aloud — " +
+        "just write elegant newspaper prose. Plain, unhurried, no exclamation points.",
+    });
+
+    console.log("[buildEdition] top stories selection meta", {
+      selectedCount: frontPage.selectionMeta.stories.length,
+      roles: frontPage.selectionMeta.stories.map((s) => s.role),
+      composition: frontPage.selectionMeta.composition ?? null,
+      editionMode: editorial.policy.mode,
+      decisionNotes: editorial.decisions.editorNotes,
+      reasonCodes: frontPage.selectionMeta.stories.map((s) =>
+        s.reasons.map((r) => r.code)
+      ),
     });
   }
 
@@ -491,16 +753,326 @@ export async function buildEditionForUser(
     localEventsStructured: localEvents.length > 0,
   });
 
-  const editionDate = new Date().toISOString().slice(0, 10);
+  const editorialContext = buildEditionEditorialContext({
+    editionDate,
+    location: {
+      city,
+      region,
+      state,
+    },
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    followedTopics,
+    favoriteSources: personalization.favoriteSources,
+    skippedTopics: personalization.skippedTopics,
+    personalizationConfidence: personalization.affinities.confidence,
+    weather: weather?.current
+      ? {
+          currentTempC: weather.current.temperature_2m,
+          todayHighC: weather.daily?.temperature_2m_max?.[0] ?? null,
+          todayLowC: weather.daily?.temperature_2m_min?.[0] ?? null,
+          tomorrowHighC: weather.daily?.temperature_2m_max?.[1] ?? null,
+          tomorrowLowC: weather.daily?.temperature_2m_min?.[1] ?? null,
+        }
+      : null,
+    frontPage: {
+      stories: frontPage.selectionMeta.stories,
+      composition: frontPage.selectionMeta.composition ?? null,
+      editorialDecisions: editorial.decisions,
+    },
+    localEvents,
+    onThisDay,
+    discovery: {
+      picks: discovery.picks,
+      surfaces: Object.keys(discovery.surfaces),
+      editorNotes: discovery.selectionMeta.editorNotes,
+    },
+    knowledge: {
+      storyCount: knowledge.selectionMeta.storyCount,
+      facetCount: knowledge.selectionMeta.facetCount,
+      highlights: knowledge.highlights,
+      editorNotes: knowledge.selectionMeta.editorNotes,
+    },
+    memory: {
+      threadCount: memory.selectionMeta.threadCount,
+      continuityDays: memory.reader.continuityDays,
+      sinceYouLastRead: memory.sinceYouLastRead,
+      highlights: memory.highlights,
+      editorNotes: memory.selectionMeta.editorNotes,
+    },
+    now: new Date(),
+  });
 
-  const { data: edition, error: editionError } = await supabaseAdmin
+  console.log("[buildEdition] editorial context", {
+    sectionTypes: editorialContext.sections.map((s) => s.sectionType),
+    signals: editorialContext.signals,
+    noteCount: editorialContext.sections.reduce(
+      (n, s) => n + s.notes.length + (s.items?.reduce((m, i) => m + i.notes.length, 0) ?? 0),
+      0
+    ),
+  });
+
+  const banditReader = await loadBanditReaderProfile(supabaseAdmin, userId);
+  const bandit = await generateBanditPayload(
+    {
+      editionDate,
+      now: new Date(),
+      reader: banditReader,
+      location: { city, region, state },
+      weatherSummary,
+      signals: {
+        hasBreakingNews: editorialContext.signals.hasBreakingNews,
+        hasLocalEvents: editorialContext.signals.hasLocalEvents,
+        weatherChange: editorialContext.signals.weatherChange,
+        holidayTomorrow: editorialContext.signals.holidayTomorrow,
+        primaryInterests: editorialContext.signals.primaryInterests,
+      },
+      editorBrief: editorialContext.editorBrief,
+      personalization: {
+        favoriteSources: personalization.favoriteSources,
+        confidence: personalization.affinities.confidence,
+      },
+      discoveryBrief: discovery.editorBrief,
+      discoveryPicks: discovery.picks.map((p) => ({
+        title: p.title,
+        category: p.category,
+        why: p.why,
+      })),
+    },
+    anthropicApiKey
+  );
+
+  const seasonMonth = new Date(`${editionDate}T12:00:00`).getMonth();
+  const seasonHint =
+    seasonMonth === 2
+      ? "Early spring light — a good morning to read slowly."
+      : seasonMonth === 5
+      ? "Summer’s first stretch — the paper keeps an easy pace."
+      : seasonMonth === 8
+      ? "Autumn arrives quietly — worth a slower cup with the edition."
+      : seasonMonth === 11
+      ? "Winter’s threshold — the paper is good company indoors."
+      : null;
+
+  const morningEdition: MorningEditionPayload =
+    await runMorningEditionDecisions(
+      {
+        editionDate,
+        now: new Date(),
+        location: { city, region, state },
+        reader: { firstName: banditReader.firstName },
+        editionMode: editorial.policy.mode,
+        modeLabel: editorial.calendar.modeLabel,
+        isWeekend: editorial.calendar.isWeekend,
+        isSunday: editorial.calendar.isSunday,
+        weatherSummary,
+        signals: {
+          hasBreakingNews: editorialContext.signals.hasBreakingNews,
+          hasLocalEvents: editorialContext.signals.hasLocalEvents,
+          weatherChange: editorialContext.signals.weatherChange,
+          holidayTomorrow: editorialContext.signals.holidayTomorrow,
+          primaryInterests: editorialContext.signals.primaryInterests,
+          sourceDiversity: editorialContext.signals.sourceDiversity,
+          topicDiversity: editorialContext.signals.topicDiversity,
+          geoBalance: editorialContext.signals.geoBalance,
+        },
+        lead: leadStory
+          ? {
+              headline: leadStory.headline,
+              summary: leadStory.summary,
+              role: leadStory.role,
+              source: leadStory.source,
+              strategy: leadStory.selection.strategy,
+              reasons: leadStory.selection.reasons,
+            }
+          : null,
+        topStoryHeadlines: topStories.map((s) => s.story.title),
+        editorialNotes: editorial.decisions.editorNotes,
+        editorBrief: editorialContext.editorBrief,
+        personalization: {
+          interests: personalization.interests.length
+            ? personalization.interests
+            : interests,
+          favoriteSources: personalization.favoriteSources,
+          confidence: personalization.affinities.confidence,
+        },
+        discoveryBrief: discovery.editorBrief,
+        discoveryPicks: discovery.picks.map((p) => ({
+          title: p.title,
+          category: p.category,
+          why: p.why,
+        })),
+        knowledgeBrief: knowledge.editorBrief,
+        knowledgeHighlights: knowledge.highlights.map((h) => ({
+          headline: h.headline,
+          facetType: h.facetType,
+          why: h.why,
+        })),
+        memoryBrief: memory.editorBrief,
+        sinceYouLastRead: memory.sinceYouLastRead,
+        continuityDays: memory.reader.continuityDays,
+        unfinishedTitles: memory.threads
+          .filter((t) => t.type === "unfinished_reading")
+          .map((t) => t.data?.headline || t.title)
+          .filter(Boolean) as string[],
+        localEvents: localEvents.map((e) => ({
+          name: e.name,
+          venue: e.venue,
+          city: e.city,
+        })),
+        onThisDay,
+        banditLine: bandit.morning.line,
+        seasonHint,
+      },
+      anthropicApiKey
+    );
+
+  console.log("[buildEdition] morning edition", {
+    engines: morningEdition.selectionMeta.usedEngines,
+    polishedWithAi: morningEdition.selectionMeta.polishedWithAi,
+    openingWords: morningEdition.briefings.opening_20s.wordCount,
+    briefingWords: morningEdition.briefings.briefing_60s.wordCount,
+  });
+
+  // Rebuild editorial context with Morning Edition notes for storage.
+  const editorialContextWithMorning = buildEditionEditorialContext({
+    editionDate,
+    location: {
+      city,
+      region,
+      state,
+    },
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    followedTopics,
+    favoriteSources: personalization.favoriteSources,
+    skippedTopics: personalization.skippedTopics,
+    personalizationConfidence: personalization.affinities.confidence,
+    weather: weather?.current
+      ? {
+          currentTempC: weather.current.temperature_2m,
+          todayHighC: weather.daily?.temperature_2m_max?.[0] ?? null,
+          todayLowC: weather.daily?.temperature_2m_min?.[0] ?? null,
+          tomorrowHighC: weather.daily?.temperature_2m_max?.[1] ?? null,
+          tomorrowLowC: weather.daily?.temperature_2m_min?.[1] ?? null,
+        }
+      : null,
+    frontPage: {
+      stories: frontPage.selectionMeta.stories,
+      composition: frontPage.selectionMeta.composition ?? null,
+      editorialDecisions: editorial.decisions,
+    },
+    localEvents,
+    onThisDay,
+    discovery: {
+      picks: discovery.picks,
+      surfaces: Object.keys(discovery.surfaces),
+      editorNotes: discovery.selectionMeta.editorNotes,
+    },
+    knowledge: {
+      storyCount: knowledge.selectionMeta.storyCount,
+      facetCount: knowledge.selectionMeta.facetCount,
+      highlights: knowledge.highlights,
+      editorNotes: knowledge.selectionMeta.editorNotes,
+    },
+    memory: {
+      threadCount: memory.selectionMeta.threadCount,
+      continuityDays: memory.reader.continuityDays,
+      sinceYouLastRead: memory.sinceYouLastRead,
+      highlights: memory.highlights,
+      editorNotes: memory.selectionMeta.editorNotes,
+    },
+    morningEdition: {
+      usedEngines: morningEdition.selectionMeta.usedEngines,
+      polishedWithAi: morningEdition.selectionMeta.polishedWithAi,
+      openingPreview: morningEdition.briefings.opening_20s.text,
+      briefingPreview: morningEdition.briefings.briefing_60s.text,
+      editorNotes: morningEdition.selectionMeta.editorNotes,
+    },
+    now: new Date(),
+  });
+
+  let { data: edition, error: editionError } = await supabaseAdmin
     .from("editions")
     .upsert(
-      { user_id: userId, edition_date: editionDate, status: "ready" },
+      {
+        user_id: userId,
+        edition_date: editionDate,
+        status: "ready",
+        editorial_context: editorialContextWithMorning,
+        lead_story: leadStory,
+        bandit,
+        discovery,
+        knowledge,
+        memory,
+        morning_edition: morningEdition,
+      },
       { onConflict: "user_id,edition_date" }
     )
     .select()
     .single();
+
+  // Pre-migration fallback if new columns are missing.
+  if (
+    editionError &&
+    (/bandit/i.test(editionError.message) ||
+      /discovery/i.test(editionError.message) ||
+      /knowledge/i.test(editionError.message) ||
+      /memory/i.test(editionError.message) ||
+      /morning_edition/i.test(editionError.message))
+  ) {
+    console.log("[buildEdition] optional column missing — upserting core fields", {
+      message: editionError.message,
+    });
+    const fallback = await supabaseAdmin
+      .from("editions")
+      .upsert(
+        {
+          user_id: userId,
+          edition_date: editionDate,
+          status: "ready",
+          editorial_context: editorialContextWithMorning,
+          lead_story: leadStory,
+          bandit,
+          discovery,
+          knowledge,
+          memory,
+        },
+        { onConflict: "user_id,edition_date" }
+      )
+      .select()
+      .single();
+    edition = fallback.data;
+    editionError = fallback.error;
+
+    if (
+      editionError &&
+      (/discovery/i.test(editionError.message) ||
+        /knowledge/i.test(editionError.message) ||
+        /memory/i.test(editionError.message) ||
+        /morning_edition/i.test(editionError.message))
+    ) {
+      const core = await supabaseAdmin
+        .from("editions")
+        .upsert(
+          {
+            user_id: userId,
+            edition_date: editionDate,
+            status: "ready",
+            editorial_context: editorialContextWithMorning,
+            lead_story: leadStory,
+            bandit,
+          },
+          { onConflict: "user_id,edition_date" }
+        )
+        .select()
+        .single();
+      edition = core.data;
+      editionError = core.error;
+    }
+  }
 
   if (editionError || !edition) {
     return { ok: false, error: editionError?.message ?? "Could not create edition" };

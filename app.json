@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Kindred",
+    "slug": "kindred",
+    "scheme": "kindred",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FAF6EF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kindred.app"
+    },
+    "android": {
+      "package": "com.kindred.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-asset"
+    ]
+  }
+}
