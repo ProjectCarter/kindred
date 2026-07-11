@@ -244,6 +244,51 @@ async function fetchLocalEventsFromSerpApi(
   return mapped;
 }
 
+/** Split provider schedule strings like "Sat, Jul 12, 7 – 9 PM" into date + time. */
+function splitEventSchedule(startDateTime: string): {
+  date: string;
+  time: string;
+} {
+  const raw = startDateTime.trim();
+  if (!raw || raw === "Time TBA") {
+    return { date: "Date TBA", time: "Time TBA" };
+  }
+
+  const timeMatch = raw.match(
+    /(\d{1,2}(?::\d{2})?(?:\s*[–-]\s*\d{1,2}(?::\d{2})?)?\s*[AaPp][Mm].*)$/
+  );
+  if (timeMatch) {
+    const time = timeMatch[1].trim();
+    const date = raw
+      .slice(0, raw.length - time.length)
+      .replace(/[,\s]+$/, "")
+      .trim();
+    return {
+      date: date || "This week",
+      time,
+    };
+  }
+
+  return { date: raw, time: "See listing" };
+}
+
+function buildLocalEventsBody(events: LocalEvent[]): string {
+  return JSON.stringify({
+    events: events.map((e) => {
+      const { date, time } = splitEventSchedule(e.startDateTime);
+      return {
+        name: e.name,
+        date,
+        time,
+        venue: e.venue,
+        city: e.city,
+        sourceUrl: e.sourceUrl,
+        sourceName: e.sourceName,
+      };
+    }),
+  });
+}
+
 export function interestToNewsCategory(interests: string[]): string {
   const map: Record<string, string> = {
     Technology: "technology",
@@ -398,22 +443,7 @@ export async function buildEditionForUser(
     });
   }
 
-  if (localEvents.length > 0) {
-    sections.push({
-      section_type: "local_events",
-      position: 3,
-      groundingData: localEvents
-        .map(
-          (e) =>
-            `- ${e.name} | ${e.startDateTime} | ${e.venue}, ${e.city} | source: ${e.sourceName} (${e.sourceUrl})`
-        )
-        .join("\n"),
-      instruction:
-        "Write a calm Local Events section summarizing only these real nearby events. " +
-        "Mention name, time, and place plainly. Do not invent or add any event not listed. " +
-        "Do not include raw URLs in the body.",
-    });
-  }
+  // local_events is stored as structured JSON for card UI — not rewritten by Claude.
 
   if (onThisDay) {
     sections.push({
@@ -435,9 +465,14 @@ export async function buildEditionForUser(
     });
   }
 
+  const plannedTypes = [
+    ...sections.map((s) => s.section_type),
+    ...(localEvents.length > 0 ? ["local_events"] : []),
+  ];
+
   console.log("[buildEdition] section construction", {
-    plannedCount: sections.length,
-    plannedTypes: sections.map((s) => s.section_type),
+    plannedCount: plannedTypes.length,
+    plannedTypes,
     weatherPresent: Boolean(weather?.current),
     topStoriesCount: topStories.length,
     localEventsCount: localEvents.length,
@@ -453,6 +488,7 @@ export async function buildEditionForUser(
     plannedCount: sections.length,
     usableWrittenCount: writtenUsable,
     emptyWrittenCount: sections.length - writtenUsable,
+    localEventsStructured: localEvents.length > 0,
   });
 
   const editionDate = new Date().toISOString().slice(0, 10);
@@ -490,8 +526,6 @@ export async function buildEditionForUser(
       source_note:
         s.section_type === "top_stories"
           ? "Sourced from NewsAPI"
-          : s.section_type === "local_events"
-          ? "Sourced from Google Events"
           : s.section_type === "today_in_history"
           ? "Sourced from Wikipedia"
           : s.section_type === "weather" || s.section_type === "looking_ahead"
@@ -499,6 +533,18 @@ export async function buildEditionForUser(
           : null,
     }))
     .filter((r) => r.headline && r.body);
+
+  if (localEvents.length > 0) {
+    rows.push({
+      edition_id: edition.id,
+      section_type: "local_events",
+      position: 3,
+      headline: "A Few Things Happening Around Town",
+      body: buildLocalEventsBody(localEvents),
+      source_note: "Sourced from Google Events",
+    });
+    rows.sort((a, b) => a.position - b.position);
+  }
 
   console.log("[buildEdition] rows after headline/body filter", {
     beforeFilter: sections.length,
