@@ -940,10 +940,10 @@ const styles = StyleSheet.create({
   paragraph: {
     ...reader.body,
     color: paper.inkBody,
-    marginBottom: 28,
+    marginBottom: 36,
   },
   leadParagraph: {
-    marginBottom: 30,
+    marginBottom: 38,
   },
   dropCap: {
     ...reader.dropCap,
