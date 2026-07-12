@@ -6,12 +6,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArticleReader } from "../../components/ArticleReader";
 import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
-import { articleFromSectionItem } from "../../lib/edition/article";
+import { articleFromSectionItem, articleFromBanditsPick } from "../../lib/edition/article";
 import { getStashedArticle } from "../../lib/edition/articleStore";
 import {
   getArticleCompanion,
   type ContinueReadingItem,
 } from "../../lib/edition/articleCompanion";
+import { terminalEditorialContinuation } from "../../lib/edition/editorialContinuation";
 import {
   getArticleSessionSync,
   loadArticleSession,
@@ -156,31 +157,55 @@ export default function ArticleScreen() {
     null;
 
   function openContinue(item: ContinueReadingItem) {
-    const dekByKind: Record<ContinueReadingItem["kind"], string> = {
-      related: "A related page from today’s paper.",
-      local: "How this looks from close to home.",
-      background: "Context for the story you just read.",
-      opposing: "Another careful view of the same ground.",
-      bandit: "Set aside by the desk.",
+    if (item.action === "return_to_edition") {
+      goBack();
+      return;
+    }
+
+    const terminalCompanion = {
+      whyThisMatters: null as null,
+      whyChosen: null as null,
+      knowledgeNotes: [] as [],
+      continueReading: terminalEditorialContinuation(),
     };
+
+    if (item.kind === "bandit") {
+      const related = articleFromBanditsPick({
+        id: item.targetArticleId || `bandit:${item.title}`.slice(0, 120),
+        headline: item.title,
+        summary: item.summary,
+        source: "Kindred",
+        url: null,
+        publishedAt: null,
+      });
+      openKindredArticle(router, related, {
+        editionId: resolvedEdition,
+        backLabel: "← Previous story",
+        companion: terminalCompanion,
+      });
+      return;
+    }
+
     const related = articleFromSectionItem({
       id: `continue:${item.kind}:${item.title}`.slice(0, 120),
-      section: item.kind === "bandit" ? "discovery" : "knowledge",
+      section: "knowledge",
       headline: item.title,
       body: item.summary,
-      dek: dekByKind[item.kind],
+      dek:
+        item.kind === "following"
+          ? "Earlier coverage from the paper’s continuing thread."
+          : item.kind === "local"
+            ? "How this looks from close to home."
+            : item.kind === "opposing"
+              ? "Another careful view of the same ground."
+              : "Context for the story you just read.",
       source: "Kindred",
       byline: item.label,
     });
     openKindredArticle(router, related, {
       editionId: resolvedEdition,
       backLabel: "← Previous story",
-      companion: {
-        whyThisMatters: null,
-        whyChosen: null,
-        knowledgeNotes: [],
-        continueReading: [],
-      },
+      companion: terminalCompanion,
     });
   }
 

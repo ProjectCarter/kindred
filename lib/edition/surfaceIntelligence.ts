@@ -6,7 +6,9 @@
 import {
   banditSeasonalLine,
   banditWeeklyLine,
+  banditsPick,
   parseBanditPayload,
+  type BanditsPick,
 } from "./bandit";
 import {
   discoveryItemsForSurface,
@@ -34,7 +36,7 @@ import {
   type MorningEditionPayload,
 } from "./morningEdition";
 import type { LeadStory } from "./LeadStory";
-import type { ArticleCompanion, ContinueReadingItem, KnowledgeNote } from "./articleCompanion";
+import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
 import { isClippableSectionId } from "./article";
 import {
@@ -42,6 +44,9 @@ import {
   isInternalScoreLabel,
   isPlaceholderCopy,
 } from "./contentQuality";
+import {
+  selectEditorialContinuation,
+} from "./editorialContinuation";
 
 export type EditionIntelligence = {
   discovery: DiscoveryPayload | null;
@@ -60,6 +65,8 @@ export type EditionIntelligence = {
   leadWhyChosen: string | null;
   /** Newspaper continuity slug when today’s Lead continues prior coverage. */
   leadContinuityKicker: string | null;
+  /** Bandit’s single end-of-edition recommendation. */
+  banditsPick: BanditsPick | null;
 };
 
 export function parseEditionIntelligence(row: {
@@ -161,6 +168,7 @@ export function parseEditionIntelligence(row: {
     // LeadStorySection derives personalization reasons from lead.selection.
     leadWhyChosen: null,
     leadContinuityKicker,
+    banditsPick: banditsPick(bandit),
   };
 }
 
@@ -237,120 +245,13 @@ function knowledgeNotesFromPacket(
   return notes;
 }
 
-const CONTINUE_LABEL: Partial<
-  Record<KnowledgeFacetType, ContinueReadingItem["kind"]>
-> = {
-  related_story: "related",
-  local_context: "local",
-  historical_background: "background",
-  trusted_explainer: "background",
-  previous_coverage: "related",
-};
-
-const CONTINUE_DISPLAY: Record<ContinueReadingItem["kind"], string> = {
-  related: "Related",
-  local: "Close to home",
-  background: "Background",
-  opposing: "Another view",
-  bandit: "From the desk",
-};
-
-/** Prefer depth over volume — two careful next-reads, never a feed. */
-const CONTINUE_MAX = 2;
-
-function continueReadingFrom(
-  intelligence: EditionIntelligence,
-  packet: KnowledgePacket | null,
-  currentTitle?: string | null
-): ContinueReadingItem[] {
-  const items: ContinueReadingItem[] = [];
-  const seen = new Set<string>();
-  const current = (currentTitle ?? "").trim().toLowerCase();
-
-  if (packet?.facets) {
-    // Editorial order: background and related first, then local color.
-    const preferred = [...packet.facets].sort((a, b) => {
-      const rank = (t: string) =>
-        /background|previous|explainer|definition|timeline/i.test(t)
-          ? 0
-          : /related/i.test(t)
-            ? 1
-            : /local/i.test(t)
-              ? 2
-              : 3;
-      return rank(a.type) - rank(b.type);
-    });
-
-    for (const facet of preferred) {
-      if (!hasSubstance(facet.summary, 24)) continue;
-      const kind = CONTINUE_LABEL[facet.type];
-      if (!kind || kind === "bandit") continue;
-      const title = facet.title?.trim() || CONTINUE_DISPLAY[kind];
-      if (current && title.toLowerCase() === current) continue;
-      const key = `${kind}:${title}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      items.push({
-        kind,
-        label: CONTINUE_DISPLAY[kind],
-        title,
-        summary: facet.summary.trim().slice(0, 240),
-      });
-      if (items.length >= CONTINUE_MAX) break;
-    }
-
-    // Opposing viewpoint — only with a legitimate signal in real copy.
-    if (
-      items.length < CONTINUE_MAX &&
-      !items.some((i) => i.kind === "opposing")
-    ) {
-      const opposing = packet.facets.find(
-        (f) =>
-          hasSubstance(f.summary, 24) &&
-          /another view|other side|critics|counterpoint|opposing view/i.test(
-            `${f.title} ${f.summary}`
-          )
-      );
-      if (opposing?.summary) {
-        items.push({
-          kind: "opposing",
-          label: CONTINUE_DISPLAY.opposing,
-          title: opposing.title?.trim() || "Another view",
-          summary: opposing.summary.trim().slice(0, 240),
-        });
-      }
-    }
-  }
-
-  // Desk pick only when the page would otherwise end abruptly — never pad a full set.
-  const desk = intelligence.discoveryItems?.[0];
-  if (
-    desk?.item?.title &&
-    items.length < CONTINUE_MAX &&
-    hasSubstance(desk.item.dek, 12) &&
-    !isPlaceholderCopy(desk.item.title) &&
-    !isPlaceholderCopy(desk.item.dek)
-  ) {
-    const title = desk.item.title.trim();
-    if (!current || title.toLowerCase() !== current) {
-      items.push({
-        kind: "bandit",
-        label: CONTINUE_DISPLAY.bandit,
-        title,
-        summary: desk.item.dek.trim().slice(0, 240),
-      });
-    }
-  }
-
-  return items.slice(0, CONTINUE_MAX);
-}
-
 function buildCompanion(
   intelligence: EditionIntelligence,
   packet: KnowledgePacket | null,
   whyThisMattersNote: ArticleCompanion["whyThisMatters"],
   whyChosen: string | null,
-  currentTitle?: string | null
+  currentTitle?: string | null,
+  storyId?: string | null
 ): ArticleCompanion {
   const why =
     whyThisMattersNote && hasSubstance(whyThisMattersNote.summary, 16)
@@ -367,7 +268,15 @@ function buildCompanion(
     whyThisMatters: why,
     whyChosen: chosen,
     knowledgeNotes: knowledgeNotesFromPacket(packet),
-    continueReading: continueReadingFrom(intelligence, packet, currentTitle),
+    continueReading: selectEditorialContinuation({
+      packet,
+      memory: intelligence.memory,
+      storyId: storyId ?? null,
+      currentTitle: currentTitle ?? null,
+      currentArticleId: storyId ?? null,
+      banditsPick: intelligence.banditsPick,
+      terminal: false,
+    }),
   };
 }
 
@@ -405,7 +314,8 @@ export function companionForLead(
           }
         : null,
     chosen ? chosen + "." : null,
-    lead.headline
+    lead.headline,
+    lead.id
   );
 }
 
@@ -423,7 +333,10 @@ export function companionForArticle(
       whyThisMatters: null,
       whyChosen: null,
       knowledgeNotes: [],
-      continueReading: [],
+      continueReading: selectEditorialContinuation({
+        packet: null,
+        terminal: false,
+      }),
     };
   }
 
@@ -439,7 +352,8 @@ export function companionForArticle(
     packet,
     facet ? { title: facet.title, summary: facet.summary } : null,
     null,
-    article.headline
+    article.headline,
+    article.id
   );
 }
 

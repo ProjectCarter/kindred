@@ -598,20 +598,26 @@ export function ArticleReader({
             ) : null}
           </View>
 
-          {continueItems.length > 0 && onOpenContinue ? (
+          {continueItems.length > 0 ? (
             <View style={styles.continueBlock}>
               <Text style={styles.continueKicker}>Further along</Text>
               <Text style={styles.continueIntro}>
                 {continueItems.length === 1
-                  ? "One careful next page, chosen for this story."
-                  : "A short turn of the page — chosen for this story."}
+                  ? "One careful next step from today’s paper."
+                  : "A few careful next steps — chosen to deepen understanding, not to keep you scrolling."}
               </Text>
               {continueItems.map((item, index) => (
                 <Pressable
                   key={`${item.kind}-${index}`}
-                  onPress={() => onOpenContinue?.(item)}
+                  onPress={() => {
+                    if (item.action === "return_to_edition") {
+                      onBack();
+                      return;
+                    }
+                    onOpenContinue?.(item);
+                  }}
                   accessibilityRole="link"
-                  accessibilityLabel={`${item.label}. ${item.title}. Continue reading.`}
+                  accessibilityLabel={`${item.label}. ${item.title}. ${item.editorWhy ?? "Continue reading."}`}
                   style={({ pressed }) => [
                     styles.continueItem,
                     index === continueItems.length - 1 && styles.continueItemLast,
@@ -631,7 +637,19 @@ export function ArticleReader({
                   >
                     {item.summary}
                   </Text>
-                  <Text style={styles.continueLink}>Continue</Text>
+                  {item.editorWhy ? (
+                    <Text
+                      style={styles.continueWhy}
+                      maxFontSizeMultiplier={1.2}
+                    >
+                      {item.editorWhy}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.continueLink}>
+                    {item.action === "return_to_edition"
+                      ? "Return"
+                      : "Continue"}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -1072,7 +1090,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 26,
     color: paper.inkBody,
-    marginBottom: 14,
+    marginBottom: 10,
+  },
+  continueWhy: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 22,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginBottom: 12,
+    maxWidth: 400,
   },
   continueLink: {
     fontFamily: "Georgia",

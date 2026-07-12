@@ -11,12 +11,30 @@ export type KnowledgeNote = {
   summary: string;
 };
 
+/**
+ * Editorial Continuation kinds — finite next steps from today’s paper.
+ * Never a feed; each kind is an editorial role.
+ */
+export type ContinueReadingKind =
+  | "following"
+  | "background"
+  | "local"
+  | "opposing"
+  | "bandit"
+  | "edition";
+
 /** Editorial “Continue Reading” suggestions — finite, not a feed. */
 export type ContinueReadingItem = {
-  kind: "related" | "local" | "background" | "opposing" | "bandit";
+  kind: ContinueReadingKind;
   label: string;
   title: string;
   summary: string;
+  /** Why an editor would suggest this next. */
+  editorWhy?: string;
+  /** Soft landing back into the folio. */
+  action?: "return_to_edition";
+  /** When pointing at Bandit’s Pick or another stashed story. */
+  targetArticleId?: string;
 };
 
 export type ArticleCompanion = {
