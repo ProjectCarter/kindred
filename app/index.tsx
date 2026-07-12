@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { PaperLoading } from "../components/PaperLoading";
 import { resolveActivePlace } from "../lib/location/deviceLocation";
+import { profileHasInterests } from "../lib/auth/hasInterests";
 
 export default function Index() {
   const [checking, setChecking] = useState(true);
@@ -53,19 +54,7 @@ export default function Index() {
           console.error("[index] profiles", profileError.message);
         }
 
-        const interests = profile?.interests;
-        let list: unknown[] = [];
-        if (Array.isArray(interests)) {
-          list = interests;
-        } else if (typeof interests === "string" && interests.trim()) {
-          try {
-            const parsed = JSON.parse(interests);
-            if (Array.isArray(parsed)) list = parsed;
-          } catch {
-            list = [];
-          }
-        }
-        setHasInterests(list.length > 0);
+        setHasInterests(profileHasInterests(profile?.interests));
       } catch (err) {
         if (__DEV__) {
           console.error(
@@ -96,5 +85,6 @@ export default function Index() {
     return <Redirect href="/login" />;
   }
 
+  // Root layout also enforces this gate for deep links to /home etc.
   return <Redirect href={hasInterests ? "/home" : "/onboarding"} />;
 }

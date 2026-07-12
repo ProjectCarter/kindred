@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import type { Session } from "@supabase/supabase-js";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { profileHasInterests } from "../lib/auth/hasInterests";
 import { PaperLoading } from "../components/PaperLoading";
 
 function getAuthCodeFromUrl(url: string): string | null {
@@ -24,11 +25,52 @@ function getAuthCodeFromUrl(url: string): string | null {
   return null;
 }
 
+/** Routes allowed before interests are saved. */
+function isOnboardingAllowedRoute(root: string | undefined): boolean {
+  return root === "login" || root === "onboarding";
+}
+
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  /** null = still resolving profile interests for the current session. */
+  const [hasInterests, setHasInterests] = useState<boolean | null>(null);
   const router = useRouter();
   const segments = useSegments();
+  const verifyingGate = useRef(false);
+
+  const refreshInterests = useCallback(async (userId: string | undefined) => {
+    if (!userId || !isSupabaseConfigured) {
+      setHasInterests(null);
+      return false;
+    }
+
+    try {
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("interests")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error && __DEV__) {
+        console.error("[auth] profiles interests", error.message);
+      }
+
+      const ok = profileHasInterests(profile?.interests);
+      setHasInterests(ok);
+      return ok;
+    } catch (err) {
+      if (__DEV__) {
+        console.error(
+          "[auth] interests check failed",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+      // Fail closed — send through onboarding rather than an unpersonalized home.
+      setHasInterests(false);
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +103,13 @@ export default function RootLayout() {
         if (error && __DEV__) {
           console.error("[auth] getSession", error.message);
         }
-        setSession(data.session ?? null);
+        const next = data.session ?? null;
+        setSession(next);
+        if (next?.user?.id) {
+          await refreshInterests(next.user.id);
+        } else {
+          setHasInterests(null);
+        }
       } catch (err) {
         if (__DEV__) {
           console.error(
@@ -69,7 +117,10 @@ export default function RootLayout() {
             err instanceof Error ? err.message : String(err)
           );
         }
-        if (!cancelled) setSession(null);
+        if (!cancelled) {
+          setSession(null);
+          setHasInterests(null);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -83,7 +134,13 @@ export default function RootLayout() {
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
-        if (!cancelled) setSession(newSession);
+        if (cancelled) return;
+        setSession(newSession);
+        if (newSession?.user?.id) {
+          void refreshInterests(newSession.user.id);
+        } else {
+          setHasInterests(null);
+        }
       }
     );
 
@@ -92,7 +149,7 @@ export default function RootLayout() {
       linkSub.remove();
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshInterests]);
 
   useEffect(() => {
     if (loading) return;
@@ -102,12 +159,41 @@ export default function RootLayout() {
 
     if (!session && !inAuthFlow) {
       router.replace("/login");
-    } else if (session && inAuthFlow) {
-      router.replace("/");
+      return;
     }
-  }, [session, loading, segments, router]);
 
-  if (loading) {
+    if (!session) return;
+
+    // Wait until interests are known before routing past the gate.
+    if (hasInterests === null) return;
+
+    if (inAuthFlow) {
+      router.replace(hasInterests ? "/" : "/onboarding");
+      return;
+    }
+
+    if (!hasInterests && !isOnboardingAllowedRoute(root)) {
+      // Re-check before bouncing — covers the moment after interests are saved
+      // and onboarding navigates to /home while layout state is still stale.
+      if (verifyingGate.current) return;
+      verifyingGate.current = true;
+      void (async () => {
+        try {
+          const ok = await refreshInterests(session.user.id);
+          if (!ok) router.replace("/onboarding");
+        } finally {
+          verifyingGate.current = false;
+        }
+      })();
+      return;
+    }
+
+    if (hasInterests && root === "onboarding") {
+      router.replace("/home");
+    }
+  }, [session, loading, segments, router, hasInterests, refreshInterests]);
+
+  if (loading || (session && hasInterests === null)) {
     return (
       <SafeAreaProvider>
         <PaperLoading hint="Your paper is waiting…" />
