@@ -67,6 +67,25 @@ type Props = {
   onShareEdition?: () => void;
 };
 
+/**
+ * Folio teaser — invite the full story without reprinting it on the front page.
+ * Keeps the edition finite and magazine-like.
+ */
+function folioTeaser(body: string): { dek: string; clamped: boolean } {
+  const cleaned = body.replace(/\s+/g, " ").trim();
+  if (!cleaned) return { dek: "", clamped: false };
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  const WORD_CAP = 42;
+  if (words.length <= WORD_CAP) {
+    return { dek: cleaned, clamped: words.length > 28 };
+  }
+  return {
+    dek: `${words.slice(0, WORD_CAP).join(" ")}…`,
+    clamped: true,
+  };
+}
+
 export function EditionReader({
   sections,
   editionDate,
@@ -159,6 +178,8 @@ export function EditionReader({
       onOpenArticle(articleFromEditionSection(section));
     }
 
+    const teaser = opensReader ? folioTeaser(section.body) : null;
+
     return (
       <FolioReveal index={folioIndex} key={section.id}>
         <View style={[styles.sectionCard, isWeather && styles.weatherCard]}>
@@ -179,40 +200,35 @@ export function EditionReader({
               body={section.body}
               sourceNote={section.source_note}
             />
-          ) : opensReader ? (
+          ) : opensReader && teaser ? (
             <>
               <Pressable
                 onPress={openSection}
                 accessibilityRole="link"
                 accessibilityLabel={`Read: ${section.headline}`}
+                accessibilityHint="Opens the full story in the Kindred reader"
                 hitSlop={{ top: 6, bottom: 4, left: 2, right: 2 }}
-                style={({ pressed }) => pressed && styles.tapPressed}
-              >
-                <Text style={styles.sectionHeadline}>{section.headline}</Text>
-              </Pressable>
-              <Pressable
-                onPress={openSection}
-                accessibilityRole="link"
-                accessibilityLabel="Read the story"
-                hitSlop={4}
-                style={({ pressed }) => pressed && styles.tapPressed}
-              >
-                <Text style={styles.sectionBody}>{section.body}</Text>
-              </Pressable>
-              {section.source_note ? (
-                <Text style={styles.sourceNote}>{section.source_note}</Text>
-              ) : null}
-              <Pressable
-                onPress={openSection}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel="Read the story"
                 style={({ pressed }) => [
-                  styles.readLink,
+                  styles.sectionTeaser,
                   pressed && styles.tapPressed,
                 ]}
               >
-                <Text style={styles.readLinkText}>Read the story</Text>
+                <Text style={styles.sectionHeadline}>{section.headline}</Text>
+                {teaser.dek ? (
+                  <Text
+                    style={styles.sectionDek}
+                    numberOfLines={3}
+                    maxFontSizeMultiplier={1.25}
+                  >
+                    {teaser.dek}
+                  </Text>
+                ) : null}
+                {section.source_note ? (
+                  <Text style={styles.sourceNote}>{section.source_note}</Text>
+                ) : null}
+                {teaser.clamped ? (
+                  <Text style={styles.continueCue}>Continue reading</Text>
+                ) : null}
               </Pressable>
             </>
           ) : (
@@ -234,9 +250,7 @@ export function EditionReader({
               onPress={() => onToggleClip(section)}
               disabled={pending}
               accessibilityRole="button"
-              accessibilityLabel={
-                clipped ? "Saved" : "Save for later"
-              }
+              accessibilityLabel={clipped ? "Saved" : "Save for later"}
             >
               <Text
                 style={[
@@ -410,7 +424,15 @@ const styles = StyleSheet.create({
   sectionHeadline: {
     ...type.sectionHeadline,
     color: paper.ink,
-    marginBottom: 14,
+    marginBottom: 12,
+  },
+  sectionTeaser: {
+    alignSelf: "stretch",
+  },
+  sectionDek: {
+    ...type.folioDek,
+    color: paper.inkBody,
+    maxWidth: 440,
   },
   sectionBody: {
     ...type.body,
@@ -419,30 +441,24 @@ const styles = StyleSheet.create({
   sourceNote: {
     ...type.meta,
     color: paper.inkFaint,
-    marginTop: 16,
+    marginTop: 14,
     fontStyle: "italic",
     fontFamily: "Georgia",
   },
-  readLink: {
-    alignSelf: "flex-start",
-    marginTop: 18,
-    paddingVertical: 8,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  readLinkText: {
+  continueCue: {
     fontFamily: "Georgia",
     fontSize: 15,
     color: paper.terracotta,
     fontStyle: "italic",
-    letterSpacing: 0.25,
+    letterSpacing: 0.2,
+    marginTop: 16,
   },
   tapPressed: {
     opacity: press.opacity,
   },
   clipLink: {
     alignSelf: "flex-start",
-    marginTop: 14,
+    marginTop: 16,
     paddingVertical: 8,
     minHeight: 40,
     justifyContent: "center",
@@ -454,10 +470,10 @@ const styles = StyleSheet.create({
     fontFamily: "Georgia",
     fontSize: 14,
     letterSpacing: 0.2,
-    color: paper.terracotta,
+    color: paper.inkMuted,
     fontStyle: "italic",
   },
   clipLinkTextSaved: {
-    color: paper.inkMuted,
+    color: paper.inkFaint,
   },
 });

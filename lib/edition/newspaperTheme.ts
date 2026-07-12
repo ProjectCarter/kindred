@@ -94,6 +94,12 @@ export const type = {
     lineHeight: 22,
     fontStyle: "italic" as const,
   },
+  /** Folio teaser — a few lines that invite the full story, not the full story itself. */
+  folioDek: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 26,
+  },
   kicker: {
     fontSize: 10,
     letterSpacing: 2.2,
