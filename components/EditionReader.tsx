@@ -101,10 +101,6 @@ export function EditionReader({
   const welcomeMessage =
     greeting?.body?.trim() || greeting?.headline?.trim() || null;
 
-  const localEventsIndex = remaining.findIndex(
-    (s) => s.section_type === "local_events"
-  );
-
   const dateLabel = editionDate ? formatEditionDate(editionDate) : null;
 
   function openLead(lead: LeadStory) {
@@ -319,11 +315,10 @@ export function EditionReader({
 
       {weather ? renderSection(weather, folioCursor++) : null}
 
+      {/* Desk picks follow Looking Ahead so the paper winds down before leisure. */}
       {remaining.map((section, index) => {
         const afterThis =
-          discoveryBlock &&
-          ((localEventsIndex >= 0 && index === localEventsIndex) ||
-            (localEventsIndex < 0 && index === remaining.length - 1));
+          discoveryBlock && index === remaining.length - 1;
         const sectionIndex = folioCursor++;
         return (
           <View key={`block-${section.id}`}>
