@@ -346,7 +346,11 @@ export function selectFrontPage(
       selectedAt: now.toISOString(),
       profile,
       stories: selected.map((s) => ({
+        id: s.story.id,
         title: s.story.title,
+        description: s.story.description ?? "",
+        url: s.story.url,
+        imageUrl: s.story.imageUrl ?? null,
         role: s.role,
         score: s.score,
         reasons: s.reasons,

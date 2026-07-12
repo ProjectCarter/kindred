@@ -29,6 +29,10 @@ import {
   type EditionIntelligence,
 } from "../../lib/edition/surfaceIntelligence";
 import {
+  topStoriesFromEditorialContext,
+  type TopStoryItem,
+} from "../../lib/edition/topStories";
+import {
   inferTopicFromSection,
   trackReadingSignal,
 } from "../../lib/personalization";
@@ -44,6 +48,7 @@ export default function EditionScreen() {
   const [editionDate, setEditionDate] = useState<string | null>(null);
   const [sections, setSections] = useState<EditionSection[]>([]);
   const [leadStory, setLeadStory] = useState<LeadStory | null>(null);
+  const [topStories, setTopStories] = useState<TopStoryItem[]>([]);
   const [bandit, setBandit] = useState<BanditPayload | null>(null);
   const [intelligence, setIntelligence] =
     useState<EditionIntelligence | null>(null);
@@ -82,7 +87,7 @@ export default function EditionScreen() {
         const { data: edition, error: editionError } = await supabase
           .from("editions")
           .select(
-            "id, edition_date, status, lead_story, bandit, discovery, knowledge, memory, morning_edition"
+            "id, edition_date, status, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context"
           )
           .eq("id", editionId)
           .eq("user_id", user.id)
@@ -98,6 +103,7 @@ export default function EditionScreen() {
           setError("This morning isn’t on the shelf.");
           setSections([]);
           setLeadStory(null);
+          setTopStories([]);
           setBandit(null);
           setIntelligence(null);
           setOlder(null);
@@ -111,6 +117,11 @@ export default function EditionScreen() {
           (edition as { lead_story?: unknown }).lead_story
         );
         setLeadStory(lead);
+        setTopStories(
+          topStoriesFromEditorialContext(
+            (edition as { editorial_context?: unknown }).editorial_context
+          )
+        );
         setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
         setIntelligence(
           parseEditionIntelligence({
@@ -292,6 +303,7 @@ export default function EditionScreen() {
               sections={sections}
               editionDate={editionDate}
               leadStory={leadStory}
+              topStories={topStories}
               banditGreeting={banditMorningLine(bandit)}
               banditAside={intelligence?.banditAside}
               memoryNote={intelligence?.memoryNote}

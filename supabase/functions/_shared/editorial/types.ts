@@ -27,6 +27,13 @@ export type SectionEditorialNotes = {
     title: string;
     role?: string;
     notes: EditorialNote[];
+    /** Single-story body for Top Stories — never a mashup of unrelated wires. */
+    summary?: string;
+    dek?: string | null;
+    source?: string | null;
+    url?: string | null;
+    imageUrl?: string | null;
+    publishedAt?: string | null;
   }>;
 };
 
@@ -87,7 +94,13 @@ export type BuildEditorialContextInput = {
   } | null;
   frontPage?: {
     stories: Array<{
+      id?: string;
       title: string;
+      /** Wire or Story Editor body for this single story. */
+      description?: string;
+      dek?: string | null;
+      url?: string | null;
+      imageUrl?: string | null;
       role: string;
       score: number;
       source: string;

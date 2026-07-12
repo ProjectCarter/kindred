@@ -801,6 +801,58 @@ export async function buildEditionForUser(
     });
   }
 
+  // Story Editor — each Top Story alone (never a multi-wire mashup article).
+  const frontPageStoriesForDesk: Array<{
+    id: string;
+    title: string;
+    description: string;
+    dek: string | null;
+    url: string | null;
+    imageUrl: string | null;
+    role: string;
+    score: number;
+    reasons: typeof topStories[number]["reasons"];
+    source: string;
+    category: string | null;
+    publishedAt: string | null;
+  }> = [];
+  for (const ranked of topStories) {
+    const edited = await runStoryEditorSafe(
+      {
+        id: ranked.story.id,
+        headline: ranked.story.title,
+        sourceText: ranked.story.description || ranked.story.title,
+        source: ranked.story.source,
+        url: ranked.story.url,
+        publishedAt: ranked.story.publishedAt,
+        surfaceRole: "top_story",
+        locale: "en",
+        selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
+      },
+      anthropicApiKey
+    );
+    frontPageStoriesForDesk.push({
+      id: ranked.story.id,
+      title: edited.headline || ranked.story.title,
+      description: edited.bodyText || ranked.story.description,
+      dek: edited.dek,
+      url: ranked.story.url,
+      imageUrl: ranked.story.imageUrl ?? null,
+      role: ranked.role,
+      score: ranked.score,
+      reasons: ranked.reasons,
+      source: ranked.story.source,
+      category: ranked.story.category,
+      publishedAt: ranked.story.publishedAt,
+    });
+    console.log("[buildEdition] storyEditor top_story", {
+      id: ranked.story.id.slice(0, 40),
+      path: edited.desk.path,
+      passes: edited.desk.passes,
+      paras: edited.paragraphs.length,
+    });
+  }
+
   const weatherSummary = formatWeatherSummary({
     city: city ?? location.city,
     currentC: weather?.current?.temperature_2m ?? null,
@@ -851,18 +903,18 @@ export async function buildEditionForUser(
       reasons: leadStory.selection.reasons,
     });
   }
-  for (const ranked of topStories) {
+  for (const story of frontPageStoriesForDesk) {
     knowledgeStories.push({
-      storyKey: ranked.story.id,
+      storyKey: story.id,
       section: "top_stories",
-      headline: ranked.story.title,
-      summary: ranked.story.description ?? "",
-      source: ranked.story.source,
-      url: ranked.story.url,
-      role: ranked.role,
-      category: ranked.story.category,
-      publishedAt: ranked.story.publishedAt,
-      reasons: ranked.reasons,
+      headline: story.title,
+      summary: story.description ?? "",
+      source: story.source,
+      url: story.url,
+      role: story.role,
+      category: story.category,
+      publishedAt: story.publishedAt,
+      reasons: story.reasons,
     });
   }
 
@@ -984,24 +1036,26 @@ export async function buildEditionForUser(
     sections.push({
       section_type: "top_stories",
       position: 2,
-      groundingData: frontPage.groundingData,
+      groundingData:
+        `City: ${city ?? location.city}. Edition mode: ${editorial.calendar.modeLabel}.\n` +
+        `Front-page slate (titles only — each story opens separately in the reader):\n` +
+        frontPageStoriesForDesk
+          .map((s, i) => `${i + 1}. ${s.title} (${s.source})`)
+          .join("\n"),
       instruction:
-        "Write a calm Top Stories section for a personalized morning newspaper. " +
-        "Summarize only the listed stories, preserving the balanced mix of roles " +
-        "(national, interest, local, feature, breaking). " +
-        "Treat the slate as intentionally edited by a newspaper editor — varied sources and topics, " +
-        "local and wider world in balance, emotional balance without doomscrolling. " +
-        "Do not invent stories. Do not mention ranking scores, algorithms, or selection reasons aloud — " +
-        "just write elegant newspaper prose. Plain, unhurried, no exclamation points.",
+        "Write ONLY a short Top Stories standfirst for the folio — one calm headline and " +
+        "two or three sentences introducing today’s curated slate. " +
+        "Do NOT summarize each story in full. Do NOT combine unrelated stories into one narrative. " +
+        "Each story will open as its own article. Plain, unhurried, no exclamation points.",
     });
 
     console.log("[buildEdition] top stories selection meta", {
-      selectedCount: frontPage.selectionMeta.stories.length,
-      roles: frontPage.selectionMeta.stories.map((s) => s.role),
+      selectedCount: frontPageStoriesForDesk.length,
+      roles: frontPageStoriesForDesk.map((s) => s.role),
       composition: frontPage.selectionMeta.composition ?? null,
       editionMode: editorial.policy.mode,
       decisionNotes: editorial.decisions.editorNotes,
-      reasonCodes: frontPage.selectionMeta.stories.map((s) =>
+      reasonCodes: frontPageStoriesForDesk.map((s) =>
         s.reasons.map((r) => r.code)
       ),
     });
@@ -1070,40 +1124,6 @@ export async function buildEditionForUser(
     sections.map((section) => writeSection(section, anthropicApiKey))
   );
 
-  // Story Editor — Top Stories section (roundup article in the reader).
-  for (let i = 0; i < sections.length; i++) {
-    if (sections[i].section_type !== "top_stories") continue;
-    if (!written[i]?.headline || !written[i]?.body) continue;
-    const editedSection = await runStoryEditorSafe(
-      {
-        id: `top_stories:${editionDate}`,
-        headline: written[i].headline,
-        sourceText: `${frontPage.groundingData}\n\nDraft:\n${written[i].body}`,
-        source: "Kindred",
-        surfaceRole: "top_stories_section",
-        locale: "en",
-        priorDraft: {
-          headline: written[i].headline,
-          dek: null,
-          paragraphs: written[i].body
-            .split(/\n\s*\n/)
-            .map((p) => p.replace(/\s+/g, " ").trim())
-            .filter(Boolean),
-        },
-      },
-      anthropicApiKey
-    );
-    written[i] = {
-      headline: editedSection.headline || written[i].headline,
-      body: editedSection.bodyText || written[i].body,
-    };
-    console.log("[buildEdition] storyEditor top_stories", {
-      path: editedSection.desk.path,
-      passes: editedSection.desk.passes,
-      paras: editedSection.paragraphs.length,
-    });
-  }
-
   const writtenUsable = written.filter((w) => w.headline && w.body).length;
   console.log("[buildEdition] write results", {
     plannedCount: sections.length,
@@ -1136,7 +1156,7 @@ export async function buildEditionForUser(
         }
       : null,
     frontPage: {
-      stories: frontPage.selectionMeta.stories,
+      stories: frontPageStoriesForDesk,
       composition: frontPage.selectionMeta.composition ?? null,
       editorialDecisions: editorial.decisions,
     },
@@ -1380,7 +1400,7 @@ export async function buildEditionForUser(
         }
       : null,
     frontPage: {
-      stories: frontPage.selectionMeta.stories,
+      stories: frontPageStoriesForDesk,
       composition: frontPage.selectionMeta.composition ?? null,
       editorialDecisions: editorial.decisions,
     },

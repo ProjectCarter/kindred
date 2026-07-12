@@ -371,9 +371,15 @@ export function buildEditionEditorialContext(
           ),
       ];
       return {
-        id: undefined,
+        id: story.id,
         title: story.title,
         role: story.role,
+        summary: (story.description ?? "").trim(),
+        dek: story.dek ?? null,
+        source: story.source,
+        url: story.url ?? null,
+        imageUrl: story.imageUrl ?? null,
+        publishedAt: story.publishedAt ?? null,
         notes,
       };
     });

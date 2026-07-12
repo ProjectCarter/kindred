@@ -32,6 +32,13 @@ export type SectionEditorialNotes = {
     title: string;
     role?: string;
     notes: EditorialNote[];
+    /** Single-story body when this item is a Top Stories entry. */
+    summary?: string;
+    dek?: string | null;
+    source?: string | null;
+    url?: string | null;
+    imageUrl?: string | null;
+    publishedAt?: string | null;
   }>;
 };
 

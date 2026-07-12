@@ -32,6 +32,10 @@ import {
   type EditionIntelligence,
 } from "../lib/edition/surfaceIntelligence";
 import {
+  topStoriesFromEditorialContext,
+  type TopStoryItem,
+} from "../lib/edition/topStories";
+import {
   inferTopicFromSection,
   trackReadingSignal,
 } from "../lib/personalization";
@@ -70,6 +74,7 @@ export default function HomeScreen() {
   const [editionDate, setEditionDate] = useState<string | null>(null);
   const [editionId, setEditionId] = useState<string | null>(null);
   const [leadStory, setLeadStory] = useState<LeadStory | null>(null);
+  const [topStories, setTopStories] = useState<TopStoryItem[]>([]);
   const [bandit, setBandit] = useState<BanditPayload | null>(null);
   const [intelligence, setIntelligence] =
     useState<EditionIntelligence | null>(null);
@@ -150,6 +155,7 @@ export default function HomeScreen() {
       setEditionDate(null);
       setEditionId(null);
       setLeadStory(null);
+      setTopStories([]);
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -258,6 +264,7 @@ export default function HomeScreen() {
       setEditionDate(null);
       setEditionId(null);
       setLeadStory(null);
+      setTopStories([]);
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -381,6 +388,7 @@ export default function HomeScreen() {
       setEditionDate(null);
       setEditionId(null);
       setLeadStory(null);
+      setTopStories([]);
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -405,6 +413,11 @@ export default function HomeScreen() {
     setEditionDate(edition.edition_date);
     setEditionId(edition.id);
     setLeadStory(lead);
+    setTopStories(
+      topStoriesFromEditorialContext(
+        (edition as { editorial_context?: unknown }).editorial_context
+      )
+    );
     setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
     setIntelligence(intel);
     setOlder(adjacent.older);
@@ -966,6 +979,7 @@ export default function HomeScreen() {
               sections={sections}
               editionDate={editionDate}
               leadStory={leadStory}
+              topStories={topStories}
               banditGreeting={banditMorningLine(bandit)}
               banditAside={intelligence?.banditAside}
               memoryNote={intelligence?.memoryNote}

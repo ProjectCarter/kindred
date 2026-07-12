@@ -17,6 +17,10 @@ import {
   articleFromLeadStory,
   sectionOpensArticleReader,
 } from "../lib/edition/article";
+import {
+  articleFromTopStory,
+  type TopStoryItem,
+} from "../lib/edition/topStories";
 import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
@@ -59,6 +63,11 @@ type Props = {
   discoveryItems?: RankedDiscoveryItem[];
   /** One thoughtful Bandit's Pick after the main paper. */
   banditsPick?: BanditsPickData | null;
+  /**
+   * Individual Top Stories — each opens as one cohesive article.
+   * When present, the combined top_stories section body is not opened as a mashup.
+   */
+  topStories?: TopStoryItem[];
   clippedSectionIds?: Set<string>;
   onToggleClip?: (section: EditionSection) => void;
   clipPendingId?: string | null;
@@ -110,6 +119,7 @@ export function EditionReader({
   discoveryEditorNote,
   discoveryItems,
   banditsPick,
+  topStories = [],
   clippedSectionIds,
   onToggleClip,
   clipPendingId,
@@ -165,7 +175,99 @@ export function EditionReader({
     openLead(leadStory);
   }
 
+  function renderTopStoriesSlate(
+    section: EditionSection,
+    folioIndex: number
+  ) {
+    const clipped = clippedSectionIds?.has(section.id) ?? false;
+    const pending = clipPendingId === section.id;
+    const intro = sectionIntro(section.section_type);
+
+    return (
+      <FolioReveal index={folioIndex} key={section.id}>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionLabel}>
+              {SECTION_LABELS[section.section_type] ?? section.section_type}
+            </Text>
+            <View style={styles.sectionRule} />
+          </View>
+
+          {intro ? (
+            <Text style={styles.sectionIntro}>{intro}</Text>
+          ) : null}
+
+          {topStories.map((story, index) => (
+            <Pressable
+              key={story.id}
+              onPress={() => onOpenArticle?.(articleFromTopStory(story))}
+              accessibilityRole="link"
+              accessibilityLabel={`Read: ${story.headline}`}
+              accessibilityHint="Opens this single story in the Kindred reader"
+              style={({ pressed }) => [
+                styles.topStoryItem,
+                index === topStories.length - 1 && styles.topStoryItemLast,
+                pressed && styles.tapPressed,
+              ]}
+            >
+              <Text style={styles.sectionHeadline}>{story.headline}</Text>
+              {story.summary ? (
+                <Text
+                  style={styles.sectionDek}
+                  numberOfLines={3}
+                  maxFontSizeMultiplier={1.25}
+                >
+                  {folioTeaser(story.summary).dek}
+                </Text>
+              ) : null}
+              <Text style={styles.topStoryMeta}>
+                {[story.source, story.role ? story.role.replace(/_/g, " ") : null]
+                  .filter(Boolean)
+                  .join("  ·  ")}
+              </Text>
+              <Text style={styles.continueCue}>Continue reading</Text>
+            </Pressable>
+          ))}
+
+          {onToggleClip ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.clipLink,
+                pressed && styles.clipPressed,
+              ]}
+              onPress={() => onToggleClip(section)}
+              disabled={pending}
+              accessibilityRole="button"
+              accessibilityLabel={clipped ? "Saved" : "Save for later"}
+            >
+              <Text
+                style={[
+                  styles.clipLinkText,
+                  clipped && styles.clipLinkTextSaved,
+                ]}
+              >
+                {pending
+                  ? "Saving…"
+                  : clipped
+                    ? "Saved"
+                    : "Save for later"}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </FolioReveal>
+    );
+  }
+
   function renderSection(section: EditionSection, folioIndex: number) {
+    if (
+      section.section_type === "top_stories" &&
+      topStories.length > 0 &&
+      onOpenArticle
+    ) {
+      return renderTopStoriesSlate(section, folioIndex);
+    }
+
     const clipped = clippedSectionIds?.has(section.id) ?? false;
     const pending = clipPendingId === section.id;
     const isWeather = section.section_type === "weather";
@@ -452,6 +554,23 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     letterSpacing: 0.2,
     marginTop: 16,
+  },
+  topStoryItem: {
+    paddingBottom: 28,
+    marginBottom: 28,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
+  },
+  topStoryItemLast: {
+    borderBottomWidth: 0,
+    marginBottom: 0,
+    paddingBottom: 8,
+  },
+  topStoryMeta: {
+    ...type.meta,
+    color: paper.inkFaint,
+    marginTop: 12,
+    textTransform: "capitalize",
   },
   tapPressed: {
     opacity: press.opacity,
