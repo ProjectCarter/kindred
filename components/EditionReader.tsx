@@ -50,6 +50,7 @@ type Props = {
   morningBriefing?: MorningBriefing | null;
   leadWhyThisMatters?: string | null;
   leadWhyChosen?: string | null;
+  leadContinuityKicker?: string | null;
   discoveryHeadline?: string | null;
   discoveryEditorNote?: string | null;
   discoveryItems?: RankedDiscoveryItem[];
@@ -80,6 +81,7 @@ export function EditionReader({
   morningBriefing,
   leadWhyThisMatters,
   leadWhyChosen,
+  leadContinuityKicker,
   discoveryHeadline,
   discoveryEditorNote,
   discoveryItems,
@@ -295,6 +297,7 @@ export function EditionReader({
             onContinueReading={onOpenArticle ? openLead : undefined}
             whyThisMatters={leadWhyThisMatters}
             whyChosen={leadWhyChosen}
+            continuityKicker={leadContinuityKicker}
             onOpenKnowledge={onOpenArticle ? openLeadKnowledge : undefined}
           />
         </FolioReveal>

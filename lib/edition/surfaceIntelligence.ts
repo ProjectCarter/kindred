@@ -24,6 +24,7 @@ import {
 import {
   parseMemoryPayload,
   sinceYouLastRead as memorySinceYouLastRead,
+  memoryForStory,
   type MemoryPayload,
 } from "./memory";
 import {
@@ -57,6 +58,8 @@ export type EditionIntelligence = {
   discoveryEditorNote: string | null;
   leadWhyThisMatters: string | null;
   leadWhyChosen: string | null;
+  /** Newspaper continuity slug when today’s Lead continues prior coverage. */
+  leadContinuityKicker: string | null;
 };
 
 export function parseEditionIntelligence(row: {
@@ -140,6 +143,8 @@ export function parseEditionIntelligence(row: {
     morning?.beats?.leadWhy ||
     null;
 
+  const leadContinuityKicker = continuityKickerForLead(memory, lead);
+
   return {
     discovery,
     knowledge,
@@ -155,7 +160,27 @@ export function parseEditionIntelligence(row: {
     leadWhyThisMatters,
     // LeadStorySection derives personalization reasons from lead.selection.
     leadWhyChosen: null,
+    leadContinuityKicker,
   };
+}
+
+/**
+ * Timeless newspaper tradition: mark serial coverage on the front page.
+ * Digital feeds erased “Continued from yesterday”; Kindred keeps it when memory agrees.
+ */
+function continuityKickerForLead(
+  memory: MemoryPayload | null,
+  lead: LeadStory | null
+): string | null {
+  if (!memory || !lead?.id) return null;
+  const threads = memoryForStory(memory, lead.id);
+  const continues = threads.some(
+    (t) => t.type === "continuing_news" || t.type === "ongoing_timeline"
+  );
+  if (!continues) return null;
+  const daysAway = memory.sinceYouLastRead?.daysAway;
+  if (daysAway === 1) return "Continued from yesterday";
+  return "Continued from earlier editions";
 }
 
 function labelForSurface(surface: string): string {

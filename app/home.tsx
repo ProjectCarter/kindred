@@ -972,6 +972,7 @@ export default function HomeScreen() {
               morningBriefing={intelligence?.morningBriefing}
               leadWhyThisMatters={intelligence?.leadWhyThisMatters}
               leadWhyChosen={intelligence?.leadWhyChosen}
+              leadContinuityKicker={intelligence?.leadContinuityKicker}
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}

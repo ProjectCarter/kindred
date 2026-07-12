@@ -18,6 +18,8 @@ type Props = {
   whyThisMatters?: string | null;
   /** Personalization / editorial — why it earned the front page. */
   whyChosen?: string | null;
+  /** Classic continuity slug when coverage continues from a prior edition. */
+  continuityKicker?: string | null;
   /** Opens a knowledge/explainer article in the native reader. */
   onOpenKnowledge?: (kind: "why_this_matters" | "why_chosen") => void;
 };
@@ -97,6 +99,7 @@ export function LeadStorySection({
   onContinueReading,
   whyThisMatters,
   whyChosen,
+  continuityKicker,
   onOpenKnowledge,
 }: Props) {
   const roleTag = ROLE_TAG[lead.role];
@@ -105,6 +108,7 @@ export function LeadStorySection({
   const byline = publicationByline(lead.source);
   const chosen = leadWhyChosen(lead, whyChosen);
   const [heroFailed, setHeroFailed] = useState(false);
+  const sectionKicker = continuityKicker?.trim() || "Lead Story";
 
   const metaParts = [
     roleTag,
@@ -125,7 +129,7 @@ export function LeadStorySection({
   return (
     <View style={styles.wrap} accessibilityRole="summary">
       <View style={styles.kickerRow}>
-        <Text style={styles.kicker}>Lead Story</Text>
+        <Text style={styles.kicker}>{sectionKicker}</Text>
         <View style={styles.kickerRule} />
       </View>
 
