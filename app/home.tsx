@@ -691,6 +691,16 @@ export default function HomeScreen() {
     );
   }
 
+  // Dedicated waiting surface while the presses run — never leave the folio
+  // interactive with only a button-label change.
+  if (generating) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <PaperLoading hint={waitingCopy.preparing} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <LocationFirstRun
