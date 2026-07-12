@@ -19,10 +19,25 @@ import {
 import type { MemoryPayload, MemoryStoryInput } from "./memory/types.ts";
 import { runMorningEditionDecisions } from "./morningEdition/index.ts";
 import type { MorningEditionPayload } from "./morningEdition/types.ts";
+import {
+  formatTempC,
+  formatWeatherSummary,
+  resolveTemperatureUnit,
+  unitInstruction,
+  type TemperatureUnit,
+  type TemperatureUnitPreference,
+} from "./weather/units.ts";
+import { eventMatchesCity } from "./contentQuality.ts";
 
 export type BuildEditionResult =
   | { ok: true; editionId: string }
   | { ok: false; error: string };
+
+export type BuildEditionOptions = {
+  /** Reader's local calendar date YYYY-MM-DD — preferred over UTC. */
+  editionDate?: string | null;
+  temperatureUnitPreference?: TemperatureUnitPreference | null;
+};
 
 type SectionInput = {
   section_type: string;
@@ -327,12 +342,30 @@ async function fetchLocalEventsFromSerpApi(
     if (!sourceUrl) continue;
 
     const sourceName = ticket?.source?.trim() || "Google Events";
+    const resolvedCity = cityFromAddress || cityQuery;
+
+    if (
+      !eventMatchesCity(
+        resolvedCity,
+        venue,
+        name,
+        cityQuery
+      )
+    ) {
+      console.log("[buildEdition] getLocalEvents rejected foreign city", {
+        expected: cityQuery,
+        eventCity: resolvedCity,
+        venue,
+        name: name.slice(0, 60),
+      });
+      continue;
+    }
 
     mapped.push({
       name,
       startDateTime,
       venue,
-      city: cityFromAddress || cityQuery,
+      city: cityQuery,
       sourceUrl,
       sourceName,
     });
@@ -342,6 +375,9 @@ async function fetchLocalEventsFromSerpApi(
 
   console.log("[buildEdition] getLocalEvents filtered", {
     provider: "SerpApi Google Events",
+    cityQuery,
+    lat: location.lat,
+    lon: location.lon,
     rawEventCount: rawEvents.length,
     filteredCount: mapped.length,
   });
@@ -531,7 +567,8 @@ export function createServiceClient() {
 export async function buildEditionForUser(
   supabaseAdmin: SupabaseClient,
   userId: string,
-  locationHint: Location | null
+  locationHint: Location | null,
+  options: BuildEditionOptions = {}
 ): Promise<BuildEditionResult> {
   const newsApiKey = Deno.env.get("NEWS_API_KEY");
   const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -562,6 +599,7 @@ export async function buildEditionForUser(
   }
 
   console.log("[buildEdition] resolved location", {
+    source: locationHint?.city ? "client-or-profile" : "profile-only",
     city: location.city,
     region: location.region,
     state: location.state,
@@ -577,6 +615,18 @@ export async function buildEditionForUser(
 
   // Eligibility still based on onboarding interests.
   const interests: string[] = profile?.interests ?? [];
+
+  const tempPref: TemperatureUnitPreference =
+    options.temperatureUnitPreference ?? "auto";
+  const tempUnit: TemperatureUnit = resolveTemperatureUnit(tempPref, {
+    state: location.state,
+    region: location.region,
+  });
+
+  console.log("[buildEdition] temperature unit", {
+    preference: tempPref,
+    resolved: tempUnit,
+  });
 
   const [recentStoryKeys, personalization, memoryArchive] = await Promise.all([
     loadRecentStoryKeys(supabaseAdmin, userId),
@@ -613,7 +663,18 @@ export async function buildEditionForUser(
     ])
   );
 
-  const editionDate = new Date().toISOString().slice(0, 10);
+  const editionDate =
+    options.editionDate && /^\d{4}-\d{2}-\d{2}$/.test(options.editionDate)
+      ? options.editionDate
+      : new Date().toISOString().slice(0, 10);
+
+  console.log("[buildEdition] edition date", {
+    editionDate,
+    source:
+      options.editionDate && /^\d{4}-\d{2}-\d{2}$/.test(options.editionDate)
+        ? "client-local"
+        : "utc-fallback",
+  });
 
   const [weather, onThisDay, localEvents, editorial] = await Promise.all([
     getWeather(weatherLat, weatherLon),
@@ -649,10 +710,22 @@ export async function buildEditionForUser(
   const topStories = frontPage.stories;
   const leadStory = editorial.leadStory;
 
-  const weatherSummary =
-    weather?.current != null
-      ? `Current ${weather.current.temperature_2m}°C in ${city ?? "your area"}; high ${weather.daily?.temperature_2m_max?.[0] ?? "?"}° / low ${weather.daily?.temperature_2m_min?.[0] ?? "?"}°.`
-      : null;
+  const weatherSummary = formatWeatherSummary({
+    city: city ?? location.city,
+    currentC: weather?.current?.temperature_2m ?? null,
+    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
+    lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
+    unit: tempUnit,
+  });
+
+  console.log("[buildEdition] weather provider", {
+    provider: "Open-Meteo",
+    city: city ?? location.city,
+    lat: weatherLat,
+    lon: weatherLon,
+    unit: tempUnit,
+    summary: weatherSummary,
+  });
 
   const discovery: DiscoveryPayload = runDiscoveryDecisions({
     editionDate,
@@ -803,12 +876,15 @@ export async function buildEditionForUser(
   });
 
   if (weather?.current) {
+    const current = formatTempC(weather.current.temperature_2m, tempUnit);
+    const high = formatTempC(weather.daily?.temperature_2m_max?.[0], tempUnit);
+    const low = formatTempC(weather.daily?.temperature_2m_min?.[0], tempUnit);
     sections.push({
       section_type: "weather",
       position: 1,
-      groundingData: `Current temperature: ${weather.current.temperature_2m}°C in ${location.city}. Today's high/low: ${weather.daily.temperature_2m_max[0]}°/${weather.daily.temperature_2m_min[0]}°.`,
+      groundingData: `Current temperature: ${current} in ${location.city}. Today's high/low: ${high}/${low}. Temperature unit: ${tempUnit}.`,
       instruction:
-        "Write a brief, practical weather section. State the real numbers given. No invented details.",
+        `Write a brief, practical weather section. State the real numbers given. ${unitInstruction(tempUnit)} No invented details. Do not mix temperature units.`,
     });
   }
 
@@ -852,12 +928,20 @@ export async function buildEditionForUser(
   }
 
   if (weather?.daily) {
+    const tomorrowHigh = formatTempC(
+      weather.daily.temperature_2m_max?.[1],
+      tempUnit
+    );
+    const tomorrowLow = formatTempC(
+      weather.daily.temperature_2m_min?.[1],
+      tempUnit
+    );
     sections.push({
       section_type: "looking_ahead",
       position: 5,
-      groundingData: `Tomorrow's forecast: high ${weather.daily.temperature_2m_max[1]}°, low ${weather.daily.temperature_2m_min[1]}° in ${location.city}.`,
+      groundingData: `Tomorrow's forecast: high ${tomorrowHigh}, low ${tomorrowLow} in ${location.city}. Temperature unit: ${tempUnit}.`,
       instruction:
-        "Write a brief, practical 'Looking Ahead' note about tomorrow, grounded only in this forecast. Not generic encouragement.",
+        `Write a brief, practical 'Looking Ahead' note about tomorrow, grounded only in this forecast. ${unitInstruction(tempUnit)} Not generic encouragement. Do not mix temperature units.`,
     });
   }
 

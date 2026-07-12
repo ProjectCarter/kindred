@@ -114,23 +114,49 @@ export function discoveryItemsForSurface(
   surface: DiscoverySurface
 ): RankedDiscoveryItem[] {
   const items = payload?.surfaces?.[surface]?.items ?? [];
-  return items.filter(
-    (ranked) =>
-      ranked &&
-      ranked.item &&
-      typeof ranked.item.title === "string" &&
-      ranked.item.title.trim().length > 0
-  );
+  return items.filter((ranked) => {
+    if (!ranked?.item || typeof ranked.item.title !== "string") return false;
+    const title = ranked.item.title.trim();
+    if (!title) return false;
+    if (
+      /third-wave|editorial quality|magazine desk|hand-selected for today/i.test(
+        `${title} ${ranked.item.dek ?? ""}`
+      )
+    ) {
+      return false;
+    }
+    // Unverified Kindred Desk place templates
+    if (
+      ranked.item.source?.name === "Kindred Desk" &&
+      /coffee|restaurants|hiking|beaches|parks|museums|experiences/.test(
+        ranked.item.category
+      )
+    ) {
+      return false;
+    }
+    return true;
+  });
 }
 
 /** Calm prose — never mentions scores or algorithms. */
 export function formatDiscoveryWhy(item: RankedDiscoveryItem): string {
   const top = (item.reasons ?? [])
-    .filter((r) => r && r.weight > 0 && !String(r.code).startsWith("surface_"))
+    .filter(
+      (r) =>
+        r &&
+        r.weight > 0 &&
+        !String(r.code).startsWith("surface_") &&
+        typeof r.label === "string" &&
+        r.label.trim() &&
+        !/editorial quality|magazine desk|matches what you tend|hand-selected|algorithm|score/i.test(
+          r.label
+        )
+    )
     .slice(0, 2)
-    .map((r) => r.label)
-    .filter((label) => typeof label === "string" && label.trim());
-  return top.join(" ") || "Hand-selected for today’s paper.";
+    .map((r) => r.label);
+  if (top.length) return top.join(" ");
+  if (item.item.place?.city) return `Nearby in ${item.item.place.city}.`;
+  return "";
 }
 
 export const DiscoveryService = {

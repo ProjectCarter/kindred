@@ -1,3 +1,4 @@
+import { isPlaceholderCopy } from "../contentQuality.ts";
 import {
   SURFACE_CATEGORIES,
   SURFACE_EDITOR_NOTES,
@@ -12,12 +13,48 @@ import type {
 
 const DEFAULT_MAX = 4;
 
-function whyLine(item: RankedDiscoveryItem): string {
+/** Place-like categories must come from verified local data, not seed templates. */
+const PLACE_CATEGORIES = new Set([
+  "coffee",
+  "restaurants",
+  "hiking",
+  "beaches",
+  "parks",
+  "museums",
+  "scenic_drives",
+  "experiences",
+]);
+
+export function whyLine(item: RankedDiscoveryItem): string {
   const top = item.reasons
-    .filter((r) => r.weight > 0)
+    .filter(
+      (r) =>
+        r.weight > 0 &&
+        !isPlaceholderCopy(r.label) &&
+        !/magazine desk|tend to care|algorithm|score/i.test(r.label)
+    )
     .slice(0, 2)
     .map((r) => r.label);
-  return top.join(" ") || "Hand-selected for today’s paper.";
+  if (top.length) return top.join(" ");
+  if (item.item.place?.city) {
+    return `Nearby in ${item.item.place.city}.`;
+  }
+  return "From today’s paper.";
+}
+
+function isVerifiedPlaceItem(item: RankedDiscoveryItem): boolean {
+  const cat = item.item.category;
+  if (!PLACE_CATEGORIES.has(cat)) return true;
+  // Local events / provider URLs count as verified
+  if (item.item.id.startsWith("event_")) return true;
+  if (item.item.source?.tier === "local" && item.item.url) return true;
+  if (item.item.place?.city && item.item.source?.url) return true;
+  // Seed Kindred Desk place templates are not verified recommendations
+  if (item.item.source?.name === "Kindred Desk") return false;
+  if (isPlaceholderCopy(item.item.title) || isPlaceholderCopy(item.item.dek)) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -35,7 +72,7 @@ export function selectDiscoverySurface(
   const usedCategories = new Set<string>();
 
   const pool = ranked
-    .filter((r) => allowed.has(r.item.category))
+    .filter((r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r))
     .sort((a, b) => b.score - a.score);
 
   // Hidden gems: prefer uniqueness

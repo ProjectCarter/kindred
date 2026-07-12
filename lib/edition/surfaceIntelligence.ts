@@ -36,6 +36,11 @@ import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, ContinueReadingItem, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
 import { isClippableSectionId } from "./article";
+import {
+  hasSubstance,
+  isInternalScoreLabel,
+  isPlaceholderCopy,
+} from "./contentQuality";
 
 export type EditionIntelligence = {
   discovery: DiscoveryPayload | null;
@@ -194,7 +199,8 @@ function knowledgeNotesFromPacket(
   for (const type of KNOWLEDGE_NOTE_TYPES) {
     for (const facet of packet.facets) {
       if (facet.type !== type) continue;
-      if (!facet.summary?.trim()) continue;
+      if (!hasSubstance(facet.summary, 16)) continue;
+      if (isPlaceholderCopy(facet.title)) continue;
       notes.push({
         kicker: KNOWLEDGE_KICKERS[type] ?? "Context",
         title: facet.title?.trim() || KNOWLEDGE_KICKERS[type] || "Context",
@@ -214,30 +220,32 @@ const CONTINUE_LABEL: Partial<
   historical_background: "background",
   trusted_explainer: "background",
   previous_coverage: "related",
-  definition: "background",
 };
 
 const CONTINUE_DISPLAY: Record<ContinueReadingItem["kind"], string> = {
   related: "Related Story",
   local: "Local Perspective",
-  background: "Background Explainer",
+  background: "Background",
   opposing: "Opposing Viewpoint",
   bandit: "Bandit’s Pick",
 };
 
 function continueReadingFrom(
   intelligence: EditionIntelligence,
-  packet: KnowledgePacket | null
+  packet: KnowledgePacket | null,
+  currentTitle?: string | null
 ): ContinueReadingItem[] {
   const items: ContinueReadingItem[] = [];
   const seen = new Set<string>();
+  const current = (currentTitle ?? "").trim().toLowerCase();
 
   if (packet?.facets) {
     for (const facet of packet.facets) {
-      if (!facet.summary?.trim()) continue;
+      if (!hasSubstance(facet.summary, 18)) continue;
       const kind = CONTINUE_LABEL[facet.type];
       if (!kind) continue;
       const title = facet.title?.trim() || CONTINUE_DISPLAY[kind];
+      if (current && title.toLowerCase() === current) continue;
       const key = `${kind}:${title}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -250,13 +258,12 @@ function continueReadingFrom(
       if (items.length >= 3) break;
     }
 
-    // Soft opposing viewpoint — only when an explainer/related facet
-    // explicitly signals another side (never invent controversy).
+    // Opposing viewpoint — only with a legitimate signal in real copy.
     if (!items.some((i) => i.kind === "opposing")) {
       const opposing = packet.facets.find(
         (f) =>
-          f.summary &&
-          /another view|other side|critics|meanwhile|opposing|counterpoint/i.test(
+          hasSubstance(f.summary, 18) &&
+          /another view|other side|critics|counterpoint|opposing view/i.test(
             `${f.title} ${f.summary}`
           )
       );
@@ -272,31 +279,50 @@ function continueReadingFrom(
   }
 
   const bandit = intelligence.discoveryItems?.[0];
-  if (bandit?.item?.title && items.length < 4) {
-    items.push({
-      kind: "bandit",
-      label: CONTINUE_DISPLAY.bandit,
-      title: bandit.item.title.trim(),
-      summary:
-        bandit.item.dek?.trim() ||
-        "A quiet suggestion from Bandit, your editor.",
-    });
+  if (
+    bandit?.item?.title &&
+    items.length < 4 &&
+    hasSubstance(bandit.item.dek, 8) &&
+    !isPlaceholderCopy(bandit.item.title) &&
+    !isPlaceholderCopy(bandit.item.dek)
+  ) {
+    const title = bandit.item.title.trim();
+    if (!current || title.toLowerCase() !== current) {
+      items.push({
+        kind: "bandit",
+        label: CONTINUE_DISPLAY.bandit,
+        title,
+        summary: bandit.item.dek.trim().slice(0, 220),
+      });
+    }
   }
 
-  return items.slice(0, 4);
+  return items.slice(0, 3);
 }
 
 function buildCompanion(
   intelligence: EditionIntelligence,
   packet: KnowledgePacket | null,
   whyThisMattersNote: ArticleCompanion["whyThisMatters"],
-  whyChosen: string | null
+  whyChosen: string | null,
+  currentTitle?: string | null
 ): ArticleCompanion {
+  const why =
+    whyThisMattersNote && hasSubstance(whyThisMattersNote.summary, 16)
+      ? whyThisMattersNote
+      : null;
+  const chosen =
+    whyChosen &&
+    hasSubstance(whyChosen, 8) &&
+    !isInternalScoreLabel(whyChosen)
+      ? whyChosen
+      : null;
+
   return {
-    whyThisMatters: whyThisMattersNote,
-    whyChosen,
+    whyThisMatters: why,
+    whyChosen: chosen,
     knowledgeNotes: knowledgeNotesFromPacket(packet),
-    continueReading: continueReadingFrom(intelligence, packet),
+    continueReading: continueReadingFrom(intelligence, packet, currentTitle),
   };
 }
 
@@ -313,6 +339,7 @@ export function companionForLead(
       (r) =>
         r.weight > 0 &&
         !r.code.startsWith("role_") &&
+        !isInternalScoreLabel(r.label) &&
         !/score|algorithm|boost|rank|weight/i.test(r.label) &&
         !/score|algorithm|boost|rank/i.test(r.code)
     )
@@ -332,7 +359,8 @@ export function companionForLead(
             summary: intelligence.leadWhyThisMatters,
           }
         : null,
-    chosen ? chosen + "." : null
+    chosen ? chosen + "." : null,
+    lead.headline
   );
 }
 
@@ -365,7 +393,8 @@ export function companionForArticle(
     intelligence,
     packet,
     facet ? { title: facet.title, summary: facet.summary } : null,
-    null
+    null,
+    article.headline
   );
 }
 

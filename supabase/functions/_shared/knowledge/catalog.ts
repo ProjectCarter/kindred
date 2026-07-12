@@ -10,19 +10,19 @@ import type {
 } from "./types.ts";
 
 function whyThisMattersSummary(story: KnowledgeStoryInput): string {
-  const role = story.role ?? "national";
-  const topic = inferTopicLabel(story.headline, story.category);
-  const topReason = story.reasons?.find((r) => !r.code.startsWith("role_"));
+  const topReason = story.reasons?.find(
+    (r) =>
+      !r.code.startsWith("role_") &&
+      r.label?.trim() &&
+      !/score|algorithm|boost|rank|magazine desk|tend to care/i.test(r.label)
+  );
   if (topReason?.label) {
-    return `${topReason.label} This story belongs on today’s paper because it shapes what readers need to understand now.`;
+    return topReason.label.replace(/\.$/, "") + ".";
   }
-  if (topic) {
-    return `A development in ${topic} with consequences beyond the day’s headline — worth the context, not just the alert.`;
+  if (story.summary?.trim() && story.summary.trim().length > 40) {
+    return story.summary.trim().slice(0, 220);
   }
-  if (role === "local") {
-    return "It matters close to home — decisions, places, and people in your community.";
-  }
-  return "It matters because the day’s paper should connect events to a clearer picture of the world.";
+  return "";
 }
 
 /**

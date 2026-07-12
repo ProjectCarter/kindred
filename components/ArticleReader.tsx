@@ -449,8 +449,9 @@ export function ArticleReader({
 
           {briefing ? (
             <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
-              A Kindred summary for your morning paper — not the full article
-              from the publisher.
+              {article.body.length <= 1
+                ? "A short Kindred note — limited source text was available. View the original source for the full publisher report."
+                : "A Kindred summary for your morning paper — not the full article from the publisher."}
             </Text>
           ) : null}
 
@@ -537,7 +538,7 @@ export function ArticleReader({
 
           {knowledgeNotes.length > 0 ? (
             <View style={styles.knowledgeBlock}>
-              <Text style={styles.knowledgeHeading}>Knowledge context</Text>
+              <Text style={styles.knowledgeHeading}>Kindred context</Text>
               <View style={styles.knowledgeRule} />
               {knowledgeNotes.map((note, i) => (
                 <MagazineCallout
@@ -568,23 +569,22 @@ export function ArticleReader({
             ) : null}
           </View>
 
-          {continueItems.length > 0 ? (
+          {continueItems.length > 0 && onOpenContinue ? (
             <View style={styles.continueBlock}>
               <Text style={styles.continueKicker}>Continue reading</Text>
               <Text style={styles.continueIntro}>
-                A few careful pages nearby — nothing more than you need.
+                Related pages from today’s edition.
               </Text>
               {continueItems.map((item, index) => (
                 <Pressable
                   key={`${item.kind}-${index}`}
                   onPress={() => onOpenContinue?.(item)}
-                  disabled={!onOpenContinue}
-                  accessibilityRole={onOpenContinue ? "link" : "text"}
+                  accessibilityRole="link"
                   accessibilityLabel={`${item.label}. ${item.title}`}
                   style={({ pressed }) => [
                     styles.continueItem,
                     index === continueItems.length - 1 && styles.continueItemLast,
-                    pressed && onOpenContinue && styles.pressed,
+                    pressed && styles.pressed,
                   ]}
                 >
                   <Text style={styles.continueLabel}>{item.label}</Text>

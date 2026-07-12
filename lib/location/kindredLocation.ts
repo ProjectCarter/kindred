@@ -459,6 +459,19 @@ export async function resolveActivePlace(options?: {
 
   const active = toActive(prefs);
   if (active.place) void syncProfile(prefs, active.place);
+  if (__DEV__) {
+    console.log("[location] resolveActivePlace", {
+      mode: active.mode,
+      modeLabel: active.modeLabel,
+      city: active.place?.city ?? null,
+      region: active.place?.region ?? null,
+      state: active.place?.state ?? null,
+      lat: active.place?.lat ?? null,
+      lon: active.place?.lon ?? null,
+      needsSetup: active.needsSetup,
+      isTravel: active.isTravel,
+    });
+  }
   return active;
 }
 

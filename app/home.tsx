@@ -50,6 +50,10 @@ import {
   type ActiveLocation,
   type KindredPlace,
 } from "../lib/location/deviceLocation";
+import { citiesMatch } from "../lib/location/locationKey";
+import {
+  getTemperatureUnitPreference,
+} from "../lib/weather/units";
 import {
   LocationFirstRun,
   useLocationFirstRun,
@@ -75,6 +79,7 @@ export default function HomeScreen() {
     null
   );
   const [showFirstRun, setShowFirstRun] = useState(false);
+  const [locationMismatch, setLocationMismatch] = useState<string | null>(null);
   const { pending: firstRunPending, dismiss: dismissFirstRun } =
     useLocationFirstRun();
   const loadGen = useRef(0);
@@ -293,19 +298,55 @@ export default function HomeScreen() {
     setEditionId(edition.id);
     const lead = parseLeadStory((edition as { lead_story?: unknown }).lead_story);
     setLeadStory(lead);
+    const intel = parseEditionIntelligence({
+      bandit: (edition as { bandit?: unknown }).bandit,
+      discovery: (edition as { discovery?: unknown }).discovery,
+      knowledge: (edition as { knowledge?: unknown }).knowledge,
+      memory: (edition as { memory?: unknown }).memory,
+      morning_edition: (edition as { morning_edition?: unknown })
+        .morning_edition,
+      leadStory: lead,
+    });
     setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
-    setIntelligence(
-      parseEditionIntelligence({
-        bandit: (edition as { bandit?: unknown }).bandit,
-        discovery: (edition as { discovery?: unknown }).discovery,
-        knowledge: (edition as { knowledge?: unknown }).knowledge,
-        memory: (edition as { memory?: unknown }).memory,
-        morning_edition: (edition as { morning_edition?: unknown })
-          .morning_edition,
-        leadStory: lead,
-      })
-    );
+    setIntelligence(intel);
     setOlder(adjacent.older);
+
+    // Detect stale edition built for a different city than the active location.
+    const builtCity = intel.discovery?.location?.city ?? null;
+    const active = await resolveActivePlace({ refreshIfStale: false });
+    if (mountedRef.current) setActiveLocation(active);
+    if (
+      active.place?.city &&
+      builtCity &&
+      !citiesMatch(active.place.city, builtCity)
+    ) {
+      if (__DEV__) {
+        console.warn("[home] loadEdition: location mismatch", {
+          mode: active.mode,
+          activeCity: active.place.city,
+          builtCity,
+          editionId: edition.id,
+        });
+      }
+      if (mountedRef.current && gen === loadGen.current) {
+        setLocationMismatch(builtCity);
+      }
+    } else if (mountedRef.current && gen === loadGen.current) {
+      setLocationMismatch(null);
+    }
+
+    if (__DEV__) {
+      console.log("[home] loadEdition: location check", {
+        mode: active.mode,
+        activeCity: active.place?.city ?? null,
+        builtCity,
+        mismatch: Boolean(
+          active.place?.city &&
+            builtCity &&
+            !citiesMatch(active.place.city, builtCity)
+        ),
+      });
+    }
 
     if (loaded.length > 0) {
       const { data: clips, error: clipsError } = await supabase
@@ -378,10 +419,8 @@ export default function HomeScreen() {
     __DEV__ && console.log("[home] generate-edition: start");
 
     try {
-      const active =
-        activeLocation?.place
-          ? activeLocation
-          : await resolveActivePlace({ refreshIfStale: true });
+      // Always re-resolve — never trust a stale in-memory place for generation.
+      const active = await resolveActivePlace({ refreshIfStale: true });
       if (mountedRef.current) setActiveLocation(active);
 
       if (!active.place) {
@@ -393,11 +432,31 @@ export default function HomeScreen() {
       }
 
       const loc: KindredPlace = active.place;
+      const tempUnit = await getTemperatureUnitPreference();
+      const editionDate = localEditionDate();
+
+      if (__DEV__) {
+        console.log("[home] generate-edition: location resolved", {
+          mode: active.mode,
+          modeLabel: active.modeLabel,
+          city: loc.city,
+          region: loc.region,
+          state: loc.state,
+          lat: loc.lat,
+          lon: loc.lon,
+          editionDate,
+          temperatureUnit: tempUnit,
+        });
+      }
 
       const INVOKE_TIMEOUT_MS = 90_000;
       const { data, error: invokeError } = await Promise.race([
         supabase.functions.invoke("generate-edition", {
-          body: { location: locationPayload(loc) },
+          body: {
+            location: locationPayload(loc),
+            editionDate,
+            temperatureUnit: tempUnit,
+          },
         }),
         new Promise<never>((_, reject) => {
           setTimeout(
@@ -408,7 +467,11 @@ export default function HomeScreen() {
       ]);
 
       __DEV__ &&
-        console.log("[home] generate-edition: location sent", locationPayload(loc));
+        console.log("[home] generate-edition: location sent", {
+          ...locationPayload(loc),
+          editionDate,
+          temperatureUnit: tempUnit,
+        });
       let responseStatus: number | string | null = null;
       let responseBody: unknown = data;
 
@@ -471,6 +534,7 @@ export default function HomeScreen() {
         return;
       }
 
+      setLocationMismatch(null);
       await loadEdition();
       __DEV__ && console.log("[home] generate-edition: loadEdition finished");
     } catch (err) {
@@ -640,6 +704,30 @@ export default function HomeScreen() {
               accessibilityLabel="Return to home city"
             >
               <Text style={styles.travelReturn}>Return to Home City</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {locationMismatch && activeLocation?.place ? (
+          <View style={styles.mismatchBanner}>
+            <Text style={styles.mismatchText}>
+              This edition was prepared for {locationMismatch}. You’re in{" "}
+              {activeLocation.place.city} now — refresh the paper for local news,
+              weather, and events.
+            </Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.mismatchButton,
+                generating && styles.buttonDisabled,
+                pressed && !generating && styles.linkPressed,
+              ]}
+              onPress={handleGenerate}
+              disabled={generating}
+              accessibilityRole="button"
+            >
+              <Text style={styles.mismatchButtonText}>
+                {generating ? "Preparing…" : "Refresh for this city"}
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -820,6 +908,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: paper.terracotta,
     fontStyle: "italic",
+  },
+  mismatchBanner: {
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
+  },
+  mismatchText: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 23,
+    color: paper.inkMuted,
+    marginBottom: 12,
+  },
+  mismatchButton: {
+    alignSelf: "flex-start",
+    backgroundColor: paper.ink,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  mismatchButtonText: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    color: paper.cream,
   },
   locationHint: {
     fontFamily: "Georgia",

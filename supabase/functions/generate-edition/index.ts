@@ -1,15 +1,15 @@
 // Kindred — generate-edition
-// On-demand build for the signed-in user (manual fallback while overnight
-// generation is the primary path). Secrets stay server-side only.
-// Prefer client GPS location from the request body over IP geolocation.
+// On-demand build for the signed-in user.
+// Requires an explicit client location — never silently falls back to IP or a hard-coded city.
 
 import {
   buildEditionForUser,
   createServiceClient,
-  getApproxLocation,
   resolveEditionLocation,
+  type BuildEditionOptions,
 } from "../_shared/buildEdition.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import type { TemperatureUnitPreference } from "../_shared/weather/units.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -47,31 +47,74 @@ Deno.serve(async (req) => {
     }
 
     let clientLocation: ClientLocation | null = null;
+    let editionDate: string | null = null;
+    let temperatureUnitPreference: TemperatureUnitPreference | null = null;
+
     try {
       const body = await req.json();
       if (body?.location && typeof body.location === "object") {
         clientLocation = body.location as ClientLocation;
       }
+      if (
+        typeof body?.editionDate === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(body.editionDate)
+      ) {
+        editionDate = body.editionDate;
+      }
+      if (
+        body?.temperatureUnit === "auto" ||
+        body?.temperatureUnit === "fahrenheit" ||
+        body?.temperatureUnit === "celsius"
+      ) {
+        temperatureUnitPreference = body.temperatureUnit;
+      }
     } catch {
-      // No JSON body — fall through to profile / IP.
+      // No JSON body
     }
 
-    const supabaseAdmin = createServiceClient();
-    const ipApprox = await getApproxLocation(req);
-
-    const locationHint =
+    const locationUsable =
       clientLocation &&
       typeof clientLocation.lat === "number" &&
       typeof clientLocation.lon === "number" &&
-      clientLocation.city
-        ? {
-            lat: clientLocation.lat,
-            lon: clientLocation.lon,
-            city: clientLocation.city,
-            region: clientLocation.region ?? null,
-            state: clientLocation.state ?? null,
-          }
-        : ipApprox;
+      Number.isFinite(clientLocation.lat) &&
+      Number.isFinite(clientLocation.lon) &&
+      typeof clientLocation.city === "string" &&
+      clientLocation.city.trim().length > 0 &&
+      clientLocation.city.trim().toLowerCase() !== "your area";
+
+    if (!locationUsable) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "location_required — send { location: { city, lat, lon } } from the device. Kindred never invents a city.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    const locationHint = {
+      lat: clientLocation!.lat!,
+      lon: clientLocation!.lon!,
+      city: clientLocation!.city!.trim(),
+      region: clientLocation!.region ?? null,
+      state: clientLocation!.state ?? null,
+    };
+
+    const supabaseAdmin = createServiceClient();
+
+    // Persist active location so overnight jobs match the reader's city.
+    await supabaseAdmin
+      .from("profiles")
+      .update({
+        location: {
+          city: locationHint.city,
+          region: locationHint.region,
+          state: locationHint.state,
+          lat: locationHint.lat,
+          lon: locationHint.lon,
+        },
+      })
+      .eq("id", user.id);
 
     const location = await resolveEditionLocation(
       supabaseAdmin,
@@ -90,13 +133,28 @@ Deno.serve(async (req) => {
     }
 
     console.log("[generate-edition] location", {
-      source: clientLocation?.city ? "client" : "profile-or-ip",
+      source: "client",
+      mode: "explicit-body",
       city: location.city,
+      region: location.region,
+      state: location.state,
       lat: location.lat,
       lon: location.lon,
+      editionDate,
+      temperatureUnitPreference,
     });
 
-    const result = await buildEditionForUser(supabaseAdmin, user.id, location);
+    const buildOptions: BuildEditionOptions = {
+      editionDate,
+      temperatureUnitPreference: temperatureUnitPreference ?? "auto",
+    };
+
+    const result = await buildEditionForUser(
+      supabaseAdmin,
+      user.id,
+      location,
+      buildOptions
+    );
 
     if (!result.ok) {
       return new Response(JSON.stringify({ error: result.error }), {
@@ -104,11 +162,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const editionDate = new Date().toISOString().slice(0, 10);
+    const jobDate =
+      editionDate && /^\d{4}-\d{2}-\d{2}$/.test(editionDate)
+        ? editionDate
+        : new Date().toISOString().slice(0, 10);
+
     await supabaseAdmin.from("generation_jobs").upsert(
       {
         user_id: user.id,
-        edition_date: editionDate,
+        edition_date: jobDate,
         status: "ready",
         attempts: 1,
         last_error: null,
@@ -126,12 +188,17 @@ Deno.serve(async (req) => {
           region: location.region,
           state: location.state,
         },
+        editionDate: jobDate,
       }),
       { headers: { "content-type": "application/json" } }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-    });
+    console.error("[generate-edition] failure", err);
+    return new Response(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unknown error",
+      }),
+      { status: 500 }
+    );
   }
 });

@@ -43,7 +43,7 @@ export function scoreDiscoveryItem(
   score += quality;
   reasons.push({
     code: "editorial_quality",
-    label: "Editorial quality worthy of a magazine desk",
+    label: "A quiet desk recommendation",
     weight: quality,
   });
 
@@ -68,7 +68,7 @@ export function scoreDiscoveryItem(
     score += 12;
     reasons.push({
       code: "reader_interest",
-      label: "Matches what you tend to care about",
+      label: "Fits what you’ve been reading",
       weight: 12,
     });
   }

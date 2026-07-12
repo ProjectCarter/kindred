@@ -4,6 +4,7 @@ import {
   type RankedDiscoveryItem,
 } from "./discovery";
 import type { KnowledgeFacet } from "./knowledge";
+import { dedupeProse } from "./contentQuality";
 
 /**
  * Canonical article model for Kindred’s native reader.
@@ -60,16 +61,19 @@ export function splitIntoParagraphs(text: string): string[] {
   return paragraphs;
 }
 
+/**
+ * Only return a pull quote when the source text contains an attributable quotation.
+ * Never manufacture magazine quotes from ordinary prose.
+ */
 export function extractPullQuote(paragraphs: string[]): string | null {
-  const candidates = paragraphs
-    .flatMap((p) => p.match(/[^.!?]+[.!?]+/g) ?? [p])
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 70 && s.length <= 180);
-
-  if (!candidates.length) return null;
-  // Prefer a mid-article sentence for editorial rhythm.
-  const mid = candidates[Math.floor(candidates.length / 2)] ?? candidates[0];
-  return mid.replace(/^["“]|["”]$/g, "").trim();
+  const blob = paragraphs.join(" ");
+  const quoted =
+    blob.match(/[“"]([^”"]{40,160})[”"]/) ||
+    blob.match(/\u201C([^\u201D]{40,160})\u201D/);
+  if (!quoted?.[1]) return null;
+  const text = quoted[1].trim();
+  if (text.split(/\s+/).length < 8) return null;
+  return text;
 }
 
 export function estimateArticleReadMinutes(
@@ -122,7 +126,7 @@ export function formatArticlePublishedAt(
  */
 export function articleFromLeadStory(lead: LeadStory): KindredArticle {
   const summary = lead.summary ?? "";
-  const body = splitIntoParagraphs(summary);
+  const body = dedupeProse(splitIntoParagraphs(summary));
   const pullQuote = extractPullQuote(body);
   const heroUri = lead.heroImage?.uri ?? null;
   const article: KindredArticle = {
@@ -140,7 +144,13 @@ export function articleFromLeadStory(lead: LeadStory): KindredArticle {
           credit: `Photograph via ${lead.source ?? "Kindred"}`,
         }
       : null,
-    body: body.length ? body : summary ? [summary] : [lead.headline],
+    body: body.length
+      ? body
+      : summary
+        ? [summary]
+        : [
+            "This briefing is thin — open the original source for the full publisher report.",
+          ],
     pullQuote,
     sourceUrl: lead.url,
   };
@@ -167,12 +177,29 @@ export function articleFromSectionItem(input: {
   pullQuote?: string | null;
 }): KindredArticle {
   const source = input.source?.trim() || "Kindred";
-  const body = splitIntoParagraphs(input.body);
+  const dek = input.dek?.trim() || null;
+  let body = dedupeProse(splitIntoParagraphs(input.body));
+  // Do not repeat the dek as the body.
+  if (dek && body.length === 1) {
+    const b = body[0].toLowerCase().replace(/\s+/g, " ");
+    const d = dek.toLowerCase().replace(/\s+/g, " ");
+    if (b === d || b.includes(d) || d.includes(b)) {
+      body = [];
+    }
+  }
+  if (!body.length && input.body.trim() && input.body.trim() !== dek) {
+    body = [input.body.trim()];
+  }
+  if (!body.length) {
+    body = [
+      "Kindred has only a short note for this item. View the original source for the full report.",
+    ];
+  }
   const article: KindredArticle = {
     id: input.id,
     section: input.section,
     headline: input.headline.trim(),
-    dek: input.dek?.trim() || null,
+    dek,
     byline: input.byline?.trim() || formatArticleByline(source),
     source,
     publishedAt: input.publishedAt ?? null,
@@ -183,13 +210,10 @@ export function articleFromSectionItem(input: {
           credit: `Photograph via ${source}`,
         }
       : null,
-    body: body.length ? body : [input.body.trim()].filter(Boolean),
+    body,
     pullQuote: input.pullQuote ?? extractPullQuote(body),
     sourceUrl: input.sourceUrl ?? null,
   };
-  if (!article.body.length) {
-    article.body = [article.headline];
-  }
   article.estimatedReadMinutes = estimateArticleReadMinutes(article);
   return article;
 }

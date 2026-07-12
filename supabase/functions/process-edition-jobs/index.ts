@@ -146,7 +146,8 @@ Deno.serve(async (req) => {
       const result = await buildEditionForUser(
         supabaseAdmin,
         job.user_id,
-        location
+        location,
+        { temperatureUnitPreference: "auto" }
       );
 
       if (result.ok) {

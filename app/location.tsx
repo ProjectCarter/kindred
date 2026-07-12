@@ -20,26 +20,37 @@ import {
   type ActiveLocation,
   type LocationPrefs,
 } from "../lib/location/deviceLocation";
+import {
+  getTemperatureUnitPreference,
+  setTemperatureUnitPreference,
+  preferenceLabel,
+  resolveTemperatureUnit,
+  type TemperatureUnitPreference,
+} from "../lib/weather/units";
 
 /**
  * Location Settings — calm editorial screen.
- * Current Location · Home City · Travel Edition
+ * Current Location · Home City · Travel Edition · Temperature
  */
 export default function LocationSettingsScreen() {
   const router = useRouter();
   const [active, setActive] = useState<ActiveLocation | null>(null);
   const [prefs, setPrefs] = useState<LocationPrefs | null>(null);
+  const [tempPref, setTempPref] =
+    useState<TemperatureUnitPreference>("auto");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [a, p] = await Promise.all([
+    const [a, p, t] = await Promise.all([
       getActiveLocation(),
       getLocationPrefs(),
+      getTemperatureUnitPreference(),
     ]);
     setActive(a);
     setPrefs(p);
+    setTempPref(t);
   }, []);
 
   useFocusEffect(
@@ -210,6 +221,62 @@ export default function LocationSettingsScreen() {
             </Pressable>
           </>
         ) : null}
+
+        <View style={styles.tempBlock}>
+          <Text style={styles.statusLabel}>Temperature</Text>
+          <Text style={styles.statusMeta}>
+            {preferenceLabel(tempPref)}
+            {tempPref === "auto" && active?.place
+              ? ` · ${
+                  resolveTemperatureUnit("auto", active.place) === "fahrenheit"
+                    ? "°F"
+                    : "°C"
+                } here`
+              : ""}
+          </Text>
+          {(
+            [
+              ["auto", "Automatic"],
+              ["fahrenheit", "Fahrenheit"],
+              ["celsius", "Celsius"],
+            ] as const
+          ).map(([value, label]) => (
+            <Pressable
+              key={value}
+              style={({ pressed }) => [
+                styles.tempOption,
+                tempPref === value && styles.tempOptionActive,
+                pressed && styles.pressed,
+              ]}
+              onPress={() =>
+                void withBusy(async () => {
+                  await setTemperatureUnitPreference(value);
+                  setTempPref(value);
+                  setMessage(
+                    value === "auto"
+                      ? "Temperature follows your city"
+                      : `Using ${label}`
+                  );
+                })
+              }
+              accessibilityRole="button"
+              accessibilityState={{ selected: tempPref === value }}
+            >
+              <Text
+                style={[
+                  styles.tempOptionText,
+                  tempPref === value && styles.tempOptionTextActive,
+                ]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+          <Text style={styles.tempHint}>
+            Applies to newly generated editions. Regenerate today’s paper after
+            changing units.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -319,6 +386,39 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     paddingVertical: 8,
+  },
+  tempBlock: {
+    marginTop: 36,
+    paddingTop: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: paper.inkRule,
+  },
+  tempOption: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.inkRule,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  tempOptionActive: {
+    borderColor: paper.ink,
+    backgroundColor: paper.ink,
+  },
+  tempOptionText: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    color: paper.ink,
+  },
+  tempOptionTextActive: {
+    color: paper.cream,
+  },
+  tempHint: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    fontStyle: "italic",
+    color: paper.inkFaint,
+    marginTop: 14,
+    lineHeight: 20,
   },
   disabled: {
     opacity: 0.55,

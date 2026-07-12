@@ -1,3 +1,4 @@
+import { isPlaceholderCopy } from "../contentQuality.ts";
 import type {
   KnowledgeFacet,
   KnowledgeFacetType,
@@ -11,13 +12,13 @@ const DEFAULT_MAX = 6;
 const TYPE_CAP: Partial<Record<KnowledgeFacetType, number>> = {
   related_story: 2,
   previous_coverage: 2,
-  definition: 2,
+  definition: 1,
   local_context: 2,
   why_this_matters: 1,
   trusted_explainer: 1,
   historical_background: 1,
   timeline: 1,
-  map: 1,
+  map: 0, // omit generic map templates
 };
 
 /**
@@ -30,6 +31,12 @@ export function selectKnowledgePacket(
 ): KnowledgePacket {
   const ordered = scored
     .filter((s) => s.storyKey === story.storyKey)
+    .filter(
+      (s) =>
+        !isPlaceholderCopy(s.facet.summary) &&
+        !isPlaceholderCopy(s.facet.title) &&
+        (TYPE_CAP[s.facet.type] ?? 1) > 0
+    )
     .sort((a, b) => b.score - a.score);
 
   const selected: KnowledgeFacet[] = [];
