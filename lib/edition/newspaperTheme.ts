@@ -162,7 +162,7 @@ export const reader = {
   body: {
     fontFamily: "Georgia",
     fontSize: 19,
-    lineHeight: 36,
+    lineHeight: 32,
     letterSpacing: 0.15,
   },
   dropCap: {
