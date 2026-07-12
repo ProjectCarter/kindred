@@ -54,6 +54,7 @@ import { citiesMatch } from "../lib/location/locationKey";
 import {
   getTemperatureUnitPreference,
 } from "../lib/weather/units";
+import { resolveEditionBuiltCity } from "../lib/edition/editionLocation";
 import {
   LocationFirstRun,
   useLocationFirstRun,
@@ -80,10 +81,13 @@ export default function HomeScreen() {
   );
   const [showFirstRun, setShowFirstRun] = useState(false);
   const [locationMismatch, setLocationMismatch] = useState<string | null>(null);
+  const [pendingCityRegen, setPendingCityRegen] = useState(false);
   const { pending: firstRunPending, dismiss: dismissFirstRun } =
     useLocationFirstRun();
   const loadGen = useRef(0);
   const mountedRef = useRef(true);
+  /** One auto-regen per edition id + active city. */
+  const autoRegenKey = useRef<string | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -184,7 +188,7 @@ export default function HomeScreen() {
     } = await supabase
       .from("editions")
       .select(
-        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition",
+        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context",
         {
         count: "exact",
       })
@@ -293,11 +297,12 @@ export default function HomeScreen() {
 
     if (!mountedRef.current || gen !== loadGen.current) return;
 
-    setSections(loaded);
-    setEditionDate(edition.edition_date);
-    setEditionId(edition.id);
+    // Resolve active location before deciding whether this edition is fresh.
+    // Current Location mode always refreshes GPS when stale.
+    const active = await resolveActivePlace({ refreshIfStale: true });
+    if (mountedRef.current) setActiveLocation(active);
+
     const lead = parseLeadStory((edition as { lead_story?: unknown }).lead_story);
-    setLeadStory(lead);
     const intel = parseEditionIntelligence({
       bandit: (edition as { bandit?: unknown }).bandit,
       discovery: (edition as { discovery?: unknown }).discovery,
@@ -307,46 +312,78 @@ export default function HomeScreen() {
         .morning_edition,
       leadStory: lead,
     });
-    setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
-    setIntelligence(intel);
-    setOlder(adjacent.older);
 
-    // Detect stale edition built for a different city than the active location.
-    const builtCity = intel.discovery?.location?.city ?? null;
-    const active = await resolveActivePlace({ refreshIfStale: false });
-    if (mountedRef.current) setActiveLocation(active);
-    if (
-      active.place?.city &&
-      builtCity &&
-      !citiesMatch(active.place.city, builtCity)
-    ) {
-      if (__DEV__) {
-        console.warn("[home] loadEdition: location mismatch", {
-          mode: active.mode,
-          activeCity: active.place.city,
-          builtCity,
-          editionId: edition.id,
-        });
-      }
-      if (mountedRef.current && gen === loadGen.current) {
-        setLocationMismatch(builtCity);
-      }
-    } else if (mountedRef.current && gen === loadGen.current) {
-      setLocationMismatch(null);
-    }
+    const builtCity = resolveEditionBuiltCity(
+      {
+        discovery: (edition as { discovery?: unknown }).discovery,
+        editorial_context: (edition as { editorial_context?: unknown })
+          .editorial_context,
+        morning_edition: (edition as { morning_edition?: unknown })
+          .morning_edition,
+      },
+      loaded
+    );
+
+    const activeCity = active.place?.city ?? null;
+    const cityMismatch = Boolean(
+      activeCity &&
+        (builtCity
+          ? !citiesMatch(activeCity, builtCity)
+          : // Unknown build city + Current Location → do not trust the cache
+            active.mode === "current")
+    );
 
     if (__DEV__) {
       console.log("[home] loadEdition: location check", {
         mode: active.mode,
-        activeCity: active.place?.city ?? null,
+        activeCity,
         builtCity,
-        mismatch: Boolean(
-          active.place?.city &&
-            builtCity &&
-            !citiesMatch(active.place.city, builtCity)
-        ),
+        cityMismatch,
+        editionId: edition.id,
       });
     }
+
+    // Never silently reuse an edition generated for another city.
+    if (cityMismatch && activeCity) {
+      if (__DEV__) {
+        console.warn("[home] loadEdition: withholding wrong-city edition", {
+          mode: active.mode,
+          activeCity,
+          builtCity,
+          editionId: edition.id,
+        });
+      }
+      setSections([]);
+      setEditionDate(null);
+      setEditionId(null);
+      setLeadStory(null);
+      setBandit(null);
+      setIntelligence(null);
+      setClippedIds(new Set());
+      setOlder(adjacent.older);
+      setLocationMismatch(builtCity ?? "another city");
+      setLoading(false);
+      setRefreshing(false);
+
+      const regenKey = `${edition.id}:${activeCity}:${active.mode}`;
+      if (autoRegenKey.current !== regenKey) {
+        autoRegenKey.current = regenKey;
+        // Current Location: regenerate automatically. Other modes: show CTA.
+        if (active.mode === "current") {
+          setPendingCityRegen(true);
+        }
+      }
+      return;
+    }
+
+    setLocationMismatch(null);
+    setSections(loaded);
+    setEditionDate(edition.edition_date);
+    setEditionId(edition.id);
+    setLeadStory(lead);
+    setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
+    setIntelligence(intel);
+    setOlder(adjacent.older);
 
     if (loaded.length > 0) {
       const { data: clips, error: clipsError } = await supabase
@@ -535,6 +572,7 @@ export default function HomeScreen() {
       }
 
       setLocationMismatch(null);
+      autoRegenKey.current = null;
       await loadEdition();
       __DEV__ && console.log("[home] generate-edition: loadEdition finished");
     } catch (err) {
@@ -551,6 +589,16 @@ export default function HomeScreen() {
       setGenerating(false);
     }
   }
+
+  // After withholding a wrong-city paper in Current Location mode, regenerate once.
+  useEffect(() => {
+    if (!pendingCityRegen) return;
+    if (generating || loading) return;
+    setPendingCityRegen(false);
+    void handleGenerate();
+    // handleGenerate is intentionally stable enough for this one-shot trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCityRegen, generating, loading]);
 
   async function handleToggleClip(section: EditionSection) {
     if (clipPendingId) return;
@@ -708,7 +756,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {locationMismatch && activeLocation?.place ? (
+        {locationMismatch && activeLocation?.place && sections.length > 0 ? (
           <View style={styles.mismatchBanner}>
             <Text style={styles.mismatchText}>
               This edition was prepared for {locationMismatch}. You’re in{" "}
@@ -726,7 +774,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
             >
               <Text style={styles.mismatchButtonText}>
-                {generating ? "Preparing…" : "Refresh for this city"}
+                {generating ? "Preparing…" : "Refresh Today’s Edition"}
               </Text>
             </Pressable>
           </View>
@@ -735,8 +783,16 @@ export default function HomeScreen() {
         {sections.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.title}>{morningSalutation()}</Text>
-            <Text style={styles.emptyKicker}>{waitingCopy.emptyTitle}</Text>
-            <Text style={styles.body}>{waitingCopy.emptyBody}</Text>
+            <Text style={styles.emptyKicker}>
+              {locationMismatch
+                ? "Today’s paper needs a refresh."
+                : waitingCopy.emptyTitle}
+            </Text>
+            <Text style={styles.body}>
+              {locationMismatch && activeLocation?.place
+                ? `The edition on file was prepared for ${locationMismatch}. Get a fresh paper for ${activeLocation.place.city}.`
+                : waitingCopy.emptyBody}
+            </Text>
             {activeLocation?.needsSetup ? (
               <Text style={styles.locationHint}>
                 Set a home city or allow current location so local news,
@@ -761,7 +817,9 @@ export default function HomeScreen() {
               <Text style={styles.buttonText}>
                 {generating
                   ? waitingCopy.preparing
-                  : waitingCopy.openAction}
+                  : locationMismatch
+                    ? "Refresh Today’s Edition"
+                    : waitingCopy.openAction}
               </Text>
             </Pressable>
             {activeLocation?.needsSetup ? (
