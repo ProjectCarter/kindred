@@ -6,7 +6,7 @@ export type {
   BuildEditorialContextInput,
 } from "./types.ts";
 
-export { buildEditionEditorialContext } from "./buildEditorialContext.ts";
+export { buildEditionEditorialContext, buildLookingAheadGrounding } from "./buildEditorialContext.ts";
 
 /**
  * AI entry points — consume EditionEditorialContext without UI.

@@ -98,6 +98,7 @@ function lookingAheadNotes(input: BuildEditorialContextInput): EditorialNote[] {
   const editionDay = parseEditionDate(input.editionDate, now);
   const tomorrow = addDays(editionDay, 1);
   const holidayTomorrow = holidayNameOn(tomorrow);
+  const tomorrowIso = formatDateKey(tomorrow);
 
   const w = input.weather;
   if (
@@ -141,14 +142,15 @@ function lookingAheadNotes(input: BuildEditorialContextInput): EditorialNote[] {
     );
   }
 
-  const majorTomorrow = (input.localEvents ?? []).some((e) =>
-    /\b(tomorrow|tmw)\b/i.test(e.startDateTime)
+  const eventsTomorrow = eventsOnTomorrow(
+    input.localEvents ?? [],
+    tomorrowIso
   );
-  if (majorTomorrow) {
+  if (eventsTomorrow.length) {
     notes.push(
       note(
         "major_local_event_tomorrow",
-        "Major local event tomorrow",
+        `Local event tomorrow (${eventsTomorrow[0].name})`,
         "event",
         3
       )
@@ -162,6 +164,92 @@ function lookingAheadNotes(input: BuildEditorialContextInput): EditorialNote[] {
   }
 
   return notes;
+}
+
+function formatDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function eventsOnTomorrow(
+  events: Array<{ name: string; startDateTime: string; venue?: string }>,
+  tomorrowIso: string
+): Array<{ name: string; startDateTime: string; venue?: string }> {
+  return events.filter((e) => {
+    if (/\b(tomorrow|tmw)\b/i.test(e.startDateTime)) return true;
+    if (e.startDateTime.includes(tomorrowIso)) return true;
+    return false;
+  });
+}
+
+/**
+ * Grounding facts for the Looking Ahead writer — the paper’s closing glance at tomorrow.
+ * Uses the same intelligence as editorial notes, with enough detail to write a specific close.
+ */
+export function buildLookingAheadGrounding(input: {
+  editionDate: string;
+  now?: Date;
+  city: string | null;
+  tempUnit: string;
+  tomorrowHighLabel: string | null;
+  tomorrowLowLabel: string | null;
+  todayHighC: number | null;
+  tomorrowHighC: number | null;
+  localEvents?: Array<{ name: string; startDateTime: string; venue?: string }>;
+}): string {
+  const now = input.now ?? new Date();
+  const editionDay = parseEditionDate(input.editionDate, now);
+  const tomorrow = addDays(editionDay, 1);
+  const tomorrowIso = formatDateKey(tomorrow);
+  const holiday = holidayNameOn(tomorrow);
+  const facts: string[] = [];
+
+  if (holiday) {
+    facts.push(`Holiday tomorrow: ${holiday}.`);
+  }
+
+  const eventsTomorrow = eventsOnTomorrow(input.localEvents ?? [], tomorrowIso);
+  for (const event of eventsTomorrow.slice(0, 2)) {
+    const venue = event.venue?.trim();
+    facts.push(
+      venue
+        ? `Local event tomorrow: ${event.name} at ${venue}.`
+        : `Local event tomorrow: ${event.name}.`
+    );
+  }
+
+  if (
+    input.todayHighC != null &&
+    input.tomorrowHighC != null &&
+    Math.abs(input.tomorrowHighC - input.todayHighC) >= 4
+  ) {
+    facts.push(
+      input.tomorrowHighC > input.todayHighC
+        ? "Weather shift: noticeably warmer tomorrow than today."
+        : "Weather shift: noticeably cooler tomorrow than today."
+    );
+  }
+
+  if (tomorrow.getDay() === 1) {
+    facts.push("Calendar note: Monday morning — expect a busier start to the week.");
+  }
+
+  if (input.tomorrowHighLabel || input.tomorrowLowLabel) {
+    facts.push(
+      `Tomorrow’s forecast in ${input.city ?? "your area"}: high ${input.tomorrowHighLabel ?? "—"}, low ${input.tomorrowLowLabel ?? "—"}. Temperature unit: ${input.tempUnit}.`
+    );
+  }
+
+  if (!facts.length) {
+    facts.push("Tomorrow’s practical outlook — keep the note brief and useful.");
+  }
+
+  return [
+    "Looking Ahead grounding (use only these facts; do not invent):",
+    ...facts.map((f, i) => `${i + 1}. ${f}`),
+  ].join("\n");
 }
 
 function mapStoryReasonCode(code: string): EditorialNote["category"] {
@@ -584,9 +672,8 @@ export function buildEditionEditorialContext(
       weatherChange,
       holidayTomorrow,
       majorLocalEventTomorrow: Boolean(
-        input.localEvents?.some((e) =>
-          /\b(tomorrow|tmw)\b/i.test(e.startDateTime)
-        )
+        eventsOnTomorrow(input.localEvents ?? [], formatDateKey(tomorrow))
+          .length
       ),
       primaryInterests: interests.slice(0, 3),
       sourceDiversity: Boolean(

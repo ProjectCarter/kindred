@@ -4,7 +4,7 @@
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { primaryNewsCategory } from "./stories/sources.ts";
-import { buildEditionEditorialContext } from "./editorial/index.ts";
+import { buildEditionEditorialContext, buildLookingAheadGrounding } from "./editorial/index.ts";
 import { loadPersonalizationProfile } from "./personalization/index.ts";
 import { generateBanditPayload, loadBanditReaderProfile } from "./bandit/index.ts";
 import { runEditorialDecisions } from "./editor/index.ts";
@@ -987,12 +987,27 @@ export async function buildEditionForUser(
       weather.daily.temperature_2m_min?.[1],
       tempUnit
     );
+    const lookingAheadGrounding = buildLookingAheadGrounding({
+      editionDate,
+      now: new Date(),
+      city,
+      tempUnit,
+      tomorrowHighLabel: tomorrowHigh,
+      tomorrowLowLabel: tomorrowLow,
+      todayHighC: weather.daily.temperature_2m_max?.[0] ?? null,
+      tomorrowHighC: weather.daily.temperature_2m_max?.[1] ?? null,
+      localEvents,
+    });
     sections.push({
       section_type: "looking_ahead",
       position: 5,
-      groundingData: `Tomorrow's forecast: high ${tomorrowHigh}, low ${tomorrowLow} in ${location.city}. Temperature unit: ${tempUnit}.`,
+      groundingData: lookingAheadGrounding,
       instruction:
-        `Write a brief, practical 'Looking Ahead' note about tomorrow, grounded only in this forecast. ${unitInstruction(tempUnit)} Not generic encouragement. Do not mix temperature units.`,
+        `Write a brief, practical Looking Ahead note that closes today’s paper with a glance at tomorrow. ` +
+        `Ground ONLY in the numbered facts below. Lead with the most useful fact for the reader ` +
+        `(holiday or a named local event before routine forecast). Two to four short sentences. ` +
+        `Calm newspaper tone — specific, not promotional. Not generic encouragement. Do not invent facts. ` +
+        `${unitInstruction(tempUnit)} Do not mix temperature units.`,
     });
   }
 
