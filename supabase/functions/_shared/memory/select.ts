@@ -98,6 +98,18 @@ export function buildSinceYouLastRead(
 ): MemoryPayload["sinceYouLastRead"] {
   const since = threads.find((t) => t.type === "since_you_last_read");
   if (!since) return null;
+
+  const continuing = threads.find((t) => t.type === "continuing_news");
+  const unfinished = threads.find((t) => t.type === "unfinished_reading");
+  const daysAway = since.data?.daysAway ?? null;
+
+  const continuingHeadline = threadHeadline(continuing);
+  const unfinishedHeadline = threadHeadline(unfinished);
+  const priorLead =
+    typeof since.data?.headline === "string"
+      ? since.data.headline.trim()
+      : "";
+
   const highlights = threads
     .filter((t) =>
       ["continuing_news", "unfinished_reading", "long_term_interest"].includes(
@@ -105,12 +117,58 @@ export function buildSinceYouLastRead(
       )
     )
     .slice(0, 4)
-    .map((t) => t.title);
+    .map((t) => highlightLabel(t))
+    .filter(Boolean);
+
+  // Specific continuity beats generic ritual copy — readers remember named threads.
+  let summary = since.summary;
+  if (unfinishedHeadline) {
+    const title = clipHeadline(unfinishedHeadline);
+    summary =
+      daysAway === 1
+        ? `You left off mid-read on “${title}.” It’s still waiting in the paper.`
+        : `You left off mid-read on “${title}.” It’s been ${daysAway} days — pick it up when you’re ready.`;
+  } else if (continuingHeadline) {
+    const title = clipHeadline(continuingHeadline);
+    summary =
+      daysAway === 1
+        ? `Yesterday’s coverage of “${title}” continues in today’s paper.`
+        : `A thread from ${daysAway} days ago — “${title}” — continues today.`;
+  } else if (priorLead) {
+    const title = clipHeadline(priorLead);
+    summary =
+      daysAway === 1
+        ? `Yesterday led with “${title}.” Today’s edition continues the conversation.`
+        : `It’s been ${daysAway} days. Last time, the paper opened on “${title}.”`;
+  }
 
   return {
     title: since.title,
-    summary: since.summary,
-    daysAway: since.data?.daysAway ?? null,
+    summary,
+    daysAway,
     highlights,
   };
+}
+
+function threadHeadline(thread: MemoryThread | undefined): string | null {
+  if (!thread) return null;
+  const fromData = thread.data?.headline?.trim();
+  if (fromData) return fromData;
+  const quoted = thread.summary.match(/[“"]([^”"]+)[”"]/);
+  return quoted?.[1]?.trim() || null;
+}
+
+function highlightLabel(thread: MemoryThread): string {
+  const headline = threadHeadline(thread);
+  if (headline) return clipHeadline(headline, 120);
+  if (thread.type === "long_term_interest") {
+    return thread.title.replace(/^An ongoing interest:\s*/i, "").trim();
+  }
+  return thread.title;
+}
+
+function clipHeadline(value: string, max = 90): string {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max - 1).trim()}…`;
 }
