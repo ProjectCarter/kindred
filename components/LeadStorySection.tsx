@@ -297,11 +297,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   imageBlock: {
-    marginBottom: 24,
+    marginBottom: 26,
   },
   imageFrame: {
     width: "100%",
-    aspectRatio: 3 / 2,
+    aspectRatio: 4 / 3,
     borderRadius: 2,
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
@@ -310,11 +310,11 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: "112%",
-    marginTop: "-6%",
+    height: "118%",
+    marginTop: "-8%",
   },
   imageCredit: {
-    marginTop: 12,
+    marginTop: 14,
     fontFamily: "Georgia",
     fontSize: 11,
     lineHeight: 15,

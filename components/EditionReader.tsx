@@ -333,11 +333,11 @@ export function EditionReader({
 
 const styles = StyleSheet.create({
   folio: {
-    paddingBottom: 12,
+    paddingBottom: 28,
   },
   sectionCard: {
     marginBottom: space.sectionGap,
-    paddingBottom: 40,
+    paddingBottom: 44,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },

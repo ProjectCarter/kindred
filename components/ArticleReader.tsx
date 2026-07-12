@@ -76,11 +76,13 @@ export function ArticleReader({
     companionProp ?? getArticleCompanion(article.id) ?? null;
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const readingWidth = Math.min(windowWidth - 48, reader.measure);
-  const figureBleed = Math.min(
-    18,
-    Math.max(0, (windowWidth - readingWidth) / 2)
+  const readingWidth = Math.min(
+    windowWidth - reader.gutter * 2,
+    reader.measure
   );
+  /** Magazine bleed — photograph nearly edge-to-edge, never cramped in the column. */
+  const figureWidth = Math.min(windowWidth - 16, readingWidth + 36);
+  const figureBleed = Math.max(0, (figureWidth - readingWidth) / 2);
 
   const [contentHeight, setContentHeight] = useState(1);
   const [viewportHeight, setViewportHeight] = useState(1);
@@ -95,7 +97,7 @@ export function ArticleReader({
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const enterOpacity = useRef(new Animated.Value(0)).current;
-  const enterRise = useRef(new Animated.Value(motion.risePx + 4)).current;
+  const enterRise = useRef(new Animated.Value(motion.risePx)).current;
   const heroOpacity = useRef(new Animated.Value(0)).current;
 
   const briefing = isKindredBriefing(article);
@@ -106,8 +108,10 @@ export function ArticleReader({
   useArticleReadingSession(article, progress, { editionId });
 
   useEffect(() => {
+    restoredScroll.current = false;
+    scrollYRef.current = initialScrollY;
     enterOpacity.setValue(0);
-    enterRise.setValue(motion.risePx + 4);
+    enterRise.setValue(motion.risePx);
     Animated.parallel([
       Animated.timing(enterOpacity, {
         toValue: 1,
@@ -117,12 +121,12 @@ export function ArticleReader({
       }),
       Animated.timing(enterRise, {
         toValue: 0,
-        duration: motion.enterMs + 40,
+        duration: motion.enterMs + 60,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [article.id, enterOpacity, enterRise]);
+  }, [article.id, enterOpacity, enterRise, initialScrollY]);
 
   useEffect(() => {
     setHeroFailed(false);
@@ -349,7 +353,7 @@ export function ArticleReader({
     if (article.sourceUrl) {
       parts.push("", article.sourceUrl);
     } else {
-      parts.push("", "Shared from Kindred");
+      parts.push("", "From today’s Kindred edition");
     }
     try {
       await Share.share({
@@ -392,7 +396,10 @@ export function ArticleReader({
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 88 + insets.bottom },
+          {
+            paddingBottom: 96 + insets.bottom,
+            paddingHorizontal: reader.gutter,
+          },
         ]}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -400,6 +407,7 @@ export function ArticleReader({
         onLayout={onLayout}
         showsVerticalScrollIndicator={false}
         bounces
+        alwaysBounceVertical={false}
         decelerationRate="normal"
       >
         <Animated.View
@@ -481,7 +489,7 @@ export function ArticleReader({
                 styles.figure,
                 {
                   marginHorizontal: -figureBleed,
-                  width: readingWidth + figureBleed * 2,
+                  width: figureWidth,
                 },
               ]}
             >
@@ -538,7 +546,7 @@ export function ArticleReader({
 
           {knowledgeNotes.length > 0 ? (
             <View style={styles.knowledgeBlock}>
-              <Text style={styles.knowledgeHeading}>Kindred context</Text>
+              <Text style={styles.knowledgeHeading}>Context</Text>
               <View style={styles.knowledgeRule} />
               {knowledgeNotes.map((note, i) => (
                 <MagazineCallout
@@ -559,7 +567,7 @@ export function ArticleReader({
             <View style={styles.footerRule} />
             <Text style={styles.endMark}>◆</Text>
             <Text style={styles.attribution}>
-              From the edition  ·  {article.source}
+              End of article  ·  {article.source}
             </Text>
             {briefing && article.sourceUrl ? (
               <Text style={styles.sourceHint} maxFontSizeMultiplier={1.2}>
@@ -573,14 +581,16 @@ export function ArticleReader({
             <View style={styles.continueBlock}>
               <Text style={styles.continueKicker}>Further along</Text>
               <Text style={styles.continueIntro}>
-                More from today’s edition.
+                {continueItems.length === 1
+                  ? "One careful next page, chosen for this story."
+                  : "A short turn of the page — chosen for this story."}
               </Text>
               {continueItems.map((item, index) => (
                 <Pressable
                   key={`${item.kind}-${index}`}
                   onPress={() => onOpenContinue?.(item)}
                   accessibilityRole="link"
-                  accessibilityLabel={`${item.label}. ${item.title}`}
+                  accessibilityLabel={`${item.label}. ${item.title}. Continue reading.`}
                   style={({ pressed }) => [
                     styles.continueItem,
                     index === continueItems.length - 1 && styles.continueItemLast,
@@ -600,13 +610,14 @@ export function ArticleReader({
                   >
                     {item.summary}
                   </Text>
+                  <Text style={styles.continueLink}>Continue</Text>
                 </Pressable>
               ))}
             </View>
           ) : null}
 
           <View style={styles.actionsBlock}>
-            <Text style={styles.actionsKicker}>This article</Text>
+            <Text style={styles.actionsKicker}>This page</Text>
             <View style={styles.actionsList}>
               {canClip ? (
                 <ActionLink
@@ -755,20 +766,20 @@ const styles = StyleSheet.create({
     backgroundColor: paper.cream,
   },
   progressTrack: {
-    height: 2,
+    height: 1.5,
     backgroundColor: paper.inkRule,
   },
   progressFill: {
-    height: 2,
+    height: 1.5,
     backgroundColor: paper.terracotta,
-    opacity: 0.55,
+    opacity: 0.45,
   },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 22,
-    paddingVertical: 15,
+    paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
     backgroundColor: paper.cream,
@@ -793,8 +804,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: "center",
-    paddingTop: 32,
-    paddingHorizontal: 24,
+    paddingTop: 36,
   },
   column: {
     maxWidth: reader.measure,
@@ -803,26 +813,26 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 32,
+    marginBottom: 28,
   },
   kicker: {
     ...type.kicker,
     color: paper.terracotta,
     letterSpacing: 2.2,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   headline: {
     ...reader.headline,
     color: paper.ink,
-    marginBottom: 18,
+    marginBottom: 16,
   },
   dek: {
     ...reader.dek,
     color: paper.inkBody,
-    marginBottom: 24,
+    marginBottom: 22,
   },
   bylineBlock: {
-    marginBottom: 26,
+    marginBottom: 28,
     gap: 8,
   },
   byline: {
@@ -845,12 +855,12 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   figure: {
-    marginBottom: 44,
+    marginBottom: 48,
     alignSelf: "center",
   },
   imageFrame: {
     width: "100%",
-    aspectRatio: 3 / 2,
+    aspectRatio: 4 / 3,
     borderRadius: 2,
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
@@ -865,13 +875,14 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: "112%",
-    marginTop: "-6%",
+    height: "118%",
+    marginTop: "-8%",
   },
   captionBlock: {
     flexDirection: "row",
-    marginTop: 14,
-    paddingRight: 4,
+    marginTop: 16,
+    paddingRight: 8,
+    paddingLeft: 4,
     gap: 12,
   },
   captionRule: {
@@ -896,33 +907,33 @@ const styles = StyleSheet.create({
   noImageRule: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 36,
+    marginBottom: 40,
   },
   paragraph: {
     ...reader.body,
     color: paper.inkBody,
-    marginBottom: 30,
+    marginBottom: 28,
   },
   leadParagraph: {
-    marginBottom: 32,
+    marginBottom: 30,
   },
   dropCap: {
     ...reader.dropCap,
     color: paper.ink,
   },
   pullQuoteBlock: {
-    marginTop: 10,
-    marginBottom: 40,
-    paddingHorizontal: 6,
+    marginTop: 12,
+    marginBottom: 44,
+    paddingHorizontal: 4,
   },
   pullMark: {
     fontFamily: "Georgia",
-    fontSize: 72,
-    lineHeight: 60,
+    fontSize: 68,
+    lineHeight: 56,
     color: paper.terracotta,
-    opacity: 0.35,
-    marginBottom: -10,
-    marginLeft: -6,
+    opacity: 0.32,
+    marginBottom: -8,
+    marginLeft: -4,
   },
   pullQuote: {
     ...reader.pullQuote,
@@ -930,49 +941,48 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   pullRule: {
-    width: 52,
+    width: 48,
     height: 1.5,
     backgroundColor: paper.terracotta,
-    opacity: 0.65,
+    opacity: 0.6,
   },
   knowledgeBlock: {
-    marginTop: 16,
-    marginBottom: 12,
+    marginTop: 20,
+    marginBottom: 8,
   },
   knowledgeHeading: {
     ...type.kicker,
     color: paper.inkFaint,
     letterSpacing: 2,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   knowledgeRule: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 18,
+    marginBottom: 20,
   },
   colophon: {
-    marginTop: 20,
-    alignItems: "flex-start",
-    gap: 12,
+    marginTop: 28,
+    alignItems: "center",
+    gap: 14,
   },
   footerRule: {
     alignSelf: "stretch",
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   endMark: {
-    alignSelf: "center",
-    fontSize: 11,
+    fontSize: 10,
     color: paper.inkFaint,
     letterSpacing: 1,
   },
   attribution: {
     ...reader.meta,
     color: paper.inkMuted,
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
-    alignSelf: "center",
+    textAlign: "center",
   },
   sourceHint: {
     fontFamily: "Georgia",
@@ -980,14 +990,13 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginTop: 8,
-    maxWidth: 400,
-    alignSelf: "center",
+    marginTop: 4,
+    maxWidth: 380,
     textAlign: "center",
   },
   continueBlock: {
-    marginTop: 52,
-    paddingTop: 32,
+    marginTop: 48,
+    paddingTop: 36,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,
   },
@@ -999,51 +1008,59 @@ const styles = StyleSheet.create({
   },
   continueIntro: {
     fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 26,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginBottom: 26,
+    marginBottom: 28,
     maxWidth: 400,
   },
   continueItem: {
-    paddingBottom: 24,
-    marginBottom: 24,
+    paddingBottom: 26,
+    marginBottom: 26,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
   continueItemLast: {
     borderBottomWidth: 0,
     marginBottom: 0,
-    paddingBottom: 8,
+    paddingBottom: 4,
   },
   continueLabel: {
     ...type.kicker,
     color: paper.inkFaint,
     letterSpacing: 1.8,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   continueTitle: {
     fontFamily: "Georgia",
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 21,
+    lineHeight: 29,
     fontWeight: "600",
     color: paper.ink,
     letterSpacing: -0.15,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   continueSummary: {
     fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 26,
     color: paper.inkBody,
+    marginBottom: 14,
+  },
+  continueLink: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    fontStyle: "italic",
+    color: paper.terracotta,
+    letterSpacing: 0.2,
   },
   actionsBlock: {
-    marginTop: 44,
+    marginTop: 48,
     paddingTop: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,
-    paddingBottom: 16,
+    paddingBottom: 20,
   },
   actionsKicker: {
     ...type.kicker,

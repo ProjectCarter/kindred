@@ -22,10 +22,10 @@ export const paper = {
 export const shadow = {
   photo: {
     shadowColor: "#2B2620",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 3,
   },
 } as const;
 
@@ -42,7 +42,7 @@ export const space = {
   afterMasthead: 32,
   afterBandit: 40,
   afterLead: 48,
-  endPadding: 36,
+  endPadding: 48,
 } as const;
 
 export const type = {
@@ -124,10 +124,10 @@ export const type = {
 
 /** Soft motion timings — ink settling on paper, not a feed. */
 export const motion = {
-  enterMs: 560,
-  staggerMs: 56,
-  risePx: 4,
-  photoMs: 1000,
+  enterMs: 480,
+  staggerMs: 52,
+  risePx: 3,
+  photoMs: 1100,
   fadeEasing: "cubic" as const,
 } as const;
 
@@ -136,20 +136,22 @@ export const motion = {
  * Tuned for a calm Sunday-paper / magazine measure (NYT / Economist / Monocle).
  */
 export const reader = {
-  /** Comfortable measure — roughly 62–68 characters. */
-  measure: 540,
+  /** Comfortable phone measure — roughly 58–65 characters. */
+  measure: 512,
+  /** Side inset from the screen edge for the reading column. */
+  gutter: 22,
   headline: {
     fontFamily: "Georgia",
-    fontSize: 36,
-    lineHeight: 44,
+    fontSize: 34,
+    lineHeight: 42,
     fontWeight: "600" as const,
-    letterSpacing: -0.35,
+    letterSpacing: -0.3,
   },
   dek: {
     fontFamily: "Georgia",
-    fontSize: 20,
-    lineHeight: 32,
-    letterSpacing: 0.05,
+    fontSize: 19,
+    lineHeight: 31,
+    letterSpacing: 0.04,
   },
   byline: {
     fontFamily: "Georgia",
@@ -159,22 +161,22 @@ export const reader = {
   },
   body: {
     fontFamily: "Georgia",
-    fontSize: 20,
-    lineHeight: 37,
-    letterSpacing: 0.12,
+    fontSize: 19,
+    lineHeight: 36,
+    letterSpacing: 0.15,
   },
   dropCap: {
     fontFamily: "Georgia",
-    fontSize: 56,
-    lineHeight: 48,
+    fontSize: 54,
+    lineHeight: 46,
     fontWeight: "600" as const,
   },
   pullQuote: {
     fontFamily: "Georgia",
-    fontSize: 25,
-    lineHeight: 37,
+    fontSize: 24,
+    lineHeight: 36,
     fontStyle: "italic" as const,
-    letterSpacing: -0.08,
+    letterSpacing: -0.06,
   },
   caption: {
     fontFamily: "Georgia",
@@ -194,7 +196,7 @@ export const reader = {
   calloutBody: {
     fontFamily: "Georgia",
     fontSize: 16,
-    lineHeight: 27,
+    lineHeight: 28,
     fontStyle: "italic" as const,
   },
 } as const;

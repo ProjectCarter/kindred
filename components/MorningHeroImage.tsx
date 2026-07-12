@@ -37,8 +37,8 @@ export function MorningHeroImage({
   accessibilityLabel,
 }: MorningHeroImageProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const width = Math.max(windowWidth - 48, 280);
-  const height = Math.round(width * (10.5 / 16));
+  const width = Math.max(windowWidth - 32, 280);
+  const height = Math.round(width * (3 / 4));
 
   const fade = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(1.01)).current;
@@ -190,7 +190,7 @@ export function MorningHeroImage({
 const styles = StyleSheet.create({
   outer: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 44,
   },
   frame: {
     borderRadius: 2,
@@ -201,11 +201,11 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: "108%",
-    marginTop: "-4%",
+    height: "116%",
+    marginTop: "-7%",
   },
   caption: {
-    marginTop: 14,
+    marginTop: 16,
     fontFamily: "Georgia",
     fontSize: 12,
     lineHeight: 18,

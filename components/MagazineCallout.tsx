@@ -74,33 +74,33 @@ export function MagazineCallout({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: 10,
-    marginBottom: 28,
+    marginTop: 8,
+    marginBottom: 32,
   },
   wrapFeatured: {
-    marginBottom: 34,
+    marginBottom: 38,
   },
   pressed: {
     opacity: press.opacity,
   },
   inner: {
     backgroundColor: paper.creamWash,
-    paddingVertical: 22,
+    paddingVertical: 24,
     paddingHorizontal: 22,
   },
   innerFeatured: {
-    paddingVertical: 26,
+    paddingVertical: 28,
     paddingHorizontal: 24,
   },
   topRule: {
     height: 2,
-    width: 36,
+    width: 32,
     backgroundColor: paper.terracotta,
     marginBottom: 16,
     opacity: 0.85,
   },
   bottomRule: {
-    marginTop: 18,
+    marginTop: 20,
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
   },

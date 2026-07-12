@@ -224,11 +224,14 @@ const CONTINUE_LABEL: Partial<
 
 const CONTINUE_DISPLAY: Record<ContinueReadingItem["kind"], string> = {
   related: "Related",
-  local: "Nearby",
+  local: "Close to home",
   background: "Background",
   opposing: "Another view",
   bandit: "From the desk",
 };
+
+/** Prefer depth over volume — two careful next-reads, never a feed. */
+const CONTINUE_MAX = 2;
 
 function continueReadingFrom(
   intelligence: EditionIntelligence,
@@ -240,10 +243,23 @@ function continueReadingFrom(
   const current = (currentTitle ?? "").trim().toLowerCase();
 
   if (packet?.facets) {
-    for (const facet of packet.facets) {
-      if (!hasSubstance(facet.summary, 18)) continue;
+    // Editorial order: background and related first, then local color.
+    const preferred = [...packet.facets].sort((a, b) => {
+      const rank = (t: string) =>
+        /background|previous|explainer|definition|timeline/i.test(t)
+          ? 0
+          : /related/i.test(t)
+            ? 1
+            : /local/i.test(t)
+              ? 2
+              : 3;
+      return rank(a.type) - rank(b.type);
+    });
+
+    for (const facet of preferred) {
+      if (!hasSubstance(facet.summary, 24)) continue;
       const kind = CONTINUE_LABEL[facet.type];
-      if (!kind) continue;
+      if (!kind || kind === "bandit") continue;
       const title = facet.title?.trim() || CONTINUE_DISPLAY[kind];
       if (current && title.toLowerCase() === current) continue;
       const key = `${kind}:${title}`;
@@ -253,16 +269,19 @@ function continueReadingFrom(
         kind,
         label: CONTINUE_DISPLAY[kind],
         title,
-        summary: facet.summary.trim().slice(0, 220),
+        summary: facet.summary.trim().slice(0, 240),
       });
-      if (items.length >= 3) break;
+      if (items.length >= CONTINUE_MAX) break;
     }
 
     // Opposing viewpoint — only with a legitimate signal in real copy.
-    if (!items.some((i) => i.kind === "opposing")) {
+    if (
+      items.length < CONTINUE_MAX &&
+      !items.some((i) => i.kind === "opposing")
+    ) {
       const opposing = packet.facets.find(
         (f) =>
-          hasSubstance(f.summary, 18) &&
+          hasSubstance(f.summary, 24) &&
           /another view|other side|critics|counterpoint|opposing view/i.test(
             `${f.title} ${f.summary}`
           )
@@ -272,32 +291,33 @@ function continueReadingFrom(
           kind: "opposing",
           label: CONTINUE_DISPLAY.opposing,
           title: opposing.title?.trim() || "Another view",
-          summary: opposing.summary.trim().slice(0, 220),
+          summary: opposing.summary.trim().slice(0, 240),
         });
       }
     }
   }
 
-  const bandit = intelligence.discoveryItems?.[0];
+  // Desk pick only when the page would otherwise end abruptly — never pad a full set.
+  const desk = intelligence.discoveryItems?.[0];
   if (
-    bandit?.item?.title &&
-    items.length < 4 &&
-    hasSubstance(bandit.item.dek, 8) &&
-    !isPlaceholderCopy(bandit.item.title) &&
-    !isPlaceholderCopy(bandit.item.dek)
+    desk?.item?.title &&
+    items.length < CONTINUE_MAX &&
+    hasSubstance(desk.item.dek, 12) &&
+    !isPlaceholderCopy(desk.item.title) &&
+    !isPlaceholderCopy(desk.item.dek)
   ) {
-    const title = bandit.item.title.trim();
+    const title = desk.item.title.trim();
     if (!current || title.toLowerCase() !== current) {
       items.push({
         kind: "bandit",
         label: CONTINUE_DISPLAY.bandit,
         title,
-        summary: bandit.item.dek.trim().slice(0, 220),
+        summary: desk.item.dek.trim().slice(0, 240),
       });
     }
   }
 
-  return items.slice(0, 3);
+  return items.slice(0, CONTINUE_MAX);
 }
 
 function buildCompanion(

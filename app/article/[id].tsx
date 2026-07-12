@@ -113,7 +113,7 @@ export default function ArticleScreen() {
     return (
       <SafeAreaView style={styles.flex}>
         <StatusBar style="dark" />
-        <PaperLoading hint="Opening the story…" />
+        <PaperLoading hint="Settling the page…" />
       </SafeAreaView>
     );
   }
@@ -154,17 +154,25 @@ export default function ArticleScreen() {
     null;
 
   function openContinue(item: ContinueReadingItem) {
+    const dekByKind: Record<ContinueReadingItem["kind"], string> = {
+      related: "A related page from today’s paper.",
+      local: "How this looks from close to home.",
+      background: "Context for the story you just read.",
+      opposing: "Another careful view of the same ground.",
+      bandit: "Set aside by the desk.",
+    };
     const related = articleFromSectionItem({
       id: `continue:${item.kind}:${item.title}`.slice(0, 120),
       section: item.kind === "bandit" ? "discovery" : "knowledge",
       headline: item.title,
       body: item.summary,
-      dek: item.label,
+      dek: dekByKind[item.kind],
       source: "Kindred",
+      byline: item.label,
     });
     openKindredArticle(router, related, {
       editionId: resolvedEdition,
-      backLabel: "← Back to story",
+      backLabel: "← Previous story",
       companion: {
         whyThisMatters: null,
         whyChosen: null,

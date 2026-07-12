@@ -18,7 +18,7 @@ export function editionColophon(): string {
 }
 
 export function editionFarewell(): string {
-  return "See you in the morning.";
+  return "Put the paper down when you’re ready. See you in the morning.";
 }
 
 /** Calm lines while the presses catch up. */
