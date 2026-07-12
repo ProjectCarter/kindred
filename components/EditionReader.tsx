@@ -101,6 +101,10 @@ export function EditionReader({
   const welcomeMessage =
     greeting?.body?.trim() || greeting?.headline?.trim() || null;
 
+  const lookingAheadIndex = remaining.findIndex(
+    (s) => s.section_type === "looking_ahead"
+  );
+
   const dateLabel = editionDate ? formatEditionDate(editionDate) : null;
 
   function openLead(lead: LeadStory) {
@@ -315,15 +319,22 @@ export function EditionReader({
 
       {weather ? renderSection(weather, folioCursor++) : null}
 
-      {/* Desk picks follow Looking Ahead so the paper winds down before leisure. */}
+      {/* Desk picks precede Looking Ahead so tomorrow’s note closes the paper. */}
       {remaining.map((section, index) => {
-        const afterThis =
-          discoveryBlock && index === remaining.length - 1;
+        const insertDiscoveryBefore =
+          discoveryBlock &&
+          lookingAheadIndex >= 0 &&
+          index === lookingAheadIndex;
+        const insertDiscoveryAfter =
+          discoveryBlock &&
+          lookingAheadIndex < 0 &&
+          index === remaining.length - 1;
         const sectionIndex = folioCursor++;
         return (
           <View key={`block-${section.id}`}>
+            {insertDiscoveryBefore ? discoveryBlock : null}
             {renderSection(section, sectionIndex)}
-            {afterThis ? discoveryBlock : null}
+            {insertDiscoveryAfter ? discoveryBlock : null}
           </View>
         );
       })}
