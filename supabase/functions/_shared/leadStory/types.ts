@@ -74,6 +74,8 @@ export type SelectLeadStoryInput = {
     reasons: StorySelectionReason[];
   }>;
   localScoreThreshold?: number;
+  /** Front-page keys from recent editions — prefer a Lead the reader hasn’t seen. */
+  recentStoryKeys?: string[];
 };
 
 export type LeadStoryPolicy = {

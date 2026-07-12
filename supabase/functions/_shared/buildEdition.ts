@@ -508,7 +508,7 @@ async function writeSection(
 async function loadRecentStoryKeys(
   supabaseAdmin: SupabaseClient,
   userId: string,
-  limit = 5
+  limit = 10
 ): Promise<string[]> {
   const { data, error } = await supabaseAdmin
     .from("editions")

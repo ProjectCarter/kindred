@@ -1,6 +1,10 @@
 import { storySimilarity } from "../stories/score.ts";
-import { hoursSince, isNearDuplicate } from "../stories/diversity.ts";
-import type { StorySelectionReason } from "../stories/types.ts";
+import {
+  hoursSince,
+  isNearDuplicate,
+  matchesRecentCoverage,
+} from "../stories/diversity.ts";
+import type { CandidateStory, StorySelectionReason } from "../stories/types.ts";
 import type {
   LeadStory,
   LeadStoryRole,
@@ -14,6 +18,37 @@ const DIVERSITY_LIMIT = 0.38;
 
 type StoryLike = SelectLeadStoryInput["scoredCandidates"][number]["story"];
 type ScoredLike = SelectLeadStoryInput["scoredCandidates"][number];
+
+function asCandidate(story: StoryLike): CandidateStory {
+  return {
+    id: story.id,
+    title: story.title,
+    description: story.description,
+    source: story.source,
+    url: story.url,
+    publishedAt: story.publishedAt,
+    imageUrl: story.imageUrl,
+    category: null,
+    pool: (story.pool as CandidateStory["pool"]) || "general",
+  };
+}
+
+function isRecentToReader(story: StoryLike, recentKeys: string[]): boolean {
+  if (!recentKeys.length) return false;
+  return matchesRecentCoverage(asCandidate(story), recentKeys);
+}
+
+/** Prefer unread coverage; only fall back to recent when the desk is empty. */
+function firstFresh(
+  candidates: ScoredLike[],
+  predicate: (c: ScoredLike) => boolean,
+  recentKeys: string[]
+): ScoredLike | undefined {
+  const matches = candidates.filter(predicate);
+  if (!matches.length) return undefined;
+  const fresh = matches.filter((c) => !isRecentToReader(c.story, recentKeys));
+  return fresh[0] ?? matches[0];
+}
 
 function cleanHeadline(title: string): string {
   // NewsAPI often appends " - Source Name"
@@ -156,12 +191,14 @@ function buildLeadStory(
  * Select one Front Page Lead Story using editorial judgment.
  * Prefer important local; otherwise strongest national/world;
  * weekend editions may elevate a strong feature.
+ * Recently covered stories stay off the cover unless nothing fresher exists.
  */
 export function selectLeadStory(
   input: SelectLeadStoryInput,
   policy: LeadStoryPolicy = {}
 ): LeadStory | null {
   const threshold = input.localScoreThreshold ?? DEFAULT_LOCAL_THRESHOLD;
+  const recentKeys = input.recentStoryKeys ?? [];
   const below = input.topStories.map((s) => s.story);
   const belowFoldTitles = below.map((s) => s.title);
   const belowIds = new Set(below.map((s) => s.id));
@@ -192,8 +229,14 @@ export function selectLeadStory(
     weight: number
   ): StorySelectionReason => ({ code, label, weight });
 
+  const allowRecentSlatePick = (story: StoryLike): boolean => {
+    if (!isRecentToReader(story, recentKeys)) return true;
+    return !candidates.some((c) => !isRecentToReader(c.story, recentKeys));
+  };
+
   // 1) Prefer important local
-  const localPick = candidates.find(
+  const localPick = firstFresh(
+    candidates,
     (c) =>
       hasLocalSignal(c) &&
       c.score >= threshold &&
@@ -201,7 +244,8 @@ export function selectLeadStory(
         c.story,
         below.filter((b) => b.id !== c.story.id),
         c.story.id
-      )
+      ),
+    recentKeys
   );
   if (localPick) {
     return buildLeadStory(
@@ -221,7 +265,11 @@ export function selectLeadStory(
 
   // 2) Breaking — only when clearly strong
   const breakingFromSlate = input.topStories.find((s) => s.role === "breaking");
-  if (breakingFromSlate && breakingFromSlate.score >= 30) {
+  if (
+    breakingFromSlate &&
+    breakingFromSlate.score >= 30 &&
+    allowRecentSlatePick(breakingFromSlate.story)
+  ) {
     const c =
       byId.get(breakingFromSlate.story.id) ??
       ({
@@ -246,7 +294,8 @@ export function selectLeadStory(
 
   // 3) Weekend — strong feature may lead if it outranks thin national copy
   if (policy.preferWeekendFeature) {
-    const featureLead = candidates.find(
+    const featureLead = firstFresh(
+      candidates,
       (c) =>
         (isUpliftingStory(`${c.story.title} ${c.story.description}`) ||
           c.reasons.some(
@@ -257,7 +306,8 @@ export function selectLeadStory(
           c.story,
           below.filter((b) => b.id !== c.story.id),
           belowIds.has(c.story.id) ? c.story.id : null
-        )
+        ),
+      recentKeys
     );
     if (featureLead) {
       return buildLeadStory(
@@ -280,7 +330,7 @@ export function selectLeadStory(
   const nationalFromSlate = input.topStories.find(
     (s) => s.role === "national" || s.role === "breaking"
   );
-  if (nationalFromSlate) {
+  if (nationalFromSlate && allowRecentSlatePick(nationalFromSlate.story)) {
     const c =
       byId.get(nationalFromSlate.story.id) ??
       ({
@@ -303,14 +353,16 @@ export function selectLeadStory(
     );
   }
 
-  const nationalPool = candidates.find(
+  const nationalPool = firstFresh(
+    candidates,
     (c) =>
       hasNationalOrWorldSignal(c) &&
       isDistinctFromBelow(
         c.story,
         below.filter((b) => b.id !== c.story.id),
         belowIds.has(c.story.id) ? c.story.id : null
-      )
+      ),
+    recentKeys
   );
   if (nationalPool) {
     return buildLeadStory(
@@ -329,12 +381,15 @@ export function selectLeadStory(
   }
 
   // 5) Fallback
-  const fallback = candidates.find((c) =>
-    isDistinctFromBelow(
-      c.story,
-      below.filter((b) => b.id !== c.story.id),
-      belowIds.has(c.story.id) ? c.story.id : null
-    )
+  const fallback = firstFresh(
+    candidates,
+    (c) =>
+      isDistinctFromBelow(
+        c.story,
+        below.filter((b) => b.id !== c.story.id),
+        belowIds.has(c.story.id) ? c.story.id : null
+      ),
+    recentKeys
   );
   if (!fallback) return null;
 

@@ -1,6 +1,7 @@
 import { fetchStoryCandidates } from "../stories/fetchCandidates.ts";
 import { scoreCandidate, type ScoredCandidate } from "../stories/score.ts";
 import { selectFrontPage } from "../stories/selectFrontPage.ts";
+import { matchesRecentCoverage } from "../stories/diversity.ts";
 import { selectLeadStory } from "../leadStory/selectLeadStory.ts";
 import type { LeadStory } from "../leadStory/types.ts";
 import type {
@@ -67,6 +68,7 @@ export async function runEditorialDecisions(
       topStories: provisionalSlate.stories,
       scoredCandidates: scored,
       localScoreThreshold: calendar.isWeekend ? 20 : 22,
+      recentStoryKeys: ranking.recentStoryKeys ?? [],
     },
     {
       preferWeekendFeature: policy.preferLeisureTone,
@@ -174,7 +176,8 @@ function ensureEmotionalBalance(
 
   // Replace the least essential heavy non-local story with a feature uplift.
   const used = new Set(frontPage.stories.map((s) => s.story.id));
-  const uplift = pool
+  const recentKeys = ranking.recentStoryKeys ?? [];
+  const upliftPool = pool
     .filter((c) => !used.has(c.story.id))
     .filter(
       (c) =>
@@ -183,7 +186,11 @@ function ensureEmotionalBalance(
         c.story.category === "science" ||
         c.story.category === "health"
     )
-    .sort((a, b) => b.score - a.score)[0];
+    .sort((a, b) => b.score - a.score);
+  const unreadUplift = recentKeys.length
+    ? upliftPool.filter((c) => !matchesRecentCoverage(c.story, recentKeys))
+    : upliftPool;
+  const uplift = (unreadUplift[0] ?? upliftPool[0]) ?? null;
 
   if (!uplift) return frontPage;
 

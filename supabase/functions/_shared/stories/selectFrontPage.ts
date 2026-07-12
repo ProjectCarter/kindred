@@ -3,6 +3,7 @@ import {
   auditComposition,
   hoursSince,
   isNearDuplicate,
+  matchesRecentCoverage,
   normalizeSourceKey,
 } from "./diversity.ts";
 import type {
@@ -30,6 +31,8 @@ type PickOptions = {
   requireFresh?: boolean;
   /** When true, allow a second story from an avoided source. */
   allowSourceRepeat?: boolean;
+  /** When true, allow stories that already led or filled Top Stories recently. */
+  allowRecentCoverage?: boolean;
 };
 
 function categoryKey(c: ScoredCandidate): string {
@@ -62,13 +65,15 @@ function freshnessOk(
 /**
  * Editorially ranked pick — applies source/topic/freshness preferences,
  * then gradually relaxes constraints so the page still fills.
+ * Recently covered stories stay off the page until every fresher option is gone.
  */
 function pickBest(
   pool: ScoredCandidate[],
   selected: RankedStory[],
   predicate: (c: ScoredCandidate) => boolean,
   now: Date,
-  options: PickOptions = {}
+  options: PickOptions = {},
+  recentStoryKeys: string[] = []
 ): ScoredCandidate | null {
   const base = pool
     .filter((c) => predicate(c))
@@ -82,24 +87,28 @@ function pickBest(
       preferFresh: options.preferFresh !== false,
       requireFresh: true,
       allowSourceRepeat: false,
+      allowRecentCoverage: false,
     },
     {
       ...options,
       preferFresh: true,
       requireFresh: false,
       allowSourceRepeat: false,
+      allowRecentCoverage: false,
     },
     {
       ...options,
       preferFresh: false,
       requireFresh: false,
       allowSourceRepeat: false,
+      allowRecentCoverage: false,
     },
     {
       ...options,
       preferFresh: false,
       requireFresh: false,
       allowSourceRepeat: true,
+      allowRecentCoverage: true,
     },
   ];
 
@@ -123,6 +132,10 @@ function pickBest(
         if (!attempt.avoidCategories?.size) return true;
         return !attempt.avoidCategories.has(categoryKey(c));
       })
+      .filter((c) => {
+        if (attempt.allowRecentCoverage || !recentStoryKeys.length) return true;
+        return !matchesRecentCoverage(c.story, recentStoryKeys);
+      })
       .sort((a, b) => {
         // Secondary editorial sort: score, then fresher, then quality already in score.
         if (b.score !== a.score) return b.score - a.score;
@@ -137,8 +150,12 @@ function pickBest(
     if (ranked[0]) return ranked[0];
   }
 
-  // Absolute fallback — still distinct, ignore freshness/source.
-  return base.sort((a, b) => b.score - a.score)[0] ?? null;
+  // Absolute fallback — still prefer unread coverage when any remains.
+  const unread = recentStoryKeys.length
+    ? base.filter((c) => !matchesRecentCoverage(c.story, recentStoryKeys))
+    : base;
+  const fallbackPool = unread.length ? unread : base;
+  return fallbackPool.sort((a, b) => b.score - a.score)[0] ?? null;
 }
 
 function toRanked(c: ScoredCandidate, role: StoryRole): RankedStory {
@@ -183,6 +200,7 @@ export function selectFrontPage(
 ): FrontPageSelection {
   const maxStories = ctx.maxStories ?? 4;
   const now = ctx.now ?? new Date();
+  const recentStoryKeys = ctx.recentStoryKeys ?? [];
   const selected: RankedStory[] = [];
   const used = new Set<string>();
   const usedSources = new Set<string>();
@@ -204,47 +222,41 @@ export function selectFrontPage(
     preferFresh: true,
   });
 
+  const pick = (
+    predicate: (c: ScoredCandidate) => boolean,
+    options: PickOptions = opts()
+  ) => pickBest(candidates, selected, predicate, now, options, recentStoryKeys);
+
   // 1) Major national / world
   take(
-    pickBest(
-      candidates,
-      selected,
+    pick(
       (c) =>
         c.story.pool === "general" ||
         /national_importance|breaking|global_scope/.test(
           c.reasons.map((r) => r.code).join(" ")
-        ),
-      now,
-      opts()
-    ) ?? pickBest(candidates, selected, () => true, now, opts()),
+        )
+    ) ?? pick(() => true),
     "national"
   );
 
   // 2) Strongest interest match — prefer a different topic/source
   take(
-    pickBest(
-      candidates,
-      selected,
+    pick(
       (c) =>
         c.reasons.some((r) => r.code === "user_interest") ||
         c.story.pool === "interest" ||
-        c.story.pool === "secondary",
-      now,
-      opts()
+        c.story.pool === "secondary"
     ),
     "interest"
   );
 
   // 3) Local / regional — keep local even if category overlaps interest
   take(
-    pickBest(
-      candidates,
-      selected,
+    pick(
       (c) =>
         c.reasons.some(
           (r) => r.code === "local_relevance" || r.code === "local_pool"
         ) || c.story.pool === "local",
-      now,
       { ...opts(), avoidCategories: new Set() }
     ),
     "local"
@@ -252,31 +264,19 @@ export function selectFrontPage(
 
   // 4) Uplifting / feature for tonal balance
   take(
-    pickBest(
-      candidates,
-      selected,
-      (c) => c.reasons.some((r) => r.code === "feature_tone"),
-      now,
-      opts()
-    ) ??
-      pickBest(
-        candidates,
-        selected,
+    pick((c) => c.reasons.some((r) => r.code === "feature_tone")) ??
+      pick(
         (c) =>
           c.story.category === "science" ||
           c.story.category === "health" ||
-          c.story.pool === "secondary",
-        now,
-        opts()
+          c.story.pool === "secondary"
       ),
     "feature"
   );
 
   // 5) Optional breaking — only if important enough and distinct
   if (selected.length < maxStories) {
-    const breaking = pickBest(
-      candidates,
-      selected,
+    const breaking = pick(
       (c) =>
         c.score >= 28 &&
         c.reasons.some(
@@ -284,9 +284,7 @@ export function selectFrontPage(
             r.code === "breaking_language" ||
             r.code === "breaking_fresh" ||
             r.code === "national_importance"
-        ),
-      now,
-      opts()
+        )
     );
     if (breaking && breaking.score >= 32) {
       take(breaking, "breaking");
@@ -295,7 +293,7 @@ export function selectFrontPage(
 
   // Fill remaining slots with next-best distinct stories for a complete page.
   while (selected.length < Math.min(maxStories, 3)) {
-    const next = pickBest(candidates, selected, () => true, now, opts());
+    const next = pick(() => true);
     if (!next) break;
     const role: StoryRole =
       selected.length === 0
@@ -312,14 +310,10 @@ export function selectFrontPage(
     !selected.some((s) => s.role === "local")
   ) {
     take(
-      pickBest(
-        candidates,
-        selected,
+      pick(
         (c) =>
           c.story.pool === "local" ||
-          c.reasons.some((r) => r.code === "local_relevance"),
-        now,
-        opts()
+          c.reasons.some((r) => r.code === "local_relevance")
       ),
       "local"
     );
