@@ -1,5 +1,6 @@
 import type { Router } from "expo-router";
 import type { KindredArticle } from "./article";
+import { ensureArticleHero } from "./articleHero";
 import { stashArticle } from "./articleStore";
 import {
   stashArticleCompanion,
@@ -31,7 +32,9 @@ export function openKindredArticle(
   article: KindredArticle,
   options: OpenArticleOptions = {}
 ): void {
-  const id = stashArticle(article);
+  // Visual identity is required — wire photo or curated editorial fallback.
+  const withHero = ensureArticleHero(article);
+  const id = stashArticle(withHero);
   const companion = options.companion ?? null;
   if (companion) {
     stashArticleCompanion(id, companion);
@@ -41,7 +44,7 @@ export function openKindredArticle(
   const clipSectionId = options.clipSectionId ?? null;
 
   stashArticleSession({
-    article,
+    article: withHero,
     companion,
     editionId: options.editionId ?? null,
     backLabel,
@@ -52,14 +55,15 @@ export function openKindredArticle(
 
   void trackReadingSignal({
     signalType: "open",
-    storyKey: article.id,
-    sectionType: article.section,
+    storyKey: withHero.id,
+    sectionType: withHero.section,
     editionId: options.editionId,
-    source: article.source,
-    topic: inferTopicFromSection(article.section, article.headline),
+    source: withHero.source,
+    topic: inferTopicFromSection(withHero.section, withHero.headline),
     payload: {
-      headline: article.headline.slice(0, 160),
-      url: article.sourceUrl ?? null,
+      headline: withHero.headline.slice(0, 160),
+      url: withHero.sourceUrl ?? null,
+      heroKind: withHero.heroImage?.kind ?? null,
     },
   });
 

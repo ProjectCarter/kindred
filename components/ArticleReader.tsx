@@ -12,6 +12,7 @@ import {
   Easing,
   AppState,
   useWindowDimensions,
+  type ImageSourcePropType,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type LayoutChangeEvent,
@@ -47,6 +48,12 @@ import {
 import { supabase } from "../lib/supabase";
 import { MagazineCallout } from "./MagazineCallout";
 import { KnowledgeCardList } from "./KnowledgeCard";
+import { resolveArticleHero } from "../lib/edition/articleHero";
+import {
+  KindredFullMasthead,
+  KindredStickyMasthead,
+  MastheadLink,
+} from "./KindredMasthead";
 
 type Props = {
   article: KindredArticle;
@@ -90,12 +97,18 @@ export function ArticleReader({
   const [progress, setProgress] = useState(0);
   const [heroFailed, setHeroFailed] = useState(false);
   const [heroReady, setHeroReady] = useState(false);
+  const [editorialFallback, setEditorialFallback] = useState<{
+    source: ImageSourcePropType;
+    caption: string;
+    credit: string;
+  } | null>(null);
   const [clipped, setClipped] = useState(false);
   const [clipPending, setClipPending] = useState(false);
   const [clipError, setClipError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(initialScrollY);
   const restoredScroll = useRef(false);
+  const mastheadScrollY = useRef(new Animated.Value(initialScrollY)).current;
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const enterOpacity = useRef(new Animated.Value(0)).current;
@@ -113,6 +126,7 @@ export function ArticleReader({
   useEffect(() => {
     restoredScroll.current = false;
     scrollYRef.current = initialScrollY;
+    mastheadScrollY.setValue(initialScrollY);
     enterOpacity.setValue(0);
     enterRise.setValue(motion.risePx);
     Animated.parallel([
@@ -129,13 +143,18 @@ export function ArticleReader({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [article.id, enterOpacity, enterRise, initialScrollY]);
+  }, [article.id, enterOpacity, enterRise, initialScrollY, mastheadScrollY]);
 
   useEffect(() => {
     setHeroFailed(false);
     setHeroReady(false);
+    setEditorialFallback(null);
     heroOpacity.setValue(0);
-  }, [article.id, article.heroImage?.uri, heroOpacity]);
+    // Local catalog assets are ready immediately.
+    if (article.heroImage?.source && !article.heroImage?.uri) {
+      setHeroReady(true);
+    }
+  }, [article.id, article.heroImage?.uri, article.heroImage?.source, heroOpacity]);
 
   useEffect(() => {
     if (!heroReady) return;
@@ -216,6 +235,7 @@ export function ArticleReader({
       const { contentOffset, layoutMeasurement, contentSize } =
         event.nativeEvent;
       scrollYRef.current = contentOffset.y;
+      mastheadScrollY.setValue(contentOffset.y);
       const scrollable = Math.max(
         contentSize.height - layoutMeasurement.height,
         1
@@ -225,7 +245,7 @@ export function ArticleReader({
       setProgress(next);
       updateArticleSessionScroll(article.id, contentOffset.y);
     },
-    [progressAnim, article.id]
+    [progressAnim, article.id, mastheadScrollY]
   );
 
   const onContentSizeChange = useCallback(
@@ -401,20 +421,20 @@ export function ArticleReader({
         <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
       </View>
 
-      <View style={styles.topBar}>
-        <Pressable
-          onPress={onBack}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Text style={styles.back}>{backLabel}</Text>
-        </Pressable>
-        <Text style={styles.sectionTag} numberOfLines={1}>
-          {formatSectionLabel(article.section)}
-        </Text>
-      </View>
+      <KindredStickyMasthead
+        scrollY={mastheadScrollY}
+        style={styles.stickyMasthead}
+        subtitle={
+          briefing ? "Briefing" : formatSectionLabel(article.section)
+        }
+        leading={
+          <MastheadLink
+            label={backLabel}
+            onPress={onBack}
+            accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
+          />
+        }
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -445,7 +465,21 @@ export function ArticleReader({
             },
           ]}
         >
-          <View style={styles.mastheadRule} />
+          <KindredFullMasthead
+            eyebrow={briefing ? "Briefing" : null}
+            meta={
+              briefing ? null : formatSectionLabel(article.section)
+            }
+            leading={
+              <MastheadLink
+                label={backLabel}
+                onPress={onBack}
+                accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
+              />
+            }
+            scrollY={mastheadScrollY}
+            style={styles.articleMasthead}
+          />
 
           <Text style={styles.kicker}>
             {briefing
@@ -488,54 +522,103 @@ export function ArticleReader({
             </Text>
           ) : null}
 
-          {article.heroImage?.uri && !heroFailed ? (
-            <View
-              style={[
-                styles.figure,
-                {
-                  marginHorizontal: -figureBleed,
-                  width: figureWidth,
-                },
-              ]}
-            >
-              <View style={[styles.imageFrame, shadow.photo]}>
-                {!heroReady ? <View style={styles.imagePlaceholder} /> : null}
-                <Animated.View
-                  style={[styles.imageFade, { opacity: heroOpacity }]}
-                >
-                  <Image
-                    source={{ uri: article.heroImage.uri }}
-                    style={styles.image}
-                    resizeMode="cover"
-                    accessibilityLabel={
-                      article.heroImage.caption || article.headline
-                    }
-                    onLoad={() => setHeroReady(true)}
-                    onError={() => setHeroFailed(true)}
-                  />
-                </Animated.View>
-              </View>
-              {(article.heroImage.caption || article.heroImage.credit) && (
-                <View style={styles.captionBlock}>
-                  <View style={styles.captionRule} />
-                  <View style={styles.captionCopy}>
-                    {article.heroImage.caption ? (
-                      <Text style={styles.caption} maxFontSizeMultiplier={1.2}>
-                        {article.heroImage.caption}
-                      </Text>
-                    ) : null}
-                    {article.heroImage.credit ? (
-                      <Text style={styles.credit} maxFontSizeMultiplier={1.15}>
-                        {article.heroImage.credit}
-                      </Text>
-                    ) : null}
-                  </View>
+          {(() => {
+            const heroUri = article.heroImage?.uri?.trim() || null;
+            const heroLocal =
+              editorialFallback?.source ??
+              article.heroImage?.source ??
+              null;
+            const showHero =
+              Boolean(heroLocal) || (Boolean(heroUri) && !heroFailed);
+            if (!showHero) {
+              return <View style={styles.noImageRule} />;
+            }
+            const caption =
+              editorialFallback?.caption ||
+              article.heroImage?.caption ||
+              article.headline;
+            const credit =
+              editorialFallback?.credit ||
+              article.heroImage?.credit ||
+              null;
+            return (
+              <View
+                style={[
+                  styles.figure,
+                  {
+                    marginHorizontal: -figureBleed,
+                    width: figureWidth,
+                  },
+                ]}
+              >
+                <View style={[styles.imageFrame, shadow.photo]}>
+                  {!heroReady ? <View style={styles.imagePlaceholder} /> : null}
+                  <Animated.View
+                    style={[styles.imageFade, { opacity: heroOpacity }]}
+                  >
+                    <Image
+                      source={
+                        heroLocal
+                          ? heroLocal
+                          : { uri: heroUri! }
+                      }
+                      style={styles.image}
+                      resizeMode="cover"
+                      accessibilityLabel={caption}
+                      onLoad={() => setHeroReady(true)}
+                      onError={() => {
+                        if (heroUri && !heroLocal) {
+                          const fallback = resolveArticleHero({
+                            headline: article.headline,
+                            section: article.section,
+                            body: article.body,
+                            source: article.source,
+                          });
+                          if (fallback.source) {
+                            setEditorialFallback({
+                              source: fallback.source,
+                              caption: fallback.caption || article.headline,
+                              credit:
+                                fallback.credit || "Kindred editorial archive",
+                            });
+                            setHeroFailed(false);
+                            setHeroReady(true);
+                            return;
+                          }
+                          setHeroFailed(true);
+                        } else {
+                          setHeroReady(true);
+                        }
+                      }}
+                    />
+                  </Animated.View>
                 </View>
-              )}
-            </View>
-          ) : (
-            <View style={styles.noImageRule} />
-          )}
+                {(caption || credit) && (
+                  <View style={styles.captionBlock}>
+                    <View style={styles.captionRule} />
+                    <View style={styles.captionCopy}>
+                      {caption ? (
+                        <Text
+                          style={styles.caption}
+                          maxFontSizeMultiplier={1.2}
+                        >
+                          {caption}
+                        </Text>
+                      ) : null}
+                      {credit ? (
+                        <Text
+                          style={styles.credit}
+                          maxFontSizeMultiplier={1.15}
+                        >
+                          {credit}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
 
           {companion?.whyThisMatters?.summary ? (
             <MagazineCallout
@@ -827,46 +910,22 @@ const styles = StyleSheet.create({
     backgroundColor: paper.terracotta,
     opacity: 0.45,
   },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
-    backgroundColor: paper.cream,
+  stickyMasthead: {
+    top: 1.5,
   },
-  back: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    fontStyle: "italic",
-    color: paper.terracotta,
-    letterSpacing: 0.2,
-    maxWidth: "62%",
-  },
-  sectionTag: {
-    ...type.kicker,
-    color: paper.inkFaint,
-    maxWidth: "36%",
-    textAlign: "right",
-    letterSpacing: 1.7,
+  articleMasthead: {
+    alignSelf: "stretch",
+    marginBottom: 28,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     alignItems: "center",
-    paddingTop: 36,
+    paddingTop: 20,
   },
   column: {
     maxWidth: reader.measure,
-  },
-  mastheadRule: {
-    alignSelf: "stretch",
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkRule,
-    marginBottom: 28,
   },
   kicker: {
     ...type.kicker,

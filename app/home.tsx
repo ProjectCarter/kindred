@@ -3,7 +3,7 @@ import {
   Text,
   View,
   StyleSheet,
-  ScrollView,
+  Animated,
   Pressable,
   RefreshControl,
   AppState,
@@ -48,6 +48,11 @@ import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
 import { EditionAdjacentNav } from "../components/EditionAdjacentNav";
+import {
+  KindredFullMasthead,
+  KindredStickyMasthead,
+  MastheadLink,
+} from "../components/KindredMasthead";
 import {
   resolveActivePlace,
   locationPayload,
@@ -97,6 +102,8 @@ export default function HomeScreen() {
   const generatingRef = useRef(false);
   /** Abort in-flight generate-edition fetch on timeout / unmount / supersede. */
   const generateAbortRef = useRef<AbortController | null>(null);
+  /** Collapsing editorial masthead — scroll position drives compact sticky chrome. */
+  const mastheadScrollY = useRef(new Animated.Value(0)).current;
   /** One auto-regen per edition id + active city. */
   const autoRegenKey = useRef<string | null>(null);
 
@@ -827,10 +834,25 @@ export default function HomeScreen() {
           router.push("/location-search?purpose=home");
         }}
       />
-      <ScrollView
+      <KindredStickyMasthead
+        scrollY={mastheadScrollY}
+        trailing={
+          <MastheadLink
+            label="Library"
+            onPress={() => router.push("/library")}
+            accessibilityLabel="Open library"
+          />
+        }
+      />
+      <Animated.ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: mastheadScrollY } } }],
+          { useNativeDriver: true }
+        )}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -840,21 +862,19 @@ export default function HomeScreen() {
           />
         }
       >
-        <View style={styles.headerRow}>
-          {sections.length === 0 ? (
-            <Text style={styles.date}>{today}</Text>
-          ) : (
-            <View style={styles.headerSpacer} />
-          )}
-          <Pressable
-            onPress={() => router.push("/library")}
-            accessibilityRole="button"
-            accessibilityLabel="Open library"
-            style={({ pressed }) => pressed && styles.linkPressed}
-          >
-            <Text style={styles.libraryLink}>Library</Text>
-          </Pressable>
-        </View>
+        {sections.length === 0 ? (
+          <KindredFullMasthead
+            dateLabel={today}
+            trailing={
+              <MastheadLink
+                label="Library"
+                onPress={() => router.push("/library")}
+                accessibilityLabel="Open library"
+              />
+            }
+            scrollY={mastheadScrollY}
+          />
+        ) : null}
 
         {clipError ? (
           <Text style={styles.error} accessibilityRole="alert">
@@ -992,6 +1012,14 @@ export default function HomeScreen() {
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
               banditsPick={banditsPick(bandit)}
+              mastheadScrollY={mastheadScrollY}
+              mastheadTrailing={
+                <MastheadLink
+                  label="Library"
+                  onPress={() => router.push("/library")}
+                  accessibilityLabel="Open library"
+                />
+              }
               locationCity={
                 activeLocation?.place?.city ??
                 intelligence?.discovery?.location?.city ??
@@ -1034,7 +1062,7 @@ export default function HomeScreen() {
             />
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }
@@ -1048,34 +1076,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 18,
     paddingBottom: 80,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-    paddingBottom: 8,
-  },
-  headerSpacer: {
-    flex: 1,
-  },
-  date: {
-    fontSize: 10,
-    letterSpacing: 2.2,
-    textTransform: "uppercase",
-    color: paper.inkMuted,
-    flex: 1,
-    paddingRight: 12,
-    fontWeight: "600",
-  },
-  mastQuiet: {
-    fontFamily: "Georgia",
-    fontSize: 13,
-    fontStyle: "italic",
-    color: paper.inkFaint,
-    flex: 1,
-    paddingRight: 12,
-    letterSpacing: 0.2,
   },
   travelBanner: {
     flexDirection: "row",
@@ -1131,13 +1131,6 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
     marginBottom: 16,
     marginTop: 4,
-  },
-  libraryLink: {
-    fontFamily: "Georgia",
-    fontSize: 13,
-    color: paper.terracotta,
-    fontStyle: "italic",
-    letterSpacing: 0.2,
   },
   linkPressed: {
     opacity: press.opacity,

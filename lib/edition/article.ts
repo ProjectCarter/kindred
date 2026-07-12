@@ -6,6 +6,8 @@ import {
 import type { KnowledgeFacet } from "./knowledge";
 import { dedupeProse } from "./contentQuality";
 
+import type { ImageSourcePropType } from "react-native";
+
 /**
  * Canonical article model for Kindred’s native reader.
  * Every section (Lead, Top Stories, Business, Science, etc.)
@@ -22,9 +24,13 @@ export type KindredArticle = {
   source: string;
   publishedAt?: string | null;
   heroImage?: {
-    uri: string;
+    /** Remote wire photograph. */
+    uri?: string | null;
+    /** Local curated editorial asset when no wire photo exists. */
+    source?: ImageSourcePropType | null;
     caption?: string | null;
     credit?: string | null;
+    kind?: "wire" | "editorial";
   } | null;
   /** Body paragraphs for native reading. */
   body: string[];
@@ -148,6 +154,7 @@ export function articleFromLeadStory(lead: LeadStory): KindredArticle {
           uri: heroUri,
           caption: lead.heroImage?.alt || lead.headline,
           credit: `Photograph via ${lead.source ?? "Kindred"}`,
+          kind: "wire" as const,
         }
       : null,
     body: body.length
@@ -239,6 +246,7 @@ export function articleFromSectionItem(input: {
           uri: input.imageUrl,
           caption: input.imageCaption ?? input.headline,
           credit: `Photograph via ${source}`,
+          kind: "wire" as const,
         }
       : null,
     body,

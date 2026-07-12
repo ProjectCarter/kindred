@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Text,
   View,
@@ -17,6 +17,7 @@ import { morningSalutation } from "../lib/edition/morningRitual";
 import type { MorningBriefing } from "../lib/edition/morningEdition";
 import { motion, paper, space, type } from "../lib/edition/newspaperTheme";
 import { MorningBriefing as MorningBriefingBlock } from "./MorningBriefing";
+import { KindredFullMasthead } from "./KindredMasthead";
 
 type Props = {
   editionDate?: string | null;
@@ -28,6 +29,12 @@ type Props = {
   morningOpening?: MorningBriefing | null;
   morningBriefing?: MorningBriefing | null;
   weatherText?: string | null;
+  /** When false, parent owns the collapsing masthead. */
+  showNameplate?: boolean;
+  mastheadLeading?: ReactNode;
+  mastheadTrailing?: ReactNode;
+  /** Drives calm fade as the sticky compact masthead takes over. */
+  mastheadScrollY?: Animated.Value;
 };
 
 function resolveDisplayDate(editionDate?: string | null): string {
@@ -63,6 +70,10 @@ export function MorningGreeting({
   morningOpening,
   morningBriefing,
   weatherText,
+  showNameplate = true,
+  mastheadLeading,
+  mastheadTrailing,
+  mastheadScrollY,
 }: Props) {
   const dateLabel = resolveDisplayDate(editionDate);
   const weatherLine = weatherSummary(weatherText);
@@ -171,20 +182,17 @@ export function MorningGreeting({
 
   return (
     <View style={styles.wrap} accessibilityRole="header">
-      <Animated.View style={[styles.nameplate, { opacity: mastheadOp }]}>
-        <Text style={styles.masthead} maxFontSizeMultiplier={1.15}>
-          Kindred
-        </Text>
-        <View style={styles.nameplateRule} />
-        <Text style={styles.date} maxFontSizeMultiplier={1.25}>
-          {dateLabel}
-        </Text>
-        {weatherLine ? (
-          <Text style={styles.weather} maxFontSizeMultiplier={1.25}>
-            {weatherLine}
-          </Text>
-        ) : null}
-      </Animated.View>
+      {showNameplate ? (
+        <Animated.View style={{ opacity: mastheadOp }}>
+          <KindredFullMasthead
+            dateLabel={dateLabel}
+            weatherLine={weatherLine}
+            leading={mastheadLeading}
+            trailing={mastheadTrailing}
+            scrollY={mastheadScrollY}
+          />
+        </Animated.View>
+      ) : null}
 
       <Animated.View
         style={[
@@ -251,41 +259,6 @@ export function MorningGreeting({
 const styles = StyleSheet.create({
   wrap: {
     marginBottom: 8,
-  },
-  nameplate: {
-    alignItems: "center",
-    marginBottom: space.afterMasthead,
-    paddingBottom: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
-  },
-  masthead: {
-    ...type.nameplate,
-    color: paper.ink,
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  nameplateRule: {
-    width: 48,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkMuted,
-    opacity: 0.4,
-    marginBottom: 12,
-  },
-  date: {
-    ...type.nameplateMeta,
-    color: paper.inkMuted,
-    textAlign: "center",
-  },
-  weather: {
-    marginTop: 6,
-    fontFamily: "Georgia",
-    fontSize: 13,
-    lineHeight: 18,
-    fontStyle: "italic",
-    color: paper.inkFaint,
-    textAlign: "center",
-    maxWidth: 320,
   },
   goodMorning: {
     fontFamily: "Georgia",

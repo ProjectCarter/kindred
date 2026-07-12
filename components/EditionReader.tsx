@@ -1,4 +1,5 @@
-import { Text, View, Pressable, StyleSheet } from "react-native";
+import { type ReactNode } from "react";
+import { Text, View, Pressable, StyleSheet, Animated } from "react-native";
 import {
   SECTION_LABELS,
   formatEditionDate,
@@ -74,6 +75,10 @@ type Props = {
   onOpenClippings?: () => void;
   onOpenArchive?: () => void;
   onShareEdition?: () => void;
+  /** Collapsing masthead — trailing action while expanded (e.g. Library). */
+  mastheadTrailing?: ReactNode;
+  mastheadLeading?: ReactNode;
+  mastheadScrollY?: Animated.Value;
 };
 
 /**
@@ -126,6 +131,9 @@ export function EditionReader({
   onOpenClippings,
   onOpenArchive,
   onShareEdition,
+  mastheadTrailing,
+  mastheadLeading,
+  mastheadScrollY,
 }: Props) {
   const weather = sections.find((s) => s.section_type === "weather");
   const greeting = sections.find((s) => s.section_type === "greeting");
@@ -403,6 +411,9 @@ export function EditionReader({
         morningOpening={morningOpening}
         morningBriefing={morningBriefing}
         weatherText={weather?.body ?? weather?.headline ?? null}
+        mastheadLeading={mastheadLeading}
+        mastheadTrailing={mastheadTrailing}
+        mastheadScrollY={mastheadScrollY}
         banditContext={{
           firstName: banditFirstName,
           weatherText: weather?.body ?? weather?.headline ?? null,

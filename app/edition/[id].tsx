@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Text,
   View,
   StyleSheet,
-  ScrollView,
-  Pressable,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -38,6 +37,10 @@ import {
 } from "../../lib/personalization";
 import { EditionReader } from "../../components/EditionReader";
 import { EditionAdjacentNav } from "../../components/EditionAdjacentNav";
+import {
+  KindredStickyMasthead,
+  MastheadLink,
+} from "../../components/KindredMasthead";
 import { PaperLoading } from "../../components/PaperLoading";
 import { paper } from "../../lib/edition/newspaperTheme";
 
@@ -57,6 +60,7 @@ export default function EditionScreen() {
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [newer, setNewer] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mastheadScrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -280,21 +284,27 @@ export default function EditionScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
+      <KindredStickyMasthead
+        scrollY={mastheadScrollY}
+        leading={
+          <MastheadLink
+            label="← Library"
+            onPress={() => router.back()}
+            accessibilityLabel="Back to library"
+          />
+        }
+      />
+      <Animated.ScrollView
         key={id}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: mastheadScrollY } } }],
+          { useNativeDriver: true }
+        )}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backLink}
-          accessibilityRole="button"
-          accessibilityLabel="Back to library"
-        >
-          <Text style={styles.backText}>← Library</Text>
-        </Pressable>
-
         {error ? (
           <Text style={styles.error}>{error}</Text>
         ) : (
@@ -316,6 +326,14 @@ export default function EditionScreen() {
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
               banditsPick={banditsPick(bandit)}
+              mastheadScrollY={mastheadScrollY}
+              mastheadLeading={
+                <MastheadLink
+                  label="← Library"
+                  onPress={() => router.back()}
+                  accessibilityLabel="Back to library"
+                />
+              }
               locationCity={intelligence?.discovery?.location?.city ?? null}
               locationRegion={intelligence?.discovery?.location?.region ?? null}
               locationState={intelligence?.discovery?.location?.state ?? null}
@@ -346,7 +364,7 @@ export default function EditionScreen() {
             />
           </>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }
@@ -360,15 +378,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 72,
-  },
-  backLink: {
-    marginBottom: 18,
-  },
-  backText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    color: paper.terracotta,
-    fontStyle: "italic",
   },
   error: {
     color: paper.terracotta,
