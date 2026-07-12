@@ -19,19 +19,22 @@ import {
   type HeroImageContext,
   type HeroImageAsset,
 } from "../lib/edition/HeroImageService";
-import { motion, paper, press, shadow } from "../lib/edition/newspaperTheme";
+import { motion, paper, press } from "../lib/edition/newspaperTheme";
+
+/** Matches home folio gutter — feature photo bleeds like the cover. */
+const FOLIO_GUTTER = 28;
 
 type Props = {
   events: LocalEventCard[];
-  /** Prefer a different photograph from the morning cover when possible. */
   heroContext?: HeroImageContext | null;
-  /** Image ids already shown above (cover) so we pick a fresh supporting frame. */
   excludeHeroIds?: string[];
 };
 
 /**
- * Don’t Miss Today — editorial recommendation, not a calendar.
- * TIME / Monocle / Airbnb craft: desire first, details last.
+ * Don’t Miss Today — rebuilt from stop-scroll principles:
+ * TIME: one story owns the scale.
+ * Apple: photograph + restrained type; nothing else competes.
+ * Airbnb: the image creates desire; text only names the feeling.
  */
 export function DontMissToday({
   events,
@@ -39,16 +42,17 @@ export function DontMissToday({
   excludeHeroIds = [],
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
-  const featureWidth = Math.max(windowWidth - 56, 280);
-  const featureHeight = Math.round(featureWidth * 0.72);
+  /** Full-bleed monopoly — same width language as the cover hero. */
+  const photoWidth = windowWidth;
+  const photoHeight = Math.round(Math.min(windowWidth * 1.05, 460));
 
   const featured = events[0] ?? null;
-  const secondary = events.slice(1, 4);
+  const secondary = events.slice(1, 3);
 
   const [reduceMotion, setReduceMotion] = useState(false);
   const [featureImage, setFeatureImage] = useState<HeroImageAsset | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
-  const rise = useRef(new Animated.Value(8)).current;
+  const rise = useRef(new Animated.Value(6)).current;
   const photoOp = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -97,13 +101,13 @@ export function DontMissToday({
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 580,
+        duration: 640,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(rise, {
         toValue: 0,
-        duration: 620,
+        duration: 680,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -119,7 +123,7 @@ export function DontMissToday({
     photoOp.setValue(0);
     Animated.timing(photoOp, {
       toValue: 1,
-      duration: motion.photoMs,
+      duration: motion.photoMs + 200,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -136,8 +140,7 @@ export function DontMissToday({
     );
   }
 
-  const when = formatWhen(featured);
-  const where = formatWhere(featured);
+  const meta = whisperMeta(featured);
   const open = featured.sourceUrl
     ? () => {
         void Linking.openURL(featured.sourceUrl).catch(() => {});
@@ -155,56 +158,67 @@ export function DontMissToday({
     >
       <Text style={styles.kicker}>Don’t miss today</Text>
 
-      {/* Featured recommendation — desire before details */}
       <Pressable
         onPress={open}
         disabled={!open}
         accessibilityRole={open ? "link" : "text"}
-        accessibilityLabel={[featured.name, when, where]
-          .filter(Boolean)
-          .join(". ")}
+        accessibilityLabel={[featured.name, meta].filter(Boolean).join(". ")}
         style={({ pressed }) => [open && pressed && styles.pressed]}
       >
+        {/* Scale monopoly — the photograph is the product */}
         {featureImage ? (
           <Animated.View
             style={[
-              styles.featurePhoto,
-              { width: featureWidth, opacity: photoOp },
-              shadow.photo,
+              styles.photoBleed,
+              {
+                width: photoWidth,
+                marginLeft: -FOLIO_GUTTER,
+                opacity: photoOp,
+              },
             ]}
           >
             <Image
               source={featureImage.source}
-              style={{ width: featureWidth, height: featureHeight }}
+              style={{ width: photoWidth, height: photoHeight }}
               resizeMode="cover"
               accessibilityLabel={
-                featureImage.title || "A scene from near you"
+                featureImage.title || "A place worth going"
               }
             />
           </Animated.View>
-        ) : null}
+        ) : (
+          <View
+            style={[
+              styles.photoFallback,
+              {
+                width: photoWidth,
+                marginLeft: -FOLIO_GUTTER,
+                height: Math.round(photoHeight * 0.45),
+              },
+            ]}
+          />
+        )}
 
-        <Text style={styles.featureHeadline} maxFontSizeMultiplier={1.25}>
+        {/* Apple restraint: name the desire, then stop talking */}
+        <Text style={styles.headline} maxFontSizeMultiplier={1.2}>
           {featured.name}
         </Text>
 
-        <Text style={styles.featureInvite} maxFontSizeMultiplier={1.3}>
-          {inviteLine(featured)}
-        </Text>
-
-        {(when || where) && (
-          <Text style={styles.featureMeta} maxFontSizeMultiplier={1.2}>
-            {[when, where].filter(Boolean).join("  ·  ")}
+        {/* TIME byline energy — logistics last, nearly invisible */}
+        {meta ? (
+          <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
+            {meta}
           </Text>
-        )}
+        ) : null}
 
         {open ? (
-          <Text style={styles.featureCue} maxFontSizeMultiplier={1.15}>
-            Make plans
+          <Text style={styles.go} maxFontSizeMultiplier={1.15}>
+            Go
           </Text>
         ) : null}
       </Pressable>
 
+      {/* Air resolves the feature before anything else appears */}
       {secondary.length > 0 ? (
         <View style={styles.secondaryBlock}>
           <Text style={styles.secondaryKicker}>Also nearby</Text>
@@ -228,8 +242,7 @@ function SecondaryRecommendation({
   event: LocalEventCard;
   isLast: boolean;
 }) {
-  const when = formatWhen(event);
-  const where = formatWhere(event);
+  const meta = whisperMeta(event);
   const open = event.sourceUrl
     ? () => {
         void Linking.openURL(event.sourceUrl).catch(() => {});
@@ -241,91 +254,78 @@ function SecondaryRecommendation({
       onPress={open}
       disabled={!open}
       accessibilityRole={open ? "link" : "text"}
-      accessibilityLabel={[event.name, when, where].filter(Boolean).join(". ")}
+      accessibilityLabel={[event.name, meta].filter(Boolean).join(". ")}
       style={({ pressed }) => [
         styles.secondaryRow,
         !isLast && styles.secondaryRule,
         open && pressed && styles.pressed,
       ]}
     >
-      <Text style={styles.secondaryHeadline} maxFontSizeMultiplier={1.3}>
+      <Text style={styles.secondaryHeadline} maxFontSizeMultiplier={1.25}>
         {event.name}
       </Text>
-      <Text style={styles.secondaryMeta} maxFontSizeMultiplier={1.2}>
-        {[when, where].filter(Boolean).join("  ·  ")}
-      </Text>
+      {meta ? (
+        <Text style={styles.secondaryMeta} maxFontSizeMultiplier={1.15}>
+          {meta}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
 
-function formatWhen(event: LocalEventCard): string {
-  return [event.date, event.time].filter(Boolean).join(" · ");
-}
-
-function formatWhere(event: LocalEventCard): string {
-  return [event.venue, event.city].filter(Boolean).join(", ");
-}
-
-/** Soft magazine dek — invitation, not a calendar row. */
-function inviteLine(event: LocalEventCard): string {
-  const place = event.venue?.trim() || event.city?.trim();
-  if (place) {
-    return `Worth crossing town for — ${place}.`;
-  }
-  return "One local moment worth making room for.";
+/** One whisper line — never a calendar stack. */
+function whisperMeta(event: LocalEventCard): string {
+  const when = [event.date, event.time].filter(Boolean).join(" · ");
+  const where = [event.venue, event.city].filter(Boolean).join(", ");
+  return [when, where].filter(Boolean).join("  ·  ");
 }
 
 const styles = StyleSheet.create({
   section: {
-    marginTop: 4,
-    marginBottom: 8,
+    marginTop: 8,
   },
   kicker: {
-    fontSize: 11,
-    letterSpacing: 2.8,
+    fontSize: 10,
+    letterSpacing: 3,
     fontWeight: "600",
     textTransform: "uppercase",
     color: paper.terracotta,
-    marginBottom: 22,
+    marginBottom: 20,
   },
-  featurePhoto: {
+  photoBleed: {
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
-    marginBottom: 28,
+    marginBottom: 32,
   },
-  featureHeadline: {
+  photoFallback: {
+    backgroundColor: paper.chrome,
+    marginBottom: 32,
+  },
+  headline: {
     fontFamily: "Georgia",
-    fontSize: 32,
-    lineHeight: 40,
+    fontSize: 36,
+    lineHeight: 44,
     fontWeight: "600",
-    letterSpacing: -0.4,
+    letterSpacing: -0.55,
     color: paper.ink,
-    marginBottom: 14,
-    maxWidth: 480,
+    marginBottom: 16,
+    maxWidth: 520,
+    paddingRight: 8,
   },
-  featureInvite: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 28,
-    fontStyle: "italic",
-    color: paper.inkMuted,
-    marginBottom: 20,
-    maxWidth: 420,
-  },
-  featureMeta: {
+  meta: {
     fontSize: 13,
     lineHeight: 20,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
     color: paper.inkFaint,
-    marginBottom: 4,
+    maxWidth: 400,
   },
-  featureCue: {
-    marginTop: 22,
+  go: {
+    marginTop: 28,
     fontFamily: "Georgia",
-    fontSize: 16,
+    fontSize: 17,
     fontStyle: "italic",
     color: paper.terracotta,
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
   },
   empty: {
     fontFamily: "Georgia",
@@ -335,22 +335,23 @@ const styles = StyleSheet.create({
     color: paper.inkMuted,
     maxWidth: 400,
   },
+  /** Enough air that the featured pick emotionally resolves first. */
   secondaryBlock: {
-    marginTop: 48,
-    paddingTop: 28,
+    marginTop: 72,
+    paddingTop: 36,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.border,
   },
   secondaryKicker: {
     fontSize: 10,
-    letterSpacing: 2.2,
+    letterSpacing: 2.4,
     fontWeight: "600",
     textTransform: "uppercase",
     color: paper.inkFaint,
-    marginBottom: 18,
+    marginBottom: 20,
   },
   secondaryRow: {
-    paddingVertical: 16,
+    paddingVertical: 18,
   },
   secondaryRule: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -358,17 +359,17 @@ const styles = StyleSheet.create({
   },
   secondaryHeadline: {
     fontFamily: "Georgia",
-    fontSize: 19,
-    lineHeight: 26,
+    fontSize: 20,
+    lineHeight: 28,
     fontWeight: "600",
-    letterSpacing: -0.1,
+    letterSpacing: -0.15,
     color: paper.ink,
     marginBottom: 6,
   },
   secondaryMeta: {
     fontSize: 13,
     lineHeight: 19,
-    color: paper.inkMuted,
+    color: paper.inkFaint,
   },
   pressed: {
     opacity: press.opacity,
