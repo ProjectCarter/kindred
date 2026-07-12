@@ -592,7 +592,12 @@ export function ArticleReader({
             <View style={styles.footerRule} />
             <Text style={styles.endMark}>◆</Text>
             <Text style={styles.attribution}>
-              End of article  ·  {article.source}
+              From this morning’s paper  ·  {article.source}
+            </Text>
+            <Text style={styles.closingCadence} maxFontSizeMultiplier={1.25}>
+              {briefing
+                ? "That is the desk’s note on this story. Sit with it a moment."
+                : "That is the end of this story. Sit with it a moment."}
             </Text>
             {briefing && article.sourceUrl ? (
               <Text style={styles.sourceHint} maxFontSizeMultiplier={1.2}>
@@ -1031,6 +1036,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: "uppercase",
     textAlign: "center",
+  },
+  closingCadence: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 26,
+    fontStyle: "italic",
+    color: paper.inkBody,
+    textAlign: "center",
+    maxWidth: 340,
+    marginTop: 4,
   },
   sourceHint: {
     fontFamily: "Georgia",
