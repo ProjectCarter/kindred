@@ -20,6 +20,10 @@ export type LeadStory = {
   id: string;
   headline: string;
   summary: string;
+  /** Story Editor body paragraphs when present. */
+  body?: string[];
+  dek?: string | null;
+  desk?: Record<string, unknown> | null;
   source: string;
   url: string | null;
   publishedAt: string | null;
@@ -60,6 +64,20 @@ export function parseLeadStory(value: unknown): LeadStory | null {
         ? raw.dek
         : "";
 
+  const body = Array.isArray(raw.body)
+    ? (raw.body as unknown[])
+        .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+        .map((p) => p.trim())
+    : undefined;
+
+  const dek =
+    typeof raw.dek === "string" && raw.dek.trim() ? raw.dek.trim() : null;
+
+  const desk =
+    raw.desk && typeof raw.desk === "object"
+      ? (raw.desk as Record<string, unknown>)
+      : null;
+
   const source =
     typeof raw.source === "string" && raw.source.trim()
       ? raw.source.trim()
@@ -93,6 +111,9 @@ export function parseLeadStory(value: unknown): LeadStory | null {
     id,
     headline,
     summary,
+    body: body?.length ? body : undefined,
+    dek,
+    desk,
     source,
     url: typeof raw.url === "string" ? raw.url : null,
     publishedAt: typeof raw.publishedAt === "string" ? raw.publishedAt : null,

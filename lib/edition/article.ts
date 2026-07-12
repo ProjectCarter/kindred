@@ -126,14 +126,20 @@ export function formatArticlePublishedAt(
  */
 export function articleFromLeadStory(lead: LeadStory): KindredArticle {
   const summary = lead.summary ?? "";
-  const body = dedupeProse(splitIntoParagraphs(summary));
+  const deskBody =
+    Array.isArray(lead.body) && lead.body.length
+      ? dedupeProse(lead.body.map((p) => p.trim()).filter(Boolean))
+      : [];
+  const body = deskBody.length
+    ? deskBody
+    : dedupeProse(splitIntoParagraphs(summary));
   const pullQuote = extractPullQuote(body);
   const heroUri = lead.heroImage?.uri ?? null;
   const article: KindredArticle = {
     id: lead.id,
     section: "lead",
     headline: lead.headline,
-    dek: null,
+    dek: lead.dek?.trim() || null,
     byline: formatArticleByline(lead.source ?? "Kindred"),
     source: lead.source ?? "Kindred",
     publishedAt: lead.publishedAt,

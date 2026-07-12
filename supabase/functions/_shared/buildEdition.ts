@@ -33,6 +33,8 @@ import {
   type TemperatureUnitPreference,
 } from "./weather/units.ts";
 import { eventMatchesCity } from "./contentQuality.ts";
+import { runStoryEditorSafe } from "./storyEditor/index.ts";
+import type { LeadStory } from "./leadStory/types.ts";
 
 export type BuildEditionResult =
   | { ok: true; editionId: string }
@@ -763,7 +765,41 @@ export async function buildEditionForUser(
 
   const frontPage = editorial.frontPage;
   const topStories = frontPage.stories;
-  const leadStory = editorial.leadStory;
+  let leadStory: LeadStory | null = editorial.leadStory;
+
+  // Story Editor — Lead (editorial heart; before knowledge/memory consume summary).
+  if (leadStory && anthropicApiKey) {
+    const edited = await runStoryEditorSafe(
+      {
+        id: leadStory.id,
+        headline: leadStory.headline,
+        sourceText: leadStory.summary || leadStory.headline,
+        source: leadStory.source,
+        url: leadStory.url,
+        publishedAt: leadStory.publishedAt,
+        surfaceRole: "lead",
+        locale: "en",
+        selectionWhy: leadStory.selection.reasons
+          .map((r) => r.label)
+          .slice(0, 4),
+      },
+      anthropicApiKey
+    );
+    leadStory = {
+      ...leadStory,
+      headline: edited.headline || leadStory.headline,
+      summary: edited.bodyText || leadStory.summary,
+      body: edited.paragraphs,
+      dek: edited.dek,
+      desk: edited.desk as unknown as Record<string, unknown>,
+    };
+    console.log("[buildEdition] storyEditor lead", {
+      path: edited.desk.path,
+      passes: edited.desk.passes,
+      paras: edited.paragraphs.length,
+      scores: edited.desk.scores,
+    });
+  }
 
   const weatherSummary = formatWeatherSummary({
     city: city ?? location.city,
@@ -1034,6 +1070,40 @@ export async function buildEditionForUser(
     sections.map((section) => writeSection(section, anthropicApiKey))
   );
 
+  // Story Editor — Top Stories section (roundup article in the reader).
+  for (let i = 0; i < sections.length; i++) {
+    if (sections[i].section_type !== "top_stories") continue;
+    if (!written[i]?.headline || !written[i]?.body) continue;
+    const editedSection = await runStoryEditorSafe(
+      {
+        id: `top_stories:${editionDate}`,
+        headline: written[i].headline,
+        sourceText: `${frontPage.groundingData}\n\nDraft:\n${written[i].body}`,
+        source: "Kindred",
+        surfaceRole: "top_stories_section",
+        locale: "en",
+        priorDraft: {
+          headline: written[i].headline,
+          dek: null,
+          paragraphs: written[i].body
+            .split(/\n\s*\n/)
+            .map((p) => p.replace(/\s+/g, " ").trim())
+            .filter(Boolean),
+        },
+      },
+      anthropicApiKey
+    );
+    written[i] = {
+      headline: editedSection.headline || written[i].headline,
+      body: editedSection.bodyText || written[i].body,
+    };
+    console.log("[buildEdition] storyEditor top_stories", {
+      path: editedSection.desk.path,
+      passes: editedSection.desk.passes,
+      paras: editedSection.paragraphs.length,
+    });
+  }
+
   const writtenUsable = written.filter((w) => w.headline && w.body).length;
   console.log("[buildEdition] write results", {
     plannedCount: sections.length,
@@ -1112,26 +1182,51 @@ export async function buildEditionForUser(
       : interests,
     recentKeys: blendedRecentKeys,
   });
-  const banditsPick: BanditsPick | null = banditsPickStory
-    ? {
-        intro: composeBanditsPickIntro(
-          banditsPickStory,
-          banditReader.firstName,
-          editionDate
-        ),
-        story: {
-          id: banditsPickStory.id,
-          headline: banditsPickStory.headline,
-          summary: banditsPickStory.summary,
-          source: banditsPickStory.source,
-          url: banditsPickStory.url,
-          publishedAt: banditsPickStory.publishedAt,
-          imageUrl: banditsPickStory.imageUrl,
-          category: banditsPickStory.category,
-          why: banditsPickStory.why,
+
+  let banditsPick: BanditsPick | null = null;
+  if (banditsPickStory) {
+    const editedPick = await runStoryEditorSafe(
+      {
+        id: banditsPickStory.id,
+        headline: banditsPickStory.headline,
+        sourceText: banditsPickStory.summary || banditsPickStory.headline,
+        source: banditsPickStory.source,
+        url: banditsPickStory.url,
+        publishedAt: banditsPickStory.publishedAt,
+        surfaceRole: "bandits_pick",
+        locale: "en",
+        selectionWhy: [banditsPickStory.why].filter(Boolean),
+      },
+      anthropicApiKey
+    );
+    banditsPick = {
+      intro: composeBanditsPickIntro(
+        {
+          ...banditsPickStory,
+          headline: editedPick.headline || banditsPickStory.headline,
+          summary: editedPick.bodyText || banditsPickStory.summary,
         },
-      }
-    : null;
+        banditReader.firstName,
+        editionDate
+      ),
+      story: {
+        id: banditsPickStory.id,
+        headline: editedPick.headline || banditsPickStory.headline,
+        summary: editedPick.bodyText || banditsPickStory.summary,
+        source: banditsPickStory.source,
+        url: banditsPickStory.url,
+        publishedAt: banditsPickStory.publishedAt,
+        imageUrl: banditsPickStory.imageUrl,
+        category: banditsPickStory.category,
+        why: banditsPickStory.why,
+      },
+    };
+    console.log("[buildEdition] storyEditor bandits_pick", {
+      path: editedPick.desk.path,
+      passes: editedPick.desk.passes,
+      paras: editedPick.paragraphs.length,
+    });
+  }
 
   console.log("[buildEdition] bandits pick", {
     selected: Boolean(banditsPick),

@@ -26,6 +26,11 @@ export type LeadStory = {
   id: string;
   headline: string;
   summary: string;
+  /** Story Editor paragraphs when the desk has rewritten the Lead. */
+  body?: string[];
+  dek?: string | null;
+  /** Story Editor provenance — Learning Engine + reader adapters. */
+  desk?: Record<string, unknown> | null;
   source: string;
   url: string | null;
   publishedAt: string | null;
