@@ -48,53 +48,76 @@ export type LocalEvent = {
   sourceName: string;
 };
 
-const DEFAULT_LOCATION: Location = {
-  /**
-   * LAST RESORT when no GPS, no profile location, and IP lookup fails.
-   * Easy to change — do NOT silently default to San Francisco.
-   * Prefer client-sent GPS + profiles.location over this object.
-   */
-  lat: 33.4484,
-  lon: -112.074,
-  city: "Phoenix",
-  region: "Arizona",
-  state: "AZ",
-};
+/**
+ * No silent Phoenix / San Francisco default.
+ * Client GPS, active profiles.location, travel, or home_location only.
+ */
+function placeFromProfileBlob(raw: unknown): Location | null {
+  if (!raw || typeof raw !== "object") return null;
+  const loc = raw as {
+    city?: string | null;
+    region?: string | null;
+    state?: string | null;
+    lat?: number | null;
+    lon?: number | null;
+  };
+  if (
+    loc.lat == null ||
+    loc.lon == null ||
+    !loc.city ||
+    loc.city === "your area"
+  ) {
+    return null;
+  }
+  return {
+    lat: loc.lat,
+    lon: loc.lon,
+    city: loc.city,
+    region: loc.region ?? null,
+    state: loc.state ?? null,
+  };
+}
 
-/** @deprecated Name kept for call sites — resolves IP approx only. Prefer client GPS. */
-export async function getApproxLocation(req?: Request): Promise<Location> {
-  if (!req) return { ...DEFAULT_LOCATION };
+/** @deprecated IP approx only — may return null. Prefer client GPS. */
+export async function getApproxLocation(
+  req?: Request
+): Promise<Location | null> {
+  if (!req) return null;
 
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
   // Skip bogus / datacenter defaults that pin everyone to one metro.
   if (!ip || ip === "8.8.8.8") {
-    return { ...DEFAULT_LOCATION };
+    return null;
   }
   try {
     const res = await fetch(`https://ipapi.co/${ip}/json/`);
     const data = await res.json();
     if (data?.error || data?.latitude == null || data?.longitude == null) {
-      return { ...DEFAULT_LOCATION };
+      return null;
     }
+    if (!data.city || data.city === "your area") return null;
     return {
       lat: data.latitude,
       lon: data.longitude,
-      city: data.city ?? DEFAULT_LOCATION.city,
+      city: data.city,
       region: data.region ?? data.region_code ?? null,
       state: data.region_code ?? data.region ?? null,
     };
   } catch {
-    return { ...DEFAULT_LOCATION };
+    return null;
   }
 }
 
-/** Prefer stored profile GPS over IP / hard-coded fallback. */
+/**
+ * Prefer client GPS → profiles.location → travel → home_location.
+ * Never silently defaults to a hard-coded city.
+ */
 export async function resolveEditionLocation(
   supabaseAdmin: SupabaseClient,
   userId: string,
   hint?: Location | null
-): Promise<Location> {
+): Promise<Location | null> {
   const hintUsable =
     hint &&
     hint.city &&
@@ -115,40 +138,48 @@ export async function resolveEditionLocation(
   try {
     const { data } = await supabaseAdmin
       .from("profiles")
-      .select("location")
+      .select("location, home_location, travel")
       .eq("id", userId)
       .maybeSingle();
-    const loc = data?.location as {
+
+    const active = placeFromProfileBlob(data?.location);
+    if (active) return active;
+
+    const travel = data?.travel as {
+      away?: boolean;
       city?: string | null;
-      region?: string | null;
-      state?: string | null;
       lat?: number | null;
       lon?: number | null;
+      region?: string | null;
+      state?: string | null;
     } | null;
-    if (
-      loc &&
-      loc.lat != null &&
-      loc.lon != null &&
-      loc.city &&
-      loc.city !== "your area"
-    ) {
+    if (travel?.away && travel.city && travel.lat != null && travel.lon != null) {
       return {
-        lat: loc.lat,
-        lon: loc.lon,
-        city: loc.city,
-        region: loc.region ?? null,
-        state: loc.state ?? null,
+        lat: travel.lat,
+        lon: travel.lon,
+        city: travel.city,
+        region: travel.region ?? null,
+        state: travel.state ?? null,
       };
     }
+
+    const home = placeFromProfileBlob(data?.home_location);
+    if (home) return home;
   } catch {
     /* fall through */
   }
 
-  if (hint && Number.isFinite(hint.lat) && Number.isFinite(hint.lon)) {
+  if (
+    hint &&
+    Number.isFinite(hint.lat) &&
+    Number.isFinite(hint.lon) &&
+    hint.city &&
+    hint.city !== "your area"
+  ) {
     return hint;
   }
 
-  return { ...DEFAULT_LOCATION };
+  return null;
 }
 
 async function getWeather(lat: number, lon: number) {
@@ -221,9 +252,17 @@ async function fetchLocalEventsFromSerpApi(
   apiKey: string
 ): Promise<LocalEvent[]> {
   const cityQuery =
-    location.city && location.city !== "your area"
-      ? location.city
-      : DEFAULT_LOCATION.city; // explicit last-resort — never hardcode San Francisco
+    location.city && location.city !== "your area" ? location.city : null;
+  if (!cityQuery) {
+    console.log("[buildEdition] getLocalEvents", {
+      provider: "SerpApi Google Events",
+      skipped: true,
+      reason: "no city on location",
+      rawEventCount: 0,
+      filteredCount: 0,
+    });
+    return [];
+  }
 
   const params = new URLSearchParams({
     engine: "google_events",
@@ -492,7 +531,7 @@ export function createServiceClient() {
 export async function buildEditionForUser(
   supabaseAdmin: SupabaseClient,
   userId: string,
-  locationHint: Location
+  locationHint: Location | null
 ): Promise<BuildEditionResult> {
   const newsApiKey = Deno.env.get("NEWS_API_KEY");
   const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -512,6 +551,15 @@ export async function buildEditionForUser(
     userId,
     locationHint
   );
+
+  if (!location) {
+    console.warn("[buildEdition] no location — refusing silent city default");
+    return {
+      ok: false,
+      error:
+        "No location set. Choose a home city or enable current location in Kindred.",
+    };
+  }
 
   console.log("[buildEdition] resolved location", {
     city: location.city,

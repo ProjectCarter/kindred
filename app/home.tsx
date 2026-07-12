@@ -10,7 +10,7 @@ import {
   type AppStateStatus,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { type EditionSection } from "../lib/edition/types";
 import {
@@ -44,10 +44,16 @@ import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
 import { EditionAdjacentNav } from "../components/EditionAdjacentNav";
 import {
-  resolveDeviceLocation,
+  resolveActivePlace,
   locationPayload,
-  type DeviceLocation,
+  returnToHomeCity,
+  type ActiveLocation,
+  type KindredPlace,
 } from "../lib/location/deviceLocation";
+import {
+  LocationFirstRun,
+  useLocationFirstRun,
+} from "../components/LocationFirstRun";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -65,9 +71,12 @@ export default function HomeScreen() {
   const [clipPendingId, setClipPendingId] = useState<string | null>(null);
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deviceLocation, setDeviceLocation] = useState<DeviceLocation | null>(
+  const [activeLocation, setActiveLocation] = useState<ActiveLocation | null>(
     null
   );
+  const [showFirstRun, setShowFirstRun] = useState(false);
+  const { pending: firstRunPending, dismiss: dismissFirstRun } =
+    useLocationFirstRun();
   const loadGen = useRef(0);
   const mountedRef = useRef(true);
 
@@ -78,18 +87,30 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Ask for GPS on first open; persist city for weather / events / local news.
+  // Resolve shared location (GPS / home / travel). Never silent city default.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const loc = await resolveDeviceLocation();
-      if (!cancelled && mountedRef.current) setDeviceLocation(loc);
+      const active = await resolveActivePlace({ refreshIfStale: true });
+      if (!cancelled && mountedRef.current) setActiveLocation(active);
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
+  useEffect(() => {
+    if (firstRunPending) setShowFirstRun(true);
+  }, [firstRunPending]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        const active = await resolveActivePlace({ refreshIfStale: false });
+        if (mountedRef.current) setActiveLocation(active);
+      })();
+    }, [])
+  );
 
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -331,7 +352,7 @@ export default function HomeScreen() {
     loadEdition();
   }, [loadEdition]);
 
-  // Resume: quietly refresh if the paper may have aged while backgrounded.
+  // Resume: quietly refresh paper + stale GPS when mode is current.
   useEffect(() => {
     const lastActive = { at: Date.now() };
     const onChange = (state: AppStateStatus) => {
@@ -339,7 +360,11 @@ export default function HomeScreen() {
       const now = Date.now();
       if (now - lastActive.at < 45_000) return;
       lastActive.at = now;
-      void loadEdition(true);
+      void (async () => {
+        const active = await resolveActivePlace({ refreshIfStale: true });
+        if (mountedRef.current) setActiveLocation(active);
+        void loadEdition(true);
+      })();
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => sub.remove();
@@ -353,8 +378,21 @@ export default function HomeScreen() {
     __DEV__ && console.log("[home] generate-edition: start");
 
     try {
-      const loc = deviceLocation ?? (await resolveDeviceLocation());
-      if (mountedRef.current) setDeviceLocation(loc);
+      const active =
+        activeLocation?.place
+          ? activeLocation
+          : await resolveActivePlace({ refreshIfStale: true });
+      if (mountedRef.current) setActiveLocation(active);
+
+      if (!active.place) {
+        setError(
+          "Choose a home city or enable current location so Kindred knows where your paper belongs."
+        );
+        setShowFirstRun(true);
+        return;
+      }
+
+      const loc: KindredPlace = active.place;
 
       const INVOKE_TIMEOUT_MS = 90_000;
       const { data, error: invokeError } = await Promise.race([
@@ -543,6 +581,19 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LocationFirstRun
+        visible={showFirstRun}
+        onComplete={(active) => {
+          setShowFirstRun(false);
+          dismissFirstRun();
+          if (active) setActiveLocation(active);
+        }}
+        onChooseHomeCity={() => {
+          setShowFirstRun(false);
+          dismissFirstRun();
+          router.push("/location-search?purpose=home");
+        }}
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -572,11 +623,42 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        {activeLocation?.isTravel && activeLocation.place ? (
+          <View style={styles.travelBanner}>
+            <Text style={styles.travelText}>
+              Travel Edition · {activeLocation.place.city}
+            </Text>
+            <Pressable
+              onPress={() => {
+                void (async () => {
+                  const next = await returnToHomeCity();
+                  setActiveLocation(next);
+                })();
+              }}
+              style={({ pressed }) => pressed && styles.linkPressed}
+              accessibilityRole="button"
+              accessibilityLabel="Return to home city"
+            >
+              <Text style={styles.travelReturn}>Return to Home City</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {sections.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.title}>{morningSalutation()}</Text>
             <Text style={styles.emptyKicker}>{waitingCopy.emptyTitle}</Text>
             <Text style={styles.body}>{waitingCopy.emptyBody}</Text>
+            {activeLocation?.needsSetup ? (
+              <Text style={styles.locationHint}>
+                Set a home city or allow current location so local news,
+                weather, and events can find you.
+              </Text>
+            ) : activeLocation?.place ? (
+              <Text style={styles.locationHint}>
+                {activeLocation.modeLabel} · {activeLocation.place.city}
+              </Text>
+            ) : null}
             {error && <Text style={styles.error}>{error}</Text>}
             <Pressable
               style={({ pressed }) => [
@@ -594,6 +676,15 @@ export default function HomeScreen() {
                   : waitingCopy.openAction}
               </Text>
             </Pressable>
+            {activeLocation?.needsSetup ? (
+              <Pressable
+                style={styles.previousLink}
+                onPress={() => router.push("/location")}
+                accessibilityRole="button"
+              >
+                <Text style={styles.previousLinkText}>Location settings</Text>
+              </Pressable>
+            ) : null}
             {older ? (
               <Pressable
                 style={styles.previousLink}
@@ -623,17 +714,17 @@ export default function HomeScreen() {
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
               locationCity={
-                deviceLocation?.city ??
+                activeLocation?.place?.city ??
                 intelligence?.discovery?.location?.city ??
                 null
               }
               locationRegion={
-                deviceLocation?.region ??
+                activeLocation?.place?.region ??
                 intelligence?.discovery?.location?.region ??
                 null
               }
               locationState={
-                deviceLocation?.state ??
+                activeLocation?.place?.state ??
                 intelligence?.discovery?.location?.state ??
                 null
               }
@@ -703,6 +794,37 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 12,
     letterSpacing: 0.2,
+  },
+  travelBanner: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
+  },
+  travelText: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    flex: 1,
+    paddingRight: 12,
+  },
+  travelReturn: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    color: paper.terracotta,
+    fontStyle: "italic",
+  },
+  locationHint: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    fontStyle: "italic",
+    color: paper.inkFaint,
+    marginBottom: 16,
+    marginTop: 4,
   },
   libraryLink: {
     fontFamily: "Georgia",

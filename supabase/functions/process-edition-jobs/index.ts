@@ -129,6 +129,20 @@ Deno.serve(async (req) => {
         null
       );
 
+      if (!location) {
+        failed += 1;
+        await supabaseAdmin
+          .from("generation_jobs")
+          .update({
+            status: "failed",
+            last_error:
+              "No location set. Choose a home city or enable current location.",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", job.id);
+        continue;
+      }
+
       const result = await buildEditionForUser(
         supabaseAdmin,
         job.user_id,

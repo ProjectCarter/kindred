@@ -141,6 +141,18 @@ export default function LibraryScreen() {
             styles.clippingsLink,
             pressed && styles.pressed,
           ]}
+          onPress={() => router.push("/location")}
+          accessibilityRole="button"
+          accessibilityLabel="Open location settings"
+        >
+          <Text style={styles.clippingsLinkText}>Location</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.clippingsLink,
+            pressed && styles.pressed,
+          ]}
           onPress={() => router.push("/clippings")}
           accessibilityRole="button"
           accessibilityLabel="Open your clippings"

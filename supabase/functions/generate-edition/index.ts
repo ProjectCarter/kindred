@@ -79,8 +79,18 @@ Deno.serve(async (req) => {
       locationHint
     );
 
+    if (!location) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "No location set. Choose a home city or enable current location.",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
+    }
+
     console.log("[generate-edition] location", {
-      source: clientLocation?.city ? "client-gps" : "profile-or-ip",
+      source: clientLocation?.city ? "client" : "profile-or-ip",
       city: location.city,
       lat: location.lat,
       lon: location.lon,
