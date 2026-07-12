@@ -11,9 +11,6 @@ import {
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import type { TemperatureUnitPreference } from "../_shared/weather/units.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 type ClientLocation = {
   city?: string;
   region?: string | null;
@@ -24,10 +21,23 @@ type ClientLocation = {
 
 Deno.serve(async (req) => {
   try {
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+      console.error("[generate-edition] missing SUPABASE_URL or SERVICE_ROLE_KEY");
+      return new Response(
+        JSON.stringify({
+          error: "Server configuration incomplete. Missing Supabase credentials.",
+        }),
+        { status: 500, headers: { "content-type": "application/json" } }
+      );
+    }
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing auth" }), {
         status: 401,
+        headers: { "content-type": "application/json" },
       });
     }
 
@@ -43,6 +53,7 @@ Deno.serve(async (req) => {
     if (userError || !user) {
       return new Response(JSON.stringify({ error: "Not authenticated" }), {
         status: 401,
+        headers: { "content-type": "application/json" },
       });
     }
 
@@ -142,6 +153,12 @@ Deno.serve(async (req) => {
       lon: location.lon,
       editionDate,
       temperatureUnitPreference,
+      temperatureResolvedHint:
+        temperatureUnitPreference === "celsius"
+          ? "celsius"
+          : temperatureUnitPreference === "fahrenheit"
+            ? "fahrenheit"
+            : "auto→US→fahrenheit expected for AZ",
     });
 
     const buildOptions: BuildEditionOptions = {
@@ -157,8 +174,10 @@ Deno.serve(async (req) => {
     );
 
     if (!result.ok) {
+      console.error("[generate-edition] build failed", result.error);
       return new Response(JSON.stringify({ error: result.error }), {
         status: 500,
+        headers: { "content-type": "application/json" },
       });
     }
 
@@ -198,7 +217,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         error: err instanceof Error ? err.message : "Unknown error",
       }),
-      { status: 500 }
+      { status: 500, headers: { "content-type": "application/json" } }
     );
   }
 });

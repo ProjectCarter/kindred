@@ -160,5 +160,3 @@ export function formatDiscoveryBrief(
   }
   return lines.join("\n");
 }
-
-export { whyLine };
