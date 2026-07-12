@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Text,
   TextInput,
@@ -11,9 +11,11 @@ import {
   Easing,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
 import * as Linking from "expo-linking";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { isPlausibleEmail } from "../lib/edition/dates";
+import { consumeAuthLinkError } from "../lib/auth/authLinkError";
 import { motion, paper, press, type } from "../lib/edition/newspaperTheme";
 
 export default function LoginScreen() {
@@ -31,6 +33,13 @@ export default function LoginScreen() {
       mountedRef.current = false;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const linkError = consumeAuthLinkError();
+      if (linkError) setError(linkError);
+    }, [])
+  );
 
   useEffect(() => {
     Animated.parallel([

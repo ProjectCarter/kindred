@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { profileHasInterests } from "../lib/auth/hasInterests";
+import { setAuthLinkError } from "../lib/auth/authLinkError";
 import { PaperLoading } from "../components/PaperLoading";
 import { AppErrorBoundary } from "../components/AppErrorBoundary";
 
@@ -90,6 +91,11 @@ export default function RootLayout() {
           console.error("[auth] exchangeCodeForSession", error.message);
         }
         // Keep code in exchangedCodes to prevent retry storms on poisoned links.
+        setAuthLinkError(
+          "That sign-in link has expired or already been used. Request a fresh one below."
+        );
+        // Ensure the reader lands on login with the message visible.
+        router.replace("/login");
       }
     }
 
@@ -150,7 +156,7 @@ export default function RootLayout() {
       linkSub.remove();
       listener.subscription.unsubscribe();
     };
-  }, [refreshInterests]);
+  }, [refreshInterests, router]);
 
   useEffect(() => {
     if (loading) return;
