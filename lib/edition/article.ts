@@ -159,6 +159,31 @@ export function articleFromLeadStory(lead: LeadStory): KindredArticle {
 }
 
 /**
+ * Adapter: Bandit's Pick → KindredArticle.
+ */
+export function articleFromBanditsPick(pick: {
+  id: string;
+  headline: string;
+  summary: string;
+  source: string;
+  url: string | null;
+  publishedAt: string | null;
+  imageUrl?: string | null;
+}): KindredArticle {
+  return articleFromSectionItem({
+    id: pick.id,
+    section: "bandits_pick",
+    headline: pick.headline,
+    body: pick.summary,
+    source: pick.source,
+    sourceUrl: pick.url,
+    publishedAt: pick.publishedAt,
+    imageUrl: pick.imageUrl,
+    dek: null,
+  });
+}
+
+/**
  * Generic adapter for plain section copy (Top Stories items, etc.).
  * Call this from any future section that has headline + body text.
  */

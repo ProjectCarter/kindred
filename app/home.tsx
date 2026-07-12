@@ -21,6 +21,7 @@ import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import {
   banditMorningLine,
+  banditsPick,
   parseBanditPayload,
   type BanditPayload,
 } from "../lib/edition/bandit";
@@ -976,6 +977,7 @@ export default function HomeScreen() {
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
+              banditsPick={banditsPick(bandit)}
               locationCity={
                 activeLocation?.place?.city ??
                 intelligence?.discovery?.location?.city ??

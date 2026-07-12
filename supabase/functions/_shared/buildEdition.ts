@@ -7,6 +7,11 @@ import { primaryNewsCategory } from "./stories/sources.ts";
 import { buildEditionEditorialContext, buildLookingAheadGrounding } from "./editorial/index.ts";
 import { loadPersonalizationProfile } from "./personalization/index.ts";
 import { generateBanditPayload, loadBanditReaderProfile } from "./bandit/index.ts";
+import {
+  composeBanditsPickIntro,
+  selectBanditsPick,
+} from "./bandit/selectPick.ts";
+import type { BanditsPick } from "./bandit/types.ts";
 import { runEditorialDecisions } from "./editor/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
 import type { DiscoveryPayload } from "./discovery/types.ts";
@@ -1098,6 +1103,41 @@ export async function buildEditionForUser(
   });
 
   const banditReader = await loadBanditReaderProfile(supabaseAdmin, userId);
+  const banditsPickStory = selectBanditsPick({
+    scored: frontPage.scoredCandidates ?? [],
+    leadId: leadStory?.id ?? null,
+    frontPageIds: topStories.map((s) => s.story.id),
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    recentKeys: blendedRecentKeys,
+  });
+  const banditsPick: BanditsPick | null = banditsPickStory
+    ? {
+        intro: composeBanditsPickIntro(
+          banditsPickStory,
+          banditReader.firstName,
+          editionDate
+        ),
+        story: {
+          id: banditsPickStory.id,
+          headline: banditsPickStory.headline,
+          summary: banditsPickStory.summary,
+          source: banditsPickStory.source,
+          url: banditsPickStory.url,
+          publishedAt: banditsPickStory.publishedAt,
+          imageUrl: banditsPickStory.imageUrl,
+          category: banditsPickStory.category,
+          why: banditsPickStory.why,
+        },
+      }
+    : null;
+
+  console.log("[buildEdition] bandits pick", {
+    selected: Boolean(banditsPick),
+    headline: banditsPick?.story.headline?.slice(0, 60) ?? null,
+  });
+
   const bandit = await generateBanditPayload(
     {
       editionDate,
@@ -1123,6 +1163,7 @@ export async function buildEditionForUser(
         category: p.category,
         why: p.why,
       })),
+      pick: banditsPick,
     },
     anthropicApiKey
   );

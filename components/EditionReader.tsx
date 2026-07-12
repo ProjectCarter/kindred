@@ -8,7 +8,9 @@ import type { LeadStory } from "../lib/edition/LeadStory";
 import type { MorningBriefing } from "../lib/edition/morningEdition";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
 import type { KindredArticle } from "../lib/edition/article";
+import type { BanditsPick as BanditsPickData } from "../lib/edition/bandit";
 import {
+  articleFromBanditsPick,
   articleFromDiscoveryItem,
   articleFromEditionSection,
   articleFromKnowledgeFacet,
@@ -25,6 +27,7 @@ import { MorningGreeting } from "./MorningGreeting";
 import { MorningHeroImage } from "./MorningHeroImage";
 import { LeadStorySection } from "./LeadStorySection";
 import { DiscoveryDesk } from "./DiscoveryDesk";
+import { BanditsPick } from "./BanditsPick";
 import { FolioReveal } from "./FolioReveal";
 import { EditionClose } from "./EditionClose";
 
@@ -54,6 +57,8 @@ type Props = {
   discoveryHeadline?: string | null;
   discoveryEditorNote?: string | null;
   discoveryItems?: RankedDiscoveryItem[];
+  /** One thoughtful Bandit's Pick after the main paper. */
+  banditsPick?: BanditsPickData | null;
   clippedSectionIds?: Set<string>;
   onToggleClip?: (section: EditionSection) => void;
   clipPendingId?: string | null;
@@ -85,6 +90,7 @@ export function EditionReader({
   discoveryHeadline,
   discoveryEditorNote,
   discoveryItems,
+  banditsPick,
   clippedSectionIds,
   onToggleClip,
   clipPendingId,
@@ -343,6 +349,18 @@ export function EditionReader({
       })}
 
       {remaining.length === 0 ? discoveryBlock : null}
+
+      {banditsPick ? (
+        <BanditsPick
+          pick={banditsPick}
+          folioIndex={folioCursor++}
+          onOpen={
+            onOpenArticle
+              ? () => onOpenArticle(articleFromBanditsPick(banditsPick.story))
+              : undefined
+          }
+        />
+      ) : null}
 
       <EditionClose
         folioIndex={folioCursor + 2}

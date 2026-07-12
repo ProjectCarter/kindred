@@ -36,8 +36,24 @@ export type BanditMoment = {
 
 /**
  * Stored on editions.bandit — morning is shown today;
- * other fields reserve architecture for future surfaces (no new sections).
+ * pick is Bandit's single end-of-edition recommendation.
  */
+export type BanditsPick = {
+  /** One or two warm sentences from Bandit. */
+  intro: string;
+  story: {
+    id: string;
+    headline: string;
+    summary: string;
+    source: string;
+    url: string | null;
+    publishedAt: string | null;
+    imageUrl?: string | null;
+    category?: string | null;
+    why: string;
+  };
+};
+
 export type BanditPayload = {
   version: 1;
   morning: BanditMoment;
@@ -46,6 +62,8 @@ export type BanditPayload = {
   editorialNotes: string[];
   /** Occasions detected for this edition (debug / future UI). */
   occasions: BanditOccasion[];
+  /** Exactly one thoughtful recommendation near the end of the paper. */
+  pick?: BanditsPick | null;
 };
 
 export type BanditReaderProfile = {
@@ -88,4 +106,6 @@ export type BanditComposeInput = {
   /** Discovery Engine brief — Bandit's Picks / Weekend Ideas (no UI required). */
   discoveryBrief?: string | null;
   discoveryPicks?: Array<{ title: string; category: string; why: string }>;
+  /** Optional Bandit's Pick already selected by the editor desk. */
+  pick?: BanditsPick | null;
 };

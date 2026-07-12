@@ -255,6 +255,7 @@ export function composeBanditPayload(
     seasonal: composeSeasonalMoment(input, occasions, generatedAt),
     editorialNotes: composeEditorialNotes(input, occasions),
     occasions: occasions.all,
+    pick: input.pick ?? null,
   };
 }
 

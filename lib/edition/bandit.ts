@@ -38,6 +38,21 @@ export type BanditMoment = {
   generatedAt: string;
 };
 
+export type BanditsPick = {
+  intro: string;
+  story: {
+    id: string;
+    headline: string;
+    summary: string;
+    source: string;
+    url: string | null;
+    publishedAt: string | null;
+    imageUrl?: string | null;
+    category?: string | null;
+    why: string;
+  };
+};
+
 export type BanditPayload = {
   version: 1;
   morning: BanditMoment;
@@ -45,6 +60,8 @@ export type BanditPayload = {
   seasonal: BanditMoment | null;
   editorialNotes: string[];
   occasions: BanditOccasion[];
+  /** Exactly one thoughtful recommendation near the end of the paper. */
+  pick?: BanditsPick | null;
 };
 
 /** Context for optional client-side providers (preview / offline). */
@@ -110,7 +127,49 @@ export function parseBanditPayload(value: unknown): BanditPayload | null {
       ? raw.editorialNotes
       : [],
     occasions: Array.isArray(raw.occasions) ? raw.occasions : [],
+    pick: parseBanditsPick(raw.pick),
   };
+}
+
+function parseBanditsPick(value: unknown): BanditsPick | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<BanditsPick> & {
+    story?: Partial<BanditsPick["story"]>;
+  };
+  const story = raw.story;
+  const intro = typeof raw.intro === "string" ? raw.intro.trim() : "";
+  const headline =
+    typeof story?.headline === "string" ? story.headline.trim() : "";
+  const id = typeof story?.id === "string" ? story.id.trim() : "";
+  if (!intro || !headline || !id) return null;
+  return {
+    intro: intro.slice(0, 280),
+    story: {
+      id,
+      headline,
+      summary:
+        typeof story?.summary === "string" ? story.summary.trim() : headline,
+      source:
+        typeof story?.source === "string" && story.source.trim()
+          ? story.source.trim()
+          : "Kindred",
+      url: typeof story?.url === "string" ? story.url : null,
+      publishedAt:
+        typeof story?.publishedAt === "string" ? story.publishedAt : null,
+      imageUrl:
+        typeof story?.imageUrl === "string" ? story.imageUrl : null,
+      category:
+        typeof story?.category === "string" ? story.category : null,
+      why: typeof story?.why === "string" ? story.why.trim() : "",
+    },
+  };
+}
+
+/** Bandit's Pick for the end of the edition — null when none stored. */
+export function banditsPick(
+  payload: BanditPayload | null | undefined
+): BanditsPick | null {
+  return payload?.pick ?? null;
 }
 
 /** Morning line for MorningGreeting — from stored payload. */

@@ -5,6 +5,7 @@ export type {
   BanditOccasion,
   BanditPayload,
   BanditReaderProfile,
+  BanditsPick,
 } from "./types.ts";
 
 export {
@@ -24,3 +25,8 @@ export {
   polishBanditMorningLine,
 } from "./generate.ts";
 export { loadBanditReaderProfile } from "./loadReaderProfile.ts";
+export {
+  selectBanditsPick,
+  composeBanditsPickIntro,
+  type BanditsPickStory,
+} from "./selectPick.ts";
