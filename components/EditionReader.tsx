@@ -19,8 +19,10 @@ import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { sectionIntro } from "../lib/edition/sectionIntro";
+import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { LocalEventsSection } from "./LocalEventsSection";
 import { MorningGreeting } from "./MorningGreeting";
+import { MorningHeroImage } from "./MorningHeroImage";
 import { LeadStorySection } from "./LeadStorySection";
 import { DiscoveryDesk } from "./DiscoveryDesk";
 import { FolioReveal } from "./FolioReveal";
@@ -271,16 +273,12 @@ export function EditionReader({
       <MorningGreeting
         editionDate={editionDate}
         welcomeMessage={welcomeMessage}
-        heroImageUri={heroImageUri}
         banditGreeting={banditGreeting}
         banditAside={banditAside}
         memoryNote={memoryNote}
         morningOpening={morningOpening}
         morningBriefing={morningBriefing}
         weatherText={weather?.body ?? weather?.headline ?? null}
-        locationCity={locationCity}
-        locationState={locationState}
-        birthdayMMDD={birthdayMMDD}
         banditContext={{
           firstName: banditFirstName,
           weatherText: weather?.body ?? weather?.headline ?? null,
@@ -301,6 +299,23 @@ export function EditionReader({
           />
         </FolioReveal>
       ) : null}
+
+      {/* Morning photograph follows the Lead so the cover story owns the first scroll. */}
+      <FolioReveal index={folioCursor++}>
+        <MorningHeroImage
+          uri={heroImageUri}
+          context={{
+            date: editionDate,
+            weatherText: weather?.body ?? weather?.headline ?? null,
+            birthdayMMDD,
+            location: {
+              city: locationCity,
+              region: (locationRegion as HeroRegionId | null | undefined) ?? null,
+              state: locationState,
+            },
+          }}
+        />
+      </FolioReveal>
 
       {weather ? renderSection(weather, folioCursor++) : null}
 

@@ -15,12 +15,7 @@ import {
 } from "../lib/edition/bandit";
 import { morningSalutation } from "../lib/edition/morningRitual";
 import type { MorningBriefing } from "../lib/edition/morningEdition";
-import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { motion, paper, space, type } from "../lib/edition/newspaperTheme";
-import {
-  MorningHeroImage,
-  type MorningHeroImageProps,
-} from "./MorningHeroImage";
 import { MorningBriefing as MorningBriefingBlock } from "./MorningBriefing";
 
 type Props = {
@@ -33,13 +28,6 @@ type Props = {
   morningOpening?: MorningBriefing | null;
   morningBriefing?: MorningBriefing | null;
   weatherText?: string | null;
-  locationCity?: string | null;
-  locationMetro?: string | null;
-  locationRegion?: HeroRegionId | null;
-  locationState?: string | null;
-  birthdayMMDD?: string | null;
-  heroImageUri?: string | null;
-  heroImageSource?: MorningHeroImageProps["source"];
 };
 
 function resolveDisplayDate(editionDate?: string | null): string {
@@ -62,7 +50,8 @@ function weatherSummary(weatherText?: string | null): string | null {
 
 /**
  * Kindred’s signature opening —
- * nameplate, date, greeting, Bandit the editor, briefing, photograph.
+ * nameplate, date, greeting, Bandit the editor, briefing.
+ * The morning photograph follows the Lead so the cover story owns the first scroll.
  */
 export function MorningGreeting({
   editionDate,
@@ -74,13 +63,6 @@ export function MorningGreeting({
   morningOpening,
   morningBriefing,
   weatherText,
-  locationCity,
-  locationMetro,
-  locationRegion,
-  locationState,
-  birthdayMMDD,
-  heroImageUri,
-  heroImageSource,
 }: Props) {
   const dateLabel = resolveDisplayDate(editionDate);
   const weatherLine = weatherSummary(weatherText);
@@ -261,22 +243,6 @@ export function MorningGreeting({
       <MorningBriefingBlock
         opening={morningOpening}
         briefing={morningBriefing}
-      />
-
-      <MorningHeroImage
-        uri={heroImageUri}
-        source={heroImageSource}
-        context={{
-          date: editionDate,
-          weatherText,
-          birthdayMMDD,
-          location: {
-            city: locationCity,
-            metro: locationMetro,
-            region: locationRegion,
-            state: locationState,
-          },
-        }}
       />
     </View>
   );
