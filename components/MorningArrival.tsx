@@ -222,12 +222,8 @@ export function MorningArrival({
         )}
       </Animated.View>
 
-      {/* Editorial recommendation — not a calendar */}
-      <DontMissToday
-        events={events}
-        heroContext={heroContext}
-        excludeHeroIds={hero?.id ? [hero.id] : []}
-      />
+      {/* Editorial recommendation — event photos come from edition JSON only */}
+      <DontMissToday events={events} />
 
       <View style={styles.endRule} accessibilityElementsHidden />
     </View>

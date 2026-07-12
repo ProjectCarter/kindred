@@ -1,3 +1,5 @@
+export type LocalEventImageSource = "provider_thumbnail";
+
 export type LocalEventCard = {
   name: string;
   date: string;
@@ -6,6 +8,10 @@ export type LocalEventCard = {
   city: string;
   sourceUrl: string;
   sourceName: string;
+  /** Authentic listing photograph when the provider supplies one. */
+  imageUrl?: string | null;
+  /** Provenance — never filled by HeroImageService / weather stock. */
+  imageSource?: LocalEventImageSource | null;
 };
 
 export type LocalEventsBody = {
@@ -37,6 +43,26 @@ export function splitEventSchedule(startDateTime: string): {
   return { date: raw, time: "See listing" };
 }
 
+function normalizeImageUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  if (/google\.com\/maps\/vt/i.test(trimmed)) return null;
+  if (/\/favicon/i.test(trimmed) || /faviconV2/i.test(trimmed)) return null;
+  return trimmed;
+}
+
+function normalizeImageSource(
+  value: unknown,
+  imageUrl: string | null
+): LocalEventImageSource | null {
+  if (!imageUrl) return null;
+  if (value === "provider_thumbnail") return "provider_thumbnail";
+  // Older payloads may only have imageUrl — treat as provider listing art.
+  return "provider_thumbnail";
+}
+
 export function parseLocalEventsBody(
   body: string
 ): LocalEventCard[] | null {
@@ -45,19 +71,42 @@ export function parseLocalEventsBody(
     if (!parsed || !Array.isArray(parsed.events)) return null;
     return parsed.events
       .filter((e) => e && typeof e.name === "string" && e.name.trim().length > 0)
-      .map((e) => ({
-        name: e.name.trim(),
-        date: typeof e.date === "string" && e.date.trim() ? e.date.trim() : "Date TBA",
-        time: typeof e.time === "string" && e.time.trim() ? e.time.trim() : "Time TBA",
-        venue: typeof e.venue === "string" ? e.venue.trim() : "",
-        city: typeof e.city === "string" ? e.city.trim() : "",
-        sourceUrl: typeof e.sourceUrl === "string" ? e.sourceUrl.trim() : "",
-        sourceName:
-          typeof e.sourceName === "string" && e.sourceName.trim()
-            ? e.sourceName.trim()
-            : "Listing",
-      }));
+      .map((e) => {
+        const imageUrl = normalizeImageUrl(e.imageUrl);
+        return {
+          name: e.name.trim(),
+          date: typeof e.date === "string" && e.date.trim() ? e.date.trim() : "Date TBA",
+          time: typeof e.time === "string" && e.time.trim() ? e.time.trim() : "Time TBA",
+          venue: typeof e.venue === "string" ? e.venue.trim() : "",
+          city: typeof e.city === "string" ? e.city.trim() : "",
+          sourceUrl: typeof e.sourceUrl === "string" ? e.sourceUrl.trim() : "",
+          sourceName:
+            typeof e.sourceName === "string" && e.sourceName.trim()
+              ? e.sourceName.trim()
+              : "Listing",
+          imageUrl,
+          imageSource: normalizeImageSource(e.imageSource, imageUrl),
+        };
+      });
   } catch {
     return null;
   }
+}
+
+/**
+ * Feature the strongest visual story first: prefer an event that has its own photo.
+ * Provider order is preserved among peers (Google already ranks relevance).
+ */
+export function splitFeaturedEvents(events: LocalEventCard[]): {
+  featured: LocalEventCard | null;
+  secondary: LocalEventCard[];
+} {
+  if (!events.length) return { featured: null, secondary: [] };
+
+  const featuredIndex = events.findIndex((e) => Boolean(e.imageUrl));
+  const index = featuredIndex >= 0 ? featuredIndex : 0;
+  const featured = events[index] ?? null;
+  const secondary = events.filter((_, i) => i !== index).slice(0, 2);
+
+  return { featured, secondary };
 }

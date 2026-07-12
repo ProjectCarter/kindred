@@ -32,9 +32,21 @@ import {
   type TemperatureUnit,
   type TemperatureUnitPreference,
 } from "./weather/units.ts";
-import { eventMatchesCity } from "./contentQuality.ts";
 import { runStoryEditorSafe } from "./storyEditor/index.ts";
 import type { LeadStory } from "./leadStory/types.ts";
+import {
+  buildLocalEventsBody,
+  getLocalEvents,
+  type LocalEvent,
+} from "./localEvents/provider.ts";
+
+export type { LocalEvent } from "./localEvents/provider.ts";
+export {
+  buildLocalEventsBody,
+  getLocalEvents,
+  pickProviderEventImage,
+  splitEventSchedule,
+} from "./localEvents/provider.ts";
 
 export type BuildEditionResult =
   | { ok: true; editionId: string }
@@ -59,15 +71,6 @@ type Location = {
   city: string;
   region?: string | null;
   state?: string | null;
-};
-
-export type LocalEvent = {
-  name: string;
-  startDateTime: string;
-  venue: string;
-  city: string;
-  sourceUrl: string;
-  sourceName: string;
 };
 
 /**
@@ -235,206 +238,6 @@ async function getOnThisDay() {
   if (events.length === 0) return null;
   const pick = events[Math.floor(Math.random() * Math.min(events.length, 10))];
   return { year: pick.year, text: pick.text };
-}
-
-/**
- * Provider-agnostic local events fetch.
- * V1 adapter: SerpApi Google Events. Swap the body later without changing callers.
- */
-export async function getLocalEvents(
-  location: Location
-): Promise<LocalEvent[]> {
-  const apiKey = Deno.env.get("EVENTS_API_KEY");
-  if (!apiKey) {
-    console.log("[buildEdition] getLocalEvents", {
-      provider: "SerpApi Google Events",
-      skipped: true,
-      reason: "EVENTS_API_KEY not set",
-      rawEventCount: 0,
-      filteredCount: 0,
-    });
-    return [];
-  }
-
-  try {
-    return await fetchLocalEventsFromSerpApi(location, apiKey);
-  } catch (err) {
-    console.error("[buildEdition] getLocalEvents provider failure", {
-      provider: "SerpApi Google Events",
-      error: err instanceof Error ? err.message : String(err),
-      rawEventCount: 0,
-      filteredCount: 0,
-    });
-    return [];
-  }
-}
-
-async function fetchLocalEventsFromSerpApi(
-  location: Location,
-  apiKey: string
-): Promise<LocalEvent[]> {
-  const cityQuery =
-    location.city && location.city !== "your area" ? location.city : null;
-  if (!cityQuery) {
-    console.log("[buildEdition] getLocalEvents", {
-      provider: "SerpApi Google Events",
-      skipped: true,
-      reason: "no city on location",
-      rawEventCount: 0,
-      filteredCount: 0,
-    });
-    return [];
-  }
-
-  const params = new URLSearchParams({
-    engine: "google_events",
-    q: `Events in ${cityQuery}`,
-    htichips: "date:week",
-    api_key: apiKey,
-  });
-
-  const res = await fetch(`https://serpapi.com/search.json?${params}`);
-  const data = await res.json();
-  const rawEvents: unknown[] = Array.isArray(data.events_results)
-    ? data.events_results
-    : [];
-
-  console.log("[buildEdition] getLocalEvents", {
-    provider: "SerpApi Google Events",
-    httpStatus: res.status,
-    ok: res.ok,
-    rawEventCount: rawEvents.length,
-    apiError: data.error ? String(data.error) : null,
-  });
-
-  if (!res.ok || data.error) {
-    return [];
-  }
-
-  const mapped: LocalEvent[] = [];
-
-  for (const raw of rawEvents) {
-    if (!raw || typeof raw !== "object") continue;
-    const event = raw as {
-      title?: string;
-      date?: { start_date?: string; when?: string };
-      address?: string[];
-      link?: string;
-      venue?: { name?: string };
-      ticket_info?: Array<{ source?: string; link?: string }>;
-    };
-
-    const name = event.title?.trim();
-    if (!name) continue;
-
-    const startDateTime =
-      event.date?.when?.trim() ||
-      event.date?.start_date?.trim() ||
-      "Time TBA";
-
-    const venue =
-      event.venue?.name?.trim() ||
-      (Array.isArray(event.address) && event.address[0]
-        ? String(event.address[0]).trim()
-        : "Venue TBA");
-
-    const cityFromAddress =
-      Array.isArray(event.address) && event.address.length > 1
-        ? String(event.address[event.address.length - 1]).trim()
-        : "";
-
-    const ticket = event.ticket_info?.[0];
-    const sourceUrl =
-      ticket?.link?.trim() || event.link?.trim() || "";
-    if (!sourceUrl) continue;
-
-    const sourceName = ticket?.source?.trim() || "Google Events";
-    const resolvedCity = cityFromAddress || cityQuery;
-
-    if (
-      !eventMatchesCity(
-        resolvedCity,
-        venue,
-        name,
-        cityQuery
-      )
-    ) {
-      console.log("[buildEdition] getLocalEvents rejected foreign city", {
-        expected: cityQuery,
-        eventCity: resolvedCity,
-        venue,
-        name: name.slice(0, 60),
-      });
-      continue;
-    }
-
-    mapped.push({
-      name,
-      startDateTime,
-      venue,
-      city: cityQuery,
-      sourceUrl,
-      sourceName,
-    });
-
-    if (mapped.length >= 3) break;
-  }
-
-  console.log("[buildEdition] getLocalEvents filtered", {
-    provider: "SerpApi Google Events",
-    cityQuery,
-    lat: location.lat,
-    lon: location.lon,
-    rawEventCount: rawEvents.length,
-    filteredCount: mapped.length,
-  });
-
-  return mapped;
-}
-
-/** Split provider schedule strings like "Sat, Jul 12, 7 – 9 PM" into date + time. */
-function splitEventSchedule(startDateTime: string): {
-  date: string;
-  time: string;
-} {
-  const raw = startDateTime.trim();
-  if (!raw || raw === "Time TBA") {
-    return { date: "Date TBA", time: "Time TBA" };
-  }
-
-  const timeMatch = raw.match(
-    /(\d{1,2}(?::\d{2})?(?:\s*[–-]\s*\d{1,2}(?::\d{2})?)?\s*[AaPp][Mm].*)$/
-  );
-  if (timeMatch) {
-    const time = timeMatch[1].trim();
-    const date = raw
-      .slice(0, raw.length - time.length)
-      .replace(/[,\s]+$/, "")
-      .trim();
-    return {
-      date: date || "This week",
-      time,
-    };
-  }
-
-  return { date: raw, time: "See listing" };
-}
-
-function buildLocalEventsBody(events: LocalEvent[]): string {
-  return JSON.stringify({
-    events: events.map((e) => {
-      const { date, time } = splitEventSchedule(e.startDateTime);
-      return {
-        name: e.name,
-        date,
-        time,
-        venue: e.venue,
-        city: e.city,
-        sourceUrl: e.sourceUrl,
-        sourceName: e.sourceName,
-      };
-    }),
-  });
 }
 
 /** @deprecated Prefer primaryNewsCategory from stories/sources — kept for callers. */
