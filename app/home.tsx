@@ -50,7 +50,7 @@ import {
   type ActiveLocation,
   type KindredPlace,
 } from "../lib/location/deviceLocation";
-import { citiesMatch } from "../lib/location/locationKey";
+import { citiesMatch, locationKey } from "../lib/location/locationKey";
 import {
   getTemperatureUnitPreference,
 } from "../lib/weather/units";
@@ -93,6 +93,15 @@ export default function HomeScreen() {
   /** One auto-regen per edition id + active city. */
   const autoRegenKey = useRef<string | null>(null);
 
+  /** Tracks location when home last focused — reload edition if it changes. */
+  const focusedLocationKeyRef = useRef<string | null>(null);
+
+  function activeLocationKey(active: ActiveLocation | null): string {
+    if (!active) return "none";
+    if (!active.place) return `${active.mode}|needs-setup`;
+    return `${active.mode}|${locationKey(active.place)}`;
+  }
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -107,7 +116,10 @@ export default function HomeScreen() {
     let cancelled = false;
     void (async () => {
       const active = await resolveActivePlace({ refreshIfStale: true });
-      if (!cancelled && mountedRef.current) setActiveLocation(active);
+      if (!cancelled && mountedRef.current) {
+        setActiveLocation(active);
+        focusedLocationKeyRef.current = activeLocationKey(active);
+      }
     })();
     return () => {
       cancelled = true;
@@ -117,15 +129,6 @@ export default function HomeScreen() {
   useEffect(() => {
     if (firstRunPending) setShowFirstRun(true);
   }, [firstRunPending]);
-
-  useFocusEffect(
-    useCallback(() => {
-      void (async () => {
-        const active = await resolveActivePlace({ refreshIfStale: false });
-        if (mountedRef.current) setActiveLocation(active);
-      })();
-    }, [])
-  );
 
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -445,6 +448,24 @@ export default function HomeScreen() {
     }
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        const active = await resolveActivePlace({ refreshIfStale: false });
+        if (!mountedRef.current) return;
+        setActiveLocation(active);
+        const nextKey = activeLocationKey(active);
+        const prevKey = focusedLocationKeyRef.current;
+        focusedLocationKeyRef.current = nextKey;
+        // Reload today's paper when returning from Location settings (or any
+        // focus) with a different city/mode — never leave a stale folio up.
+        if (prevKey !== null && prevKey !== nextKey) {
+          void loadEdition(true);
+        }
+      })();
+    }, [loadEdition])
+  );
+
   useEffect(() => {
     loadEdition();
   }, [loadEdition]);
@@ -459,7 +480,10 @@ export default function HomeScreen() {
       lastActive.at = now;
       void (async () => {
         const active = await resolveActivePlace({ refreshIfStale: true });
-        if (mountedRef.current) setActiveLocation(active);
+        if (mountedRef.current) {
+          setActiveLocation(active);
+          focusedLocationKeyRef.current = activeLocationKey(active);
+        }
         void loadEdition(true);
       })();
     };
@@ -754,7 +778,11 @@ export default function HomeScreen() {
         onComplete={(active) => {
           setShowFirstRun(false);
           dismissFirstRun();
-          if (active) setActiveLocation(active);
+          if (active) {
+            setActiveLocation(active);
+            focusedLocationKeyRef.current = activeLocationKey(active);
+            void loadEdition(true);
+          }
         }}
         onChooseHomeCity={() => {
           setShowFirstRun(false);
@@ -801,6 +829,8 @@ export default function HomeScreen() {
                 void (async () => {
                   const next = await returnToHomeCity();
                   setActiveLocation(next);
+                  focusedLocationKeyRef.current = activeLocationKey(next);
+                  void loadEdition(true);
                 })();
               }}
               style={({ pressed }) => pressed && styles.linkPressed}
