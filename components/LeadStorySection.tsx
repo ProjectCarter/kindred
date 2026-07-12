@@ -8,7 +8,6 @@ import {
 } from "react-native";
 import type { LeadStory } from "../lib/edition/LeadStory";
 import { paper, press, shadow, space, type } from "../lib/edition/newspaperTheme";
-import { sectionIntro } from "../lib/edition/sectionIntro";
 import { EditorialNote } from "./EditorialNote";
 
 type Props = {
@@ -106,7 +105,6 @@ export function LeadStorySection({
   const byline = publicationByline(lead.source);
   const chosen = leadWhyChosen(lead, whyChosen);
   const [heroFailed, setHeroFailed] = useState(false);
-  const intro = sectionIntro("lead");
 
   const metaParts = [
     roleTag,
@@ -130,8 +128,6 @@ export function LeadStorySection({
         <Text style={styles.kicker}>Lead Story</Text>
         <View style={styles.kickerRule} />
       </View>
-
-      {intro ? <Text style={styles.intro}>{intro}</Text> : null}
 
       <Pressable
         onPress={canOpen ? openStory : undefined}
@@ -276,12 +272,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-  },
-  intro: {
-    ...type.sectionIntro,
-    color: paper.inkFaint,
-    marginBottom: 18,
-    maxWidth: 400,
   },
   headline: {
     ...type.leadHeadline,
