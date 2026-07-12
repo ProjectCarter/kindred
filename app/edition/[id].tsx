@@ -299,6 +299,9 @@ export default function EditionScreen() {
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
+              locationCity={intelligence?.discovery?.location?.city ?? null}
+              locationRegion={intelligence?.discovery?.location?.region ?? null}
+              locationState={intelligence?.discovery?.location?.state ?? null}
               onOpenArticle={(article) => {
                 const companion = companionForArticle(
                   intelligence,

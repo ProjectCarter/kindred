@@ -5,7 +5,7 @@
 import {
   buildEditionForUser,
   createServiceClient,
-  getApproxLocation,
+  resolveEditionLocation,
 } from "../_shared/buildEdition.ts";
 
 const BATCH_SIZE = 10;
@@ -47,7 +47,6 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createServiceClient();
     const editionDate = todayDateString();
-    const location = await getApproxLocation();
 
     // 1) Enqueue: one pending job per user with interests who lacks today's ready edition.
     const { data: profiles, error: profilesError } = await supabaseAdmin
@@ -123,6 +122,12 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", job.id);
+
+      const location = await resolveEditionLocation(
+        supabaseAdmin,
+        job.user_id,
+        null
+      );
 
       const result = await buildEditionForUser(
         supabaseAdmin,

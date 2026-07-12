@@ -49,31 +49,106 @@ export type LocalEvent = {
 };
 
 const DEFAULT_LOCATION: Location = {
-  lat: 37.77,
-  lon: -122.42,
-  city: "your area",
-  region: null,
-  state: null,
+  /**
+   * LAST RESORT when no GPS, no profile location, and IP lookup fails.
+   * Easy to change — do NOT silently default to San Francisco.
+   * Prefer client-sent GPS + profiles.location over this object.
+   */
+  lat: 33.4484,
+  lon: -112.074,
+  city: "Phoenix",
+  region: "Arizona",
+  state: "AZ",
 };
 
+/** @deprecated Name kept for call sites — resolves IP approx only. Prefer client GPS. */
 export async function getApproxLocation(req?: Request): Promise<Location> {
-  if (!req) return DEFAULT_LOCATION;
+  if (!req) return { ...DEFAULT_LOCATION };
 
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "8.8.8.8";
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+  // Skip bogus / datacenter defaults that pin everyone to one metro.
+  if (!ip || ip === "8.8.8.8") {
+    return { ...DEFAULT_LOCATION };
+  }
   try {
     const res = await fetch(`https://ipapi.co/${ip}/json/`);
     const data = await res.json();
+    if (data?.error || data?.latitude == null || data?.longitude == null) {
+      return { ...DEFAULT_LOCATION };
+    }
     return {
-      lat: data.latitude ?? DEFAULT_LOCATION.lat,
-      lon: data.longitude ?? DEFAULT_LOCATION.lon,
+      lat: data.latitude,
+      lon: data.longitude,
       city: data.city ?? DEFAULT_LOCATION.city,
       region: data.region ?? data.region_code ?? null,
       state: data.region_code ?? data.region ?? null,
     };
   } catch {
-    return DEFAULT_LOCATION;
+    return { ...DEFAULT_LOCATION };
   }
+}
+
+/** Prefer stored profile GPS over IP / hard-coded fallback. */
+export async function resolveEditionLocation(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  hint?: Location | null
+): Promise<Location> {
+  const hintUsable =
+    hint &&
+    hint.city &&
+    hint.city !== "your area" &&
+    Number.isFinite(hint.lat) &&
+    Number.isFinite(hint.lon);
+
+  if (hintUsable) {
+    return {
+      lat: hint!.lat,
+      lon: hint!.lon,
+      city: hint!.city,
+      region: hint!.region ?? null,
+      state: hint!.state ?? null,
+    };
+  }
+
+  try {
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("location")
+      .eq("id", userId)
+      .maybeSingle();
+    const loc = data?.location as {
+      city?: string | null;
+      region?: string | null;
+      state?: string | null;
+      lat?: number | null;
+      lon?: number | null;
+    } | null;
+    if (
+      loc &&
+      loc.lat != null &&
+      loc.lon != null &&
+      loc.city &&
+      loc.city !== "your area"
+    ) {
+      return {
+        lat: loc.lat,
+        lon: loc.lon,
+        city: loc.city,
+        region: loc.region ?? null,
+        state: loc.state ?? null,
+      };
+    }
+  } catch {
+    /* fall through */
+  }
+
+  if (hint && Number.isFinite(hint.lat) && Number.isFinite(hint.lon)) {
+    return hint;
+  }
+
+  return { ...DEFAULT_LOCATION };
 }
 
 async function getWeather(lat: number, lon: number) {
@@ -148,7 +223,7 @@ async function fetchLocalEventsFromSerpApi(
   const cityQuery =
     location.city && location.city !== "your area"
       ? location.city
-      : "San Francisco";
+      : DEFAULT_LOCATION.city; // explicit last-resort — never hardcode San Francisco
 
   const params = new URLSearchParams({
     engine: "google_events",
@@ -417,7 +492,7 @@ export function createServiceClient() {
 export async function buildEditionForUser(
   supabaseAdmin: SupabaseClient,
   userId: string,
-  location: Location
+  locationHint: Location
 ): Promise<BuildEditionResult> {
   const newsApiKey = Deno.env.get("NEWS_API_KEY");
   const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -431,6 +506,20 @@ export async function buildEditionForUser(
   if (!newsApiKey || !anthropicApiKey) {
     return { ok: false, error: "Missing NEWS_API_KEY or ANTHROPIC_API_KEY" };
   }
+
+  const location = await resolveEditionLocation(
+    supabaseAdmin,
+    userId,
+    locationHint
+  );
+
+  console.log("[buildEdition] resolved location", {
+    city: location.city,
+    region: location.region,
+    state: location.state,
+    lat: location.lat,
+    lon: location.lon,
+  });
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")
@@ -453,23 +542,20 @@ export async function buildEditionForUser(
     loadMemoryArchive(supabaseAdmin, userId),
   ]);
 
-  const city = personalization.city;
-  const region = personalization.region;
-  const state = personalization.state;
+  const city = personalization.city ?? location.city;
+  const region = personalization.region ?? location.region;
+  const state = personalization.state ?? location.state;
   const followedTopics = personalization.followedTopics;
 
-  const weatherLat =
-    location.city === "your area" && personalization.lat != null
-      ? personalization.lat
-      : location.lat;
-  const weatherLon =
-    location.city === "your area" && personalization.lon != null
-      ? personalization.lon
-      : location.lon;
-  const eventsLocation =
-    location.city === "your area" && city
-      ? { ...location, city, lat: weatherLat, lon: weatherLon, region, state }
-      : location;
+  const weatherLat = personalization.lat ?? location.lat;
+  const weatherLon = personalization.lon ?? location.lon;
+  const eventsLocation: Location = {
+    lat: weatherLat,
+    lon: weatherLon,
+    city: city && city !== "your area" ? city : location.city,
+    region,
+    state,
+  };
 
   // Blend edition history with stories the reader actually opened/clipped.
   const blendedRecentKeys = Array.from(

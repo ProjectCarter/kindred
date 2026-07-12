@@ -43,6 +43,11 @@ import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
 import { EditionAdjacentNav } from "../components/EditionAdjacentNav";
+import {
+  resolveDeviceLocation,
+  locationPayload,
+  type DeviceLocation,
+} from "../lib/location/deviceLocation";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -60,6 +65,9 @@ export default function HomeScreen() {
   const [clipPendingId, setClipPendingId] = useState<string | null>(null);
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deviceLocation, setDeviceLocation] = useState<DeviceLocation | null>(
+    null
+  );
   const loadGen = useRef(0);
   const mountedRef = useRef(true);
 
@@ -67,6 +75,18 @@ export default function HomeScreen() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+    };
+  }, []);
+
+  // Ask for GPS on first open; persist city for weather / events / local news.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const loc = await resolveDeviceLocation();
+      if (!cancelled && mountedRef.current) setDeviceLocation(loc);
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -333,9 +353,14 @@ export default function HomeScreen() {
     __DEV__ && console.log("[home] generate-edition: start");
 
     try {
+      const loc = deviceLocation ?? (await resolveDeviceLocation());
+      if (mountedRef.current) setDeviceLocation(loc);
+
       const INVOKE_TIMEOUT_MS = 90_000;
       const { data, error: invokeError } = await Promise.race([
-        supabase.functions.invoke("generate-edition"),
+        supabase.functions.invoke("generate-edition", {
+          body: { location: locationPayload(loc) },
+        }),
         new Promise<never>((_, reject) => {
           setTimeout(
             () => reject(new Error("generate-edition timed out")),
@@ -344,6 +369,8 @@ export default function HomeScreen() {
         }),
       ]);
 
+      __DEV__ &&
+        console.log("[home] generate-edition: location sent", locationPayload(loc));
       let responseStatus: number | string | null = null;
       let responseBody: unknown = data;
 
@@ -595,6 +622,21 @@ export default function HomeScreen() {
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
+              locationCity={
+                deviceLocation?.city ??
+                intelligence?.discovery?.location?.city ??
+                null
+              }
+              locationRegion={
+                deviceLocation?.region ??
+                intelligence?.discovery?.location?.region ??
+                null
+              }
+              locationState={
+                deviceLocation?.state ??
+                intelligence?.discovery?.location?.state ??
+                null
+              }
               onOpenArticle={(article) => {
                 const companion = companionForArticle(
                   intelligence,

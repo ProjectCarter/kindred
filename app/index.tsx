@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { PaperLoading } from "../components/PaperLoading";
+import { resolveDeviceLocation } from "../lib/location/deviceLocation";
 
 export default function Index() {
   const [checking, setChecking] = useState(true);
@@ -36,6 +37,9 @@ export default function Index() {
         }
 
         setSignedIn(true);
+
+        // Warm GPS / permission early so generate-edition is not stuck on IP fallback.
+        void resolveDeviceLocation();
 
         const { data: profile, error: profileError } = await supabase
           .from("profiles")

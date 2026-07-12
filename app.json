@@ -11,14 +11,24 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.kindred.app"
+      "bundleIdentifier": "com.kindred.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Kindred uses your location to show local weather, events, and news for your city."
+      }
     },
     "android": {
-      "package": "com.kindred.app"
+      "package": "com.kindred.app",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
     },
     "plugins": [
       "expo-router",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Kindred uses your location to show local weather, events, and news for your city."
+        }
+      ]
     ]
   }
 }
