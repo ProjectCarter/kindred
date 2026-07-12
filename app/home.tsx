@@ -76,6 +76,7 @@ export default function HomeScreen() {
   const [clipPendingId, setClipPendingId] = useState<string | null>(null);
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clipError, setClipError] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<ActiveLocation | null>(
     null
   );
@@ -675,9 +676,13 @@ export default function HomeScreen() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setClipError("Sign in again to save passages from your paper.");
+      return;
+    }
 
     setClipPendingId(section.id);
+    setClipError(null);
     const alreadyClipped = clippedIds.has(section.id);
     const topic = inferTopicFromSection(section.section_type, section.headline);
     const storyKey = `${section.section_type}:${section.headline}`.slice(0, 240);
@@ -705,6 +710,11 @@ export default function HomeScreen() {
             source: section.source_note,
             topic,
           });
+        } else {
+          if (__DEV__) {
+            console.error("[home] unclip failed", deleteError.message);
+          }
+          setClipError("Couldn’t remove that clipping. Please try again.");
         }
       } else {
         let insertError = (
@@ -746,8 +756,21 @@ export default function HomeScreen() {
               payload: { headline: section.headline.slice(0, 160) },
             });
           }
+        } else {
+          if (__DEV__) {
+            console.error("[home] clip failed", insertError.message);
+          }
+          setClipError("Couldn’t save that for later. Please try again.");
         }
       }
+    } catch (err) {
+      if (__DEV__) {
+        console.error(
+          "[home] clip threw",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+      setClipError("Couldn’t save that for later. Please try again.");
     } finally {
       setClipPendingId(null);
     }
@@ -818,6 +841,12 @@ export default function HomeScreen() {
             <Text style={styles.libraryLink}>Library</Text>
           </Pressable>
         </View>
+
+        {clipError ? (
+          <Text style={styles.error} accessibilityRole="alert">
+            {clipError}
+          </Text>
+        ) : null}
 
         {activeLocation?.isTravel && activeLocation.place ? (
           <View style={styles.travelBanner}>

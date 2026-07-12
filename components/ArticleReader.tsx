@@ -91,6 +91,7 @@ export function ArticleReader({
   const [heroReady, setHeroReady] = useState(false);
   const [clipped, setClipped] = useState(false);
   const [clipPending, setClipPending] = useState(false);
+  const [clipError, setClipError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(initialScrollY);
   const restoredScroll = useRef(false);
@@ -259,11 +260,15 @@ export function ArticleReader({
   async function handleToggleClip() {
     if (!clipSectionId || clipPending) return;
     setClipPending(true);
+    setClipError(null);
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setClipError("Sign in again to save passages from your paper.");
+        return;
+      }
 
       const storyKey = `${article.section}:${article.headline}`.slice(0, 240);
       const topic = inferTopicFromSection(article.section, article.headline);
@@ -285,6 +290,11 @@ export function ArticleReader({
             source: article.source,
             topic,
           });
+        } else {
+          if (__DEV__) {
+            console.error("[ArticleReader] unclip failed", error.message);
+          }
+          setClipError("Couldn’t remove that clipping. Please try again.");
         }
       } else {
         let insertError = (
@@ -325,8 +335,21 @@ export function ArticleReader({
               payload: { headline: article.headline.slice(0, 160) },
             });
           }
+        } else {
+          if (__DEV__) {
+            console.error("[ArticleReader] clip failed", insertError.message);
+          }
+          setClipError("Couldn’t save that for later. Please try again.");
         }
       }
+    } catch (err) {
+      if (__DEV__) {
+        console.error(
+          "[ArticleReader] clip threw",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+      setClipError("Couldn’t save that for later. Please try again.");
     } finally {
       setClipPending(false);
     }
@@ -618,6 +641,11 @@ export function ArticleReader({
 
           <View style={styles.actionsBlock}>
             <Text style={styles.actionsKicker}>This page</Text>
+            {clipError ? (
+              <Text style={styles.clipError} accessibilityRole="alert">
+                {clipError}
+              </Text>
+            ) : null}
             <View style={styles.actionsList}>
               {canClip ? (
                 <ActionLink
@@ -1067,6 +1095,14 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
     letterSpacing: 1.9,
     marginBottom: 16,
+  },
+  clipError: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 22,
+    fontStyle: "italic",
+    color: paper.terracotta,
+    marginBottom: 12,
   },
   actionsList: {
     gap: 2,
