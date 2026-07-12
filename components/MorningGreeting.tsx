@@ -288,7 +288,11 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   goodMorning: {
-    ...type.display,
+    fontFamily: "Georgia",
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "600",
+    letterSpacing: -0.15,
     color: paper.ink,
     marginBottom: 8,
   },
