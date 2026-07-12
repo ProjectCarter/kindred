@@ -86,6 +86,10 @@ export default function HomeScreen() {
     useLocationFirstRun();
   const loadGen = useRef(0);
   const mountedRef = useRef(true);
+  /** Sync guard — React state alone can miss rapid double-taps. */
+  const generatingRef = useRef(false);
+  /** Abort in-flight generate-edition fetch on timeout / unmount / supersede. */
+  const generateAbortRef = useRef<AbortController | null>(null);
   /** One auto-regen per edition id + active city. */
   const autoRegenKey = useRef<string | null>(null);
 
@@ -93,6 +97,8 @@ export default function HomeScreen() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      generateAbortRef.current?.abort();
+      generateAbortRef.current = null;
     };
   }, []);
 
@@ -449,16 +455,25 @@ export default function HomeScreen() {
   }, [loadEdition]);
 
   async function handleGenerate() {
-    if (generating) return;
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     setGenerating(true);
     setError(null);
+
+    // Supersede any prior in-flight invoke (should be none when the guard holds).
+    generateAbortRef.current?.abort();
+    const abort = new AbortController();
+    generateAbortRef.current = abort;
+    const INVOKE_TIMEOUT_MS = 90_000;
+    const timeoutId = setTimeout(() => abort.abort(), INVOKE_TIMEOUT_MS);
 
     __DEV__ && console.log("[home] generate-edition: start");
 
     try {
       // Always re-resolve — never trust a stale in-memory place for generation.
       const active = await resolveActivePlace({ refreshIfStale: true });
-      if (mountedRef.current) setActiveLocation(active);
+      if (!mountedRef.current || abort.signal.aborted) return;
+      setActiveLocation(active);
 
       if (!active.place) {
         setError(
@@ -486,22 +501,19 @@ export default function HomeScreen() {
         });
       }
 
-      const INVOKE_TIMEOUT_MS = 90_000;
-      const { data, error: invokeError } = await Promise.race([
-        supabase.functions.invoke("generate-edition", {
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        "generate-edition",
+        {
           body: {
             location: locationPayload(loc),
             editionDate,
             temperatureUnit: tempUnit,
           },
-        }),
-        new Promise<never>((_, reject) => {
-          setTimeout(
-            () => reject(new Error("generate-edition timed out")),
-            INVOKE_TIMEOUT_MS
-          );
-        }),
-      ]);
+          signal: abort.signal,
+        }
+      );
+
+      if (!mountedRef.current || abort.signal.aborted) return;
 
       __DEV__ &&
         console.log("[home] generate-edition: location sent", {
@@ -576,6 +588,22 @@ export default function HomeScreen() {
       await loadEdition();
       __DEV__ && console.log("[home] generate-edition: loadEdition finished");
     } catch (err) {
+      if (!mountedRef.current) return;
+      // Timeout / explicit abort — do not treat as a generic stumble when we
+      // cancelled the client request on purpose.
+      const aborted =
+        abort.signal.aborted ||
+        (err instanceof Error &&
+          (err.name === "AbortError" || /aborted|timed out/i.test(err.message)));
+      if (aborted) {
+        if (__DEV__) {
+          console.warn("[home] generate-edition: aborted or timed out", err);
+        }
+        setError(
+          "That took longer than expected. Try again in a moment — only one paper at a time."
+        );
+        return;
+      }
       if (__DEV__) console.error("[home] generate-edition: caught exception", err);
       const message = err instanceof Error ? err.message : String(err);
       const friendly =
@@ -586,7 +614,12 @@ export default function HomeScreen() {
           : friendly
       );
     } finally {
-      setGenerating(false);
+      clearTimeout(timeoutId);
+      if (generateAbortRef.current === abort) {
+        generateAbortRef.current = null;
+      }
+      generatingRef.current = false;
+      if (mountedRef.current) setGenerating(false);
     }
   }
 
