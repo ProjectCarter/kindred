@@ -799,8 +799,12 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {locationMismatch && activeLocation?.place && sections.length > 0 ? (
-          <View style={styles.mismatchBanner}>
+        {locationMismatch && activeLocation?.place ? (
+          <View
+            style={styles.mismatchBanner}
+            accessibilityRole="summary"
+            accessibilityLabel={`This edition was set for ${locationMismatch}. You’re in ${activeLocation.place.city} now.`}
+          >
             <Text style={styles.mismatchText}>
               This edition was set for {locationMismatch}. You’re in{" "}
               {activeLocation.place.city} now — refresh for local news, weather,
@@ -809,15 +813,14 @@ export default function HomeScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.mismatchButton,
-                generating && styles.buttonDisabled,
-                pressed && !generating && styles.linkPressed,
+                pressed && styles.linkPressed,
               ]}
               onPress={handleGenerate}
-              disabled={generating}
               accessibilityRole="button"
+              accessibilityLabel="Refresh today’s edition"
             >
               <Text style={styles.mismatchButtonText}>
-                {generating ? "Setting the type…" : "Refresh today’s edition"}
+                Refresh today’s edition
               </Text>
             </Pressable>
           </View>
@@ -841,35 +844,32 @@ export default function HomeScreen() {
                 Choose a home city or allow current location so local news,
                 weather, and events can find you.
               </Text>
-            ) : activeLocation?.place ? (
+            ) : activeLocation?.place && !locationMismatch ? (
               <Text style={styles.locationHint}>
                 {activeLocation.modeLabel} · {activeLocation.place.city}
               </Text>
             ) : null}
             {error && <Text style={styles.error}>{error}</Text>}
-            <Pressable
-              style={({ pressed }) => [
-                styles.button,
-                generating && styles.buttonDisabled,
-                pressed && !generating && styles.linkPressed,
-              ]}
-              onPress={handleGenerate}
-              disabled={generating}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonText}>
-                {generating
-                  ? waitingCopy.preparing
-                  : locationMismatch
-                    ? "Refresh today’s edition"
-                    : waitingCopy.openAction}
-              </Text>
-            </Pressable>
+            {/* Mismatch refresh lives on the banner — avoid a duplicate CTA. */}
+            {!locationMismatch ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.button,
+                  pressed && styles.linkPressed,
+                ]}
+                onPress={handleGenerate}
+                accessibilityRole="button"
+                accessibilityLabel={waitingCopy.openAction}
+              >
+                <Text style={styles.buttonText}>{waitingCopy.openAction}</Text>
+              </Pressable>
+            ) : null}
             {activeLocation?.needsSetup ? (
               <Pressable
                 style={styles.previousLink}
                 onPress={() => router.push("/location")}
                 accessibilityRole="button"
+                accessibilityLabel="Location settings"
               >
                 <Text style={styles.previousLinkText}>Location settings</Text>
               </Pressable>
@@ -879,6 +879,7 @@ export default function HomeScreen() {
                 style={styles.previousLink}
                 onPress={() => router.push(`/edition/${older.id}`)}
                 accessibilityRole="button"
+                accessibilityLabel={waitingCopy.previous}
               >
                 <Text style={styles.previousLinkText}>
                   {waitingCopy.previous}
