@@ -138,6 +138,19 @@ export default function HomeScreen() {
     if (isRefresh) setRefreshing(true);
     setError(null);
 
+    // Withhold the previous folio immediately so a reload never flashes a
+    // wrong-city or superseded edition while location/edition resolve.
+    if (mountedRef.current) {
+      setSections([]);
+      setEditionDate(null);
+      setEditionId(null);
+      setLeadStory(null);
+      setBandit(null);
+      setIntelligence(null);
+      setClippedIds(new Set());
+      setLocationMismatch(null);
+    }
+
     try {
     if (!isSupabaseConfigured) {
       if (mountedRef.current && gen === loadGen.current) {
