@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -126,13 +126,15 @@ export default function ArticleScreen() {
         <Text style={styles.missingBody}>
           Return to your edition and open it again from the front page.
         </Text>
-        <Text
-          style={styles.backLink}
+        <Pressable
           onPress={goBack}
           accessibilityRole="button"
+          accessibilityLabel="Back to today’s paper"
+          hitSlop={12}
+          style={({ pressed }) => pressed && { opacity: 0.55 }}
         >
-          ← Today’s paper
-        </Text>
+          <Text style={styles.backLink}>← Today’s paper</Text>
+        </Pressable>
       </SafeAreaView>
     );
   }

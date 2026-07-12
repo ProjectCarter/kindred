@@ -151,6 +151,7 @@ export default function OnboardingScreen() {
           onPress={handleContinue}
           disabled={pending}
           accessibilityRole="button"
+          accessibilityLabel={pending ? "Saving interests" : "Continue"}
         >
           <Text style={styles.buttonText}>
             {pending ? "Saving…" : "Continue"}

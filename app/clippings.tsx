@@ -142,6 +142,7 @@ export default function ClippingsScreen() {
           onPress={() => router.back()}
           style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}
           accessibilityRole="button"
+          accessibilityLabel="Back to library"
         >
           <Text style={styles.backText}>← Library</Text>
         </Pressable>
@@ -243,6 +244,7 @@ export default function ClippingsScreen() {
                     }
                     style={({ pressed }) => pressed && styles.pressed}
                     accessibilityRole="button"
+                    accessibilityLabel="Open edition"
                   >
                     <Text style={styles.actionText}>Open edition</Text>
                   </Pressable>
@@ -251,6 +253,11 @@ export default function ClippingsScreen() {
                     disabled={removingId === clip.id}
                     style={({ pressed }) => pressed && styles.pressed}
                     accessibilityRole="button"
+                    accessibilityLabel={
+                      removingId === clip.id
+                        ? "Removing clipping"
+                        : "Remove clipping"
+                    }
                   >
                     <Text style={styles.actionTextMuted}>
                       {removingId === clip.id ? "Removing…" : "Remove"}

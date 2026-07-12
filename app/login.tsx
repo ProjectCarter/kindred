@@ -140,6 +140,7 @@ export default function LoginScreen() {
                   setError(null);
                 }}
                 accessibilityRole="button"
+                accessibilityLabel="Use a different email"
                 hitSlop={10}
               >
                 <Text style={styles.textActionLabel}>Use a different email</Text>

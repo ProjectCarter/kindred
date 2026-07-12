@@ -77,6 +77,9 @@ export function LocationFirstRun({
             onPress={() => void useCurrent()}
             disabled={busy}
             accessibilityRole="button"
+            accessibilityLabel={
+              busy ? "Finding your location" : "Use current location"
+            }
           >
             <Text style={styles.primaryText}>
               {busy ? "Finding you…" : "Use Current Location"}
@@ -94,6 +97,7 @@ export function LocationFirstRun({
             }}
             disabled={busy}
             accessibilityRole="button"
+            accessibilityLabel="Choose my home city"
           >
             <Text style={styles.secondaryText}>Choose My Home City</Text>
           </Pressable>
@@ -103,6 +107,7 @@ export function LocationFirstRun({
             onPress={() => void notNow()}
             disabled={busy}
             accessibilityRole="button"
+            accessibilityLabel="Not now"
           >
             <Text style={styles.tertiaryText}>Not Now</Text>
           </Pressable>

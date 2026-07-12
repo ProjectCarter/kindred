@@ -100,6 +100,7 @@ export default function LocationSettingsScreen() {
           onPress={() => router.back()}
           style={({ pressed }) => pressed && styles.pressed}
           accessibilityRole="button"
+          accessibilityLabel="Back"
         >
           <Text style={styles.back}>← Back</Text>
         </Pressable>
@@ -162,6 +163,7 @@ export default function LocationSettingsScreen() {
             })
           }
           accessibilityRole="button"
+          accessibilityLabel="Use current location"
         >
           <Text style={styles.actionText}>Use Current Location</Text>
         </Pressable>
@@ -173,6 +175,7 @@ export default function LocationSettingsScreen() {
           ]}
           onPress={() => router.push("/location-search?purpose=home")}
           accessibilityRole="button"
+          accessibilityLabel="Choose home city"
         >
           <Text style={styles.actionOutlineText}>Choose Home City</Text>
         </Pressable>
@@ -184,6 +187,7 @@ export default function LocationSettingsScreen() {
           ]}
           onPress={() => router.push("/location-search?purpose=travel")}
           accessibilityRole="button"
+          accessibilityLabel="Choose travel location"
         >
           <Text style={styles.actionOutlineText}>Choose Travel Location</Text>
         </Pressable>
@@ -203,6 +207,7 @@ export default function LocationSettingsScreen() {
                 })
               }
               accessibilityRole="button"
+              accessibilityLabel="Return to home city"
             >
               <Text style={styles.actionOutlineText}>Return to Home City</Text>
             </Pressable>
@@ -216,6 +221,7 @@ export default function LocationSettingsScreen() {
                 })
               }
               accessibilityRole="button"
+              accessibilityLabel="Clear travel location"
             >
               <Text style={styles.clearText}>Clear Travel Location</Text>
             </Pressable>
@@ -260,6 +266,7 @@ export default function LocationSettingsScreen() {
                 })
               }
               accessibilityRole="button"
+              accessibilityLabel={`Temperature unit: ${label}`}
               accessibilityState={{ selected: tempPref === value }}
             >
               <Text

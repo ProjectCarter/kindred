@@ -85,6 +85,7 @@ export default function LocationSearchScreen() {
           onPress={() => router.back()}
           style={({ pressed }) => pressed && styles.pressed}
           accessibilityRole="button"
+          accessibilityLabel="Back"
         >
           <Text style={styles.back}>← Back</Text>
         </Pressable>

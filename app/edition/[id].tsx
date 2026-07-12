@@ -274,7 +274,12 @@ export default function EditionScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
       >
-        <Pressable onPress={() => router.back()} style={styles.backLink}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backLink}
+          accessibilityRole="button"
+          accessibilityLabel="Back to library"
+        >
           <Text style={styles.backText}>← Library</Text>
         </Pressable>
 
