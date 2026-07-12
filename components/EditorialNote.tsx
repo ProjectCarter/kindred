@@ -1,5 +1,5 @@
-import { Text, View, StyleSheet } from "react-native";
-import { paper, type } from "../lib/edition/newspaperTheme";
+import { Text, View, StyleSheet, Pressable } from "react-native";
+import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   /** Small terracotta kicker — e.g. "Why this matters" */
@@ -8,14 +8,55 @@ type Props = {
   /** Optional quieter second line */
   aside?: string | null;
   compact?: boolean;
+  /** When set, the whole note opens more content (native reader). */
+  onPress?: () => void;
 };
 
 /**
  * Magazine sidebar aside — desk note on cream wash,
  * not a bordered product card.
  */
-export function EditorialNote({ kicker, body, aside, compact }: Props) {
+export function EditorialNote({
+  kicker,
+  body,
+  aside,
+  compact,
+  onPress,
+}: Props) {
   if (!body.trim()) return null;
+
+  const content = (
+    <View style={styles.inner}>
+      <View style={styles.rule} />
+      <Text style={styles.kicker}>{kicker}</Text>
+      <Text style={styles.body} maxFontSizeMultiplier={1.35}>
+        {body.trim()}
+      </Text>
+      {aside?.trim() ? (
+        <Text style={styles.aside} maxFontSizeMultiplier={1.25}>
+          {aside.trim()}
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="link"
+        accessibilityLabel={`${kicker}. ${body}. Open to read more.`}
+        hitSlop={6}
+        style={({ pressed }) => [
+          styles.wrap,
+          compact && styles.wrapCompact,
+          pressed && styles.pressed,
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
 
   return (
     <View
@@ -23,18 +64,7 @@ export function EditorialNote({ kicker, body, aside, compact }: Props) {
       accessible
       accessibilityLabel={`${kicker}. ${body}`}
     >
-      <View style={styles.inner}>
-        <View style={styles.rule} />
-        <Text style={styles.kicker}>{kicker}</Text>
-        <Text style={styles.body} maxFontSizeMultiplier={1.35}>
-          {body.trim()}
-        </Text>
-        {aside?.trim() ? (
-          <Text style={styles.aside} maxFontSizeMultiplier={1.25}>
-            {aside.trim()}
-          </Text>
-        ) : null}
-      </View>
+      {content}
     </View>
   );
 }
@@ -46,6 +76,9 @@ const styles = StyleSheet.create({
   },
   wrapCompact: {
     marginBottom: 14,
+  },
+  pressed: {
+    opacity: press.opacity,
   },
   inner: {
     backgroundColor: paper.creamWash,

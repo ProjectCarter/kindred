@@ -1,4 +1,9 @@
 import type { LeadStory } from "./LeadStory";
+import {
+  formatDiscoveryWhy,
+  type RankedDiscoveryItem,
+} from "./discovery";
+import type { KnowledgeFacet } from "./knowledge";
 
 /**
  * Canonical article model for Kindred’s native reader.
@@ -182,6 +187,72 @@ export function articleFromSectionItem(input: {
     pullQuote: input.pullQuote ?? extractPullQuote(body),
     sourceUrl: input.sourceUrl ?? null,
   };
+  if (!article.body.length) {
+    article.body = [article.headline];
+  }
   article.estimatedReadMinutes = estimateArticleReadMinutes(article);
   return article;
+}
+
+/** Edition folio section → KindredArticle (Top Stories, History, etc.). */
+export function articleFromEditionSection(section: {
+  id: string;
+  section_type: string;
+  headline: string;
+  body: string;
+  source_note?: string | null;
+}): KindredArticle {
+  return articleFromSectionItem({
+    id: section.id,
+    section: section.section_type,
+    headline: section.headline,
+    body: section.body,
+    source: section.source_note?.trim() || "Kindred",
+    sourceUrl: null,
+  });
+}
+
+/**
+ * Sections that open the native article reader when tapped.
+ * Weather / greeting / local events use their own interactions.
+ */
+export function sectionOpensArticleReader(sectionType: string): boolean {
+  return (
+    sectionType !== "weather" &&
+    sectionType !== "greeting" &&
+    sectionType !== "local_events"
+  );
+}
+
+/** Discovery recommendation → KindredArticle (native reader, not the publisher). */
+export function articleFromDiscoveryItem(
+  ranked: RankedDiscoveryItem
+): KindredArticle {
+  const item = ranked.item;
+  const why = formatDiscoveryWhy(ranked);
+  const body = [item.dek?.trim(), why].filter(Boolean).join("\n\n");
+  return articleFromSectionItem({
+    id: item.id,
+    section: "discovery",
+    headline: item.title,
+    body: body || item.title,
+    dek: item.dek,
+    source: item.source?.name ?? "Kindred",
+    sourceUrl: item.url ?? item.source?.url ?? null,
+  });
+}
+
+/** Knowledge / explainer facet → KindredArticle. */
+export function articleFromKnowledgeFacet(
+  facet: KnowledgeFacet,
+  storyKey: string
+): KindredArticle {
+  return articleFromSectionItem({
+    id: `${storyKey}:${facet.type}:${facet.title}`.slice(0, 120),
+    section: "knowledge",
+    headline: facet.title,
+    body: facet.summary,
+    source: facet.source?.name ?? "Kindred",
+    sourceUrl: facet.source?.url ?? null,
+  });
 }

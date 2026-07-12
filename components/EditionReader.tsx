@@ -6,6 +6,16 @@ import {
 import type { LeadStory } from "../lib/edition/LeadStory";
 import type { MorningBriefing } from "../lib/edition/morningEdition";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
+import type { KindredArticle } from "../lib/edition/article";
+import {
+  articleFromDiscoveryItem,
+  articleFromEditionSection,
+  articleFromKnowledgeFacet,
+  articleFromLeadStory,
+  sectionOpensArticleReader,
+} from "../lib/edition/article";
+import { whyThisMatters } from "../lib/edition/knowledge";
+import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 import { editionColophon } from "../lib/edition/morningRitual";
 import { LocalEventsSection } from "./LocalEventsSection";
@@ -18,7 +28,10 @@ type Props = {
   sections: EditionSection[];
   editionDate?: string | null;
   leadStory?: LeadStory | null;
-  onOpenArticle?: (lead: LeadStory) => void;
+  /** Opens any Kindred article in the shared native reader. */
+  onOpenArticle?: (article: KindredArticle) => void;
+  /** Stored knowledge payload — used when tapping explainer notes. */
+  knowledge?: KnowledgePayload | null;
   heroImageUri?: string | null;
   banditGreeting?: string | null;
   banditAside?: string | null;
@@ -47,6 +60,7 @@ export function EditionReader({
   editionDate,
   leadStory,
   onOpenArticle,
+  knowledge,
   heroImageUri,
   banditGreeting,
   banditAside,
@@ -83,10 +97,49 @@ export function EditionReader({
     (s) => s.section_type === "local_events"
   );
 
+  function openLead(lead: LeadStory) {
+    onOpenArticle?.(articleFromLeadStory(lead));
+  }
+
+  function openLeadKnowledge(kind: "why_this_matters" | "why_chosen") {
+    if (!leadStory || !onOpenArticle) return;
+    if (kind === "why_this_matters") {
+      const facet = whyThisMatters(knowledge?.byStoryKey?.[leadStory.id]);
+      if (facet) {
+        onOpenArticle(articleFromKnowledgeFacet(facet, leadStory.id));
+        return;
+      }
+      if (leadWhyThisMatters?.trim()) {
+        onOpenArticle(
+          articleFromKnowledgeFacet(
+            {
+              type: "why_this_matters",
+              title: "Why this matters",
+              summary: leadWhyThisMatters.trim(),
+              source: { name: "Kindred", tier: "kindred" },
+              reasons: [],
+            },
+            leadStory.id
+          )
+        );
+        return;
+      }
+    }
+    // Fall back to the lead story itself.
+    openLead(leadStory);
+  }
+
   function renderSection(section: EditionSection, folioIndex: number) {
     const clipped = clippedSectionIds?.has(section.id) ?? false;
     const pending = clipPendingId === section.id;
     const isWeather = section.section_type === "weather";
+    const opensReader =
+      Boolean(onOpenArticle) && sectionOpensArticleReader(section.section_type);
+
+    function openSection() {
+      if (!onOpenArticle) return;
+      onOpenArticle(articleFromEditionSection(section));
+    }
 
     return (
       <FolioReveal index={folioIndex} key={section.id}>
@@ -104,6 +157,42 @@ export function EditionReader({
               body={section.body}
               sourceNote={section.source_note}
             />
+          ) : opensReader ? (
+            <>
+              <Pressable
+                onPress={openSection}
+                accessibilityRole="link"
+                accessibilityLabel={`Read: ${section.headline}`}
+                hitSlop={{ top: 6, bottom: 4, left: 2, right: 2 }}
+                style={({ pressed }) => pressed && styles.tapPressed}
+              >
+                <Text style={styles.sectionHeadline}>{section.headline}</Text>
+              </Pressable>
+              <Pressable
+                onPress={openSection}
+                accessibilityRole="link"
+                accessibilityLabel="Read the story"
+                hitSlop={4}
+                style={({ pressed }) => pressed && styles.tapPressed}
+              >
+                <Text style={styles.sectionBody}>{section.body}</Text>
+              </Pressable>
+              {section.source_note ? (
+                <Text style={styles.sourceNote}>{section.source_note}</Text>
+              ) : null}
+              <Pressable
+                onPress={openSection}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel="Read the story"
+                style={({ pressed }) => [
+                  styles.readLink,
+                  pressed && styles.tapPressed,
+                ]}
+              >
+                <Text style={styles.readLinkText}>Read the story</Text>
+              </Pressable>
+            </>
           ) : (
             <>
               <Text style={styles.sectionHeadline}>{section.headline}</Text>
@@ -152,6 +241,11 @@ export function EditionReader({
         headline={discoveryHeadline ?? "Bandit’s Picks"}
         editorNote={discoveryEditorNote}
         items={discoveryItems}
+        onOpenItem={
+          onOpenArticle
+            ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
+            : undefined
+        }
       />
     ) : null;
 
@@ -185,9 +279,10 @@ export function EditionReader({
         <FolioReveal index={folioCursor++}>
           <LeadStorySection
             lead={leadStory}
-            onContinueReading={onOpenArticle}
+            onContinueReading={onOpenArticle ? openLead : undefined}
             whyThisMatters={leadWhyThisMatters}
             whyChosen={leadWhyChosen}
+            onOpenKnowledge={onOpenArticle ? openLeadKnowledge : undefined}
           />
         </FolioReveal>
       ) : null}
@@ -264,6 +359,21 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontStyle: "italic",
     fontFamily: "Georgia",
+  },
+  readLink: {
+    alignSelf: "flex-start",
+    marginTop: 16,
+    paddingVertical: 6,
+  },
+  readLinkText: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    color: paper.terracotta,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+  },
+  tapPressed: {
+    opacity: press.opacity,
   },
   clipLink: {
     alignSelf: "flex-start",

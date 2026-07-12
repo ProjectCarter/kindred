@@ -18,7 +18,6 @@ import {
   type AdjacentEdition,
 } from "../lib/edition/adjacent";
 import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
-import { articleFromLeadStory } from "../lib/edition/article";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import {
   banditMorningLine,
@@ -595,15 +594,19 @@ export default function HomeScreen() {
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
-              onOpenArticle={(lead) => {
-                const companion = intelligence
-                  ? companionForLead(intelligence, lead)
-                  : null;
-                openKindredArticle(router, articleFromLeadStory(lead), {
+              onOpenArticle={(article) => {
+                const companion =
+                  leadStory &&
+                  article.id === leadStory.id &&
+                  intelligence
+                    ? companionForLead(intelligence, leadStory)
+                    : null;
+                openKindredArticle(router, article, {
                   editionId,
                   companion,
                 });
               }}
+              knowledge={intelligence?.knowledge}
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}

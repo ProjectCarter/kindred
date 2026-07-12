@@ -1,13 +1,15 @@
-import { Text, View, StyleSheet } from "react-native";
+import { Text, View, Pressable, StyleSheet } from "react-native";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
 import { formatDiscoveryWhy } from "../lib/edition/discovery";
 import { FolioReveal } from "./FolioReveal";
-import { paper, type } from "../lib/edition/newspaperTheme";
+import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   headline?: string;
   editorNote?: string | null;
   items: RankedDiscoveryItem[];
+  /** Opens the native Kindred article reader for a pick. */
+  onOpenItem?: (item: RankedDiscoveryItem) => void;
 };
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
@@ -15,11 +17,13 @@ const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
 /**
  * Discovery desk — quiet recommendations, not a feed.
  * Numbered like a magazine desk list.
+ * Title, dek, and “Read the story” open the shared native reader.
  */
 export function DiscoveryDesk({
   headline = "Bandit’s Picks",
   editorNote,
   items,
+  onOpenItem,
 }: Props) {
   if (!items.length) return null;
 
@@ -45,6 +49,11 @@ export function DiscoveryDesk({
 
         {items.map((ranked, index) => {
           const why = formatDiscoveryWhy(ranked);
+          const canOpen = Boolean(onOpenItem);
+          function open() {
+            onOpenItem?.(ranked);
+          }
+
           return (
             <View
               key={ranked.item.id}
@@ -54,23 +63,75 @@ export function DiscoveryDesk({
               ]}
             >
               <View style={styles.itemHeader}>
-                <Text style={styles.numeral}>{ROMAN[index] ?? String(index + 1)}</Text>
+                <Text style={styles.numeral}>
+                  {ROMAN[index] ?? String(index + 1)}
+                </Text>
                 <Text style={styles.category}>
                   {formatCategory(ranked.item.category)}
                 </Text>
               </View>
-              <Text style={styles.title} maxFontSizeMultiplier={1.3}>
-                {ranked.item.title}
-              </Text>
+
+              <Pressable
+                onPress={canOpen ? open : undefined}
+                disabled={!canOpen}
+                accessibilityRole={canOpen ? "link" : undefined}
+                accessibilityLabel={
+                  canOpen ? `Read: ${ranked.item.title}` : undefined
+                }
+                hitSlop={6}
+                style={({ pressed }) => [canOpen && pressed && styles.pressed]}
+              >
+                <Text style={styles.title} maxFontSizeMultiplier={1.3}>
+                  {ranked.item.title}
+                </Text>
+              </Pressable>
+
               {ranked.item.dek ? (
-                <Text style={styles.dek} maxFontSizeMultiplier={1.3}>
-                  {ranked.item.dek}
-                </Text>
+                <Pressable
+                  onPress={canOpen ? open : undefined}
+                  disabled={!canOpen}
+                  accessibilityRole={canOpen ? "link" : undefined}
+                  accessibilityLabel={canOpen ? "Read the story" : undefined}
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    canOpen && pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.dek} maxFontSizeMultiplier={1.3}>
+                    {ranked.item.dek}
+                  </Text>
+                </Pressable>
               ) : null}
+
               {why ? (
-                <Text style={styles.why} maxFontSizeMultiplier={1.25}>
-                  {why}
-                </Text>
+                <Pressable
+                  onPress={canOpen ? open : undefined}
+                  disabled={!canOpen}
+                  accessibilityRole={canOpen ? "link" : undefined}
+                  hitSlop={4}
+                  style={({ pressed }) => [
+                    canOpen && pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.why} maxFontSizeMultiplier={1.25}>
+                    {why}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {canOpen ? (
+                <Pressable
+                  onPress={open}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Read the story"
+                  style={({ pressed }) => [
+                    styles.readRow,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.readLink}>Read the story</Text>
+                </Pressable>
               ) : null}
             </View>
           );
@@ -175,5 +236,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: "italic",
     color: paper.inkMuted,
+  },
+  readRow: {
+    alignSelf: "flex-start",
+    marginTop: 10,
+    paddingVertical: 4,
+  },
+  readLink: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    color: paper.terracotta,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+  },
+  pressed: {
+    opacity: press.opacity,
   },
 });

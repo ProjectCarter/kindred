@@ -187,46 +187,62 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
             ]}
             accessible={false}
           >
-            <Text
-              style={[styles.eventName, { color: colors.ink }]}
-              maxFontSizeMultiplier={1.4}
+            <Pressable
+              onPress={event.sourceUrl ? () => openEvent(event) : undefined}
+              disabled={!event.sourceUrl}
+              accessibilityRole={event.sourceUrl ? "link" : undefined}
+              accessibilityLabel={
+                event.sourceUrl
+                  ? `Open event: ${event.name}`
+                  : event.name
+              }
+              hitSlop={{ top: 6, bottom: 4, left: 2, right: 2 }}
+              style={({ pressed }) => [
+                styles.eventMain,
+                event.sourceUrl && pressed && styles.actionPressed,
+              ]}
             >
-              {event.name}
-            </Text>
+              <Text
+                style={[styles.eventName, { color: colors.ink }]}
+                maxFontSizeMultiplier={1.4}
+              >
+                {event.name}
+              </Text>
 
-            <View style={styles.metaBlock}>
-              <MetaRow
-                symbol="calendar"
-                ion="calendar-outline"
-                colors={colors}
-              >
-                {event.date}
-              </MetaRow>
-              <MetaRow symbol="clock" ion="time-outline" colors={colors}>
-                {event.time}
-              </MetaRow>
-              <View
-                style={styles.venueRow}
-                accessible
-                accessibilityRole="text"
-                accessibilityLabel={venueLine}
-              >
-                <View style={styles.venueIconWrap}>
-                  <MetaIcon
-                    symbol="location"
-                    ion="location-outline"
-                    color={colors.inkBody}
-                  />
-                </View>
-                <Text
-                  style={[styles.venueText, { color: colors.inkBody }]}
-                  maxFontSizeMultiplier={1.35}
-                  accessible={false}
+              <View style={styles.metaBlock}>
+                <MetaRow
+                  symbol="calendar"
+                  ion="calendar-outline"
+                  colors={colors}
                 >
-                  {venueLine}
-                </Text>
+                  {event.date}
+                </MetaRow>
+                <MetaRow symbol="clock" ion="time-outline" colors={colors}>
+                  {event.time}
+                </MetaRow>
+                <View
+                  style={styles.venueRow}
+                  accessible
+                  accessibilityRole="text"
+                  accessibilityLabel={venueLine}
+                >
+                  <View style={styles.venueIconWrap}>
+                    <MetaIcon
+                      symbol="location"
+                      ion="location-outline"
+                      color={colors.inkBody}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.venueText, { color: colors.inkBody }]}
+                    maxFontSizeMultiplier={1.35}
+                    accessible={false}
+                  >
+                    {venueLine}
+                  </Text>
+                </View>
               </View>
-            </View>
+            </Pressable>
 
             <View style={styles.actions}>
               <ActionLink
@@ -284,6 +300,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     marginBottom: 6,
     paddingBottom: 10,
+  },
+  eventMain: {
+    marginBottom: 0,
   },
   eventName: {
     fontSize: 18,

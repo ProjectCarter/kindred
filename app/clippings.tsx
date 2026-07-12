@@ -11,6 +11,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
 import { SECTION_LABELS } from "../lib/edition/types";
+import {
+  articleFromEditionSection,
+  sectionOpensArticleReader,
+} from "../lib/edition/article";
+import { openKindredArticle } from "../lib/edition/openArticle";
 import { LocalEventsSection } from "../components/LocalEventsSection";
 import { PaperLoading } from "../components/PaperLoading";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
@@ -173,6 +178,62 @@ export default function ClippingsScreen() {
                     body={section.body}
                     sourceNote={section.source_note}
                   />
+                ) : sectionOpensArticleReader(section.section_type) ? (
+                  <>
+                    <Pressable
+                      onPress={() =>
+                        openKindredArticle(
+                          router,
+                          articleFromEditionSection(section),
+                          { editionId: section.edition_id }
+                        )
+                      }
+                      accessibilityRole="link"
+                      accessibilityLabel={`Read: ${section.headline}`}
+                      hitSlop={6}
+                      style={({ pressed }) => pressed && styles.pressed}
+                    >
+                      <Text style={styles.headline}>{section.headline}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        openKindredArticle(
+                          router,
+                          articleFromEditionSection(section),
+                          { editionId: section.edition_id }
+                        )
+                      }
+                      accessibilityRole="link"
+                      accessibilityLabel="Read the story"
+                      hitSlop={4}
+                      style={({ pressed }) => pressed && styles.pressed}
+                    >
+                      <Text style={styles.body}>{section.body}</Text>
+                    </Pressable>
+                    {section.source_note ? (
+                      <Text style={styles.sourceNote}>
+                        {section.source_note}
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      onPress={() =>
+                        openKindredArticle(
+                          router,
+                          articleFromEditionSection(section),
+                          { editionId: section.edition_id }
+                        )
+                      }
+                      hitSlop={12}
+                      accessibilityRole="button"
+                      accessibilityLabel="Read the story"
+                      style={({ pressed }) => [
+                        styles.readLink,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.readLinkText}>Read the story</Text>
+                    </Pressable>
+                  </>
                 ) : (
                   <>
                     <Text style={styles.headline}>{section.headline}</Text>
@@ -317,6 +378,18 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
     marginTop: 10,
     fontStyle: "italic",
+  },
+  readLink: {
+    alignSelf: "flex-start",
+    marginTop: 14,
+    paddingVertical: 4,
+  },
+  readLinkText: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    color: paper.terracotta,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
   },
   actions: {
     flexDirection: "row",

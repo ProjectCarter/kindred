@@ -19,6 +19,8 @@ type Props = {
   whyThisMatters?: string | null;
   /** Personalization / editorial — why it earned the front page. */
   whyChosen?: string | null;
+  /** Opens a knowledge/explainer article in the native reader. */
+  onOpenKnowledge?: (kind: "why_this_matters" | "why_chosen") => void;
 };
 
 const ROLE_KICKER: Record<string, string> = {
@@ -89,12 +91,14 @@ function leadWhyChosen(lead: LeadStory, override?: string | null): string | null
 
 /**
  * Front Page Lead — cover-story presentation for Kindred’s morning paper.
+ * Headline, image, summary, and “Read the story” all open the same reader.
  */
 export function LeadStorySection({
   lead,
   onContinueReading,
   whyThisMatters,
   whyChosen,
+  onOpenKnowledge,
 }: Props) {
   const kicker = ROLE_KICKER[lead.role] ?? "Front Page";
   const published = formatPublicationTime(lead.publishedAt);
@@ -113,6 +117,12 @@ export function LeadStorySection({
       : null,
   ].filter(Boolean) as string[];
 
+  function openStory() {
+    onContinueReading?.(lead);
+  }
+
+  const canOpen = Boolean(onContinueReading);
+
   return (
     <View style={styles.wrap} accessibilityRole="summary">
       <View style={styles.kickerRow}>
@@ -120,22 +130,44 @@ export function LeadStorySection({
         <View style={styles.kickerRule} />
       </View>
 
-      <Text style={styles.headline} maxFontSizeMultiplier={1.35}>
-        {lead.headline}
-      </Text>
+      <Pressable
+        onPress={canOpen ? openStory : undefined}
+        disabled={!canOpen}
+        accessibilityRole={canOpen ? "link" : undefined}
+        accessibilityLabel={canOpen ? `Read: ${lead.headline}` : undefined}
+        hitSlop={{ top: 8, bottom: 4, left: 4, right: 4 }}
+        style={({ pressed }) => [canOpen && pressed && styles.linkPressed]}
+      >
+        <Text style={styles.headline} maxFontSizeMultiplier={1.35}>
+          {lead.headline}
+        </Text>
+      </Pressable>
 
       <Text style={styles.byline} maxFontSizeMultiplier={1.25}>
         {byline}
       </Text>
 
       {lead.heroImage?.uri && !heroFailed ? (
-        <View style={styles.imageBlock}>
+        <Pressable
+          onPress={canOpen ? openStory : undefined}
+          disabled={!canOpen}
+          accessibilityRole={canOpen ? "button" : "image"}
+          accessibilityLabel={
+            canOpen
+              ? `Read story photo: ${lead.heroImage.alt || lead.headline}`
+              : lead.heroImage.alt || lead.headline
+          }
+          style={({ pressed }) => [
+            styles.imageBlock,
+            canOpen && pressed && styles.linkPressed,
+          ]}
+        >
           <View style={[styles.imageFrame, shadow.photo]}>
             <Image
               source={{ uri: lead.heroImage.uri }}
               style={styles.image}
               resizeMode="cover"
-              accessibilityLabel={lead.heroImage.alt || lead.headline}
+              accessible={false}
               onError={() => setHeroFailed(true)}
             />
           </View>
@@ -144,17 +176,36 @@ export function LeadStorySection({
               Photograph via {lead.source}
             </Text>
           ) : null}
-        </View>
+        </Pressable>
       ) : null}
 
       {lead.summary ? (
-        <Text style={styles.summary} maxFontSizeMultiplier={1.35}>
-          {lead.summary}
-        </Text>
+        <Pressable
+          onPress={canOpen ? openStory : undefined}
+          disabled={!canOpen}
+          accessibilityRole={canOpen ? "link" : undefined}
+          accessibilityLabel={canOpen ? "Read the story summary" : undefined}
+          hitSlop={6}
+          style={({ pressed }) => [canOpen && pressed && styles.linkPressed]}
+        >
+          <Text style={styles.summary} maxFontSizeMultiplier={1.35}>
+            {lead.summary}
+          </Text>
+        </Pressable>
       ) : null}
 
       {whyThisMatters?.trim() ? (
-        <EditorialNote kicker="Why this matters" body={whyThisMatters} />
+        <EditorialNote
+          kicker="Why this matters"
+          body={whyThisMatters}
+          onPress={
+            onOpenKnowledge
+              ? () => onOpenKnowledge("why_this_matters")
+              : canOpen
+                ? openStory
+                : undefined
+          }
+        />
       ) : null}
 
       {chosen ? (
@@ -162,6 +213,13 @@ export function LeadStorySection({
           kicker="Why it’s on the front page"
           body={chosen}
           compact
+          onPress={
+            onOpenKnowledge
+              ? () => onOpenKnowledge("why_chosen")
+              : canOpen
+                ? openStory
+                : undefined
+          }
         />
       ) : null}
 
@@ -175,9 +233,9 @@ export function LeadStorySection({
         </Text>
       )}
 
-      {onContinueReading ? (
+      {canOpen ? (
         <Pressable
-          onPress={() => onContinueReading(lead)}
+          onPress={openStory}
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Read the story"
