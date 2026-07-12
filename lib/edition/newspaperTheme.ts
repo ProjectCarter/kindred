@@ -39,8 +39,8 @@ export const press = {
 export const space = {
   folioGutter: 24,
   sectionGap: 52,
-  afterMasthead: 32,
-  afterBandit: 40,
+  afterMasthead: 24,
+  afterBandit: 28,
   afterLead: 48,
   endPadding: 48,
 } as const;

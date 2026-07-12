@@ -91,8 +91,8 @@ export function MorningBriefing({ opening, briefing }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 30,
-    paddingBottom: 26,
+    marginBottom: 20,
+    paddingBottom: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   kicker: {
     ...type.kicker,
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.12,
   },
   toggle: {
-    marginTop: 18,
+    marginTop: 14,
     fontFamily: "Georgia",
     fontSize: 14,
     letterSpacing: 0.2,
