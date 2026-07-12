@@ -33,7 +33,7 @@ import {
   type MorningEditionPayload,
 } from "./morningEdition";
 import type { LeadStory } from "./LeadStory";
-import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
+import type { ArticleCompanion, ContinueReadingItem, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
 import { isClippableSectionId } from "./article";
 
@@ -206,6 +206,100 @@ function knowledgeNotesFromPacket(
   return notes;
 }
 
+const CONTINUE_LABEL: Partial<
+  Record<KnowledgeFacetType, ContinueReadingItem["kind"]>
+> = {
+  related_story: "related",
+  local_context: "local",
+  historical_background: "background",
+  trusted_explainer: "background",
+  previous_coverage: "related",
+  definition: "background",
+};
+
+const CONTINUE_DISPLAY: Record<ContinueReadingItem["kind"], string> = {
+  related: "Related Story",
+  local: "Local Perspective",
+  background: "Background Explainer",
+  opposing: "Opposing Viewpoint",
+  bandit: "Bandit’s Pick",
+};
+
+function continueReadingFrom(
+  intelligence: EditionIntelligence,
+  packet: KnowledgePacket | null
+): ContinueReadingItem[] {
+  const items: ContinueReadingItem[] = [];
+  const seen = new Set<string>();
+
+  if (packet?.facets) {
+    for (const facet of packet.facets) {
+      if (!facet.summary?.trim()) continue;
+      const kind = CONTINUE_LABEL[facet.type];
+      if (!kind) continue;
+      const title = facet.title?.trim() || CONTINUE_DISPLAY[kind];
+      const key = `${kind}:${title}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        kind,
+        label: CONTINUE_DISPLAY[kind],
+        title,
+        summary: facet.summary.trim().slice(0, 220),
+      });
+      if (items.length >= 3) break;
+    }
+
+    // Soft opposing viewpoint — only when an explainer/related facet
+    // explicitly signals another side (never invent controversy).
+    if (!items.some((i) => i.kind === "opposing")) {
+      const opposing = packet.facets.find(
+        (f) =>
+          f.summary &&
+          /another view|other side|critics|meanwhile|opposing|counterpoint/i.test(
+            `${f.title} ${f.summary}`
+          )
+      );
+      if (opposing?.summary) {
+        items.push({
+          kind: "opposing",
+          label: CONTINUE_DISPLAY.opposing,
+          title: opposing.title?.trim() || "Another view",
+          summary: opposing.summary.trim().slice(0, 220),
+        });
+      }
+    }
+  }
+
+  const bandit = intelligence.discoveryItems?.[0];
+  if (bandit?.item?.title && items.length < 4) {
+    items.push({
+      kind: "bandit",
+      label: CONTINUE_DISPLAY.bandit,
+      title: bandit.item.title.trim(),
+      summary:
+        bandit.item.dek?.trim() ||
+        "A quiet suggestion from Bandit, your editor.",
+    });
+  }
+
+  return items.slice(0, 4);
+}
+
+function buildCompanion(
+  intelligence: EditionIntelligence,
+  packet: KnowledgePacket | null,
+  whyThisMattersNote: ArticleCompanion["whyThisMatters"],
+  whyChosen: string | null
+): ArticleCompanion {
+  return {
+    whyThisMatters: whyThisMattersNote,
+    whyChosen,
+    knowledgeNotes: knowledgeNotesFromPacket(packet),
+    continueReading: continueReadingFrom(intelligence, packet),
+  };
+}
+
 /** Companion metadata for the article reader. */
 export function companionForLead(
   intelligence: EditionIntelligence,
@@ -227,8 +321,10 @@ export function companionForLead(
     .map((r) => r.label.replace(/\.$/, ""))
     .join(". ");
 
-  return {
-    whyThisMatters: facet
+  return buildCompanion(
+    intelligence,
+    packet,
+    facet
       ? { title: facet.title, summary: facet.summary }
       : intelligence.leadWhyThisMatters
         ? {
@@ -236,9 +332,8 @@ export function companionForLead(
             summary: intelligence.leadWhyThisMatters,
           }
         : null,
-    whyChosen: chosen ? chosen + "." : null,
-    knowledgeNotes: knowledgeNotesFromPacket(packet),
-  };
+    chosen ? chosen + "." : null
+  );
 }
 
 /**
@@ -251,24 +346,27 @@ export function companionForArticle(
   leadStory?: LeadStory | null
 ): ArticleCompanion {
   if (!intelligence) {
-    return { whyThisMatters: null, whyChosen: null, knowledgeNotes: [] };
+    return {
+      whyThisMatters: null,
+      whyChosen: null,
+      knowledgeNotes: [],
+      continueReading: [],
+    };
   }
 
   if (leadStory && article.id === leadStory.id) {
     return companionForLead(intelligence, leadStory);
   }
 
-  const packet =
-    intelligence.knowledge?.byStoryKey?.[article.id] ?? null;
+  const packet = intelligence.knowledge?.byStoryKey?.[article.id] ?? null;
   const facet = whyThisMatters(packet);
 
-  return {
-    whyThisMatters: facet
-      ? { title: facet.title, summary: facet.summary }
-      : null,
-    whyChosen: null,
-    knowledgeNotes: knowledgeNotesFromPacket(packet),
-  };
+  return buildCompanion(
+    intelligence,
+    packet,
+    facet ? { title: facet.title, summary: facet.summary } : null,
+    null
+  );
 }
 
 /** Section UUID when the article can be saved to Clippings. */

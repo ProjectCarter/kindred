@@ -110,44 +110,48 @@ export const motion = {
 
 /**
  * Shared Article Reader tokens — inherited by every section’s reading page.
- * Tuned for a calm Sunday-paper / magazine measure.
+ * Tuned for a calm Sunday-paper / magazine measure (NYT / Economist / Monocle).
  */
 export const reader = {
-  measure: 560,
+  /** Comfortable measure — roughly 62–68 characters. */
+  measure: 540,
   headline: {
     fontFamily: "Georgia",
-    fontSize: 34,
-    lineHeight: 42,
+    fontSize: 36,
+    lineHeight: 44,
     fontWeight: "600" as const,
-    letterSpacing: -0.1,
+    letterSpacing: -0.35,
   },
   dek: {
     fontFamily: "Georgia",
-    fontSize: 19,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 32,
+    letterSpacing: 0.05,
   },
   byline: {
     fontFamily: "Georgia",
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
     fontStyle: "italic" as const,
   },
   body: {
     fontFamily: "Georgia",
-    fontSize: 19,
-    lineHeight: 34,
+    fontSize: 20,
+    lineHeight: 36,
+    letterSpacing: 0.15,
   },
   dropCap: {
     fontFamily: "Georgia",
-    fontSize: 46,
-    lineHeight: 40,
+    fontSize: 58,
+    lineHeight: 50,
     fontWeight: "600" as const,
   },
   pullQuote: {
     fontFamily: "Georgia",
-    fontSize: 24,
-    lineHeight: 36,
+    fontSize: 26,
+    lineHeight: 38,
     fontStyle: "italic" as const,
+    letterSpacing: -0.1,
   },
   caption: {
     fontFamily: "Georgia",
@@ -156,12 +160,18 @@ export const reader = {
     fontStyle: "italic" as const,
   },
   credit: {
-    fontSize: 11,
-    lineHeight: 15,
-    letterSpacing: 0.35,
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 0.55,
   },
   meta: {
     fontSize: 12,
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
+  },
+  calloutBody: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 27,
+    fontStyle: "italic" as const,
   },
 } as const;

@@ -7,6 +7,7 @@ import {
   ScrollView,
   Pressable,
   Linking,
+  Share,
   Animated,
   Easing,
   AppState,
@@ -24,19 +25,27 @@ import {
 import {
   getArticleCompanion,
   type ArticleCompanion,
+  type ContinueReadingItem,
 } from "../lib/edition/articleCompanion";
 import {
   stashArticleSession,
   updateArticleSessionScroll,
 } from "../lib/edition/articleSession";
-import { paper, type, reader, shadow, press } from "../lib/edition/newspaperTheme";
+import {
+  paper,
+  type,
+  reader,
+  shadow,
+  press,
+  motion,
+} from "../lib/edition/newspaperTheme";
 import {
   useArticleReadingSession,
   inferTopicFromSection,
   trackReadingSignal,
 } from "../lib/personalization";
 import { supabase } from "../lib/supabase";
-import { EditorialNote } from "./EditorialNote";
+import { MagazineCallout } from "./MagazineCallout";
 
 type Props = {
   article: KindredArticle;
@@ -46,11 +55,12 @@ type Props = {
   backLabel?: string;
   clipSectionId?: string | null;
   initialScrollY?: number;
+  onOpenContinue?: (item: ContinueReadingItem) => void;
 };
 
 /**
- * Shared native article reader for every Kindred section.
- * Kindred first — publisher source second.
+ * Shared native article reader — premium print magazine craft.
+ * Kindred first; publisher source second.
  */
 export function ArticleReader({
   article,
@@ -60,6 +70,7 @@ export function ArticleReader({
   backLabel = "← Today’s paper",
   clipSectionId = null,
   initialScrollY = 0,
+  onOpenContinue,
 }: Props) {
   const companion =
     companionProp ?? getArticleCompanion(article.id) ?? null;
@@ -67,14 +78,15 @@ export function ArticleReader({
   const { width: windowWidth } = useWindowDimensions();
   const readingWidth = Math.min(windowWidth - 48, reader.measure);
   const figureBleed = Math.min(
-    12,
-    Math.max(0, (windowWidth - readingWidth) / 2 - 4)
+    18,
+    Math.max(0, (windowWidth - readingWidth) / 2)
   );
 
   const [contentHeight, setContentHeight] = useState(1);
   const [viewportHeight, setViewportHeight] = useState(1);
   const [progress, setProgress] = useState(0);
   const [heroFailed, setHeroFailed] = useState(false);
+  const [heroReady, setHeroReady] = useState(false);
   const [clipped, setClipped] = useState(false);
   const [clipPending, setClipPending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -83,31 +95,51 @@ export function ArticleReader({
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const enterOpacity = useRef(new Animated.Value(0)).current;
-  const enterRise = useRef(new Animated.Value(14)).current;
+  const enterRise = useRef(new Animated.Value(motion.risePx + 4)).current;
+  const heroOpacity = useRef(new Animated.Value(0)).current;
 
   const briefing = isKindredBriefing(article);
   const canClip = Boolean(clipSectionId);
+  const continueItems = companion?.continueReading ?? [];
+  const knowledgeNotes = companion?.knowledgeNotes ?? [];
 
   useArticleReadingSession(article, progress, { editionId });
 
   useEffect(() => {
+    enterOpacity.setValue(0);
+    enterRise.setValue(motion.risePx + 4);
     Animated.parallel([
       Animated.timing(enterOpacity, {
         toValue: 1,
-        duration: 480,
+        duration: motion.enterMs,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(enterRise, {
         toValue: 0,
-        duration: 520,
+        duration: motion.enterMs + 40,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [enterOpacity, enterRise]);
+  }, [article.id, enterOpacity, enterRise]);
 
-  // Persist session so backgrounding / external browser does not lose the story.
+  useEffect(() => {
+    setHeroFailed(false);
+    setHeroReady(false);
+    heroOpacity.setValue(0);
+  }, [article.id, article.heroImage?.uri, heroOpacity]);
+
+  useEffect(() => {
+    if (!heroReady) return;
+    Animated.timing(heroOpacity, {
+      toValue: 1,
+      duration: motion.photoMs,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [heroReady, heroOpacity]);
+
   useEffect(() => {
     stashArticleSession({
       article,
@@ -160,14 +192,8 @@ export function ArticleReader({
   }, [clipSectionId]);
 
   const published = formatArticlePublishedAt(article.publishedAt);
-  const metaParts = [
-    published,
-    article.estimatedReadMinutes
-      ? article.estimatedReadMinutes === 1
-        ? "A one-minute read"
-        : `About ${article.estimatedReadMinutes} minutes`
-      : null,
-  ].filter(Boolean) as string[];
+  const readLabel = formatReadTime(article.estimatedReadMinutes);
+  const metaParts = [published, readLabel].filter(Boolean) as string[];
 
   const pullQuote = article.pullQuote;
   const pullIndex = useMemo(() => {
@@ -177,8 +203,6 @@ export function ArticleReader({
       article.body.length - 1
     );
   }, [pullQuote, article.body.length]);
-
-  const knowledgeNotes = companion?.knowledgeNotes ?? [];
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -319,11 +343,29 @@ export function ArticleReader({
     void Linking.openURL(article.sourceUrl).catch(() => {});
   }
 
+  async function handleShare() {
+    const parts = [article.headline];
+    if (article.dek) parts.push(article.dek);
+    if (article.sourceUrl) {
+      parts.push("", article.sourceUrl);
+    } else {
+      parts.push("", "Shared from Kindred");
+    }
+    try {
+      await Share.share({
+        message: parts.join("\n"),
+        title: article.headline,
+      });
+    } catch {
+      /* User dismissed share sheet. */
+    }
+  }
+
   return (
     <View
       style={[
         styles.screen,
-        { paddingTop: insets.top, paddingBottom: insets.bottom * 0.35 },
+        { paddingTop: insets.top, paddingBottom: insets.bottom * 0.25 },
       ]}
     >
       <View style={styles.progressTrack} accessibilityElementsHidden>
@@ -350,7 +392,7 @@ export function ArticleReader({
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 72 + insets.bottom },
+          { paddingBottom: 88 + insets.bottom },
         ]}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -378,7 +420,7 @@ export function ArticleReader({
               : formatSectionLabel(article.section)}
           </Text>
 
-          <Text style={styles.headline} maxFontSizeMultiplier={1.3}>
+          <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
             {article.headline}
           </Text>
 
@@ -398,28 +440,37 @@ export function ArticleReader({
               <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
                 {metaParts.join("  ·  ")}
               </Text>
-            ) : null}
+            ) : (
+              <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
+                {article.source}
+              </Text>
+            )}
           </View>
 
           {briefing ? (
             <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
-              A Kindred summary for your morning paper — not the full article from
-              the publisher.
+              A Kindred summary for your morning paper — not the full article
+              from the publisher.
             </Text>
           ) : null}
 
           {companion?.whyThisMatters?.summary ? (
-            <EditorialNote
-              kicker={companion.whyThisMatters.title || "Why this matters"}
+            <MagazineCallout
+              kicker="Why this matters"
+              title={
+                companion.whyThisMatters.title !== "Why this matters"
+                  ? companion.whyThisMatters.title
+                  : null
+              }
               body={companion.whyThisMatters.summary}
+              featured
             />
           ) : null}
 
           {companion?.whyChosen ? (
-            <EditorialNote
+            <MagazineCallout
               kicker="Why it’s in your paper"
               body={companion.whyChosen}
-              compact
             />
           ) : null}
 
@@ -434,15 +485,21 @@ export function ArticleReader({
               ]}
             >
               <View style={[styles.imageFrame, shadow.photo]}>
-                <Image
-                  source={{ uri: article.heroImage.uri }}
-                  style={styles.image}
-                  resizeMode="cover"
-                  accessibilityLabel={
-                    article.heroImage.caption || article.headline
-                  }
-                  onError={() => setHeroFailed(true)}
-                />
+                {!heroReady ? <View style={styles.imagePlaceholder} /> : null}
+                <Animated.View
+                  style={[styles.imageFade, { opacity: heroOpacity }]}
+                >
+                  <Image
+                    source={{ uri: article.heroImage.uri }}
+                    style={styles.image}
+                    resizeMode="cover"
+                    accessibilityLabel={
+                      article.heroImage.caption || article.headline
+                    }
+                    onLoad={() => setHeroReady(true)}
+                    onError={() => setHeroFailed(true)}
+                  />
+                </Animated.View>
               </View>
               {(article.heroImage.caption || article.heroImage.credit) && (
                 <View style={styles.captionBlock}>
@@ -468,7 +525,10 @@ export function ArticleReader({
 
           {(article.body ?? []).map((paragraph, index) => (
             <View key={`p-${index}`}>
-              <BodyParagraph text={paragraph} isLead={index === 0} />
+              <BodyParagraph
+                text={paragraph}
+                isLead={index === 0 && !briefing}
+              />
               {pullQuote && index === pullIndex ? (
                 <PullQuote text={pullQuote} />
               ) : null}
@@ -477,91 +537,138 @@ export function ArticleReader({
 
           {knowledgeNotes.length > 0 ? (
             <View style={styles.knowledgeBlock}>
-              <Text style={styles.knowledgeHeading}>Further context</Text>
+              <Text style={styles.knowledgeHeading}>Knowledge context</Text>
+              <View style={styles.knowledgeRule} />
               {knowledgeNotes.map((note, i) => (
-                <EditorialNote
+                <MagazineCallout
                   key={`${note.kicker}-${i}`}
                   kicker={note.kicker}
-                  body={
+                  title={
                     note.title && note.title !== note.kicker
-                      ? `${note.title}. ${note.summary}`
-                      : note.summary
+                      ? note.title
+                      : null
                   }
-                  compact={i > 0}
+                  body={note.summary}
                 />
               ))}
             </View>
           ) : null}
 
-          <View style={styles.footer}>
+          <View style={styles.colophon}>
             <View style={styles.footerRule} />
             <Text style={styles.endMark}>◆</Text>
             <Text style={styles.attribution}>
               From the edition  ·  {article.source}
             </Text>
-
             {briefing && article.sourceUrl ? (
               <Text style={styles.sourceHint} maxFontSizeMultiplier={1.2}>
-                For the complete piece from the publisher, view it at the source
-                below — then return here to continue your paper.
+                For the complete piece from the publisher, view the original
+                source — then return here to continue your paper.
               </Text>
             ) : null}
+          </View>
 
-            <View style={styles.endActions}>
-              {canClip ? (
+          {continueItems.length > 0 ? (
+            <View style={styles.continueBlock}>
+              <Text style={styles.continueKicker}>Continue reading</Text>
+              <Text style={styles.continueIntro}>
+                A few careful pages nearby — nothing more than you need.
+              </Text>
+              {continueItems.map((item, index) => (
                 <Pressable
-                  onPress={() => void handleToggleClip()}
-                  disabled={clipPending}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    clipped ? "Saved to Clippings" : "Save for later"
-                  }
-                  style={({ pressed }) => pressed && styles.pressed}
+                  key={`${item.kind}-${index}`}
+                  onPress={() => onOpenContinue?.(item)}
+                  disabled={!onOpenContinue}
+                  accessibilityRole={onOpenContinue ? "link" : "text"}
+                  accessibilityLabel={`${item.label}. ${item.title}`}
+                  style={({ pressed }) => [
+                    styles.continueItem,
+                    index === continueItems.length - 1 && styles.continueItemLast,
+                    pressed && onOpenContinue && styles.pressed,
+                  ]}
                 >
+                  <Text style={styles.continueLabel}>{item.label}</Text>
                   <Text
-                    style={[
-                      styles.endAction,
-                      clipped && styles.endActionMuted,
-                    ]}
+                    style={styles.continueTitle}
+                    maxFontSizeMultiplier={1.25}
                   >
-                    {clipPending
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={styles.continueSummary}
+                    maxFontSizeMultiplier={1.25}
+                  >
+                    {item.summary}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={styles.actionsBlock}>
+            <Text style={styles.actionsKicker}>This article</Text>
+            <View style={styles.actionsList}>
+              {canClip ? (
+                <ActionLink
+                  label={
+                    clipPending
                       ? "Saving…"
                       : clipped
-                        ? "Saved to Clippings"
-                        : "Save for later"}
-                  </Text>
-                </Pressable>
+                        ? "Saved"
+                        : "Save"
+                  }
+                  onPress={() => void handleToggleClip()}
+                  muted={clipped}
+                  disabled={clipPending}
+                />
               ) : null}
-
+              <ActionLink label="Share" onPress={() => void handleShare()} />
               {article.sourceUrl ? (
-                <Pressable
+                <ActionLink
+                  label="View original source"
                   onPress={openSource}
-                  hitSlop={10}
-                  accessibilityRole="link"
-                  accessibilityLabel="View at the original source"
-                  style={({ pressed }) => pressed && styles.pressed}
-                >
-                  <Text style={styles.endAction}>
-                    View at the source ↗
-                  </Text>
-                </Pressable>
+                />
               ) : null}
-
-              <Pressable
+              <ActionLink
+                label={backLabel.replace(/^←\s*/, "") || "Today’s paper"}
                 onPress={onBack}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={backLabel.replace(/^←\s*/, "Return to ")}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <Text style={styles.endAction}>{backLabel}</Text>
-              </Pressable>
+                prefix="← "
+              />
             </View>
           </View>
         </Animated.View>
       </ScrollView>
     </View>
+  );
+}
+
+function ActionLink({
+  label,
+  onPress,
+  muted,
+  disabled,
+  prefix = "",
+}: {
+  label: string;
+  onPress: () => void;
+  muted?: boolean;
+  disabled?: boolean;
+  prefix?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel={`${prefix}${label}`}
+      style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+    >
+      <Text style={[styles.actionText, muted && styles.actionMuted]}>
+        {prefix}
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -611,6 +718,12 @@ function PullQuote({ text }: { text: string }) {
   );
 }
 
+function formatReadTime(minutes: number | null | undefined): string | null {
+  if (!minutes || minutes < 1) return null;
+  if (minutes === 1) return "1 min read";
+  return `${minutes} min read`;
+}
+
 function formatSectionLabel(section: string): string {
   const map: Record<string, string> = {
     lead: "The Lead",
@@ -642,19 +755,20 @@ const styles = StyleSheet.create({
     backgroundColor: paper.cream,
   },
   progressTrack: {
-    height: StyleSheet.hairlineWidth * 2,
+    height: 2,
     backgroundColor: paper.inkRule,
   },
   progressFill: {
-    height: StyleSheet.hairlineWidth * 2,
-    backgroundColor: paper.terracottaSoft,
+    height: 2,
+    backgroundColor: paper.terracotta,
+    opacity: 0.55,
   },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 15,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
     backgroundColor: paper.cream,
@@ -679,7 +793,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: "center",
-    paddingTop: 20,
+    paddingTop: 28,
     paddingHorizontal: 24,
   },
   column: {
@@ -689,27 +803,27 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 22,
+    marginBottom: 28,
   },
   kicker: {
     ...type.kicker,
     color: paper.terracotta,
-    letterSpacing: 2,
-    marginBottom: 14,
+    letterSpacing: 2.2,
+    marginBottom: 16,
   },
   headline: {
     ...reader.headline,
     color: paper.ink,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   dek: {
     ...reader.dek,
     color: paper.inkBody,
-    marginBottom: 18,
+    marginBottom: 22,
   },
   bylineBlock: {
-    marginBottom: 18,
-    gap: 6,
+    marginBottom: 22,
+    gap: 7,
   },
   byline: {
     ...reader.byline,
@@ -718,47 +832,56 @@ const styles = StyleSheet.create({
   meta: {
     ...reader.meta,
     color: paper.inkFaint,
+    fontFamily: "Georgia",
+    fontStyle: "italic",
   },
   briefingNote: {
     fontFamily: "Georgia",
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 24,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginBottom: 22,
+    marginBottom: 26,
     maxWidth: 420,
   },
   figure: {
-    marginBottom: 36,
+    marginBottom: 40,
     alignSelf: "center",
   },
   imageFrame: {
     width: "100%",
     aspectRatio: 3 / 2,
-    borderRadius: 2,
+    borderRadius: 3,
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
   },
+  imagePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: paper.creamDeep,
+  },
+  imageFade: {
+    width: "100%",
+    height: "100%",
+  },
   image: {
     width: "100%",
-    height: "114%",
-    marginTop: "-7%",
+    height: "112%",
+    marginTop: "-6%",
   },
   captionBlock: {
     flexDirection: "row",
-    marginTop: 12,
+    marginTop: 14,
     paddingRight: 4,
     gap: 12,
   },
   captionRule: {
     width: 1.5,
     backgroundColor: paper.terracotta,
-    opacity: press.opacity,
-    borderRadius: 1,
+    opacity: 0.7,
   },
   captionCopy: {
     flex: 1,
-    gap: 3,
+    gap: 4,
     paddingTop: 1,
   },
   caption: {
@@ -773,33 +896,33 @@ const styles = StyleSheet.create({
   noImageRule: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 28,
+    marginBottom: 32,
   },
   paragraph: {
     ...reader.body,
     color: paper.inkBody,
-    marginBottom: 26,
+    marginBottom: 28,
   },
   leadParagraph: {
-    marginBottom: 28,
+    marginBottom: 30,
   },
   dropCap: {
     ...reader.dropCap,
     color: paper.ink,
   },
   pullQuoteBlock: {
-    marginTop: 8,
-    marginBottom: 36,
-    paddingHorizontal: 4,
+    marginTop: 10,
+    marginBottom: 40,
+    paddingHorizontal: 6,
   },
   pullMark: {
     fontFamily: "Georgia",
-    fontSize: 64,
-    lineHeight: 56,
+    fontSize: 72,
+    lineHeight: 60,
     color: paper.terracotta,
-    opacity: 0.4,
-    marginBottom: -8,
-    marginLeft: -4,
+    opacity: 0.35,
+    marginBottom: -10,
+    marginLeft: -6,
   },
   pullQuote: {
     ...reader.pullQuote,
@@ -807,70 +930,143 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   pullRule: {
-    width: 48,
+    width: 52,
     height: 1.5,
     backgroundColor: paper.terracotta,
-    opacity: press.opacity,
+    opacity: 0.65,
   },
   knowledgeBlock: {
-    marginTop: 8,
-    marginBottom: 8,
+    marginTop: 16,
+    marginBottom: 12,
   },
   knowledgeHeading: {
     ...type.kicker,
     color: paper.inkFaint,
-    marginBottom: 8,
-    letterSpacing: 1.8,
+    letterSpacing: 2,
+    marginBottom: 10,
   },
-  footer: {
-    marginTop: 12,
+  knowledgeRule: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkRule,
+    marginBottom: 18,
+  },
+  colophon: {
+    marginTop: 20,
     alignItems: "flex-start",
-    gap: 14,
+    gap: 12,
   },
   footerRule: {
     alignSelf: "stretch",
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   endMark: {
     alignSelf: "center",
     fontSize: 11,
     color: paper.inkFaint,
     letterSpacing: 1,
-    marginBottom: 4,
   },
   attribution: {
     ...reader.meta,
     color: paper.inkMuted,
-    letterSpacing: 0.45,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
+    alignSelf: "center",
   },
   sourceHint: {
     fontFamily: "Georgia",
     fontSize: 14,
-    lineHeight: 22,
+    lineHeight: 23,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginTop: 4,
+    marginTop: 8,
     maxWidth: 400,
+    alignSelf: "center",
+    textAlign: "center",
   },
-  endActions: {
-    marginTop: 10,
-    gap: 16,
-    alignItems: "flex-start",
-    paddingBottom: 24,
+  continueBlock: {
+    marginTop: 48,
+    paddingTop: 28,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: paper.inkRule,
   },
-  endAction: {
+  continueKicker: {
+    ...type.kicker,
+    color: paper.terracotta,
+    letterSpacing: 2.1,
+    marginBottom: 10,
+  },
+  continueIntro: {
     fontFamily: "Georgia",
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 24,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginBottom: 22,
+    maxWidth: 400,
+  },
+  continueItem: {
+    paddingBottom: 22,
+    marginBottom: 22,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
+  },
+  continueItemLast: {
+    borderBottomWidth: 0,
+    marginBottom: 0,
+    paddingBottom: 8,
+  },
+  continueLabel: {
+    ...type.kicker,
+    color: paper.inkFaint,
+    letterSpacing: 1.8,
+    marginBottom: 8,
+  },
+  continueTitle: {
+    fontFamily: "Georgia",
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: "600",
+    color: paper.ink,
+    letterSpacing: -0.15,
+    marginBottom: 8,
+  },
+  continueSummary: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 24,
+    color: paper.inkBody,
+  },
+  actionsBlock: {
+    marginTop: 40,
+    paddingTop: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: paper.inkRule,
+    paddingBottom: 16,
+  },
+  actionsKicker: {
+    ...type.kicker,
+    color: paper.inkFaint,
+    letterSpacing: 1.9,
+    marginBottom: 14,
+  },
+  actionsList: {
+    gap: 4,
+  },
+  actionRow: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+  },
+  actionText: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
     fontStyle: "italic",
     color: paper.terracotta,
-    letterSpacing: 0.2,
-    paddingVertical: 4,
+    letterSpacing: 0.15,
   },
-  endActionMuted: {
+  actionMuted: {
     color: paper.inkMuted,
   },
   pressed: {

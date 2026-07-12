@@ -6,13 +6,18 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArticleReader } from "../../components/ArticleReader";
 import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
+import { articleFromSectionItem } from "../../lib/edition/article";
 import { getStashedArticle } from "../../lib/edition/articleStore";
-import { getArticleCompanion } from "../../lib/edition/articleCompanion";
+import {
+  getArticleCompanion,
+  type ContinueReadingItem,
+} from "../../lib/edition/articleCompanion";
 import {
   getArticleSessionSync,
   loadArticleSession,
   type ArticleSession,
 } from "../../lib/edition/articleSession";
+import { openKindredArticle } from "../../lib/edition/openArticle";
 import { paper } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -148,6 +153,27 @@ export default function ArticleScreen() {
     session.editionId ||
     null;
 
+  function openContinue(item: ContinueReadingItem) {
+    const related = articleFromSectionItem({
+      id: `continue:${item.kind}:${item.title}`.slice(0, 120),
+      section: item.kind === "bandit" ? "discovery" : "knowledge",
+      headline: item.title,
+      body: item.summary,
+      dek: item.label,
+      source: "Kindred",
+    });
+    openKindredArticle(router, related, {
+      editionId: resolvedEdition,
+      backLabel: "← Back to story",
+      companion: {
+        whyThisMatters: null,
+        whyChosen: null,
+        knowledgeNotes: [],
+        continueReading: [],
+      },
+    });
+  }
+
   return (
     <View style={styles.flex}>
       <StatusBar style="dark" />
@@ -159,6 +185,7 @@ export default function ArticleScreen() {
         backLabel={resolvedBack}
         clipSectionId={resolvedClip}
         initialScrollY={session.scrollY ?? 0}
+        onOpenContinue={openContinue}
       />
     </View>
   );

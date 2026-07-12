@@ -11,6 +11,14 @@ export type KnowledgeNote = {
   summary: string;
 };
 
+/** Editorial “Continue Reading” suggestions — finite, not a feed. */
+export type ContinueReadingItem = {
+  kind: "related" | "local" | "background" | "opposing" | "bandit";
+  label: string;
+  title: string;
+  summary: string;
+};
+
 export type ArticleCompanion = {
   whyThisMatters?: {
     title: string;
@@ -19,6 +27,8 @@ export type ArticleCompanion = {
   whyChosen?: string | null;
   /** Related background, previous coverage, explainers from Knowledge. */
   knowledgeNotes?: KnowledgeNote[];
+  /** Calm next-reads for the end of the article. */
+  continueReading?: ContinueReadingItem[];
 };
 
 const MAX_COMPANIONS = 16;
