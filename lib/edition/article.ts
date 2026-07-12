@@ -256,3 +256,32 @@ export function articleFromKnowledgeFacet(
     sourceUrl: facet.source?.url ?? null,
   });
 }
+
+/**
+ * True when Kindred only has a briefing/summary — never imply a full
+ * publisher reprint when we lack authorized long-form text.
+ */
+export function isKindredBriefing(article: KindredArticle): boolean {
+  if (
+    article.section === "discovery" ||
+    article.section === "knowledge" ||
+    article.section === "today_in_history" ||
+    article.section === "looking_ahead"
+  ) {
+    return true;
+  }
+  const words = [article.dek, ...(article.body ?? [])]
+    .filter(Boolean)
+    .join(" ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+  return words < 350;
+}
+
+/** edition_sections.id is a UUID — only those can be clipped to the library. */
+export function isClippableSectionId(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    id
+  );
+}

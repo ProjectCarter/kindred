@@ -9,6 +9,7 @@ import {
   Linking,
   Animated,
   Easing,
+  AppState,
   useWindowDimensions,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -16,13 +17,25 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { KindredArticle } from "../lib/edition/article";
-import { formatArticlePublishedAt } from "../lib/edition/article";
+import {
+  formatArticlePublishedAt,
+  isKindredBriefing,
+} from "../lib/edition/article";
 import {
   getArticleCompanion,
   type ArticleCompanion,
 } from "../lib/edition/articleCompanion";
+import {
+  stashArticleSession,
+  updateArticleSessionScroll,
+} from "../lib/edition/articleSession";
 import { paper, type, reader, shadow, press } from "../lib/edition/newspaperTheme";
-import { useArticleReadingSession } from "../lib/personalization";
+import {
+  useArticleReadingSession,
+  inferTopicFromSection,
+  trackReadingSignal,
+} from "../lib/personalization";
+import { supabase } from "../lib/supabase";
 import { EditorialNote } from "./EditorialNote";
 
 type Props = {
@@ -30,36 +43,50 @@ type Props = {
   onBack: () => void;
   editionId?: string | null;
   companion?: ArticleCompanion | null;
+  backLabel?: string;
+  clipSectionId?: string | null;
+  initialScrollY?: number;
 };
 
 /**
  * Shared native article reader for every Kindred section.
- * Lead, Top Stories, Business, Science, Sports, Cooking, Cars —
- * all inherit this same premium reading experience.
+ * Kindred first — publisher source second.
  */
 export function ArticleReader({
   article,
   onBack,
   editionId,
   companion: companionProp,
+  backLabel = "← Today’s paper",
+  clipSectionId = null,
+  initialScrollY = 0,
 }: Props) {
   const companion =
     companionProp ?? getArticleCompanion(article.id) ?? null;
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const readingWidth = Math.min(windowWidth - 48, reader.measure);
-  // Soft side bleed for photography on narrow phones.
-  const figureBleed = Math.min(12, Math.max(0, (windowWidth - readingWidth) / 2 - 4));
+  const figureBleed = Math.min(
+    12,
+    Math.max(0, (windowWidth - readingWidth) / 2 - 4)
+  );
 
   const [contentHeight, setContentHeight] = useState(1);
   const [viewportHeight, setViewportHeight] = useState(1);
   const [progress, setProgress] = useState(0);
   const [heroFailed, setHeroFailed] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const [clipPending, setClipPending] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollYRef = useRef(initialScrollY);
+  const restoredScroll = useRef(false);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const enterOpacity = useRef(new Animated.Value(0)).current;
   const enterRise = useRef(new Animated.Value(14)).current;
-  const originalPress = useRef(new Animated.Value(1)).current;
+
+  const briefing = isKindredBriefing(article);
+  const canClip = Boolean(clipSectionId);
 
   useArticleReadingSession(article, progress, { editionId });
 
@@ -80,6 +107,58 @@ export function ArticleReader({
     ]).start();
   }, [enterOpacity, enterRise]);
 
+  // Persist session so backgrounding / external browser does not lose the story.
+  useEffect(() => {
+    stashArticleSession({
+      article,
+      companion,
+      editionId: editionId ?? null,
+      backLabel,
+      clipSectionId,
+      scrollY: scrollYRef.current,
+      updatedAt: Date.now(),
+    });
+  }, [article, companion, editionId, backLabel, clipSectionId]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "background" || state === "inactive") {
+        updateArticleSessionScroll(article.id, scrollYRef.current);
+        stashArticleSession({
+          article,
+          companion,
+          editionId: editionId ?? null,
+          backLabel,
+          clipSectionId,
+          scrollY: scrollYRef.current,
+          updatedAt: Date.now(),
+        });
+      }
+    });
+    return () => sub.remove();
+  }, [article, companion, editionId, backLabel, clipSectionId]);
+
+  useEffect(() => {
+    if (!clipSectionId) return;
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data } = await supabase
+        .from("clippings")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("section_id", clipSectionId)
+        .maybeSingle();
+      if (!cancelled) setClipped(Boolean(data));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clipSectionId]);
+
   const published = formatArticlePublishedAt(article.publishedAt);
   const metaParts = [
     published,
@@ -93,16 +172,19 @@ export function ArticleReader({
   const pullQuote = article.pullQuote;
   const pullIndex = useMemo(() => {
     if (!pullQuote || article.body.length < 2) return -1;
-    // Settle the quote after the opening beat — roughly a third of the way in.
     return Math.min(
       Math.max(1, Math.floor(article.body.length * 0.33)),
       article.body.length - 1
     );
   }, [pullQuote, article.body.length]);
 
+  const knowledgeNotes = companion?.knowledgeNotes ?? [];
+
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+      const { contentOffset, layoutMeasurement, contentSize } =
+        event.nativeEvent;
+      scrollYRef.current = contentOffset.y;
       const scrollable = Math.max(
         contentSize.height - layoutMeasurement.height,
         1
@@ -110,13 +192,26 @@ export function ArticleReader({
       const next = Math.min(1, Math.max(0, contentOffset.y / scrollable));
       progressAnim.setValue(next);
       setProgress(next);
+      updateArticleSessionScroll(article.id, contentOffset.y);
     },
-    [progressAnim]
+    [progressAnim, article.id]
   );
 
-  const onContentSizeChange = useCallback((_w: number, h: number) => {
-    setContentHeight(Math.max(h, 1));
-  }, []);
+  const onContentSizeChange = useCallback(
+    (_w: number, h: number) => {
+      setContentHeight(Math.max(h, 1));
+      if (!restoredScroll.current && initialScrollY > 0 && h > initialScrollY) {
+        restoredScroll.current = true;
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollTo({
+            y: initialScrollY,
+            animated: false,
+          });
+        });
+      }
+    },
+    [initialScrollY]
+  );
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     setViewportHeight(Math.max(event.nativeEvent.layout.height, 1));
@@ -132,6 +227,97 @@ export function ArticleReader({
     inputRange: [0, 1],
     outputRange: ["0%", "100%"],
   });
+
+  async function handleToggleClip() {
+    if (!clipSectionId || clipPending) return;
+    setClipPending(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const storyKey = `${article.section}:${article.headline}`.slice(0, 240);
+      const topic = inferTopicFromSection(article.section, article.headline);
+
+      if (clipped) {
+        const { error } = await supabase
+          .from("clippings")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("section_id", clipSectionId);
+        if (!error) {
+          setClipped(false);
+          void trackReadingSignal({
+            signalType: "unclip",
+            storyKey,
+            sectionType: article.section,
+            editionId,
+            sectionId: clipSectionId,
+            source: article.source,
+            topic,
+          });
+        }
+      } else {
+        let insertError = (
+          await supabase.from("clippings").insert({
+            user_id: user.id,
+            section_id: clipSectionId,
+            section_type: article.section,
+            story_key: storyKey,
+            source: article.source,
+            headline: article.headline.slice(0, 240),
+          })
+        ).error;
+
+        if (insertError && insertError.code !== "23505") {
+          insertError = (
+            await supabase.from("clippings").insert({
+              user_id: user.id,
+              section_id: clipSectionId,
+            })
+          ).error;
+        }
+
+        const duplicate =
+          insertError?.code === "23505" ||
+          /duplicate|unique/i.test(insertError?.message ?? "");
+
+        if (!insertError || duplicate) {
+          setClipped(true);
+          if (!duplicate) {
+            void trackReadingSignal({
+              signalType: "clip",
+              storyKey,
+              sectionType: article.section,
+              editionId,
+              sectionId: clipSectionId,
+              source: article.source,
+              topic,
+              payload: { headline: article.headline.slice(0, 160) },
+            });
+          }
+        }
+      }
+    } finally {
+      setClipPending(false);
+    }
+  }
+
+  function openSource() {
+    if (!article.sourceUrl) return;
+    updateArticleSessionScroll(article.id, scrollYRef.current);
+    stashArticleSession({
+      article,
+      companion,
+      editionId: editionId ?? null,
+      backLabel,
+      clipSectionId,
+      scrollY: scrollYRef.current,
+      updatedAt: Date.now(),
+    });
+    void Linking.openURL(article.sourceUrl).catch(() => {});
+  }
 
   return (
     <View
@@ -149,10 +335,10 @@ export function ArticleReader({
           onPress={onBack}
           hitSlop={12}
           accessibilityRole="button"
-          accessibilityLabel="Back to the paper"
+          accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
           style={({ pressed }) => pressed && styles.pressed}
         >
-          <Text style={styles.back}>← Back</Text>
+          <Text style={styles.back}>{backLabel}</Text>
         </Pressable>
         <Text style={styles.sectionTag} numberOfLines={1}>
           {formatSectionLabel(article.section)}
@@ -160,10 +346,11 @@ export function ArticleReader({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 56 + insets.bottom },
+          { paddingBottom: 72 + insets.bottom },
         ]}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -186,7 +373,9 @@ export function ArticleReader({
           <View style={styles.mastheadRule} />
 
           <Text style={styles.kicker}>
-            {formatSectionLabel(article.section)}
+            {briefing
+              ? "Kindred briefing"
+              : formatSectionLabel(article.section)}
           </Text>
 
           <Text style={styles.headline} maxFontSizeMultiplier={1.3}>
@@ -211,6 +400,13 @@ export function ArticleReader({
               </Text>
             ) : null}
           </View>
+
+          {briefing ? (
+            <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
+              A Kindred summary for your morning paper — not the full article from
+              the publisher.
+            </Text>
+          ) : null}
 
           {companion?.whyThisMatters?.summary ? (
             <EditorialNote
@@ -272,15 +468,30 @@ export function ArticleReader({
 
           {(article.body ?? []).map((paragraph, index) => (
             <View key={`p-${index}`}>
-              <BodyParagraph
-                text={paragraph}
-                isLead={index === 0}
-              />
+              <BodyParagraph text={paragraph} isLead={index === 0} />
               {pullQuote && index === pullIndex ? (
                 <PullQuote text={pullQuote} />
               ) : null}
             </View>
           ))}
+
+          {knowledgeNotes.length > 0 ? (
+            <View style={styles.knowledgeBlock}>
+              <Text style={styles.knowledgeHeading}>Further context</Text>
+              {knowledgeNotes.map((note, i) => (
+                <EditorialNote
+                  key={`${note.kicker}-${i}`}
+                  kicker={note.kicker}
+                  body={
+                    note.title && note.title !== note.kicker
+                      ? `${note.title}. ${note.summary}`
+                      : note.summary
+                  }
+                  compact={i > 0}
+                />
+              ))}
+            </View>
+          ) : null}
 
           <View style={styles.footer}>
             <View style={styles.footerRule} />
@@ -289,42 +500,64 @@ export function ArticleReader({
               From the edition  ·  {article.source}
             </Text>
 
-            {article.sourceUrl ? (
-              <Animated.View style={{ transform: [{ scale: originalPress }] }}>
+            {briefing && article.sourceUrl ? (
+              <Text style={styles.sourceHint} maxFontSizeMultiplier={1.2}>
+                For the complete piece from the publisher, view it at the source
+                below — then return here to continue your paper.
+              </Text>
+            ) : null}
+
+            <View style={styles.endActions}>
+              {canClip ? (
                 <Pressable
-                  onPressIn={() => {
-                    Animated.spring(originalPress, {
-                      toValue: 0.97,
-                      useNativeDriver: true,
-                      friction: 7,
-                    }).start();
-                  }}
-                  onPressOut={() => {
-                    Animated.spring(originalPress, {
-                      toValue: 1,
-                      useNativeDriver: true,
-                      friction: 7,
-                    }).start();
-                  }}
-                  onPress={() => {
-                    void Linking.openURL(article.sourceUrl!).catch(() => {
-                      // Invalid / unsupported URL — leave the reader intact.
-                    });
-                  }}
+                  onPress={() => void handleToggleClip()}
+                  disabled={clipPending}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    clipped ? "Saved to Clippings" : "Save for later"
+                  }
+                  style={({ pressed }) => pressed && styles.pressed}
+                >
+                  <Text
+                    style={[
+                      styles.endAction,
+                      clipped && styles.endActionMuted,
+                    ]}
+                  >
+                    {clipPending
+                      ? "Saving…"
+                      : clipped
+                        ? "Saved to Clippings"
+                        : "Save for later"}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {article.sourceUrl ? (
+                <Pressable
+                  onPress={openSource}
+                  hitSlop={10}
                   accessibilityRole="link"
                   accessibilityLabel="View at the original source"
-                  style={({ pressed }) => [
-                    styles.originalButton,
-                    pressed && styles.originalPressed,
-                  ]}
+                  style={({ pressed }) => pressed && styles.pressed}
                 >
-                  <Text style={styles.originalButtonText}>
-                    View at the source
+                  <Text style={styles.endAction}>
+                    View at the source ↗
                   </Text>
-                  <Text style={styles.originalChevron}>↗</Text>
                 </Pressable>
-              </Animated.View>
-            ) : null}
+              ) : null}
+
+              <Pressable
+                onPress={onBack}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={backLabel.replace(/^←\s*/, "Return to ")}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <Text style={styles.endAction}>{backLabel}</Text>
+              </Pressable>
+            </View>
           </View>
         </Animated.View>
       </ScrollView>
@@ -354,7 +587,10 @@ function BodyParagraph({
   const rest = text.slice(1);
 
   return (
-    <Text style={[styles.paragraph, styles.leadParagraph]} maxFontSizeMultiplier={1.3}>
+    <Text
+      style={[styles.paragraph, styles.leadParagraph]}
+      maxFontSizeMultiplier={1.3}
+    >
       <Text style={styles.dropCap}>{first}</Text>
       {rest}
     </Text>
@@ -379,6 +615,10 @@ function formatSectionLabel(section: string): string {
   const map: Record<string, string> = {
     lead: "The Lead",
     top_stories: "Top Stories",
+    today_in_history: "Today in History",
+    looking_ahead: "Looking Ahead",
+    discovery: "Bandit’s Picks",
+    knowledge: "Context",
     business: "Business",
     science: "Science",
     cooking: "Cooking",
@@ -423,13 +663,14 @@ const styles = StyleSheet.create({
     fontFamily: "Georgia",
     fontSize: 14,
     fontStyle: "italic",
-    color: paper.inkMuted,
+    color: paper.terracotta,
     letterSpacing: 0.2,
+    maxWidth: "62%",
   },
   sectionTag: {
     ...type.kicker,
-    color: paper.terracotta,
-    maxWidth: "55%",
+    color: paper.inkFaint,
+    maxWidth: "36%",
     textAlign: "right",
     letterSpacing: 1.7,
   },
@@ -467,7 +708,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   bylineBlock: {
-    marginBottom: 28,
+    marginBottom: 18,
     gap: 6,
   },
   byline: {
@@ -477,6 +718,15 @@ const styles = StyleSheet.create({
   meta: {
     ...reader.meta,
     color: paper.inkFaint,
+  },
+  briefingNote: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 22,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginBottom: 22,
+    maxWidth: 420,
   },
   figure: {
     marginBottom: 36,
@@ -562,6 +812,16 @@ const styles = StyleSheet.create({
     backgroundColor: paper.terracotta,
     opacity: press.opacity,
   },
+  knowledgeBlock: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  knowledgeHeading: {
+    ...type.kicker,
+    color: paper.inkFaint,
+    marginBottom: 8,
+    letterSpacing: 1.8,
+  },
   footer: {
     marginTop: 12,
     alignItems: "flex-start",
@@ -586,31 +846,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0.45,
     textTransform: "uppercase",
   },
-  originalButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    alignSelf: "flex-start",
+  sourceHint: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 22,
+    fontStyle: "italic",
+    color: paper.inkMuted,
     marginTop: 4,
-    paddingVertical: 13,
-    paddingHorizontal: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: paper.inkMuted,
-    borderRadius: 2,
-    backgroundColor: paper.creamDeep,
+    maxWidth: 400,
   },
-  originalPressed: {
-    backgroundColor: paper.cream,
+  endActions: {
+    marginTop: 10,
+    gap: 16,
+    alignItems: "flex-start",
+    paddingBottom: 24,
   },
-  originalButtonText: {
-    fontSize: 13,
-    letterSpacing: 0.5,
-    color: paper.ink,
-    fontWeight: "500",
-  },
-  originalChevron: {
-    fontSize: 13,
+  endAction: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 22,
+    fontStyle: "italic",
     color: paper.terracotta,
+    letterSpacing: 0.2,
+    paddingVertical: 4,
+  },
+  endActionMuted: {
+    color: paper.inkMuted,
   },
   pressed: {
     opacity: press.opacity,

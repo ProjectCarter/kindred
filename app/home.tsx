@@ -25,7 +25,8 @@ import {
   type BanditPayload,
 } from "../lib/edition/bandit";
 import {
-  companionForLead,
+  companionForArticle,
+  clipSectionIdForArticle,
   parseEditionIntelligence,
   type EditionIntelligence,
 } from "../lib/edition/surfaceIntelligence";
@@ -595,15 +596,16 @@ export default function HomeScreen() {
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
               onOpenArticle={(article) => {
-                const companion =
-                  leadStory &&
-                  article.id === leadStory.id &&
-                  intelligence
-                    ? companionForLead(intelligence, leadStory)
-                    : null;
+                const companion = companionForArticle(
+                  intelligence,
+                  article,
+                  leadStory
+                );
                 openKindredArticle(router, article, {
                   editionId,
                   companion,
+                  backLabel: "← Today’s paper",
+                  clipSectionId: clipSectionIdForArticle(article),
                 });
               }}
               knowledge={intelligence?.knowledge}

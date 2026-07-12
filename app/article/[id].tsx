@@ -8,31 +8,101 @@ import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
 import { getStashedArticle } from "../../lib/edition/articleStore";
 import { getArticleCompanion } from "../../lib/edition/articleCompanion";
+import {
+  getArticleSessionSync,
+  loadArticleSession,
+  type ArticleSession,
+} from "../../lib/edition/articleSession";
 import { paper } from "../../lib/edition/newspaperTheme";
 
 /**
  * Shared article route for every Kindred section.
- * Open via stashArticle(article) then router.push(`/article/${article.id}`).
+ * Open via openKindredArticle — session persists across background / external browser.
  */
 export default function ArticleScreen() {
-  const { id, editionId } = useLocalSearchParams<{
+  const { id, editionId, backLabel, clipSectionId } = useLocalSearchParams<{
     id: string;
     editionId?: string;
+    backLabel?: string;
+    clipSectionId?: string;
   }>();
   const router = useRouter();
-  const [article, setArticle] = useState<KindredArticle | null>(null);
+  const [session, setSession] = useState<ArticleSession | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const articleId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : null;
+    const articleId =
+      typeof id === "string" ? id : Array.isArray(id) ? id[0] : null;
     if (!articleId) {
-      setArticle(null);
+      setSession(null);
       setReady(true);
       return;
     }
-    setArticle(getStashedArticle(articleId));
-    setReady(true);
-  }, [id]);
+
+    let cancelled = false;
+
+    async function hydrate() {
+      const sync = getArticleSessionSync(articleId!);
+      if (sync) {
+        if (!cancelled) {
+          setSession(sync);
+          setReady(true);
+        }
+        return;
+      }
+
+      const memoryArticle = getStashedArticle(articleId!);
+      if (memoryArticle) {
+        const built: ArticleSession = {
+          article: memoryArticle,
+          companion: getArticleCompanion(articleId!) ?? null,
+          editionId:
+            typeof editionId === "string" && editionId ? editionId : null,
+          backLabel:
+            typeof backLabel === "string" && backLabel.trim()
+              ? backLabel
+              : "← Today’s paper",
+          clipSectionId:
+            typeof clipSectionId === "string" && clipSectionId
+              ? clipSectionId
+              : null,
+          scrollY: 0,
+          updatedAt: Date.now(),
+        };
+        if (!cancelled) {
+          setSession(built);
+          setReady(true);
+        }
+        return;
+      }
+
+      const persisted = await loadArticleSession(articleId!);
+      if (!cancelled) {
+        setSession(persisted);
+        setReady(true);
+      }
+    }
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, editionId, backLabel, clipSectionId]);
+
+  function goBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    const eid =
+      session?.editionId ??
+      (typeof editionId === "string" ? editionId : null);
+    if (eid) {
+      router.replace(`/edition/${eid}`);
+      return;
+    }
+    router.replace("/home");
+  }
 
   if (!ready) {
     return (
@@ -43,7 +113,7 @@ export default function ArticleScreen() {
     );
   }
 
-  if (!article) {
+  if (!session?.article) {
     return (
       <SafeAreaView style={styles.centered}>
         <StatusBar style="dark" />
@@ -53,23 +123,42 @@ export default function ArticleScreen() {
         </Text>
         <Text
           style={styles.backLink}
-          onPress={() => router.back()}
+          onPress={goBack}
           accessibilityRole="button"
         >
-          ← Back to the paper
+          ← Today’s paper
         </Text>
       </SafeAreaView>
     );
   }
+
+  const article: KindredArticle = session.article;
+  const resolvedBack =
+    (typeof backLabel === "string" && backLabel.trim()) ||
+    session.backLabel ||
+    "← Today’s paper";
+  const resolvedClip =
+    (typeof clipSectionId === "string" && clipSectionId
+      ? clipSectionId
+      : null) ||
+    session.clipSectionId ||
+    null;
+  const resolvedEdition =
+    (typeof editionId === "string" && editionId ? editionId : null) ||
+    session.editionId ||
+    null;
 
   return (
     <View style={styles.flex}>
       <StatusBar style="dark" />
       <ArticleReader
         article={article}
-        onBack={() => router.back()}
-        editionId={typeof editionId === "string" ? editionId : null}
-        companion={getArticleCompanion(article.id)}
+        onBack={goBack}
+        editionId={resolvedEdition}
+        companion={session.companion ?? getArticleCompanion(article.id)}
+        backLabel={resolvedBack}
+        clipSectionId={resolvedClip}
+        initialScrollY={session.scrollY ?? 0}
       />
     </View>
   );

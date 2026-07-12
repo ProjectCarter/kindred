@@ -16,6 +16,7 @@ import {
   sectionOpensArticleReader,
 } from "../lib/edition/article";
 import { openKindredArticle } from "../lib/edition/openArticle";
+import { clipSectionIdForArticle } from "../lib/edition/surfaceIntelligence";
 import { LocalEventsSection } from "../components/LocalEventsSection";
 import { PaperLoading } from "../components/PaperLoading";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
@@ -163,6 +164,14 @@ export default function ClippingsScreen() {
           clippings.map((clip) => {
             if (!clip.section) return null;
             const section = clip.section;
+            const article = articleFromEditionSection(section);
+            function openClipArticle() {
+              openKindredArticle(router, article, {
+                editionId: section.edition_id,
+                backLabel: "← Clippings",
+                clipSectionId: clipSectionIdForArticle(article),
+              });
+            }
             return (
               <View key={clip.id} style={styles.card}>
                 <View style={styles.labelRow}>
@@ -181,13 +190,7 @@ export default function ClippingsScreen() {
                 ) : sectionOpensArticleReader(section.section_type) ? (
                   <>
                     <Pressable
-                      onPress={() =>
-                        openKindredArticle(
-                          router,
-                          articleFromEditionSection(section),
-                          { editionId: section.edition_id }
-                        )
-                      }
+                      onPress={openClipArticle}
                       accessibilityRole="link"
                       accessibilityLabel={`Read: ${section.headline}`}
                       hitSlop={6}
@@ -196,13 +199,7 @@ export default function ClippingsScreen() {
                       <Text style={styles.headline}>{section.headline}</Text>
                     </Pressable>
                     <Pressable
-                      onPress={() =>
-                        openKindredArticle(
-                          router,
-                          articleFromEditionSection(section),
-                          { editionId: section.edition_id }
-                        )
-                      }
+                      onPress={openClipArticle}
                       accessibilityRole="link"
                       accessibilityLabel="Read the story"
                       hitSlop={4}
@@ -216,13 +213,7 @@ export default function ClippingsScreen() {
                       </Text>
                     ) : null}
                     <Pressable
-                      onPress={() =>
-                        openKindredArticle(
-                          router,
-                          articleFromEditionSection(section),
-                          { editionId: section.edition_id }
-                        )
-                      }
+                      onPress={openClipArticle}
                       hitSlop={12}
                       accessibilityRole="button"
                       accessibilityLabel="Read the story"

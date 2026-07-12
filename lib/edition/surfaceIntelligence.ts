@@ -17,6 +17,8 @@ import {
 import {
   parseKnowledgePayload,
   whyThisMatters,
+  type KnowledgeFacetType,
+  type KnowledgePacket,
   type KnowledgePayload,
 } from "./knowledge";
 import {
@@ -31,6 +33,9 @@ import {
   type MorningEditionPayload,
 } from "./morningEdition";
 import type { LeadStory } from "./LeadStory";
+import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
+import type { KindredArticle } from "./article";
+import { isClippableSectionId } from "./article";
 
 export type EditionIntelligence = {
   discovery: DiscoveryPayload | null;
@@ -161,14 +166,51 @@ function labelForSurface(surface: string): string {
   }
 }
 
+const KNOWLEDGE_NOTE_TYPES: KnowledgeFacetType[] = [
+  "historical_background",
+  "previous_coverage",
+  "related_story",
+  "trusted_explainer",
+  "local_context",
+  "definition",
+  "timeline",
+];
+
+const KNOWLEDGE_KICKERS: Partial<Record<KnowledgeFacetType, string>> = {
+  historical_background: "Background",
+  previous_coverage: "Previously in Kindred",
+  related_story: "Related",
+  trusted_explainer: "Explainer",
+  local_context: "Local context",
+  definition: "In brief",
+  timeline: "Timeline",
+};
+
+function knowledgeNotesFromPacket(
+  packet: KnowledgePacket | null
+): KnowledgeNote[] {
+  if (!packet?.facets?.length) return [];
+  const notes: KnowledgeNote[] = [];
+  for (const type of KNOWLEDGE_NOTE_TYPES) {
+    for (const facet of packet.facets) {
+      if (facet.type !== type) continue;
+      if (!facet.summary?.trim()) continue;
+      notes.push({
+        kicker: KNOWLEDGE_KICKERS[type] ?? "Context",
+        title: facet.title?.trim() || KNOWLEDGE_KICKERS[type] || "Context",
+        summary: facet.summary.trim(),
+      });
+      if (notes.length >= 4) return notes;
+    }
+  }
+  return notes;
+}
+
 /** Companion metadata for the article reader. */
 export function companionForLead(
   intelligence: EditionIntelligence,
   lead: LeadStory
-): {
-  whyThisMatters: { title: string; summary: string } | null;
-  whyChosen: string | null;
-} {
+): ArticleCompanion {
   const packet = intelligence.knowledge?.byStoryKey?.[lead.id] ?? null;
   const facet = whyThisMatters(packet);
   const reasons = lead.selection?.reasons ?? [];
@@ -189,11 +231,54 @@ export function companionForLead(
     whyThisMatters: facet
       ? { title: facet.title, summary: facet.summary }
       : intelligence.leadWhyThisMatters
-      ? {
-          title: "Why this matters",
-          summary: intelligence.leadWhyThisMatters,
-        }
-      : null,
+        ? {
+            title: "Why this matters",
+            summary: intelligence.leadWhyThisMatters,
+          }
+        : null,
     whyChosen: chosen ? chosen + "." : null,
+    knowledgeNotes: knowledgeNotesFromPacket(packet),
   };
+}
+
+/**
+ * Build companion notes for any Kindred article from stored intelligence.
+ * Lead articles get the richest packet; others look up by story id when present.
+ */
+export function companionForArticle(
+  intelligence: EditionIntelligence | null | undefined,
+  article: KindredArticle,
+  leadStory?: LeadStory | null
+): ArticleCompanion {
+  if (!intelligence) {
+    return { whyThisMatters: null, whyChosen: null, knowledgeNotes: [] };
+  }
+
+  if (leadStory && article.id === leadStory.id) {
+    return companionForLead(intelligence, leadStory);
+  }
+
+  const packet =
+    intelligence.knowledge?.byStoryKey?.[article.id] ?? null;
+  const facet = whyThisMatters(packet);
+
+  return {
+    whyThisMatters: facet
+      ? { title: facet.title, summary: facet.summary }
+      : null,
+    whyChosen: null,
+    knowledgeNotes: knowledgeNotesFromPacket(packet),
+  };
+}
+
+/** Section UUID when the article can be saved to Clippings. */
+export function clipSectionIdForArticle(article: KindredArticle): string | null {
+  if (
+    article.section === "lead" ||
+    article.section === "discovery" ||
+    article.section === "knowledge"
+  ) {
+    return null;
+  }
+  return isClippableSectionId(article.id) ? article.id : null;
 }

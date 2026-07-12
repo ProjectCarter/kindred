@@ -4,12 +4,21 @@
  * re-fetching the full edition on the article route.
  */
 
+export type KnowledgeNote = {
+  /** Small editorial kicker */
+  kicker: string;
+  title: string;
+  summary: string;
+};
+
 export type ArticleCompanion = {
   whyThisMatters?: {
     title: string;
     summary: string;
   } | null;
   whyChosen?: string | null;
+  /** Related background, previous coverage, explainers from Knowledge. */
+  knowledgeNotes?: KnowledgeNote[];
 };
 
 const MAX_COMPANIONS = 16;
