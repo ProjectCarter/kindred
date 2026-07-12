@@ -546,9 +546,7 @@ export function ArticleReader({
               body={companion.whyThisMatters.summary}
               featured
             />
-          ) : null}
-
-          {companion?.whyChosen ? (
+          ) : companion?.whyChosen ? (
             <MagazineCallout
               kicker="Why it’s in your paper"
               body={companion.whyChosen}
