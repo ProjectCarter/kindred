@@ -4,18 +4,13 @@ import {
   Animated,
   Easing,
   Image,
-  Linking,
-  Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
 import { formatEditionDate } from "../lib/edition/types";
-import {
-  parseLocalEventsBody,
-  type LocalEventCard,
-} from "../lib/edition/localEvents";
+import { parseLocalEventsBody } from "../lib/edition/localEvents";
 import {
   selectHeroImage,
   loadRecentHeroImageIds,
@@ -27,7 +22,8 @@ import {
   KindredFullMasthead,
   mastheadCollapse,
 } from "./KindredMasthead";
-import { motion, paper, press, shadow } from "../lib/edition/newspaperTheme";
+import { DontMissToday } from "./DontMissToday";
+import { paper, shadow } from "../lib/edition/newspaperTheme";
 
 /** Side inset used by home folio — arrival bleeds past it for a cover photo. */
 const FOLIO_GUTTER = 28;
@@ -70,7 +66,6 @@ export function MorningArrival({
   const placeLabel = formatPlace(locationCity);
   const weatherLine = usefulWeather(weatherHeadline, weatherBody);
   const events = (eventsBody ? parseLocalEventsBody(eventsBody) : null) ?? [];
-  const lead = events[0] ?? null;
 
   const fallbackScrollY = useRef(new Animated.Value(0)).current;
   const scrollY = mastheadScrollY ?? fallbackScrollY;
@@ -81,8 +76,6 @@ export function MorningArrival({
   const enterOp = useRef(new Animated.Value(0)).current;
   const enterY = useRef(new Animated.Value(8)).current;
   const photoOp = useRef(new Animated.Value(0)).current;
-  const storyOp = useRef(new Animated.Value(0)).current;
-  const storyY = useRef(new Animated.Value(10)).current;
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((v) =>
@@ -120,42 +113,24 @@ export function MorningArrival({
     if (reduceMotion) {
       enterOp.setValue(1);
       enterY.setValue(0);
-      storyOp.setValue(1);
-      storyY.setValue(0);
       photoOp.setValue(1);
       return;
     }
-    Animated.stagger(90, [
-      Animated.parallel([
-        Animated.timing(enterOp, {
-          toValue: 1,
-          duration: 560,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(enterY, {
-          toValue: 0,
-          duration: 600,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(storyOp, {
-          toValue: 1,
-          duration: 640,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(storyY, {
-          toValue: 0,
-          duration: 680,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
+    Animated.parallel([
+      Animated.timing(enterOp, {
+        toValue: 1,
+        duration: 560,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(enterY, {
+        toValue: 0,
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
     ]).start();
-  }, [reduceMotion, enterOp, enterY, storyOp, storyY, photoOp]);
+  }, [reduceMotion, enterOp, enterY, photoOp]);
 
   useEffect(() => {
     if (!hero) return;
@@ -180,7 +155,7 @@ export function MorningArrival({
       accessibilityRole="header"
       accessibilityLabel={
         placeLabel
-          ? `Kindred for ${placeLabel}. ${lead?.name ?? weatherLine ?? ""}`
+          ? `Kindred for ${placeLabel}. ${events[0]?.name ?? weatherLine ?? ""}`
           : "Kindred"
       }
     >
@@ -202,7 +177,7 @@ export function MorningArrival({
         />
       </Animated.View>
 
-      {/* One dominant visual hero — full bleed, magazine cover */}
+      {/* Cover photograph */}
       <Animated.View
         style={[
           styles.heroBleed,
@@ -247,68 +222,15 @@ export function MorningArrival({
         )}
       </Animated.View>
 
-      {/* One Don’t Miss story — the cover feature */}
-      <Animated.View
-        style={[
-          styles.coverStory,
-          {
-            opacity: storyOp,
-            transform: [{ translateY: storyY }],
-          },
-        ]}
-      >
-        <Text style={styles.kicker}>Don’t miss today</Text>
-
-        {lead ? (
-          <CoverStory event={lead} />
-        ) : (
-          <Text style={styles.empty} maxFontSizeMultiplier={1.3}>
-            A quiet day nearby — perfect for a slow walk and something warm.
-          </Text>
-        )}
-      </Animated.View>
+      {/* Editorial recommendation — not a calendar */}
+      <DontMissToday
+        events={events}
+        heroContext={heroContext}
+        excludeHeroIds={hero?.id ? [hero.id] : []}
+      />
 
       <View style={styles.endRule} accessibilityElementsHidden />
     </View>
-  );
-}
-
-function CoverStory({ event }: { event: LocalEventCard }) {
-  const when = [event.date, event.time].filter(Boolean).join(" · ");
-  const where = [event.venue, event.city].filter(Boolean).join(", ");
-  const open = event.sourceUrl
-    ? () => {
-        void Linking.openURL(event.sourceUrl).catch(() => {});
-      }
-    : undefined;
-
-  return (
-    <Pressable
-      onPress={open}
-      disabled={!open}
-      accessibilityRole={open ? "link" : "text"}
-      accessibilityLabel={[event.name, when, where].filter(Boolean).join(". ")}
-      style={({ pressed }) => [open && pressed && styles.pressed]}
-    >
-      <Text style={styles.coverHeadline} maxFontSizeMultiplier={1.25}>
-        {event.name}
-      </Text>
-      {when ? (
-        <Text style={styles.coverMeta} maxFontSizeMultiplier={1.2}>
-          {when}
-        </Text>
-      ) : null}
-      {where ? (
-        <Text style={styles.coverWhere} maxFontSizeMultiplier={1.2}>
-          {where}
-        </Text>
-      ) : null}
-      {open ? (
-        <Text style={styles.coverCue} maxFontSizeMultiplier={1.15}>
-          See details
-        </Text>
-      ) : null}
-    </Pressable>
   );
 }
 
@@ -384,63 +306,9 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.inkMuted,
   },
-  coverStory: {
-    paddingRight: 8,
-  },
-  kicker: {
-    fontSize: 11,
-    letterSpacing: 2.6,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    color: paper.terracotta,
-    marginBottom: 16,
-  },
-  coverHeadline: {
-    fontFamily: "Georgia",
-    fontSize: 34,
-    lineHeight: 42,
-    fontWeight: "600",
-    letterSpacing: -0.45,
-    color: paper.ink,
-    marginBottom: 14,
-    maxWidth: 520,
-  },
-  coverMeta: {
-    fontFamily: "Georgia",
-    fontSize: 17,
-    lineHeight: 26,
-    color: paper.inkMuted,
-  },
-  coverWhere: {
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 24,
-    fontStyle: "italic",
-    color: paper.inkFaint,
-    marginTop: 4,
-  },
-  coverCue: {
-    marginTop: 18,
-    fontFamily: "Georgia",
-    fontSize: 15,
-    fontStyle: "italic",
-    color: paper.terracotta,
-    letterSpacing: 0.2,
-  },
-  empty: {
-    fontFamily: "Georgia",
-    fontSize: 22,
-    lineHeight: 32,
-    fontStyle: "italic",
-    color: paper.inkMuted,
-    maxWidth: 400,
-  },
   endRule: {
-    marginTop: 44,
+    marginTop: 52,
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.border,
-  },
-  pressed: {
-    opacity: press.opacity,
   },
 });
