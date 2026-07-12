@@ -28,7 +28,7 @@ import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { LocalEventsSection } from "./LocalEventsSection";
-import { MorningGreeting } from "./MorningGreeting";
+import { MorningArrival } from "./MorningArrival";
 import { MorningHeroImage } from "./MorningHeroImage";
 import { LeadStorySection } from "./LeadStorySection";
 import { DiscoveryDesk } from "./DiscoveryDesk";
@@ -136,15 +136,14 @@ export function EditionReader({
   mastheadScrollY,
 }: Props) {
   const weather = sections.find((s) => s.section_type === "weather");
-  const greeting = sections.find((s) => s.section_type === "greeting");
+  const localEvents = sections.find((s) => s.section_type === "local_events");
+  /** Arrival owns weather + events — keep the rest of the folio intact below. */
   const remaining = sections.filter(
-    (s) => s.section_type !== "greeting" && s.section_type !== "weather"
+    (s) =>
+      s.section_type !== "greeting" &&
+      s.section_type !== "weather" &&
+      s.section_type !== "local_events"
   );
-  const hasLocalEvents = remaining.some(
-    (s) => s.section_type === "local_events"
-  );
-  const welcomeMessage =
-    greeting?.body?.trim() || greeting?.headline?.trim() || null;
 
   const lookingAheadIndex = remaining.findIndex(
     (s) => s.section_type === "looking_ahead"
@@ -402,41 +401,20 @@ export function EditionReader({
 
   return (
     <View style={styles.folio}>
-      <MorningGreeting
+      <MorningArrival
         editionDate={editionDate}
-        welcomeMessage={welcomeMessage}
-        banditGreeting={banditGreeting}
-        banditAside={banditAside}
-        memoryNote={memoryNote}
-        morningOpening={morningOpening}
-        morningBriefing={morningBriefing}
-        weatherText={weather?.body ?? weather?.headline ?? null}
+        locationCity={locationCity}
+        locationRegion={locationRegion}
+        locationState={locationState}
+        weatherHeadline={weather?.headline ?? null}
+        weatherBody={weather?.body ?? null}
+        eventsBody={localEvents?.body ?? null}
         mastheadLeading={mastheadLeading}
         mastheadTrailing={mastheadTrailing}
         mastheadScrollY={mastheadScrollY}
-        banditContext={{
-          firstName: banditFirstName,
-          weatherText: weather?.body ?? weather?.headline ?? null,
-          hasLocalEvents,
-          editionDate,
-          birthdayMMDD,
-        }}
       />
 
-      {leadStory ? (
-        <FolioReveal index={folioCursor++}>
-          <LeadStorySection
-            lead={leadStory}
-            onContinueReading={onOpenArticle ? openLead : undefined}
-            whyThisMatters={leadWhyThisMatters}
-            whyChosen={leadWhyChosen}
-            continuityKicker={leadContinuityKicker}
-            onOpenKnowledge={onOpenArticle ? openLeadKnowledge : undefined}
-          />
-        </FolioReveal>
-      ) : null}
-
-      {/* Morning photograph follows the Lead so the cover story owns the first scroll. */}
+      {/* First screen ends above. The rest of the paper follows for later review. */}
       <FolioReveal index={folioCursor++}>
         <MorningHeroImage
           uri={heroImageUri}
@@ -453,7 +431,18 @@ export function EditionReader({
         />
       </FolioReveal>
 
-      {weather ? renderSection(weather, folioCursor++) : null}
+      {leadStory ? (
+        <FolioReveal index={folioCursor++}>
+          <LeadStorySection
+            lead={leadStory}
+            onContinueReading={onOpenArticle ? openLead : undefined}
+            whyThisMatters={leadWhyThisMatters}
+            whyChosen={leadWhyChosen}
+            continuityKicker={leadContinuityKicker}
+            onOpenKnowledge={onOpenArticle ? openLeadKnowledge : undefined}
+          />
+        </FolioReveal>
+      ) : null}
 
       {/* Desk picks precede Looking Ahead so tomorrow’s note closes the paper. */}
       {remaining.map((section, index) => {

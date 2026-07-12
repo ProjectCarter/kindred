@@ -74,6 +74,8 @@ type FullProps = {
   leading?: ReactNode;
   scrollY?: Animated.Value;
   style?: StyleProp<ViewStyle>;
+  /** Tighter nameplate for the local-day arrival screen. */
+  compact?: boolean;
 };
 
 /**
@@ -89,13 +91,17 @@ export function KindredFullMasthead({
   leading,
   scrollY,
   style,
+  compact = false,
 }: FullProps) {
   const collapse = scrollY ? mastheadCollapse(scrollY) : null;
 
   const body = (
-    <View style={[styles.full, style]} accessibilityRole="header">
+    <View
+      style={[styles.full, compact && styles.fullCompact, style]}
+      accessibilityRole="header"
+    >
       {(leading || trailing) && (
-        <View style={styles.fullChrome}>
+        <View style={[styles.fullChrome, compact && styles.fullChromeCompact]}>
           <View style={styles.fullChromeSide}>{leading}</View>
           <View style={styles.fullChromeSideEnd}>{trailing}</View>
         </View>
@@ -107,7 +113,10 @@ export function KindredFullMasthead({
         </Text>
       ) : null}
 
-      <Text style={styles.nameplate} maxFontSizeMultiplier={1.15}>
+      <Text
+        style={[styles.nameplate, compact && styles.nameplateCompact]}
+        maxFontSizeMultiplier={1.15}
+      >
         Kindred
       </Text>
 
@@ -257,6 +266,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
+  fullCompact: {
+    marginBottom: 4,
+    paddingBottom: 10,
+  },
   fullChrome: {
     alignSelf: "stretch",
     flexDirection: "row",
@@ -264,6 +277,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 18,
     minHeight: 28,
+  },
+  fullChromeCompact: {
+    marginBottom: 10,
   },
   fullChromeSide: {
     flex: 1,
@@ -284,6 +300,12 @@ const styles = StyleSheet.create({
     color: paper.ink,
     textAlign: "center",
     marginBottom: 12,
+  },
+  nameplateCompact: {
+    fontSize: 32,
+    lineHeight: 38,
+    letterSpacing: 1.2,
+    marginBottom: 8,
   },
   nameplateRule: {
     width: 40,
