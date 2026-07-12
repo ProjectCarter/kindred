@@ -35,8 +35,9 @@ export function citiesMatch(
   const na = normalizeCityKey(a);
   const nb = normalizeCityKey(b);
   if (!na || !nb) return false;
-  if (na === nb) return true;
-  return na.includes(nb) || nb.includes(na);
+  // Exact normalized match only — substring includes caused false pairs
+  // (e.g. "York" / "New York").
+  return na === nb;
 }
 
 /** Distance in km (Haversine) — for rejecting far-off event results. */
