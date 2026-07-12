@@ -38,24 +38,41 @@ export const press = {
 /** Vertical rhythm of the folio — breathing room, not density. */
 export const space = {
   folioGutter: 24,
-  sectionGap: 38,
-  afterMasthead: 32,
-  afterBandit: 26,
+  sectionGap: 48,
+  afterMasthead: 28,
+  afterBandit: 36,
+  afterLead: 44,
+  endPadding: 28,
 } as const;
 
 export const type = {
+  /** Small brand mark (login, chrome). */
   masthead: {
     fontFamily: "Georgia",
     fontSize: 12,
     letterSpacing: 4.2,
     fontWeight: "600" as const,
   },
+  /** Front-page nameplate — calm, print-like authority. */
+  nameplate: {
+    fontFamily: "Georgia",
+    fontSize: 42,
+    lineHeight: 48,
+    letterSpacing: 1.2,
+    fontWeight: "600" as const,
+  },
+  nameplateMeta: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.2,
+  },
   display: {
     fontFamily: "Georgia",
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 32,
+    lineHeight: 38,
     fontWeight: "600" as const,
-    letterSpacing: -0.2,
+    letterSpacing: -0.25,
   },
   leadHeadline: {
     fontFamily: "Georgia",
@@ -66,10 +83,16 @@ export const type = {
   },
   sectionHeadline: {
     fontFamily: "Georgia",
-    fontSize: 21,
-    lineHeight: 29,
+    fontSize: 22,
+    lineHeight: 30,
     fontWeight: "600" as const,
-    letterSpacing: -0.1,
+    letterSpacing: -0.12,
+  },
+  sectionIntro: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 21,
+    fontStyle: "italic" as const,
   },
   kicker: {
     fontSize: 10,
@@ -85,7 +108,7 @@ export const type = {
   body: {
     fontFamily: "Georgia",
     fontSize: 16,
-    lineHeight: 27,
+    lineHeight: 28,
   },
   meta: {
     fontSize: 11,
@@ -93,17 +116,17 @@ export const type = {
   },
   bandit: {
     fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 28,
+    fontSize: 17,
+    lineHeight: 27,
     fontStyle: "italic" as const,
   },
 } as const;
 
 /** Soft motion timings — ink settling on paper, not a feed. */
 export const motion = {
-  enterMs: 640,
-  staggerMs: 88,
-  risePx: 8,
+  enterMs: 580,
+  staggerMs: 72,
+  risePx: 6,
   photoMs: 880,
   fadeEasing: "cubic" as const,
 } as const;

@@ -1,6 +1,7 @@
 import { Text, View, Pressable, StyleSheet } from "react-native";
 import {
   SECTION_LABELS,
+  formatEditionDate,
   type EditionSection,
 } from "../lib/edition/types";
 import type { LeadStory } from "../lib/edition/LeadStory";
@@ -16,13 +17,14 @@ import {
 } from "../lib/edition/article";
 import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
-import { paper, press, type } from "../lib/edition/newspaperTheme";
-import { editionColophon } from "../lib/edition/morningRitual";
+import { paper, press, space, type } from "../lib/edition/newspaperTheme";
+import { sectionIntro } from "../lib/edition/sectionIntro";
 import { LocalEventsSection } from "./LocalEventsSection";
 import { MorningGreeting } from "./MorningGreeting";
 import { LeadStorySection } from "./LeadStorySection";
 import { DiscoveryDesk } from "./DiscoveryDesk";
 import { FolioReveal } from "./FolioReveal";
+import { EditionClose } from "./EditionClose";
 
 type Props = {
   sections: EditionSection[];
@@ -52,7 +54,9 @@ type Props = {
   clippedSectionIds?: Set<string>;
   onToggleClip?: (section: EditionSection) => void;
   clipPendingId?: string | null;
-  endText?: string;
+  onOpenClippings?: () => void;
+  onOpenArchive?: () => void;
+  onShareEdition?: () => void;
 };
 
 export function EditionReader({
@@ -80,7 +84,9 @@ export function EditionReader({
   clippedSectionIds,
   onToggleClip,
   clipPendingId,
-  endText = editionColophon(),
+  onOpenClippings,
+  onOpenArchive,
+  onShareEdition,
 }: Props) {
   const weather = sections.find((s) => s.section_type === "weather");
   const greeting = sections.find((s) => s.section_type === "greeting");
@@ -96,6 +102,8 @@ export function EditionReader({
   const localEventsIndex = remaining.findIndex(
     (s) => s.section_type === "local_events"
   );
+
+  const dateLabel = editionDate ? formatEditionDate(editionDate) : null;
 
   function openLead(lead: LeadStory) {
     onOpenArticle?.(articleFromLeadStory(lead));
@@ -125,7 +133,6 @@ export function EditionReader({
         return;
       }
     }
-    // Fall back to the lead story itself.
     openLead(leadStory);
   }
 
@@ -135,6 +142,7 @@ export function EditionReader({
     const isWeather = section.section_type === "weather";
     const opensReader =
       Boolean(onOpenArticle) && sectionOpensArticleReader(section.section_type);
+    const intro = sectionIntro(section.section_type);
 
     function openSection() {
       if (!onOpenArticle) return;
@@ -150,6 +158,10 @@ export function EditionReader({
             </Text>
             <View style={styles.sectionRule} />
           </View>
+
+          {intro ? (
+            <Text style={styles.sectionIntro}>{intro}</Text>
+          ) : null}
 
           {section.section_type === "local_events" ? (
             <LocalEventsSection
@@ -238,8 +250,11 @@ export function EditionReader({
   const discoveryBlock =
     discoveryItems && discoveryItems.length > 0 ? (
       <DiscoveryDesk
-        headline={discoveryHeadline ?? "Bandit’s Picks"}
-        editorNote={discoveryEditorNote}
+        headline={discoveryHeadline ?? "Bandit’s Pick"}
+        editorNote={
+          discoveryEditorNote?.trim() ||
+          "I thought you’d enjoy these."
+        }
         items={discoveryItems}
         onOpenItem={
           onOpenArticle
@@ -305,13 +320,13 @@ export function EditionReader({
 
       {remaining.length === 0 ? discoveryBlock : null}
 
-      <FolioReveal index={folioCursor + 2}>
-        <View style={styles.endMarker}>
-          <View style={styles.endRule} />
-          <Text style={styles.endText}>{endText}</Text>
-          <View style={styles.endRule} />
-        </View>
-      </FolioReveal>
+      <EditionClose
+        folioIndex={folioCursor + 2}
+        editionDateLabel={dateLabel}
+        onOpenClippings={onOpenClippings}
+        onOpenArchive={onOpenArchive}
+        onShareEdition={onShareEdition}
+      />
     </View>
   );
 }
@@ -321,8 +336,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   sectionCard: {
-    marginBottom: 38,
-    paddingBottom: 32,
+    marginBottom: space.sectionGap,
+    paddingBottom: 36,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
@@ -332,8 +347,8 @@ const styles = StyleSheet.create({
   sectionLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 12,
+    gap: 14,
+    marginBottom: 10,
   },
   sectionLabel: {
     ...type.kicker,
@@ -343,6 +358,12 @@ const styles = StyleSheet.create({
     flex: 1,
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
+  },
+  sectionIntro: {
+    ...type.sectionIntro,
+    color: paper.inkFaint,
+    marginBottom: 14,
+    maxWidth: 420,
   },
   sectionHeadline: {
     ...type.sectionHeadline,
@@ -392,25 +413,5 @@ const styles = StyleSheet.create({
   },
   clipLinkTextSaved: {
     color: paper.inkMuted,
-  },
-  endMarker: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 18,
-    paddingVertical: 56,
-  },
-  endRule: {
-    width: 28,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkMuted,
-    opacity: 0.3,
-  },
-  endText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    color: paper.inkFaint,
-    fontStyle: "italic",
-    letterSpacing: 0.25,
   },
 });

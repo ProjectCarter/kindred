@@ -20,7 +20,7 @@ const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
  * Title, dek, and “Read the story” open the shared native reader.
  */
 export function DiscoveryDesk({
-  headline = "Bandit’s Picks",
+  headline = "For you today",
   editorNote,
   items,
   onOpenItem,
@@ -31,7 +31,7 @@ export function DiscoveryDesk({
     <FolioReveal index={4}>
       <View style={styles.wrap} accessibilityRole="summary">
         <View style={styles.mast}>
-          <Text style={styles.kicker}>From Bandit’s desk</Text>
+          <Text style={styles.kicker}>Bandit’s Pick</Text>
           <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
             {headline}
           </Text>
@@ -41,8 +41,7 @@ export function DiscoveryDesk({
             </Text>
           ) : (
             <Text style={styles.editorNote} maxFontSizeMultiplier={1.3}>
-              A few suggestions from Bandit, your editor — nothing you have to
-              finish.
+              I thought you’d enjoy these.
             </Text>
           )}
         </View>
@@ -147,15 +146,16 @@ function formatCategory(category: string): string {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 40,
-    marginTop: 4,
-    paddingVertical: 28,
-    paddingHorizontal: 20,
-    backgroundColor: paper.creamWash,
-    borderRadius: 1,
+    marginBottom: 48,
+    marginTop: 8,
+    paddingVertical: 32,
+    paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.inkRule,
   },
   mast: {
-    marginBottom: 24,
+    marginBottom: 28,
     paddingBottom: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
@@ -183,8 +183,8 @@ const styles = StyleSheet.create({
     maxWidth: 520,
   },
   item: {
-    marginBottom: 22,
-    paddingBottom: 20,
+    marginBottom: 26,
+    paddingBottom: 22,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },

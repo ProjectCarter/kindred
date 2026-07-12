@@ -42,21 +42,27 @@ type Props = {
   heroImageSource?: MorningHeroImageProps["source"];
 };
 
-const DEFAULT_WELCOME =
-  "The desk is quiet. Your edition is ready when you are.";
-
 function resolveDisplayDate(editionDate?: string | null): string {
   if (editionDate) return formatEditionDate(editionDate);
   return new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
     day: "numeric",
+    year: "numeric",
   });
 }
 
+function weatherSummary(weatherText?: string | null): string | null {
+  if (!weatherText?.trim()) return null;
+  // Keep masthead weather to one calm line.
+  const first = weatherText.trim().split(/\n/)[0]?.trim() ?? "";
+  if (first.length <= 72) return first;
+  return `${first.slice(0, 69).trim()}…`;
+}
+
 /**
- * Kindred’s signature morning opening —
- * masthead, greeting, Bandit, Morning Edition briefing, editorial photograph.
+ * Kindred’s signature opening —
+ * nameplate, date, greeting, Bandit the editor, briefing, photograph.
  */
 export function MorningGreeting({
   editionDate,
@@ -77,7 +83,8 @@ export function MorningGreeting({
   heroImageSource,
 }: Props) {
   const dateLabel = resolveDisplayDate(editionDate);
-  const welcome = welcomeMessage?.trim() || DEFAULT_WELCOME;
+  const weatherLine = weatherSummary(weatherText);
+  const welcome = welcomeMessage?.trim() || null;
   const salutation = morningSalutation();
 
   const [banditLine, setBanditLine] = useState(
@@ -104,10 +111,10 @@ export function MorningGreeting({
       greetY.setValue(0);
       return;
     }
-    Animated.stagger(120, [
+    Animated.stagger(100, [
       Animated.timing(mastheadOp, {
         toValue: 1,
-        duration: 520,
+        duration: 480,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
@@ -145,17 +152,17 @@ export function MorningGreeting({
       banditOp.setValue(0);
       banditY.setValue(motion.risePx);
       Animated.sequence([
-        Animated.delay(160),
+        Animated.delay(140),
         Animated.parallel([
           Animated.timing(banditOp, {
             toValue: 1,
-            duration: 700,
+            duration: 640,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
           Animated.timing(banditY, {
             toValue: 0,
-            duration: 740,
+            duration: 680,
             easing: Easing.out(Easing.cubic),
             useNativeDriver: true,
           }),
@@ -182,12 +189,20 @@ export function MorningGreeting({
 
   return (
     <View style={styles.wrap} accessibilityRole="header">
-      <Animated.Text
-        style={[styles.masthead, { opacity: mastheadOp }]}
-        maxFontSizeMultiplier={1.2}
-      >
-        Kindred
-      </Animated.Text>
+      <Animated.View style={[styles.nameplate, { opacity: mastheadOp }]}>
+        <Text style={styles.masthead} maxFontSizeMultiplier={1.15}>
+          Kindred
+        </Text>
+        <View style={styles.nameplateRule} />
+        <Text style={styles.date} maxFontSizeMultiplier={1.25}>
+          {dateLabel}
+        </Text>
+        {weatherLine ? (
+          <Text style={styles.weather} maxFontSizeMultiplier={1.25}>
+            {weatherLine}
+          </Text>
+        ) : null}
+      </Animated.View>
 
       <Animated.View
         style={{
@@ -198,12 +213,11 @@ export function MorningGreeting({
         <Text style={styles.goodMorning} maxFontSizeMultiplier={1.35}>
           {salutation}
         </Text>
-        <Text style={styles.date} maxFontSizeMultiplier={1.3}>
-          {dateLabel}
-        </Text>
-        <Text style={styles.welcome} maxFontSizeMultiplier={1.35}>
-          {welcome}
-        </Text>
+        {welcome ? (
+          <Text style={styles.welcome} maxFontSizeMultiplier={1.35}>
+            {welcome}
+          </Text>
+        ) : null}
       </Animated.View>
 
       <Animated.View
@@ -217,11 +231,11 @@ export function MorningGreeting({
         accessible
         accessibilityLabel={
           banditReady
-            ? `A note from Bandit, your editor. ${banditLine}`
-            : "A note from Bandit, your editor"
+            ? `Bandit, your editor. ${banditLine}`
+            : "Bandit, your editor"
         }
       >
-        <Text style={styles.banditLabel}>A note from Bandit, your editor</Text>
+        <Text style={styles.banditLabel}>🐶 Bandit, editor</Text>
         <Text
           style={[
             styles.banditText,
@@ -277,37 +291,59 @@ export function MorningGreeting({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  nameplate: {
+    alignItems: "center",
+    marginBottom: space.afterMasthead,
+    paddingBottom: 22,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.inkRule,
   },
   masthead: {
-    ...type.masthead,
+    ...type.nameplate,
     color: paper.ink,
     textAlign: "center",
-    marginBottom: space.afterMasthead,
-    textTransform: "uppercase",
+    marginBottom: 14,
+  },
+  nameplateRule: {
+    width: 48,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkMuted,
+    opacity: 0.4,
+    marginBottom: 14,
+  },
+  date: {
+    ...type.nameplateMeta,
+    color: paper.inkMuted,
+    textAlign: "center",
+  },
+  weather: {
+    marginTop: 8,
+    fontFamily: "Georgia",
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: "italic",
+    color: paper.inkFaint,
+    textAlign: "center",
+    maxWidth: 320,
   },
   goodMorning: {
     ...type.display,
     color: paper.ink,
-    marginBottom: 8,
-  },
-  date: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    letterSpacing: 0.35,
-    color: paper.inkMuted,
-    marginBottom: 18,
+    marginBottom: 10,
   },
   welcome: {
     ...type.dek,
     color: paper.inkBody,
-    marginBottom: 28,
+    marginBottom: 8,
     maxWidth: 520,
   },
   banditReserve: {
+    marginTop: 22,
     marginBottom: space.afterBandit,
-    paddingTop: 24,
-    paddingBottom: 24,
+    paddingTop: 22,
+    paddingBottom: 22,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: paper.inkRule,
@@ -316,6 +352,12 @@ const styles = StyleSheet.create({
     ...type.kicker,
     color: paper.terracotta,
     marginBottom: 12,
+    letterSpacing: 1.6,
+    textTransform: "none",
+    fontFamily: "Georgia",
+    fontSize: 13,
+    fontWeight: "400",
+    fontStyle: "italic",
   },
   banditText: {
     ...type.bandit,
@@ -325,7 +367,7 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
   },
   banditSign: {
-    marginTop: 14,
+    marginTop: 12,
     fontFamily: "Georgia",
     fontSize: 13,
     fontStyle: "italic",
@@ -333,7 +375,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.15,
   },
   banditAside: {
-    marginTop: 16,
+    marginTop: 14,
     fontFamily: "Georgia",
     fontSize: 14,
     lineHeight: 22,
@@ -343,7 +385,7 @@ const styles = StyleSheet.create({
     borderTopColor: paper.inkRule,
   },
   memoryBlock: {
-    marginTop: 16,
+    marginTop: 14,
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,

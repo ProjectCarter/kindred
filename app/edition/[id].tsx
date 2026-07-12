@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "../../lib/supabase";
-import { formatEditionDate, type EditionSection } from "../../lib/edition/types";
+import { type EditionSection } from "../../lib/edition/types";
 import {
   fetchAdjacentEditions,
   type AdjacentEdition,
@@ -282,9 +282,6 @@ export default function EditionScreen() {
           <Text style={styles.error}>{error}</Text>
         ) : (
           <>
-            <Text style={styles.date}>
-              {editionDate ? formatEditionDate(editionDate) : ""}
-            </Text>
             <EditionReader
               sections={sections}
               editionDate={editionDate}
@@ -319,7 +316,8 @@ export default function EditionScreen() {
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}
-              endText="A morning worth keeping."
+              onOpenClippings={() => router.push("/clippings")}
+              onOpenArchive={() => router.push("/library")}
             />
             <EditionAdjacentNav
               older={older}
@@ -351,14 +349,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: paper.terracotta,
     fontStyle: "italic",
-  },
-  date: {
-    fontSize: 10,
-    letterSpacing: 2.2,
-    textTransform: "uppercase",
-    color: paper.inkMuted,
-    marginBottom: 18,
-    fontWeight: "600",
   },
   error: {
     color: paper.terracotta,

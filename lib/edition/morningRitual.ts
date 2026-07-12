@@ -12,9 +12,13 @@ export function morningSalutation(now: Date = new Date()): string {
   return "A quiet night.";
 }
 
-/** Closing colophon at the end of an edition. */
+/** Closing lines at the end of an edition — calm, complete. */
 export function editionColophon(): string {
-  return "Until tomorrow morning.";
+  return "You’ve reached the end of today’s edition.";
+}
+
+export function editionFarewell(): string {
+  return "See you tomorrow.";
 }
 
 /** Calm lines while the presses catch up. */
@@ -32,8 +36,8 @@ export const waitingCopy = {
 const BANDIT_DAY_LINES = [
   "I left the paper open for you.",
   "Take your time with this one.",
-  "The quiet stories are often the ones that stay.",
-  "There’s something gentle waiting on the front page.",
+  "I thought you’d enjoy this.",
+  "This was my favorite story today.",
   "I’ve kept the noise down this morning.",
   "A few careful pages — nothing more than you need.",
   "Sit with this for a minute. The day can wait.",

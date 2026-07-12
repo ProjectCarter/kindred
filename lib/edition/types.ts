@@ -11,8 +11,19 @@ export const SECTION_LABELS: Record<string, string> = {
   weather: "Weather",
   top_stories: "Top Stories",
   local_events: "Local Events",
-  today_in_history: "Today in History",
+  local: "Local",
+  local_news: "Local",
+  business: "Business",
+  technology: "Technology",
+  discovery: "Discovery",
+  today_in_history: "History",
   looking_ahead: "Looking Ahead",
+  recommendations: "Recommendations",
+  bandits_picks: "Bandit’s Pick",
+  knowledge: "Context",
+  memory: "From the Archive",
+  morning_edition: "Morning Edition",
+  greeting: "Today",
 };
 
 export function formatEditionDate(dateStr: string): string {
@@ -23,5 +34,6 @@ export function formatEditionDate(dateStr: string): string {
     weekday: "long",
     month: "long",
     day: "numeric",
+    year: "numeric",
   });
 }

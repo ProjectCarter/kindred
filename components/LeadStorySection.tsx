@@ -8,7 +8,8 @@ import {
   Animated,
 } from "react-native";
 import type { LeadStory } from "../lib/edition/LeadStory";
-import { paper, press, shadow, type } from "../lib/edition/newspaperTheme";
+import { paper, press, shadow, space, type } from "../lib/edition/newspaperTheme";
+import { sectionIntro } from "../lib/edition/sectionIntro";
 import { EditorialNote } from "./EditorialNote";
 
 type Props = {
@@ -23,7 +24,7 @@ type Props = {
   onOpenKnowledge?: (kind: "why_this_matters" | "why_chosen") => void;
 };
 
-const ROLE_KICKER: Record<string, string> = {
+const ROLE_TAG: Record<string, string> = {
   local: "Local",
   national: "National",
   world: "World",
@@ -100,15 +101,17 @@ export function LeadStorySection({
   whyChosen,
   onOpenKnowledge,
 }: Props) {
-  const kicker = ROLE_KICKER[lead.role] ?? "Front Page";
+  const roleTag = ROLE_TAG[lead.role];
   const published = formatPublicationTime(lead.publishedAt);
   const readMinutes = estimateReadMinutes(lead);
   const byline = publicationByline(lead.source);
   const chosen = leadWhyChosen(lead, whyChosen);
   const readScale = useRef(new Animated.Value(1)).current;
   const [heroFailed, setHeroFailed] = useState(false);
+  const intro = sectionIntro("lead");
 
   const metaParts = [
+    roleTag,
     published,
     readMinutes
       ? readMinutes === 1
@@ -126,9 +129,11 @@ export function LeadStorySection({
   return (
     <View style={styles.wrap} accessibilityRole="summary">
       <View style={styles.kickerRow}>
-        <Text style={styles.kicker}>{kicker}</Text>
+        <Text style={styles.kicker}>Lead Story</Text>
         <View style={styles.kickerRule} />
       </View>
+
+      {intro ? <Text style={styles.intro}>{intro}</Text> : null}
 
       <Pressable
         onPress={canOpen ? openStory : undefined}
@@ -271,7 +276,7 @@ export function LeadStorySection({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 44,
+    marginBottom: space.afterLead,
     paddingBottom: 40,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
@@ -280,7 +285,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginBottom: 18,
+    marginBottom: 10,
   },
   kicker: {
     ...type.kicker,
@@ -291,6 +296,12 @@ const styles = StyleSheet.create({
     flex: 1,
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
+  },
+  intro: {
+    ...type.sectionIntro,
+    color: paper.inkFaint,
+    marginBottom: 16,
+    maxWidth: 420,
   },
   headline: {
     ...type.leadHeadline,

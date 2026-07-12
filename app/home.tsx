@@ -611,7 +611,7 @@ export default function HomeScreen() {
           {sections.length === 0 ? (
             <Text style={styles.date}>{today}</Text>
           ) : (
-            <Text style={styles.mastQuiet}>Today’s paper</Text>
+            <View style={styles.headerSpacer} />
           )}
           <Pressable
             onPress={() => router.push("/library")}
@@ -745,6 +745,8 @@ export default function HomeScreen() {
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}
+              onOpenClippings={() => router.push("/clippings")}
+              onOpenArchive={() => router.push("/library")}
             />
             <EditionAdjacentNav
               older={older}
@@ -772,10 +774,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 22,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
+    marginBottom: 12,
+    paddingBottom: 8,
+  },
+  headerSpacer: {
+    flex: 1,
   },
   date: {
     fontSize: 10,
