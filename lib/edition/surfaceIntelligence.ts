@@ -47,6 +47,7 @@ import {
 import {
   selectEditorialContinuation,
 } from "./editorialContinuation";
+import { knowledgeCardsFromPacket } from "./knowledgeCards";
 
 export type EditionIntelligence = {
   discovery: DiscoveryPayload | null;
@@ -268,6 +269,7 @@ function buildCompanion(
     whyThisMatters: why,
     whyChosen: chosen,
     knowledgeNotes: knowledgeNotesFromPacket(packet),
+    knowledgeCards: knowledgeCardsFromPacket(packet),
     continueReading: selectEditorialContinuation({
       packet,
       memory: intelligence.memory,
@@ -333,6 +335,7 @@ export function companionForArticle(
       whyThisMatters: null,
       whyChosen: null,
       knowledgeNotes: [],
+      knowledgeCards: [],
       continueReading: selectEditorialContinuation({
         packet: null,
         terminal: false,

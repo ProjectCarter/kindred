@@ -1,5 +1,6 @@
 import {
   extractKeyTerms,
+  extractNamedEntities,
   inferTopicLabel,
   tokenOverlap,
 } from "./extract.ts";
@@ -23,6 +24,38 @@ function whyThisMattersSummary(story: KnowledgeStoryInput): string {
     return story.summary.trim().slice(0, 220);
   }
   return "";
+}
+
+function firstStorySentence(summary: string): string {
+  const cleaned = summary.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  const match = cleaned.match(/^[^.!?]+[.!?]/);
+  return (match?.[0] ?? cleaned).slice(0, 180).trim();
+}
+
+function entityGloss(
+  entityName: string,
+  kind: string,
+  story: KnowledgeStoryInput
+): string {
+  const frame = firstStorySentence(story.summary || story.headline);
+  const role =
+    kind === "person"
+      ? "a person named in today’s coverage"
+      : kind === "company"
+        ? "a company named in today’s coverage"
+        : kind === "organization"
+          ? "an organization named in today’s coverage"
+          : kind === "place"
+            ? "a place named in today’s coverage"
+            : kind === "law"
+              ? "a law or legal measure named in today’s coverage"
+              : "a term the desk expects some readers may want clarified";
+
+  if (frame && frame.length > 40) {
+    return `${entityName} is ${role}. From the story: ${frame}`;
+  }
+  return `${entityName} is ${role} of “${story.headline.slice(0, 90)}.” The note is here so you can keep reading without leaving the paper.`;
 }
 
 /**
@@ -76,22 +109,59 @@ export function buildKnowledgeCandidates(
     });
   }
 
-  // Definitions from key terms
+  // Knowledge Cards — named entities the reader might otherwise look up elsewhere
   for (const story of stories) {
-    const terms = extractKeyTerms(`${story.headline} ${story.summary}`, 3);
-    for (const term of terms) {
-      if (term.length < 4) continue;
+    const entities = extractNamedEntities(
+      `${story.headline}. ${story.summary}`,
+      4
+    );
+    for (const entity of entities) {
+      if (entity.name.length < 4) continue;
+      // Skip entities that are nearly the whole headline (not a gloss).
+      if (
+        tokenOverlap(entity.name, story.headline) > 0.85 &&
+        entity.name.split(/\s+/).length >= 4
+      ) {
+        continue;
+      }
       out.push({
         facet: {
           type: "definition",
-          title: `What “${term}” refers to`,
-          summary: `A short reference note for “${term}” as it appears in this story — the kind of calm gloss BBC and The Economist place beside dense reporting.`,
-          source: { name: "Encyclopaedia Britannica", tier: "encyclopedia" },
-          data: { term, wikipediaTitle: term },
+          title: entity.name,
+          summary: entityGloss(entity.name, entity.kind, story),
+          source: { name: "Kindred Desk", tier: "kindred" },
+          data: {
+            term: entity.name,
+            wikipediaTitle: entity.name,
+            entityKind: entity.kind,
+          },
         },
         targetStoryKeys: [story.storyKey],
-        scoreHints: { relevance: 0.55, trust: 0.95, freshness: 0.7 },
+        scoreHints: {
+          relevance: entity.kind === "term" ? 0.5 : 0.72,
+          trust: 0.9,
+          freshness: 0.85,
+        },
       });
+    }
+
+    // Fallback single-term glosses when no multi-word entities appear
+    if (!entities.length) {
+      const terms = extractKeyTerms(`${story.headline} ${story.summary}`, 2);
+      for (const term of terms) {
+        if (term.length < 5) continue;
+        out.push({
+          facet: {
+            type: "definition",
+            title: term,
+            summary: entityGloss(term, "term", story),
+            source: { name: "Kindred Desk", tier: "kindred" },
+            data: { term, wikipediaTitle: term, entityKind: "term" },
+          },
+          targetStoryKeys: [story.storyKey],
+          scoreHints: { relevance: 0.48, trust: 0.88, freshness: 0.7 },
+        });
+      }
     }
   }
 

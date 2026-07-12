@@ -12,7 +12,7 @@ const DEFAULT_MAX = 6;
 const TYPE_CAP: Partial<Record<KnowledgeFacetType, number>> = {
   related_story: 2,
   previous_coverage: 2,
-  definition: 1,
+  definition: 3,
   local_context: 2,
   why_this_matters: 1,
   trusted_explainer: 1,

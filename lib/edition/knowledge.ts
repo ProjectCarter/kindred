@@ -47,6 +47,14 @@ export type KnowledgeFacet = {
     section?: string;
     term?: string;
     wikipediaTitle?: string;
+    entityKind?:
+      | "person"
+      | "company"
+      | "place"
+      | "law"
+      | "event"
+      | "organization"
+      | "term";
     events?: Array<{ date: string; label: string }>;
     lat?: number;
     lon?: number;

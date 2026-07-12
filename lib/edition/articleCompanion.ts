@@ -4,6 +4,8 @@
  * re-fetching the full edition on the article route.
  */
 
+import type { KnowledgeCard } from "./knowledgeCards";
+
 export type KnowledgeNote = {
   /** Small editorial kicker */
   kicker: string;
@@ -45,6 +47,8 @@ export type ArticleCompanion = {
   whyChosen?: string | null;
   /** Related background, previous coverage, explainers from Knowledge. */
   knowledgeNotes?: KnowledgeNote[];
+  /** Calm Knowledge Cards — optional desk glosses after the story. */
+  knowledgeCards?: KnowledgeCard[];
   /** Calm next-reads for the end of the article. */
   continueReading?: ContinueReadingItem[];
 };

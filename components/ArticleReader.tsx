@@ -46,6 +46,7 @@ import {
 } from "../lib/personalization";
 import { supabase } from "../lib/supabase";
 import { MagazineCallout } from "./MagazineCallout";
+import { KnowledgeCardList } from "./KnowledgeCard";
 
 type Props = {
   article: KindredArticle;
@@ -105,6 +106,7 @@ export function ArticleReader({
   const canClip = Boolean(clipSectionId);
   const continueItems = companion?.continueReading ?? [];
   const knowledgeNotes = companion?.knowledgeNotes ?? [];
+  const knowledgeCards = companion?.knowledgeCards ?? [];
 
   useArticleReadingSession(article, progress, { editionId });
 
@@ -565,7 +567,9 @@ export function ArticleReader({
             </View>
           ))}
 
-          {knowledgeNotes.length > 0 ? (
+          {knowledgeCards.length > 0 ? (
+            <KnowledgeCardList cards={knowledgeCards} />
+          ) : knowledgeNotes.length > 0 ? (
             <View style={styles.knowledgeBlock}>
               <Text style={styles.knowledgeHeading}>Context</Text>
               <View style={styles.knowledgeRule} />

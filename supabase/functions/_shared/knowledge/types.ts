@@ -50,6 +50,15 @@ export type KnowledgeFacet = {
     section?: string;
     term?: string;
     wikipediaTitle?: string;
+    /** Knowledge Card entity role when type is definition. */
+    entityKind?:
+      | "person"
+      | "company"
+      | "place"
+      | "law"
+      | "event"
+      | "organization"
+      | "term";
     events?: Array<{ date: string; label: string }>;
     lat?: number;
     lon?: number;
