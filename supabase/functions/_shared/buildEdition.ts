@@ -558,6 +558,49 @@ async function loadRecentStoryKeys(
   return unique;
 }
 
+/**
+ * Load recent From the desk picks so recommendations rotate across mornings.
+ */
+async function loadRecentDiscoveryKeys(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  limit = 14
+): Promise<string[]> {
+  const { data, error } = await supabaseAdmin
+    .from("editions")
+    .select("edition_date, discovery")
+    .eq("user_id", userId)
+    .order("edition_date", { ascending: false })
+    .limit(limit);
+
+  if (error || !data?.length) {
+    if (error) {
+      console.log("[buildEdition] recent discovery keys lookup", {
+        error: error.message,
+      });
+    }
+    return [];
+  }
+
+  const keys: string[] = [];
+  for (const row of data) {
+    const discovery = row.discovery as {
+      picks?: Array<{ id?: string; title?: string }>;
+    } | null;
+    for (const pick of discovery?.picks ?? []) {
+      if (pick.id) keys.push(pick.id);
+      if (pick.title) keys.push(pick.title);
+    }
+  }
+
+  const unique = Array.from(new Set(keys.map((k) => k.trim()).filter(Boolean)));
+  console.log("[buildEdition] recent discovery keys", {
+    editionCount: data.length,
+    keyCount: unique.length,
+  });
+  return unique;
+}
+
 export function createServiceClient() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -633,17 +676,19 @@ export async function buildEditionForUser(
     resolved: tempUnit,
   });
 
-  const [recentStoryKeys, personalization, memoryArchive] = await Promise.all([
-    loadRecentStoryKeys(supabaseAdmin, userId),
-    loadPersonalizationProfile(supabaseAdmin, userId, {
-      city: location.city,
-      region: location.region,
-      state: location.state,
-      lat: location.lat,
-      lon: location.lon,
-    }),
-    loadMemoryArchive(supabaseAdmin, userId),
-  ]);
+  const [recentStoryKeys, recentDiscoveryKeys, personalization, memoryArchive] =
+    await Promise.all([
+      loadRecentStoryKeys(supabaseAdmin, userId),
+      loadRecentDiscoveryKeys(supabaseAdmin, userId),
+      loadPersonalizationProfile(supabaseAdmin, userId, {
+        city: location.city,
+        region: location.region,
+        state: location.state,
+        lat: location.lat,
+        lon: location.lon,
+      }),
+      loadMemoryArchive(supabaseAdmin, userId),
+    ]);
 
   const city = personalization.city ?? location.city;
   const region = personalization.region ?? location.region;
@@ -748,6 +793,7 @@ export async function buildEditionForUser(
     isSunday: editorial.calendar.isSunday,
     localEvents,
     maxPerSurface: 4,
+    recentKeys: recentDiscoveryKeys,
   });
 
   const knowledgeStories: KnowledgeStoryInput[] = [];

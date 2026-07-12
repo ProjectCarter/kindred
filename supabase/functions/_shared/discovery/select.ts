@@ -25,6 +25,29 @@ const PLACE_CATEGORIES = new Set([
   "experiences",
 ]);
 
+function normalizeKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** True when this desk pick already appeared in a recent edition. */
+function isRecentlyRecommended(
+  item: RankedDiscoveryItem["item"],
+  recentKeys: string[]
+): boolean {
+  if (!recentKeys.length) return false;
+  const titleKey = normalizeKey(item.title).slice(0, 60);
+  const idKey = normalizeKey(item.id);
+  return recentKeys.some((raw) => {
+    const key = normalizeKey(raw);
+    if (!key) return false;
+    return key.slice(0, 60) === titleKey || key === idKey;
+  });
+}
+
 export function whyLine(item: RankedDiscoveryItem): string {
   const top = item.reasons
     .filter(
@@ -59,6 +82,7 @@ function isVerifiedPlaceItem(item: RankedDiscoveryItem): boolean {
 
 /**
  * Assemble one discovery surface — magazine desk curation, not a feed dump.
+ * Recently shown picks stay off the desk until fresher options run out.
  */
 export function selectDiscoverySurface(
   ranked: RankedDiscoveryItem[],
@@ -67,6 +91,7 @@ export function selectDiscoverySurface(
 ): DiscoverySurfaceResult {
   const allowed = new Set(SURFACE_CATEGORIES[surface]);
   const max = ctx.maxPerSurface ?? DEFAULT_MAX;
+  const recentKeys = ctx.recentKeys ?? [];
   const selected: RankedDiscoveryItem[] = [];
   const used = new Set<string>();
   const usedCategories = new Set<string>();
@@ -86,9 +111,15 @@ export function selectDiscoverySurface(
         )
       : pool;
 
-  for (const candidate of ordered) {
-    if (selected.length >= max) break;
-    if (used.has(candidate.item.id)) continue;
+  function consider(
+    candidate: RankedDiscoveryItem,
+    allowRecent: boolean
+  ): boolean {
+    if (selected.length >= max) return false;
+    if (used.has(candidate.item.id)) return false;
+    if (!allowRecent && isRecentlyRecommended(candidate.item, recentKeys)) {
+      return false;
+    }
 
     // Soft category diversity within a surface (except single-category surfaces)
     if (
@@ -99,13 +130,15 @@ export function selectDiscoverySurface(
       // Prefer unused categories first; allow repeat later if needed.
       const hasUnused = ordered.some(
         (c) =>
-          !used.has(c.item.id) && !usedCategories.has(c.item.category)
+          !used.has(c.item.id) &&
+          !usedCategories.has(c.item.category) &&
+          (allowRecent || !isRecentlyRecommended(c.item, recentKeys))
       );
-      if (hasUnused) continue;
+      if (hasUnused) return false;
     }
 
     // Bandit's Picks: never overwhelm — keep calm mix
-    if (surface === "bandits_picks" && selected.length >= 3) break;
+    if (surface === "bandits_picks" && selected.length >= 3) return false;
 
     selected.push({
       ...candidate,
@@ -113,18 +146,18 @@ export function selectDiscoverySurface(
     });
     used.add(candidate.item.id);
     usedCategories.add(candidate.item.category);
+    return true;
   }
 
-  // Fill if diversity pass left gaps
+  for (const candidate of ordered) {
+    consider(candidate, false);
+  }
+
+  // Fill if variety pass left gaps — only then reuse recent recommendations.
   if (selected.length < Math.min(2, max)) {
     for (const candidate of ordered) {
       if (selected.length >= Math.min(3, max)) break;
-      if (used.has(candidate.item.id)) continue;
-      selected.push({
-        ...candidate,
-        surfaces: [...new Set([...candidate.surfaces, surface])],
-      });
-      used.add(candidate.item.id);
+      consider(candidate, true);
     }
   }
 
