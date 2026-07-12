@@ -486,26 +486,6 @@ export function ArticleReader({
             </Text>
           ) : null}
 
-          {companion?.whyThisMatters?.summary ? (
-            <MagazineCallout
-              kicker="Why this matters"
-              title={
-                companion.whyThisMatters.title !== "Why this matters"
-                  ? companion.whyThisMatters.title
-                  : null
-              }
-              body={companion.whyThisMatters.summary}
-              featured
-            />
-          ) : null}
-
-          {companion?.whyChosen ? (
-            <MagazineCallout
-              kicker="Why it’s in your paper"
-              body={companion.whyChosen}
-            />
-          ) : null}
-
           {article.heroImage?.uri && !heroFailed ? (
             <View
               style={[
@@ -554,6 +534,26 @@ export function ArticleReader({
           ) : (
             <View style={styles.noImageRule} />
           )}
+
+          {companion?.whyThisMatters?.summary ? (
+            <MagazineCallout
+              kicker="Why this matters"
+              title={
+                companion.whyThisMatters.title !== "Why this matters"
+                  ? companion.whyThisMatters.title
+                  : null
+              }
+              body={companion.whyThisMatters.summary}
+              featured
+            />
+          ) : null}
+
+          {companion?.whyChosen ? (
+            <MagazineCallout
+              kicker="Why it’s in your paper"
+              body={companion.whyChosen}
+            />
+          ) : null}
 
           {(article.body ?? []).map((paragraph, index) => (
             <View key={`p-${index}`}>
