@@ -6,6 +6,7 @@ import * as Linking from "expo-linking";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { profileHasInterests } from "../lib/auth/hasInterests";
 import { PaperLoading } from "../components/PaperLoading";
+import { AppErrorBoundary } from "../components/AppErrorBoundary";
 
 function getAuthCodeFromUrl(url: string): string | null {
   try {
@@ -203,7 +204,9 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <Slot />
+      <AppErrorBoundary>
+        <Slot />
+      </AppErrorBoundary>
     </SafeAreaProvider>
   );
 }
