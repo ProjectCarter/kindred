@@ -45,37 +45,35 @@ function pick(
 }
 
 /**
- * Deterministic 20-second opening — ritual welcome + lead why.
+ * Deterministic 20-second opening — orient to the edition’s mood.
+ * Do not preview why the Lead was chosen; the front page carries that.
  */
 export function composeOpening20s(
   beats: MorningEditionBeats,
   _input: MorningEditionComposeInput
 ): MorningBriefing {
-  const parts = pick(beats, [
-    "welcome",
-    "leadWhy",
-    "weekendTone",
-    "bandit",
-  ]);
-  // Prefer welcome + lead; fall back to bandit spirit without duplicating fully.
+  const parts = pick(beats, ["welcome", "weekendTone", "bandit", "weather"]);
   let text: string;
-  if (beats.welcome && beats.leadWhy) {
-    text = `${beats.welcome} ${beats.leadWhy}`;
-  } else if (beats.bandit && beats.leadWhy) {
-    text = `${beats.bandit} ${beats.leadWhy}`;
+  if (beats.welcome && beats.weekendTone) {
+    text = `${beats.welcome} ${beats.weekendTone}`;
+  } else if (beats.welcome) {
+    text = beats.welcome;
+  } else if (beats.bandit) {
+    text = beats.bandit;
   } else {
     text =
       parts.slice(0, 2).join(" ") ||
       "Your morning edition is ready — curated with care.";
   }
-  if (beats.weather && wordCount(text) < 45) {
+  if (beats.weather && wordCount(text) < 45 && !/weather|outside|air/i.test(text)) {
     text = `${text} ${beats.weather}`;
   }
   return makeBriefing("opening_20s", text);
 }
 
 /**
- * Deterministic 60-second briefing — explains the edition, not a headline dump.
+ * Deterministic 60-second briefing — the shape of the paper, not the Lead’s argument.
+ * The front page explains the cover story; this orients the morning.
  */
 export function composeBriefing60s(
   beats: MorningEditionBeats,
@@ -83,7 +81,6 @@ export function composeBriefing60s(
 ): MorningBriefing {
   const chunks = pick(beats, [
     "welcome",
-    "leadWhy",
     "overnight",
     "continuing",
     "balance",
