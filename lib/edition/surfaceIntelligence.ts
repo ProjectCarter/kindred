@@ -98,7 +98,7 @@ export function parseEditionIntelligence(row: {
     "hidden_gems",
   ] as const;
   let discoveryItems: RankedDiscoveryItem[] = [];
-  let discoveryHeadline = "Bandit’s Picks";
+  let discoveryHeadline = "Worth your time";
   let discoveryEditorNote: string | null = null;
 
   for (const surface of pickSurfaces) {
@@ -161,13 +161,13 @@ export function parseEditionIntelligence(row: {
 function labelForSurface(surface: string): string {
   switch (surface) {
     case "bandits_picks":
-      return "Bandit’s Picks";
+      return "Worth your time";
     case "weekend_ideas":
-      return "Weekend Ideas";
+      return "For the weekend";
     case "hidden_gems":
-      return "Hidden Gems";
+      return "Quiet finds";
     default:
-      return "Quiet recommendations";
+      return "Worth your time";
   }
 }
 
@@ -223,11 +223,11 @@ const CONTINUE_LABEL: Partial<
 };
 
 const CONTINUE_DISPLAY: Record<ContinueReadingItem["kind"], string> = {
-  related: "Related Story",
-  local: "Local Perspective",
+  related: "Related",
+  local: "Nearby",
   background: "Background",
-  opposing: "Opposing Viewpoint",
-  bandit: "Bandit’s Pick",
+  opposing: "Another view",
+  bandit: "From the desk",
 };
 
 function continueReadingFrom(

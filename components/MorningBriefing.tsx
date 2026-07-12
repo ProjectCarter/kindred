@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   Text,
   View,
@@ -7,10 +7,9 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
-  Animated,
 } from "react-native";
 import type { MorningBriefing as MorningBriefingType } from "../lib/edition/morningEdition";
-import { paper, type } from "../lib/edition/newspaperTheme";
+import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 if (
   Platform.OS === "android" &&
@@ -30,7 +29,6 @@ type Props = {
  */
 export function MorningBriefing({ opening, briefing }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const press = useRef(new Animated.Value(1)).current;
   const shortText = opening?.text?.trim() || briefing?.text?.trim();
   const longText = briefing?.text?.trim();
   if (!shortText) return null;
@@ -49,7 +47,7 @@ export function MorningBriefing({ opening, briefing }: Props) {
   function toggle() {
     LayoutAnimation.configureNext(
       LayoutAnimation.create(
-        320,
+        280,
         LayoutAnimation.Types.easeInEaseOut,
         LayoutAnimation.Properties.opacity
       )
@@ -80,26 +78,11 @@ export function MorningBriefing({ opening, briefing }: Props) {
           accessibilityLabel={
             expanded ? "Show just the opening" : "Read a little more of the briefing"
           }
-          onPressIn={() =>
-            Animated.spring(press, {
-              toValue: 0.97,
-              useNativeDriver: true,
-              friction: 7,
-            }).start()
-          }
-          onPressOut={() =>
-            Animated.spring(press, {
-              toValue: 1,
-              useNativeDriver: true,
-              friction: 7,
-            }).start()
-          }
+          style={({ pressed }) => pressed && styles.togglePressed}
         >
-          <Animated.Text
-            style={[styles.toggle, { transform: [{ scale: press }] }]}
-          >
+          <Text style={styles.toggle}>
             {expanded ? "Just the opening" : "Read a little more"}
-          </Animated.Text>
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -144,5 +127,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     color: paper.terracotta,
     fontStyle: "italic",
+  },
+  togglePressed: {
+    opacity: press.opacity,
   },
 });

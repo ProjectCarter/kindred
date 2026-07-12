@@ -1,11 +1,10 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   Text,
   View,
   Image,
   StyleSheet,
   Pressable,
-  Animated,
 } from "react-native";
 import type { LeadStory } from "../lib/edition/LeadStory";
 import { paper, press, shadow, space, type } from "../lib/edition/newspaperTheme";
@@ -106,7 +105,6 @@ export function LeadStorySection({
   const readMinutes = estimateReadMinutes(lead);
   const byline = publicationByline(lead.source);
   const chosen = leadWhyChosen(lead, whyChosen);
-  const readScale = useRef(new Animated.Value(1)).current;
   const [heroFailed, setHeroFailed] = useState(false);
   const intro = sectionIntro("lead");
 
@@ -115,7 +113,7 @@ export function LeadStorySection({
     published,
     readMinutes
       ? readMinutes === 1
-        ? "A one-minute read"
+        ? "One minute"
         : `About ${readMinutes} minutes`
       : null,
   ].filter(Boolean) as string[];
@@ -244,30 +242,12 @@ export function LeadStorySection({
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Read the story"
-          onPressIn={() =>
-            Animated.spring(readScale, {
-              toValue: press.scale,
-              useNativeDriver: true,
-              friction: 8,
-            }).start()
-          }
-          onPressOut={() =>
-            Animated.spring(readScale, {
-              toValue: 1,
-              useNativeDriver: true,
-              friction: 8,
-            }).start()
-          }
           style={({ pressed }) => [
             styles.readRow,
             pressed && styles.linkPressed,
           ]}
         >
-          <Animated.Text
-            style={[styles.link, { transform: [{ scale: readScale }] }]}
-          >
-            Read the story
-          </Animated.Text>
+          <Text style={styles.link}>Read the story</Text>
         </Pressable>
       ) : null}
     </View>
@@ -285,7 +265,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   kicker: {
     ...type.kicker,
@@ -300,13 +280,13 @@ const styles = StyleSheet.create({
   intro: {
     ...type.sectionIntro,
     color: paper.inkFaint,
-    marginBottom: 16,
-    maxWidth: 420,
+    marginBottom: 18,
+    maxWidth: 400,
   },
   headline: {
     ...type.leadHeadline,
     color: paper.ink,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   byline: {
     fontFamily: "Georgia",
@@ -314,10 +294,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginBottom: 22,
+    marginBottom: 24,
   },
   imageBlock: {
-    marginBottom: 22,
+    marginBottom: 24,
   },
   imageFrame: {
     width: "100%",
@@ -347,27 +327,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 30,
     color: paper.inkBody,
-    marginBottom: 18,
+    marginBottom: 20,
     letterSpacing: 0.05,
   },
   metaLine: {
     ...type.meta,
     color: paper.inkFaint,
     letterSpacing: 0.3,
-    marginBottom: 18,
+    marginBottom: 16,
     fontFamily: "Georgia",
     fontStyle: "italic",
   },
   readRow: {
     alignSelf: "flex-start",
-    paddingVertical: 6,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: "center",
   },
   link: {
     fontFamily: "Georgia",
     fontSize: 15,
     color: paper.terracotta,
     fontStyle: "italic",
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   linkPressed: {
     opacity: press.opacity,

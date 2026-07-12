@@ -170,7 +170,7 @@ export function MorningHeroImage({
             <View style={styles.placeholderRule} />
             <Text style={styles.placeholderTitle}>Today’s photograph</Text>
             <Text style={styles.placeholderCaption}>
-              A calm editorial image will open the edition here
+              The morning photograph will settle here
             </Text>
             <View
               style={[styles.placeholderRule, styles.placeholderRuleBottom]}

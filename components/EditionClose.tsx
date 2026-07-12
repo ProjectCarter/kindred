@@ -46,7 +46,7 @@ export function EditionClose({
         <View style={styles.rule} />
         <Text style={styles.colophon}>{editionColophon()}</Text>
         <Text style={styles.farewell}>{editionFarewell()}</Text>
-        <Text style={styles.sign}>🐶 — Bandit</Text>
+        <Text style={styles.sign}>— Bandit</Text>
 
         <View style={styles.actions}>
           {onOpenClippings ? (
@@ -56,7 +56,7 @@ export function EditionClose({
               accessibilityRole="button"
               accessibilityLabel="Saved articles"
             >
-              <Text style={styles.actionText}>Saved Articles</Text>
+              <Text style={styles.actionText}>Saved articles</Text>
             </Pressable>
           ) : null}
           {onOpenArchive ? (
@@ -66,7 +66,7 @@ export function EditionClose({
               accessibilityRole="button"
               accessibilityLabel="Archive"
             >
-              <Text style={styles.actionText}>Archive</Text>
+              <Text style={styles.actionText}>Earlier editions</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -75,7 +75,7 @@ export function EditionClose({
             accessibilityRole="button"
             accessibilityLabel="Share today’s edition"
           >
-            <Text style={styles.actionText}>Share Today’s Edition</Text>
+            <Text style={styles.actionText}>Share today’s edition</Text>
           </Pressable>
         </View>
         <View style={styles.rule} />
@@ -91,11 +91,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   rule: {
-    width: 72,
+    width: 64,
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkMuted,
     opacity: 0.35,
-    marginVertical: 22,
+    marginVertical: 26,
   },
   colophon: {
     fontFamily: "Georgia",
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: paper.inkMuted,
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 10,
     maxWidth: 320,
   },
   farewell: {
@@ -113,23 +113,26 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.ink,
     textAlign: "center",
-    marginBottom: 14,
+    marginBottom: 16,
   },
   sign: {
     fontFamily: "Georgia",
     fontSize: 14,
+    fontStyle: "italic",
     color: paper.inkFaint,
     letterSpacing: 0.2,
     marginBottom: 8,
   },
   actions: {
-    marginTop: 18,
+    marginTop: 20,
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     marginBottom: 4,
   },
   action: {
-    paddingVertical: 4,
+    paddingVertical: 8,
+    minHeight: 40,
+    justifyContent: "center",
   },
   actionText: {
     fontFamily: "Georgia",

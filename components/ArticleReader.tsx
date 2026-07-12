@@ -450,8 +450,8 @@ export function ArticleReader({
           {briefing ? (
             <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
               {article.body.length <= 1
-                ? "A short Kindred note — limited source text was available. View the original source for the full publisher report."
-                : "A Kindred summary for your morning paper — not the full article from the publisher."}
+                ? "A short Kindred note — the full report lives with the publisher."
+                : "A Kindred summary for your morning paper — not the publisher’s full article."}
             </Text>
           ) : null}
 
@@ -563,17 +563,17 @@ export function ArticleReader({
             </Text>
             {briefing && article.sourceUrl ? (
               <Text style={styles.sourceHint} maxFontSizeMultiplier={1.2}>
-                For the complete piece from the publisher, view the original
-                source — then return here to continue your paper.
+                For the complete piece, open the original source — then return
+                here to continue your paper.
               </Text>
             ) : null}
           </View>
 
           {continueItems.length > 0 && onOpenContinue ? (
             <View style={styles.continueBlock}>
-              <Text style={styles.continueKicker}>Continue reading</Text>
+              <Text style={styles.continueKicker}>Further along</Text>
               <Text style={styles.continueIntro}>
-                Related pages from today’s edition.
+                More from today’s edition.
               </Text>
               {continueItems.map((item, index) => (
                 <Pressable
@@ -615,7 +615,7 @@ export function ArticleReader({
                       ? "Saving…"
                       : clipped
                         ? "Saved"
-                        : "Save"
+                        : "Save for later"
                   }
                   onPress={() => void handleToggleClip()}
                   muted={clipped}
@@ -625,7 +625,7 @@ export function ArticleReader({
               <ActionLink label="Share" onPress={() => void handleShare()} />
               {article.sourceUrl ? (
                 <ActionLink
-                  label="View original source"
+                  label="Original source"
                   onPress={openSource}
                 />
               ) : null}
@@ -720,8 +720,8 @@ function PullQuote({ text }: { text: string }) {
 
 function formatReadTime(minutes: number | null | undefined): string | null {
   if (!minutes || minutes < 1) return null;
-  if (minutes === 1) return "1 min read";
-  return `${minutes} min read`;
+  if (minutes === 1) return "One minute";
+  return `About ${minutes} minutes`;
 }
 
 function formatSectionLabel(section: string): string {
@@ -730,7 +730,7 @@ function formatSectionLabel(section: string): string {
     top_stories: "Top Stories",
     today_in_history: "Today in History",
     looking_ahead: "Looking Ahead",
-    discovery: "Bandit’s Picks",
+    discovery: "From the desk",
     knowledge: "Context",
     business: "Business",
     science: "Science",
@@ -793,7 +793,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     alignItems: "center",
-    paddingTop: 28,
+    paddingTop: 32,
     paddingHorizontal: 24,
   },
   column: {
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 28,
+    marginBottom: 32,
   },
   kicker: {
     ...type.kicker,
@@ -819,11 +819,11 @@ const styles = StyleSheet.create({
   dek: {
     ...reader.dek,
     color: paper.inkBody,
-    marginBottom: 22,
+    marginBottom: 24,
   },
   bylineBlock: {
-    marginBottom: 22,
-    gap: 7,
+    marginBottom: 26,
+    gap: 8,
   },
   byline: {
     ...reader.byline,
@@ -841,17 +841,17 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginBottom: 26,
+    marginBottom: 28,
     maxWidth: 420,
   },
   figure: {
-    marginBottom: 40,
+    marginBottom: 44,
     alignSelf: "center",
   },
   imageFrame: {
     width: "100%",
     aspectRatio: 3 / 2,
-    borderRadius: 3,
+    borderRadius: 2,
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
   },
@@ -896,15 +896,15 @@ const styles = StyleSheet.create({
   noImageRule: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkRule,
-    marginBottom: 32,
+    marginBottom: 36,
   },
   paragraph: {
     ...reader.body,
     color: paper.inkBody,
-    marginBottom: 28,
+    marginBottom: 30,
   },
   leadParagraph: {
-    marginBottom: 30,
+    marginBottom: 32,
   },
   dropCap: {
     ...reader.dropCap,
@@ -986,8 +986,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   continueBlock: {
-    marginTop: 48,
-    paddingTop: 28,
+    marginTop: 52,
+    paddingTop: 32,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,
   },
@@ -995,7 +995,7 @@ const styles = StyleSheet.create({
     ...type.kicker,
     color: paper.terracotta,
     letterSpacing: 2.1,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   continueIntro: {
     fontFamily: "Georgia",
@@ -1003,12 +1003,12 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginBottom: 22,
+    marginBottom: 26,
     maxWidth: 400,
   },
   continueItem: {
-    paddingBottom: 22,
-    marginBottom: 22,
+    paddingBottom: 24,
+    marginBottom: 24,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
@@ -1039,8 +1039,8 @@ const styles = StyleSheet.create({
     color: paper.inkBody,
   },
   actionsBlock: {
-    marginTop: 40,
-    paddingTop: 24,
+    marginTop: 44,
+    paddingTop: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,
     paddingBottom: 16,
@@ -1049,14 +1049,16 @@ const styles = StyleSheet.create({
     ...type.kicker,
     color: paper.inkFaint,
     letterSpacing: 1.9,
-    marginBottom: 14,
+    marginBottom: 16,
   },
   actionsList: {
-    gap: 4,
+    gap: 2,
   },
   actionRow: {
     alignSelf: "flex-start",
-    paddingVertical: 8,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: "center",
   },
   actionText: {
     fontFamily: "Georgia",

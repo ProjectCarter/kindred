@@ -246,7 +246,7 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
 
             <View style={styles.actions}>
               <ActionLink
-                label="Open in Maps"
+                label="Directions"
                 onPress={() => openMaps(event)}
                 colors={colors}
               />
@@ -259,7 +259,7 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
                     ·
                   </Text>
                   <ActionLink
-                    label="View Event"
+                    label="Details"
                     onPress={() => openEvent(event)}
                     colors={colors}
                   />

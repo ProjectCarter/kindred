@@ -149,16 +149,16 @@ export default function ClippingsScreen() {
         <Text style={styles.kicker}>Saved for later</Text>
         <Text style={styles.title}>Clippings</Text>
         <Text style={styles.subtitle}>
-          Passages you saved from your paper. Tap “Save for later” on any
-          section to add one.
+          Passages you set aside from the paper. Tap “Save for later” on any
+          section to keep one.
         </Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {clippings.length === 0 ? (
           <Text style={styles.empty}>
-            Nothing saved yet. In today’s paper, tap “Save for later” under a
-            section you want to keep.
+            Nothing clipped yet. When a passage is worth keeping, tap “Save for
+            later” in today’s paper — it will wait here.
           </Text>
         ) : (
           clippings.map((clip) => {

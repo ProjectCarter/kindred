@@ -205,10 +205,13 @@ export function MorningGreeting({
       </Animated.View>
 
       <Animated.View
-        style={{
-          opacity: greetOp,
-          transform: [{ translateY: greetY }],
-        }}
+        style={[
+          styles.greetBlock,
+          {
+            opacity: greetOp,
+            transform: [{ translateY: greetY }],
+          },
+        ]}
       >
         <Text style={styles.goodMorning} maxFontSizeMultiplier={1.35}>
           {salutation}
@@ -220,50 +223,40 @@ export function MorningGreeting({
         ) : null}
       </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.banditReserve,
-          {
-            opacity: banditOp,
-            transform: [{ translateY: banditY }],
-          },
-        ]}
-        accessible
-        accessibilityLabel={
-          banditReady
-            ? `Bandit, your editor. ${banditLine}`
-            : "Bandit, your editor"
-        }
-      >
-        <Text style={styles.banditLabel}>🐶 Bandit, editor</Text>
-        <Text
+      {banditReady ? (
+        <Animated.View
           style={[
-            styles.banditText,
-            !banditReady && styles.banditTextPlaceholder,
+            styles.banditReserve,
+            {
+              opacity: banditOp,
+              transform: [{ translateY: banditY }],
+            },
           ]}
-          maxFontSizeMultiplier={1.35}
+          accessible
+          accessibilityLabel={`Bandit, your editor. ${banditLine}`}
         >
-          {banditLine}
-        </Text>
-        {banditReady ? (
+          <Text style={styles.banditLabel}>From the editor</Text>
+          <Text style={styles.banditText} maxFontSizeMultiplier={1.35}>
+            {banditLine}
+          </Text>
           <Text style={styles.banditSign} maxFontSizeMultiplier={1.2}>
             — Bandit
           </Text>
-        ) : null}
-        {banditAside?.trim() ? (
-          <Text style={styles.banditAside} maxFontSizeMultiplier={1.3}>
-            {banditAside.trim()}
-          </Text>
-        ) : null}
-        {memoryNote?.trim() ? (
-          <View style={styles.memoryBlock} accessibilityRole="text">
-            <Text style={styles.memoryKicker}>Since you last read</Text>
-            <Text style={styles.memoryNote} maxFontSizeMultiplier={1.3}>
-              {memoryNote.trim()}
+          {banditAside?.trim() ? (
+            <Text style={styles.banditAside} maxFontSizeMultiplier={1.3}>
+              {banditAside.trim()}
             </Text>
-          </View>
-        ) : null}
-      </Animated.View>
+          ) : null}
+          {memoryNote?.trim() ? (
+            <View style={styles.memoryBlock} accessibilityRole="text">
+              <Text style={styles.memoryKicker}>Since you last read</Text>
+              <Text style={styles.memoryNote} maxFontSizeMultiplier={1.3}>
+                {memoryNote.trim()}
+              </Text>
+            </View>
+          ) : null}
+        </Animated.View>
+      ) : null}
 
       <MorningBriefingBlock
         opening={morningOpening}
@@ -336,11 +329,14 @@ const styles = StyleSheet.create({
   welcome: {
     ...type.dek,
     color: paper.inkBody,
-    marginBottom: 8,
+    marginBottom: 0,
     maxWidth: 520,
   },
+  greetBlock: {
+    marginBottom: 28,
+  },
   banditReserve: {
-    marginTop: 22,
+    marginTop: 0,
     marginBottom: space.afterBandit,
     paddingTop: 22,
     paddingBottom: 22,
@@ -349,25 +345,20 @@ const styles = StyleSheet.create({
     borderColor: paper.inkRule,
   },
   banditLabel: {
-    ...type.kicker,
+    fontFamily: "Georgia",
+    fontSize: 12,
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
+    fontWeight: "600",
     color: paper.terracotta,
     marginBottom: 12,
-    letterSpacing: 1.6,
-    textTransform: "none",
-    fontFamily: "Georgia",
-    fontSize: 13,
-    fontWeight: "400",
-    fontStyle: "italic",
   },
   banditText: {
     ...type.bandit,
     color: paper.ink,
   },
-  banditTextPlaceholder: {
-    color: paper.inkFaint,
-  },
   banditSign: {
-    marginTop: 12,
+    marginTop: 14,
     fontFamily: "Georgia",
     fontSize: 13,
     fontStyle: "italic",

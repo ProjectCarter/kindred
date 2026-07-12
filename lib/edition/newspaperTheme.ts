@@ -38,11 +38,11 @@ export const press = {
 /** Vertical rhythm of the folio — breathing room, not density. */
 export const space = {
   folioGutter: 24,
-  sectionGap: 48,
-  afterMasthead: 28,
-  afterBandit: 36,
-  afterLead: 44,
-  endPadding: 28,
+  sectionGap: 52,
+  afterMasthead: 32,
+  afterBandit: 40,
+  afterLead: 48,
+  endPadding: 36,
 } as const;
 
 export const type = {
@@ -56,78 +56,78 @@ export const type = {
   /** Front-page nameplate — calm, print-like authority. */
   nameplate: {
     fontFamily: "Georgia",
-    fontSize: 42,
-    lineHeight: 48,
-    letterSpacing: 1.2,
+    fontSize: 40,
+    lineHeight: 46,
+    letterSpacing: 1.4,
     fontWeight: "600" as const,
   },
   nameplateMeta: {
     fontFamily: "Georgia",
     fontSize: 14,
     lineHeight: 20,
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   display: {
     fontFamily: "Georgia",
-    fontSize: 32,
-    lineHeight: 38,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: "600" as const,
-    letterSpacing: -0.25,
+    letterSpacing: -0.2,
   },
   leadHeadline: {
     fontFamily: "Georgia",
-    fontSize: 30,
-    lineHeight: 38,
+    fontSize: 29,
+    lineHeight: 37,
     fontWeight: "600" as const,
-    letterSpacing: -0.15,
+    letterSpacing: -0.12,
   },
   sectionHeadline: {
     fontFamily: "Georgia",
-    fontSize: 22,
-    lineHeight: 30,
+    fontSize: 21,
+    lineHeight: 29,
     fontWeight: "600" as const,
-    letterSpacing: -0.12,
+    letterSpacing: -0.08,
   },
   sectionIntro: {
     fontFamily: "Georgia",
     fontSize: 14,
-    lineHeight: 21,
+    lineHeight: 22,
     fontStyle: "italic" as const,
   },
   kicker: {
     fontSize: 10,
-    letterSpacing: 2.1,
+    letterSpacing: 2.2,
     fontWeight: "600" as const,
     textTransform: "uppercase" as const,
   },
   dek: {
     fontFamily: "Georgia",
     fontSize: 17,
-    lineHeight: 27,
+    lineHeight: 28,
   },
   body: {
     fontFamily: "Georgia",
     fontSize: 16,
-    lineHeight: 28,
+    lineHeight: 29,
   },
   meta: {
     fontSize: 11,
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
   },
   bandit: {
     fontFamily: "Georgia",
     fontSize: 17,
-    lineHeight: 27,
+    lineHeight: 28,
     fontStyle: "italic" as const,
   },
 } as const;
 
 /** Soft motion timings — ink settling on paper, not a feed. */
 export const motion = {
-  enterMs: 580,
-  staggerMs: 72,
-  risePx: 6,
-  photoMs: 880,
+  enterMs: 560,
+  staggerMs: 56,
+  risePx: 4,
+  photoMs: 1000,
   fadeEasing: "cubic" as const,
 } as const;
 
@@ -160,21 +160,21 @@ export const reader = {
   body: {
     fontFamily: "Georgia",
     fontSize: 20,
-    lineHeight: 36,
-    letterSpacing: 0.15,
+    lineHeight: 37,
+    letterSpacing: 0.12,
   },
   dropCap: {
     fontFamily: "Georgia",
-    fontSize: 58,
-    lineHeight: 50,
+    fontSize: 56,
+    lineHeight: 48,
     fontWeight: "600" as const,
   },
   pullQuote: {
     fontFamily: "Georgia",
-    fontSize: 26,
-    lineHeight: 38,
+    fontSize: 25,
+    lineHeight: 37,
     fontStyle: "italic" as const,
-    letterSpacing: -0.1,
+    letterSpacing: -0.08,
   },
   caption: {
     fontFamily: "Georgia",

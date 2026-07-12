@@ -20,7 +20,7 @@ const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
  * Title, dek, and “Read the story” open the shared native reader.
  */
 export function DiscoveryDesk({
-  headline = "For you today",
+  headline = "Worth your time",
   editorNote,
   items,
   onOpenItem,
@@ -31,7 +31,7 @@ export function DiscoveryDesk({
     <FolioReveal index={4}>
       <View style={styles.wrap} accessibilityRole="summary">
         <View style={styles.mast}>
-          <Text style={styles.kicker}>Bandit’s Pick</Text>
+          <Text style={styles.kicker}>From the desk</Text>
           <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
             {headline}
           </Text>
@@ -41,7 +41,7 @@ export function DiscoveryDesk({
             </Text>
           ) : (
             <Text style={styles.editorNote} maxFontSizeMultiplier={1.3}>
-              I thought you’d enjoy these.
+              A few quiet recommendations for today.
             </Text>
           )}
         </View>
@@ -146,24 +146,24 @@ function formatCategory(category: string): string {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 48,
-    marginTop: 8,
-    paddingVertical: 32,
+    marginBottom: 52,
+    marginTop: 4,
+    paddingVertical: 36,
     paddingHorizontal: 4,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: paper.inkRule,
   },
   mast: {
-    marginBottom: 28,
-    paddingBottom: 20,
+    marginBottom: 32,
+    paddingBottom: 22,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
   kicker: {
     ...type.kicker,
     color: paper.terracotta,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   headline: {
     fontFamily: "Georgia",
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.2,
     color: paper.ink,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   editorNote: {
     fontFamily: "Georgia",
@@ -180,11 +180,11 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     fontStyle: "italic",
     color: paper.inkMuted,
-    maxWidth: 520,
+    maxWidth: 480,
   },
   item: {
-    marginBottom: 26,
-    paddingBottom: 22,
+    marginBottom: 28,
+    paddingBottom: 24,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   numeral: {
     fontFamily: "Georgia",
@@ -221,14 +221,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.1,
     color: paper.ink,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   dek: {
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 24,
     color: paper.inkBody,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   why: {
     fontFamily: "Georgia",
@@ -239,8 +239,10 @@ const styles = StyleSheet.create({
   },
   readRow: {
     alignSelf: "flex-start",
-    marginTop: 10,
-    paddingVertical: 4,
+    marginTop: 12,
+    paddingVertical: 8,
+    minHeight: 40,
+    justifyContent: "center",
   },
   readLink: {
     fontFamily: "Georgia",

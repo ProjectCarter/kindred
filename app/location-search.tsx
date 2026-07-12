@@ -131,7 +131,7 @@ export default function LocationSearchScreen() {
         ListEmptyComponent={
           !searching ? (
             <Text style={styles.empty}>
-              No cities matched. Try another spelling.
+              No cities matched that spelling. Try another.
             </Text>
           ) : null
         }

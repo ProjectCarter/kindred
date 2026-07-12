@@ -225,7 +225,7 @@ export function EditionReader({
               disabled={pending}
               accessibilityRole="button"
               accessibilityLabel={
-                clipped ? "Saved to Clippings" : "Save for later"
+                clipped ? "Saved" : "Save for later"
               }
             >
               <Text
@@ -237,7 +237,7 @@ export function EditionReader({
                 {pending
                   ? "Saving…"
                   : clipped
-                    ? "Saved to Clippings"
+                    ? "Saved"
                     : "Save for later"}
               </Text>
             </Pressable>
@@ -250,10 +250,10 @@ export function EditionReader({
   const discoveryBlock =
     discoveryItems && discoveryItems.length > 0 ? (
       <DiscoveryDesk
-        headline={discoveryHeadline ?? "Bandit’s Pick"}
+        headline={discoveryHeadline ?? "Worth your time"}
         editorNote={
           discoveryEditorNote?.trim() ||
-          "I thought you’d enjoy these."
+          "A few quiet recommendations for today."
         }
         items={discoveryItems}
         onOpenItem={
@@ -337,18 +337,18 @@ const styles = StyleSheet.create({
   },
   sectionCard: {
     marginBottom: space.sectionGap,
-    paddingBottom: 36,
+    paddingBottom: 40,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
   weatherCard: {
-    marginTop: 4,
+    marginTop: 2,
   },
   sectionLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionLabel: {
     ...type.kicker,
@@ -362,13 +362,13 @@ const styles = StyleSheet.create({
   sectionIntro: {
     ...type.sectionIntro,
     color: paper.inkFaint,
-    marginBottom: 14,
-    maxWidth: 420,
+    marginBottom: 16,
+    maxWidth: 400,
   },
   sectionHeadline: {
     ...type.sectionHeadline,
     color: paper.ink,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   sectionBody: {
     ...type.body,
@@ -377,29 +377,33 @@ const styles = StyleSheet.create({
   sourceNote: {
     ...type.meta,
     color: paper.inkFaint,
-    marginTop: 14,
+    marginTop: 16,
     fontStyle: "italic",
     fontFamily: "Georgia",
   },
   readLink: {
     alignSelf: "flex-start",
-    marginTop: 16,
-    paddingVertical: 6,
+    marginTop: 18,
+    paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: "center",
   },
   readLinkText: {
     fontFamily: "Georgia",
     fontSize: 15,
     color: paper.terracotta,
     fontStyle: "italic",
-    letterSpacing: 0.2,
+    letterSpacing: 0.25,
   },
   tapPressed: {
     opacity: press.opacity,
   },
   clipLink: {
     alignSelf: "flex-start",
-    marginTop: 18,
-    paddingVertical: 4,
+    marginTop: 14,
+    paddingVertical: 8,
+    minHeight: 40,
+    justifyContent: "center",
   },
   clipPressed: {
     opacity: press.opacity,

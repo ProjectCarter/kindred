@@ -116,8 +116,8 @@ export default function LibraryScreen() {
 
         {editions.length === 0 ? (
           <Text style={styles.empty}>
-            No papers here yet. After you get your first morning edition, it will
-            show up on this list.
+            Your earlier mornings will gather here. After the first edition
+            arrives, you’ll find it on this shelf.
           </Text>
         ) : (
           editions.map((edition) => (

@@ -14,11 +14,11 @@ export function morningSalutation(now: Date = new Date()): string {
 
 /** Closing lines at the end of an edition — calm, complete. */
 export function editionColophon(): string {
-  return "You’ve reached the end of today’s edition.";
+  return "That is all for today’s edition.";
 }
 
 export function editionFarewell(): string {
-  return "See you tomorrow.";
+  return "See you in the morning.";
 }
 
 /** Calm lines while the presses catch up. */
@@ -26,10 +26,10 @@ export const waitingCopy = {
   loading: "Opening today’s paper…",
   emptyTitle: "Today’s paper isn’t ready yet.",
   emptyBody:
-    "When you’re ready, tap below. It usually takes about a minute.",
-  openAction: "Get today’s paper",
-  preparing: "Preparing your paper…",
-  previous: "Read a previous paper",
+    "When you’re ready, open it below. It usually takes about a minute.",
+  openAction: "Open today’s paper",
+  preparing: "Setting the type…",
+  previous: "Earlier editions",
 } as const;
 
 /** Soft Bandit fallbacks when the stored line isn’t ready — same line all day. */

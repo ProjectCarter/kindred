@@ -19,7 +19,7 @@ type Props = {
  * A quiet mark that breathes, or holds still under Reduce Motion.
  */
 export function PaperLoading({ hint = "Opening today’s paper…" }: Props) {
-  const breath = useRef(new Animated.Value(0.35)).current;
+  const breath = useRef(new Animated.Value(0.4)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -30,20 +30,20 @@ export function PaperLoading({ hint = "Opening today’s paper…" }: Props) {
 
   useEffect(() => {
     if (reduceMotion) {
-      breath.setValue(0.85);
+      breath.setValue(0.8);
       return;
     }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breath, {
           toValue: 1,
-          duration: 1200,
+          duration: 1600,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
         Animated.timing(breath, {
-          toValue: 0.35,
-          duration: 1200,
+          toValue: 0.4,
+          duration: 1600,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),

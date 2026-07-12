@@ -759,9 +759,9 @@ export default function HomeScreen() {
         {locationMismatch && activeLocation?.place && sections.length > 0 ? (
           <View style={styles.mismatchBanner}>
             <Text style={styles.mismatchText}>
-              This edition was prepared for {locationMismatch}. You’re in{" "}
-              {activeLocation.place.city} now — refresh the paper for local news,
-              weather, and events.
+              This edition was set for {locationMismatch}. You’re in{" "}
+              {activeLocation.place.city} now — refresh for local news, weather,
+              and events.
             </Text>
             <Pressable
               style={({ pressed }) => [
@@ -774,7 +774,7 @@ export default function HomeScreen() {
               accessibilityRole="button"
             >
               <Text style={styles.mismatchButtonText}>
-                {generating ? "Preparing…" : "Refresh Today’s Edition"}
+                {generating ? "Setting the type…" : "Refresh today’s edition"}
               </Text>
             </Pressable>
           </View>
@@ -790,12 +790,12 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.body}>
               {locationMismatch && activeLocation?.place
-                ? `The edition on file was prepared for ${locationMismatch}. Get a fresh paper for ${activeLocation.place.city}.`
+                ? `The edition on file was set for ${locationMismatch}. Open a fresh paper for ${activeLocation.place.city}.`
                 : waitingCopy.emptyBody}
             </Text>
             {activeLocation?.needsSetup ? (
               <Text style={styles.locationHint}>
-                Set a home city or allow current location so local news,
+                Choose a home city or allow current location so local news,
                 weather, and events can find you.
               </Text>
             ) : activeLocation?.place ? (
@@ -818,7 +818,7 @@ export default function HomeScreen() {
                 {generating
                   ? waitingCopy.preparing
                   : locationMismatch
-                    ? "Refresh Today’s Edition"
+                    ? "Refresh today’s edition"
                     : waitingCopy.openAction}
               </Text>
             </Pressable>
