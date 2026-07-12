@@ -1,31 +1,57 @@
 /**
- * Kindred newspaper visual tokens — Front Page craft.
- * Cream paper, warm ink, terracotta accents. Original to Kindred.
- * Aligned with KINDRED_DESIGN_MANIFESTO.md
+ * Kindred visual tokens — calm morning ritual.
+ * Soft sky atmosphere, warm newspaper pages floating above it.
+ * Arboretum air, not a news feed.
  */
 export const paper = {
-  cream: "#FAF6EF",
-  creamDeep: "#F3EEE4",
-  /** Soft wash behind magazine sidebars / discovery desk. */
-  creamWash: "#F7F1E7",
-  ink: "#2B2620",
-  inkBody: "#2B2620E8",
-  inkMuted: "#2B2620A6",
-  inkFaint: "#2B262073",
-  inkRule: "#2B26201F",
-  terracotta: "#C1622D",
-  terracottaSoft: "#C1622DE6",
-  terracottaWash: "#C1622D14",
+  /** Morning sky — app atmosphere behind everything. */
+  sky: "#EEF6FB",
+  /** Navigation / sticky header wash. */
+  chrome: "#DCECF6",
+  /** Physical newspaper page — cards and reading surfaces. */
+  page: "#FAF8F3",
+  /**
+   * Paper surface alias (cards, reading column, raised panels).
+   * Prefer `page` in new code; kept for existing call sites.
+   */
+  cream: "#FAF8F3",
+  /** Slightly deeper paper for photographs / recessed panels. */
+  creamDeep: "#F0EBE3",
+  /** Soft wash behind callouts and side notes. */
+  creamWash: "#F7F3EC",
+  /** Primary text. */
+  ink: "#2D2926",
+  inkBody: "#2D2926E8",
+  /** Secondary text. */
+  inkMuted: "#7E776F",
+  inkFaint: "#7E776FB8",
+  /** Soft borders — never harsh. */
+  inkRule: "#DDD5CA",
+  border: "#DDD5CA",
+  /** Warm accent — terracotta, quieter than before. */
+  terracotta: "#B56A3A",
+  terracottaSoft: "#B56A3AE6",
+  terracottaWash: "#B56A3A14",
+  /** Success / positive community signal. */
+  success: "#6E8B6A",
 } as const;
 
-/** Soft print-like elevation — photographs only, never chrome. */
+/** Soft print-like elevation — pages floating on morning air. */
 export const shadow = {
   photo: {
-    shadowColor: "#2B2620",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 3,
+    shadowColor: "#2D2926",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  /** Quiet lift for newspaper surfaces on the sky. */
+  page: {
+    shadowColor: "#2D2926",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 1,
   },
 } as const;
 
@@ -35,14 +61,14 @@ export const press = {
   scale: 0.985,
 } as const;
 
-/** Vertical rhythm of the folio — breathing room, not density. */
+/** Vertical rhythm — more air, less density. */
 export const space = {
-  folioGutter: 24,
-  sectionGap: 52,
-  afterMasthead: 24,
-  afterBandit: 28,
-  afterLead: 48,
-  endPadding: 48,
+  folioGutter: 28,
+  sectionGap: 64,
+  afterMasthead: 32,
+  afterBandit: 36,
+  afterLead: 56,
+  endPadding: 56,
 } as const;
 
 export const type = {
@@ -139,13 +165,13 @@ export const motion = {
 
 /**
  * Shared Article Reader tokens — inherited by every section’s reading page.
- * Tuned for a calm Sunday-paper / magazine measure (NYT / Economist / Monocle).
+ * Tuned for a calm Sunday-paper / magazine measure.
  */
 export const reader = {
   /** Comfortable phone measure — roughly 58–65 characters. */
   measure: 512,
   /** Side inset from the screen edge for the reading column. */
-  gutter: 22,
+  gutter: 26,
   headline: {
     fontFamily: "Georgia",
     fontSize: 34,

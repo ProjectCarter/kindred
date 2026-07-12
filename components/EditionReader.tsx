@@ -29,7 +29,6 @@ import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { LocalEventsSection } from "./LocalEventsSection";
 import { MorningArrival } from "./MorningArrival";
-import { MorningHeroImage } from "./MorningHeroImage";
 import { LeadStorySection } from "./LeadStorySection";
 import { DiscoveryDesk } from "./DiscoveryDesk";
 import { BanditsPick } from "./BanditsPick";
@@ -409,28 +408,21 @@ export function EditionReader({
         weatherHeadline={weather?.headline ?? null}
         weatherBody={weather?.body ?? null}
         eventsBody={localEvents?.body ?? null}
-        mastheadLeading={mastheadLeading}
         mastheadTrailing={mastheadTrailing}
         mastheadScrollY={mastheadScrollY}
+        heroContext={{
+          date: editionDate,
+          weatherText: weather?.body ?? weather?.headline ?? null,
+          birthdayMMDD,
+          location: {
+            city: locationCity,
+            region: (locationRegion as HeroRegionId | null | undefined) ?? null,
+            state: locationState,
+          },
+        }}
       />
 
-      {/* First screen ends above. The rest of the paper follows for later review. */}
-      <FolioReveal index={folioCursor++}>
-        <MorningHeroImage
-          uri={heroImageUri}
-          context={{
-            date: editionDate,
-            weatherText: weather?.body ?? weather?.headline ?? null,
-            birthdayMMDD,
-            location: {
-              city: locationCity,
-              region: (locationRegion as HeroRegionId | null | undefined) ?? null,
-              state: locationState,
-            },
-          }}
-        />
-      </FolioReveal>
-
+      {/* First screen ends above. Folio continues below for later review. */}
       {leadStory ? (
         <FolioReveal index={folioCursor++}>
           <LeadStorySection
@@ -491,13 +483,13 @@ export function EditionReader({
 
 const styles = StyleSheet.create({
   folio: {
-    paddingBottom: 28,
+    paddingBottom: 36,
   },
   sectionCard: {
     marginBottom: space.sectionGap,
-    paddingBottom: 44,
+    paddingBottom: 52,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
+    borderBottomColor: paper.border,
   },
   weatherCard: {
     marginTop: 2,

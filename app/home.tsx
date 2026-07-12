@@ -836,6 +836,11 @@ export default function HomeScreen() {
       />
       <KindredStickyMasthead
         scrollY={mastheadScrollY}
+        subtitle={
+          activeLocation?.place?.city ??
+          intelligence?.discovery?.location?.city ??
+          undefined
+        }
         trailing={
           <MastheadLink
             label="Library"
@@ -1070,12 +1075,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 18,
-    paddingBottom: 80,
+    paddingHorizontal: 28,
+    paddingTop: 22,
+    paddingBottom: 96,
   },
   travelBanner: {
     flexDirection: "row",

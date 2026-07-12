@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 20,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.chrome,
   },
   stickyInner: {
     height: MASTHEAD_COMPACT_HEIGHT,
