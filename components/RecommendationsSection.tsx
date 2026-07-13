@@ -35,17 +35,22 @@ export function RecommendationsSection({ items, onOpenItem }: Props) {
 
   return (
     <View style={styles.section} accessibilityRole="summary">
-      <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
-        From the desk
-      </Text>
+      <View style={styles.header}>
+        <View style={styles.labelRow}>
+          <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
+            From the desk
+          </Text>
+          <View style={styles.labelRule} />
+        </View>
 
-      <Text style={styles.headline} maxFontSizeMultiplier={1.2}>
-        Recommendations
-      </Text>
+        <Text style={styles.headline} maxFontSizeMultiplier={1.2}>
+          Recommendations
+        </Text>
 
       <Text style={styles.intro} maxFontSizeMultiplier={1.2}>
         A few things I think you’ll enjoy today — chosen quietly, not loudly.
       </Text>
+      </View>
 
       <View style={styles.openerFrame}>
         <Image
@@ -119,13 +124,27 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },
+  header: {
+    marginBottom: 0,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 18,
+  },
+  labelRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkRule,
+  },
   kicker: {
     fontSize: 10,
     letterSpacing: 2.8,
     fontWeight: "600",
     textTransform: "uppercase",
     color: paper.terracotta,
-    marginBottom: 18,
+    marginBottom: 0,
   },
   headline: {
     fontFamily: "Georgia",

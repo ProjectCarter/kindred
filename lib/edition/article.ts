@@ -24,6 +24,21 @@ import {
 import type { ImageSourcePropType } from "react-native";
 
 /**
+ * Deterministically pick from a short list of equivalent phrasings so the
+ * same template doesn't read identically across many articles in one
+ * session — e.g. every local event sharing one "context" sentence.
+ * Same seed always picks the same option (stable across re-renders).
+ */
+function pickVariant(seed: string, options: string[]): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  const index = Math.abs(hash) % options.length;
+  return options[index];
+}
+
+/**
  * Canonical article model for Kindred’s native reader.
  * Every section (Lead, Top Stories, Business, Science, etc.)
  * should map into this shape before opening the article page.
@@ -513,10 +528,20 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
       ? `Something is on tonight at ${place} worth rearranging an evening for.`
       : "A local moment worth leaving the house for.");
   const context = isFestival
-    ? "Festivals like this are where a town actually shows up for itself — worth the crowd, the parking search, and the hour spent finding a good spot to stand."
-    : "The best local evenings rarely make anyone's must-see list. They just quietly turn out better than staying in would have.";
-  const closing =
-    "Here's what Kindred could confirm — the rest is worth discovering in person.";
+    ? pickVariant(event.name, [
+        "Festivals like this are where a town actually shows up for itself — worth the crowd, the parking search, and the hour spent finding a good spot to stand.",
+        "A festival is one of the few times a whole town turns up in the same place at once — worth the crowd and the walk to find parking.",
+      ])
+    : pickVariant(event.name, [
+        "The best local evenings rarely make anyone's must-see list. They just quietly turn out better than staying in would have.",
+        "Nothing about this needs to be a big production — just an evening worth showing up for.",
+        "This is the kind of plan that looks unremarkable on paper and turns out to be exactly the right amount of evening.",
+      ]);
+  const closing = pickVariant(`${event.name}:${event.date}`, [
+    "Here's what Kindred could confirm — the rest is worth discovering in person.",
+    "That's what Kindred could pin down — the rest is best found out by going.",
+    "Kindred can vouch for the details above; everything else is worth seeing for yourself.",
+  ]);
   const story = [hook, context, closing];
 
   return articleFromSectionItem({

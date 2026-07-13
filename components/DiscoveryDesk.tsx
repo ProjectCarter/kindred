@@ -1,11 +1,12 @@
 import { Text, View, Pressable, StyleSheet } from "react-native";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
 import { formatDiscoveryWhy } from "../lib/edition/discovery";
-import { FolioReveal } from "./FolioReveal";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   headline?: string;
+  /** Kicker above the headline — defaults to the shared editorial signature. */
+  kicker?: string;
   editorNote?: string | null;
   items: RankedDiscoveryItem[];
   /** Opens the native Kindred article reader for a pick. */
@@ -21,6 +22,7 @@ const ROMAN = ["I", "II", "III", "IV", "V", "VI"];
  */
 export function DiscoveryDesk({
   headline = "Worth your time",
+  kicker = "From the desk",
   editorNote,
   items,
   onOpenItem,
@@ -28,10 +30,9 @@ export function DiscoveryDesk({
   if (!items.length) return null;
 
   return (
-    <FolioReveal index={4}>
-      <View style={styles.wrap} accessibilityRole="summary">
+    <View style={styles.wrap} accessibilityRole="summary">
         <View style={styles.mast}>
-          <Text style={styles.kicker}>From the desk</Text>
+          <Text style={styles.kicker}>{kicker}</Text>
           <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
             {headline}
           </Text>
@@ -90,7 +91,7 @@ export function DiscoveryDesk({
                   onPress={canOpen ? open : undefined}
                   disabled={!canOpen}
                   accessibilityRole={canOpen ? "link" : undefined}
-                  accessibilityLabel={canOpen ? "Read the story" : undefined}
+                  accessibilityLabel={canOpen ? "Continue reading" : undefined}
                   hitSlop={4}
                   style={({ pressed }) => [
                     canOpen && pressed && styles.pressed,
@@ -123,20 +124,19 @@ export function DiscoveryDesk({
                   onPress={open}
                   hitSlop={12}
                   accessibilityRole="button"
-                  accessibilityLabel="Read the story"
+                  accessibilityLabel="Continue reading"
                   style={({ pressed }) => [
                     styles.readRow,
                     pressed && styles.pressed,
                   ]}
                 >
-                  <Text style={styles.readLink}>Read the story</Text>
+                  <Text style={styles.readLink}>Continue reading</Text>
                 </Pressable>
               ) : null}
             </View>
           );
         })}
-      </View>
-    </FolioReveal>
+    </View>
   );
 }
 

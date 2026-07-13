@@ -1,5 +1,12 @@
 import { useMemo, type ReactNode } from "react";
-import { Text, View, Pressable, StyleSheet, Animated } from "react-native";
+import {
+  Text,
+  View,
+  Pressable,
+  StyleSheet,
+  Animated,
+  type ImageSourcePropType,
+} from "react-native";
 import {
   SECTION_LABELS,
   formatEditionDate,
@@ -30,6 +37,8 @@ import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localEvents";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
+import { resolveArticleHero } from "../lib/edition/articleHero";
+import { experienceImageFor } from "../lib/edition/experiences";
 import { MorningArrival } from "./MorningArrival";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
@@ -88,6 +97,52 @@ type Props = {
   mastheadLeading?: ReactNode;
   mastheadScrollY?: Animated.Value;
 };
+
+/**
+ * Every TimeStylePackage card needs a photo — a wire photo when the story
+ * has one, otherwise a curated editorial fallback matched to its subject.
+ * Never the blank cream box: a headline without a real photo still deserves
+ * a real image, not an empty rectangle.
+ */
+function wireOrFallbackImage(input: {
+  imageUrl?: string | null;
+  headline: string;
+  section: string;
+  summary?: string | null;
+  source?: string | null;
+}): ImageSourcePropType {
+  const uri = input.imageUrl?.trim();
+  if (uri) return { uri };
+  const hero = resolveArticleHero({
+    headline: input.headline,
+    section: input.section,
+    body: input.summary ? [input.summary] : [],
+    source: input.source ?? null,
+  });
+  return (hero.source ?? require("../assets/heroes/hero-default-morning.jpg")) as ImageSourcePropType;
+}
+
+/**
+ * Local businesses (coffee, restaurants) never carry a provider photo —
+ * Foursquare's photo field is a paid tier Kindred doesn't use. Give each
+ * a real category-matched photograph instead of leaving the side card
+ * blank, and keep the pair visually distinct from one another.
+ */
+function localBizSideImages(
+  items: RankedDiscoveryItem[]
+): ImageSourcePropType[] {
+  const used = new Set<ImageSourcePropType>();
+  return items.map((d) => {
+    const primary = experienceImageFor(d.item.category, d.item.id);
+    if (!used.has(primary)) {
+      used.add(primary);
+      return primary;
+    }
+    const alt = experienceImageFor(d.item.category, `${d.item.id}:alt`);
+    used.add(alt);
+    return alt;
+  });
+}
 
 /**
  * Folio teaser — invite the full story without reprinting it on the front page.
@@ -187,6 +242,8 @@ export function EditionReader({
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
   );
+  const banditPickSides = localBiz.slice(0, 2);
+  const banditPickSideImages = localBizSideImages(banditPickSides);
 
   const localTopStories = topStories.filter((s) =>
     /local/i.test(s.role ?? "")
@@ -342,15 +399,20 @@ export function EditionReader({
               byline: banditsPick.story.source
                 ? `by ${banditsPick.story.source}`
                 : "— Bandit",
-              image: banditsPick.story.imageUrl
-                ? { uri: banditsPick.story.imageUrl }
-                : null,
+              image: wireOrFallbackImage({
+                imageUrl: banditsPick.story.imageUrl,
+                headline: banditsPick.story.headline,
+                section: "bandits_pick",
+                summary: banditsPick.story.summary,
+                source: banditsPick.story.source,
+              }),
             }}
-            sides={localBiz.slice(0, 2).map((d) => ({
+            sides={banditPickSides.map((d, i) => ({
               id: d.item.id,
               kicker: "Local",
               headline: d.item.title,
               byline: d.item.place?.city ?? d.item.source?.name ?? null,
+              image: banditPickSideImages[i],
             }))}
             onOpen={
               onOpenArticle
@@ -383,6 +445,7 @@ export function EditionReader({
         <FolioReveal index={folioCursor++}>
           <DiscoveryDesk
             headline="Local Businesses"
+            kicker="Nearby"
             editorNote="Places nearby worth your time and money."
             items={localBiz.slice(0, 5)}
             onOpenItem={
@@ -401,6 +464,9 @@ export function EditionReader({
               <Text style={styles.sectionLabel}>Community</Text>
               <View style={styles.sectionRule} />
             </View>
+            <Text style={styles.sectionIntro}>
+              Notes from the neighborhood desk.
+            </Text>
             {history ? (
               <Pressable
                 onPress={
@@ -453,16 +519,26 @@ export function EditionReader({
               headline: leadStory.headline,
               dek: leadStory.summary,
               byline: leadStory.source,
-              image: leadStory.heroImage?.uri
-                ? { uri: leadStory.heroImage.uri }
-                : null,
+              image: wireOrFallbackImage({
+                imageUrl: leadStory.heroImage?.uri,
+                headline: leadStory.headline,
+                section: "local_news",
+                summary: leadStory.summary,
+                source: leadStory.source,
+              }),
               imageLabel: leadStory.heroImage?.alt,
             }}
             sides={localTopStories.slice(0, 2).map((s) => ({
               id: s.id,
               headline: s.headline,
               byline: s.source,
-              image: s.imageUrl ? { uri: s.imageUrl } : null,
+              image: wireOrFallbackImage({
+                imageUrl: s.imageUrl,
+                headline: s.headline,
+                section: "local_news",
+                summary: s.summary,
+                source: s.source,
+              }),
             }))}
             onOpen={
               onOpenArticle
@@ -490,15 +566,25 @@ export function EditionReader({
               headline: leadStory.headline,
               dek: leadStory.summary,
               byline: leadStory.source,
-              image: leadStory.heroImage?.uri
-                ? { uri: leadStory.heroImage.uri }
-                : null,
+              image: wireOrFallbackImage({
+                imageUrl: leadStory.heroImage?.uri,
+                headline: leadStory.headline,
+                section: leadStory.role ?? "national",
+                summary: leadStory.summary,
+                source: leadStory.source,
+              }),
             }}
             sides={nationalTopStories.slice(0, 2).map((s) => ({
               id: s.id,
               headline: s.headline,
               byline: s.source,
-              image: s.imageUrl ? { uri: s.imageUrl } : null,
+              image: wireOrFallbackImage({
+                imageUrl: s.imageUrl,
+                headline: s.headline,
+                section: s.role ?? "national",
+                summary: s.summary,
+                source: s.source,
+              }),
             }))}
             onOpen={
               onOpenArticle
@@ -573,7 +659,7 @@ export function EditionReader({
 
 const styles = StyleSheet.create({
   folio: {
-    paddingBottom: 36,
+    paddingBottom: space.endPadding,
   },
   sectionCard: {
     marginBottom: space.sectionGap,

@@ -8,6 +8,9 @@ import {
   RefreshControl,
   AppState,
   type AppStateStatus,
+  type ScrollView,
+  type NativeSyntheticEvent,
+  type NativeScrollEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -43,6 +46,7 @@ import {
 import {
   morningSalutation,
   waitingCopy,
+  PREPARING_LINES,
 } from "../lib/edition/morningRitual";
 import { localEditionDate } from "../lib/edition/dates";
 import { paper, press } from "../lib/edition/newspaperTheme";
@@ -70,12 +74,19 @@ import {
   LocationFirstRun,
   useLocationFirstRun,
 } from "../components/LocationFirstRun";
+import {
+  clearHomeScroll,
+  homeScrollSessionKey,
+  loadHomeScroll,
+  updateHomeScroll,
+} from "../lib/edition/homeSession";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [preparingStep, setPreparingStep] = useState(0);
   const [sections, setSections] = useState<EditionSection[]>([]);
   const [editionDate, setEditionDate] = useState<string | null>(null);
   const [editionId, setEditionId] = useState<string | null>(null);
@@ -110,6 +121,74 @@ export default function HomeScreen() {
 
   /** Tracks location when home last focused — reload edition if it changes. */
   const focusedLocationKeyRef = useRef<string | null>(null);
+  /** Homepage scroll — preserve exact offset when returning from detail screens. */
+  const scrollRef = useRef<ScrollView>(null);
+  const homeScrollYRef = useRef(0);
+  const pendingScrollRestoreY = useRef(0);
+  const restoredScrollRef = useRef(false);
+  const skipScrollRestoreRef = useRef(false);
+  const resetScrollOnLoadRef = useRef(false);
+  const editionIdRef = useRef<string | null>(null);
+  const activeLocationRef = useRef<ActiveLocation | null>(null);
+
+  editionIdRef.current = editionId;
+  activeLocationRef.current = activeLocation;
+
+  function currentHomeScrollKey(): string | null {
+    const id = editionIdRef.current;
+    if (!id) return null;
+    return homeScrollSessionKey(id, activeLocationKey(activeLocationRef.current));
+  }
+
+  function markHomeScrollForReset(): void {
+    const key = currentHomeScrollKey();
+    if (key) clearHomeScroll(key);
+    skipScrollRestoreRef.current = true;
+    pendingScrollRestoreY.current = 0;
+    restoredScrollRef.current = true;
+    homeScrollYRef.current = 0;
+    mastheadScrollY.setValue(0);
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    });
+  }
+
+  function persistHomeScrollNow(): void {
+    const key = currentHomeScrollKey();
+    if (key) updateHomeScroll(key, homeScrollYRef.current);
+  }
+
+  const restoreHomeScrollIfNeeded = useCallback((contentHeight?: number) => {
+    if (skipScrollRestoreRef.current || restoredScrollRef.current) return;
+    const target = pendingScrollRestoreY.current;
+    if (target <= 0) return;
+
+    if (contentHeight != null && contentHeight <= target) {
+      const y = Math.max(0, contentHeight - 1);
+      if (y <= 0) return;
+      restoredScrollRef.current = true;
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y, animated: false });
+        mastheadScrollY.setValue(y);
+        homeScrollYRef.current = y;
+      });
+      return;
+    }
+
+    restoredScrollRef.current = true;
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: target, animated: false });
+      mastheadScrollY.setValue(target);
+      homeScrollYRef.current = target;
+    });
+  }, [mastheadScrollY]);
+
+  const onHomeContentSizeChange = useCallback(
+    (_w: number, h: number) => {
+      restoreHomeScrollIfNeeded(h);
+    },
+    [restoreHomeScrollIfNeeded]
+  );
 
   function activeLocationKey(active: ActiveLocation | null): string {
     if (!active) return "none";
@@ -125,6 +204,22 @@ export default function HomeScreen() {
       generateAbortRef.current = null;
     };
   }, []);
+
+  // The presses can run close to a minute — a single static hint over that
+  // long a wait reads as stalled. Quietly advance through a few calm lines
+  // so the wait still feels like something is happening, never technical.
+  useEffect(() => {
+    if (!generating) {
+      setPreparingStep(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setPreparingStep((step) =>
+        Math.min(step + 1, PREPARING_LINES.length - 1)
+      );
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [generating]);
 
   // Resolve shared location (GPS / home / travel). Never silent city default.
   useEffect(() => {
@@ -153,12 +248,19 @@ export default function HomeScreen() {
 
   const loadEdition = useCallback(async (isRefresh = false) => {
     const gen = ++loadGen.current;
+    const resetScroll = isRefresh || resetScrollOnLoadRef.current;
+    if (resetScroll) {
+      resetScrollOnLoadRef.current = false;
+      markHomeScrollForReset();
+    } else {
+      skipScrollRestoreRef.current = false;
+    }
     if (isRefresh) setRefreshing(true);
     setError(null);
 
     // Withhold the previous folio immediately so a reload never flashes a
     // wrong-city or superseded edition while location/edition resolve.
-    if (mountedRef.current) {
+    if (mountedRef.current && resetScroll) {
       setSections([]);
       setEditionDate(null);
       setEditionId(null);
@@ -392,6 +494,7 @@ export default function HomeScreen() {
           editionId: edition.id,
         });
       }
+      markHomeScrollForReset();
       setSections([]);
       setEditionDate(null);
       setEditionId(null);
@@ -456,6 +559,9 @@ export default function HomeScreen() {
     if (!mountedRef.current || gen !== loadGen.current) return;
     setLoading(false);
     setRefreshing(false);
+    if (!resetScroll) {
+      restoreHomeScrollIfNeeded();
+    }
     } catch (err) {
       if (__DEV__) {
         console.error(
@@ -483,10 +589,51 @@ export default function HomeScreen() {
         // Reload today's paper when returning from Location settings (or any
         // focus) with a different city/mode — never leave a stale folio up.
         if (prevKey !== null && prevKey !== nextKey) {
+          markHomeScrollForReset();
           void loadEdition(true);
         }
       })();
     }, [loadEdition])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      void (async () => {
+        if (skipScrollRestoreRef.current) {
+          skipScrollRestoreRef.current = false;
+          return;
+        }
+
+        const id = editionIdRef.current;
+        if (!id) return;
+
+        const focusEditionId = id;
+        const focusLocationKey = activeLocationKey(activeLocationRef.current);
+        const key = homeScrollSessionKey(focusEditionId, focusLocationKey);
+        const saved = await loadHomeScroll(key);
+        if (
+          cancelled ||
+          saved <= 0 ||
+          editionIdRef.current !== focusEditionId ||
+          activeLocationKey(activeLocationRef.current) !== focusLocationKey
+        ) {
+          return;
+        }
+
+        pendingScrollRestoreY.current = saved;
+        restoredScrollRef.current = false;
+        homeScrollYRef.current = saved;
+        mastheadScrollY.setValue(saved);
+        restoreHomeScrollIfNeeded();
+      })();
+
+      return () => {
+        cancelled = true;
+        persistHomeScrollNow();
+      };
+    }, [mastheadScrollY, restoreHomeScrollIfNeeded])
   );
 
   useEffect(() => {
@@ -645,6 +792,7 @@ export default function HomeScreen() {
 
       setLocationMismatch(null);
       autoRegenKey.current = null;
+      resetScrollOnLoadRef.current = true;
       await loadEdition();
       __DEV__ && console.log("[home] generate-edition: loadEdition finished");
     } catch (err) {
@@ -811,7 +959,7 @@ export default function HomeScreen() {
   if (generating) {
     return (
       <SafeAreaView style={styles.container}>
-        <PaperLoading hint={waitingCopy.preparing} />
+        <PaperLoading hint={PREPARING_LINES[preparingStep]} />
       </SafeAreaView>
     );
   }
@@ -851,14 +999,21 @@ export default function HomeScreen() {
         }
       />
       <Animated.ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
         scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: mastheadScrollY } } }],
-          { useNativeDriver: true }
+          {
+            useNativeDriver: true,
+            listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+              homeScrollYRef.current = event.nativeEvent.contentOffset.y;
+            },
+          }
         )}
+        onContentSizeChange={onHomeContentSizeChange}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -941,6 +1096,7 @@ export default function HomeScreen() {
         {sections.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.title}>{morningSalutation()}</Text>
+            <View style={styles.emptyRule} />
             <Text style={styles.emptyKicker}>
               {locationMismatch
                 ? "Today’s paper needs a refresh."
@@ -1043,6 +1199,7 @@ export default function HomeScreen() {
                 null
               }
               onOpenArticle={(article) => {
+                persistHomeScrollNow();
                 const companion = companionForArticle(
                   intelligence,
                   article,
@@ -1056,6 +1213,7 @@ export default function HomeScreen() {
                 });
               }}
               onOpenEvent={(event) => {
+                persistHomeScrollNow();
                 openKindredEvent(router, event, {
                   backLabel: "← Today’s paper",
                 });
@@ -1064,13 +1222,22 @@ export default function HomeScreen() {
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}
-              onOpenClippings={() => router.push("/clippings")}
-              onOpenArchive={() => router.push("/library")}
+              onOpenClippings={() => {
+                persistHomeScrollNow();
+                router.push("/clippings");
+              }}
+              onOpenArchive={() => {
+                persistHomeScrollNow();
+                router.push("/library");
+              }}
             />
             <EditionAdjacentNav
               older={older}
               newer={null}
-              onOpen={(edition) => router.push(`/edition/${edition.id}`)}
+              onOpen={(edition) => {
+                persistHomeScrollNow();
+                router.push(`/edition/${edition.id}`);
+              }}
             />
           </>
         )}
@@ -1149,6 +1316,13 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     paddingTop: 48,
+  },
+  emptyRule: {
+    width: 48,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkMuted,
+    opacity: 0.35,
+    marginBottom: 22,
   },
   title: {
     fontFamily: "Georgia",

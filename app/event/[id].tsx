@@ -12,11 +12,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import {
   deriveEventBadge,
   eventPlaceLine,
   getStashedEvent,
 } from "../../lib/edition/eventStore";
+import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
+import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -42,6 +46,7 @@ export default function EventDetailScreen() {
       : "← Today’s paper";
 
   const badge = event ? deriveEventBadge(event) : null;
+  const infoBadges = event ? eventInfoBadgesFor(event) : [];
   const place = event ? eventPlaceLine(event) : "";
   const photoH = Math.round(Math.min(width * 0.85, 420));
 
@@ -78,7 +83,23 @@ export default function EventDetailScreen() {
             accessibilityLabel={event.name}
           />
         ) : (
-          <View style={[styles.noPhoto, { height: Math.round(photoH * 0.35) }]} />
+          <View style={[styles.noPhoto, { height: Math.round(photoH * 0.35) }]}>
+            <SymbolView
+              name="calendar"
+              size={22}
+              weight="light"
+              tintColor={paper.inkFaint}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              fallback={
+                <Ionicons
+                  name="calendar-outline"
+                  size={22}
+                  color={paper.inkFaint}
+                />
+              }
+            />
+          </View>
         )}
 
         <View style={styles.body}>
@@ -91,6 +112,8 @@ export default function EventDetailScreen() {
           <Text style={styles.title} maxFontSizeMultiplier={1.25}>
             {event.name}
           </Text>
+
+          <EventInfoBadgeRow badges={infoBadges} style={styles.badgeRow} />
 
           <Text style={styles.meta} maxFontSizeMultiplier={1.2}>
             {[event.date, event.time].filter(Boolean).join(" · ")}
@@ -160,6 +183,8 @@ const styles = StyleSheet.create({
   noPhoto: {
     backgroundColor: paper.creamDeep,
     marginBottom: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   body: {
     paddingHorizontal: 24,
@@ -181,7 +206,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.4,
     color: paper.ink,
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  badgeRow: {
+    marginBottom: 14,
   },
   meta: {
     fontSize: 16,

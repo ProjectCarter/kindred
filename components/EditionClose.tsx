@@ -54,9 +54,9 @@ export function EditionClose({
               onPress={onOpenClippings}
               style={({ pressed }) => [styles.action, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel="Saved articles"
+              accessibilityLabel="Your clippings"
             >
-              <Text style={styles.actionText}>Saved articles</Text>
+              <Text style={styles.actionText}>Your clippings</Text>
             </Pressable>
           ) : null}
           {onOpenArchive ? (
@@ -124,10 +124,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   actions: {
-    marginTop: 20,
+    marginTop: 24,
     alignItems: "center",
-    gap: 16,
-    marginBottom: 4,
+    gap: 18,
+    marginBottom: 8,
   },
   action: {
     paddingVertical: 8,

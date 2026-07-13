@@ -6,6 +6,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import {
   orderEventsForGrid,
   type LocalEventCard,
@@ -14,6 +16,8 @@ import {
   deriveEventBadge,
   eventPlaceLine,
 } from "../lib/edition/eventStore";
+import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
+import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
 import { paper, press } from "../lib/edition/newspaperTheme";
 
 type Props = {
@@ -38,7 +42,10 @@ export function LocalEventsGrid({ events, onOpenEvent }: Props) {
   if (visible.length === 0) {
     return (
       <View style={styles.section}>
-        <Text style={styles.kicker}>Local Events</Text>
+        <View style={styles.labelRow}>
+          <Text style={styles.kicker}>Local Events</Text>
+          <View style={styles.labelRule} />
+        </View>
         <Text style={styles.empty}>
           A quiet day nearby — the perfect excuse for a slow walk.
         </Text>
@@ -69,6 +76,7 @@ export function LocalEventsGrid({ events, onOpenEvent }: Props) {
           {row.map((event, colIndex) => {
             const index = rowIndex * 2 + colIndex;
             const badge = deriveEventBadge(event);
+            const infoBadges = eventInfoBadgesFor(event);
             const venue = event.venue?.trim() || eventPlaceLine(event);
             const timeLine =
               event.time && event.time !== "Time TBA"
@@ -93,6 +101,9 @@ export function LocalEventsGrid({ events, onOpenEvent }: Props) {
                   venue,
                   note,
                   badge,
+                  infoBadges.length
+                    ? eventInfoBadgeAccessibilitySummary(infoBadges)
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(". ")}
@@ -113,7 +124,23 @@ export function LocalEventsGrid({ events, onOpenEvent }: Props) {
                   ) : (
                     <View
                       style={[styles.photoFallback, { height: photoH }]}
-                    />
+                    >
+                      <SymbolView
+                        name="calendar"
+                        size={20}
+                        weight="light"
+                        tintColor={paper.inkFaint}
+                        accessibilityElementsHidden
+                        importantForAccessibility="no"
+                        fallback={
+                          <Ionicons
+                            name="calendar-outline"
+                            size={20}
+                            color={paper.inkFaint}
+                          />
+                        }
+                      />
+                    </View>
                   )}
                 </View>
 
@@ -131,6 +158,11 @@ export function LocalEventsGrid({ events, onOpenEvent }: Props) {
                   >
                     {event.name}
                   </Text>
+
+                  <EventInfoBadgeRow
+                    badges={infoBadges}
+                    style={styles.badgeRow}
+                  />
 
                   {venue ? (
                     <Text
@@ -225,6 +257,8 @@ const styles = StyleSheet.create({
   photoFallback: {
     width: "100%",
     backgroundColor: paper.creamDeep,
+    alignItems: "center",
+    justifyContent: "center",
   },
   copy: {
     paddingTop: 16,
@@ -244,6 +278,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.3,
     color: paper.ink,
+    marginBottom: 8,
+  },
+  badgeRow: {
     marginBottom: 10,
   },
   venue: {

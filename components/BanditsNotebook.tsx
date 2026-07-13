@@ -49,9 +49,12 @@ export function BanditsNotebook({ items, discovery, onOpenItem }: Props) {
   return (
     <View style={styles.section} accessibilityRole="summary">
       <View style={styles.header}>
-        <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
-          🐶 Bandit’s Notebook
-        </Text>
+        <View style={styles.labelRow}>
+          <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
+            Bandit’s Notebook
+          </Text>
+          <View style={styles.labelRule} />
+        </View>
         <Text style={styles.intro} maxFontSizeMultiplier={1.15}>
           {intro}
         </Text>
@@ -156,13 +159,24 @@ const styles = StyleSheet.create({
     marginBottom: 26,
     paddingRight: 8,
   },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    marginBottom: 14,
+  },
+  labelRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkRule,
+  },
   kicker: {
     fontSize: 11,
     letterSpacing: 2.4,
     fontWeight: "700",
     textTransform: "uppercase",
     color: paper.terracotta,
-    marginBottom: 14,
+    marginBottom: 0,
   },
   intro: {
     fontFamily: "Georgia",

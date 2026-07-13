@@ -20,7 +20,9 @@ type Props = {
  */
 export function PaperLoading({ hint = "Opening today’s paper…" }: Props) {
   const breath = useRef(new Animated.Value(0.4)).current;
+  const hintOp = useRef(new Animated.Value(1)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
+  const prevHint = useRef(hint);
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((v) =>
@@ -53,6 +55,19 @@ export function PaperLoading({ hint = "Opening today’s paper…" }: Props) {
     return () => loop.stop();
   }, [breath, reduceMotion]);
 
+  useEffect(() => {
+    if (prevHint.current === hint) return;
+    prevHint.current = hint;
+    if (reduceMotion) return;
+    hintOp.setValue(0);
+    Animated.timing(hintOp, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [hint, hintOp, reduceMotion]);
+
   return (
     <View
       style={styles.wrap}
@@ -62,9 +77,12 @@ export function PaperLoading({ hint = "Opening today’s paper…" }: Props) {
       <Animated.Text style={[styles.mark, { opacity: breath }]}>
         ◆
       </Animated.Text>
-      <Text style={styles.hint} maxFontSizeMultiplier={1.35}>
+      <Animated.Text
+        style={[styles.hint, { opacity: hintOp }]}
+        maxFontSizeMultiplier={1.35}
+      >
         {hint}
-      </Text>
+      </Animated.Text>
     </View>
   );
 }

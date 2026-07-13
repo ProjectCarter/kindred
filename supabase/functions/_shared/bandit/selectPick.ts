@@ -1,6 +1,10 @@
 import { matchesRecentCoverage } from "../stories/diversity.ts";
 import type { ScoredCandidate } from "../stories/score.ts";
 import type { CandidateStory } from "../stories/types.ts";
+import {
+  HEAVY_TONE_HINTS,
+  UPLIFT_TONE_HINTS,
+} from "../editor/tone.ts";
 
 export type BanditsPickStory = {
   id: string;
@@ -46,6 +50,32 @@ function interestOverlap(
   return hits;
 }
 
+/**
+ * Bandit recommends like a trusted friend, not a wire desk. This
+ * reuses Kindred's shared editorial-tone bank (`editor/tone.ts`) for
+ * fear/violence/outrage/scandal, plus a technical/regulatory pattern
+ * specific to this slot — dry industry copy that isn't "heavy" but
+ * still doesn't belong in a warm closing note.
+ */
+const TECHNICAL_PATTERN =
+  /\b(?:regulators?|regulatory|impurit(?:y|ies)|compliance|quarterly earnings|shareholders?|litigation|settlement|merger|acquisition|antitrust|layoffs?|bankrupt(?:cy)?|sec filing|ipo|interest rates?|federal reserve|tariffs?|earnings call|stock (?:price|market)|shares (?:fell|rose|slipped|jumped|plunged)|data breach|supply chain|inflation|gdp|unemployment rate|press release|proxy fight|board of directors|quarterly (?:report|results)|filing with|patent dispute|product recall)\b/;
+
+const DELIGHT_PATTERN =
+  /\b(hidden|secret|mystery|mysterious|centuries-old|ancient|folklore|tradition|handmade|artisan|first time|rare|unusual|little-known|forgotten|quirky|surprising|remarkable|astonishing|breathtaking)\b/;
+
+function editorialCharacter(story: CandidateStory): {
+  technical: boolean;
+  heavy: boolean;
+  delightful: boolean;
+} {
+  const hay = `${story.title} ${story.description}`.toLowerCase();
+  return {
+    technical: TECHNICAL_PATTERN.test(hay),
+    heavy: HEAVY_TONE_HINTS.test(hay),
+    delightful: DELIGHT_PATTERN.test(hay) || UPLIFT_TONE_HINTS.test(hay),
+  };
+}
+
 function broadenScore(
   c: ScoredCandidate,
   interests: string[],
@@ -65,9 +95,21 @@ function broadenScore(
   if (c.reasons.some((r) => r.code === "weekend_leisure")) score += 6;
 
   const category = (c.story.category || "").toLowerCase();
-  if (["science", "health", "culture", "arts", "travel"].includes(category)) {
-    score += 12;
+  const character = editorialCharacter(c.story);
+
+  // Bandit's Pick is a warm, curious recommendation — not the trade press
+  // and not the day's hardest news. Culture, arts, and travel read best
+  // in this slot by default; science and health only earn the same trust
+  // once they clear the technical/regulatory filter below.
+  if (["culture", "arts", "travel"].includes(category)) score += 12;
+  if (["science", "health"].includes(category) && !character.technical) {
+    score += 8;
   }
+
+  if (character.delightful) score += 16;
+  if (character.technical) score -= 30;
+  if (character.heavy) score -= 26;
+
   if (c.story.pool === "secondary") score += 8;
   if (c.story.pool === "general" && overlap === 0) score += 6;
 
@@ -83,6 +125,9 @@ function broadenScore(
 }
 
 function whyLine(c: ScoredCandidate, interests: string[]): string {
+  if (editorialCharacter(c.story).delightful) {
+    return "The kind of story worth telling someone about later.";
+  }
   if (interestOverlap(c.story, interests) === 0) {
     return "A little outside your usual path — chosen to broaden the morning.";
   }

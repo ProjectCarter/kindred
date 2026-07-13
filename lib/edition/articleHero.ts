@@ -72,7 +72,25 @@ function catalogById(id: string): HeroImageAsset | null {
   return getHeroCatalog().find((a) => a.id === id) ?? null;
 }
 
-function pickEditorialAsset(mood: Mood, season: string): HeroImageAsset {
+function hashSeed(seed: string): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+/**
+ * Rotates deterministically among the mood's eligible fallback assets using
+ * the article's own headline as the seed. A single edition can easily carry
+ * a dozen photo-less cards sharing one mood — always returning the first
+ * preferred id meant every one of them showed the identical stock image.
+ */
+function pickEditorialAsset(
+  mood: Mood,
+  season: string,
+  seed = ""
+): HeroImageAsset {
   const seasonalId =
     season === "spring"
       ? "spring-flowers"
@@ -100,9 +118,13 @@ function pickEditorialAsset(mood: Mood, season: string): HeroImageAsset {
               ? [seasonalId, "default-morning", "city-sunrise-generic"]
               : ["default-morning", seasonalId, "city-sunrise-generic"];
 
-  for (const id of preferredIds) {
-    const asset = catalogById(id);
-    if (asset) return asset;
+  const eligible = preferredIds
+    .map((id) => catalogById(id))
+    .filter((a): a is HeroImageAsset => Boolean(a));
+
+  if (eligible.length > 0) {
+    const index = seed ? hashSeed(seed) % eligible.length : 0;
+    return eligible[index];
   }
 
   const catalog = getHeroCatalog();
@@ -158,7 +180,7 @@ export function resolveArticleHero(input: {
     input.headline,
     (input.body ?? []).join(" ")
   );
-  const asset = pickEditorialAsset(mood, seasonName);
+  const asset = pickEditorialAsset(mood, seasonName, input.headline);
 
   return {
     uri: null,
@@ -232,7 +254,7 @@ export function supportingFiguresForArticle(
     article.headline,
     paras.join(" ")
   );
-  const primary = pickEditorialAsset(mood, seasonName);
+  const primary = pickEditorialAsset(mood, seasonName, article.headline);
   const heroSource = article.heroImage?.source;
   const catalog = getHeroCatalog();
   const alternates = catalog.filter((a) => {
@@ -241,10 +263,9 @@ export function supportingFiguresForArticle(
     return true;
   });
 
-  const second =
-    alternates.find((a) => a.id.includes("spring") || a.id.includes("autumn")) ??
-    alternates[0] ??
-    null;
+  const second = alternates.length
+    ? alternates[hashSeed(`${article.headline}:second`) % alternates.length]
+    : null;
 
   const figures: ArticleFigure[] = [];
   const mid = Math.min(

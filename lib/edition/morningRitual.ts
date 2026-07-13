@@ -17,8 +17,12 @@ export function editionColophon(): string {
   return "That is all for today’s edition.";
 }
 
-export function editionFarewell(): string {
-  return "Put the paper down when you’re ready. See you in the morning.";
+export function editionFarewell(now: Date = new Date()): string {
+  const hour = now.getHours();
+  if (hour < 12) return "Put the paper down when you’re ready. The day is yours.";
+  if (hour < 17) return "Put the paper down when you’re ready. See you tomorrow.";
+  if (hour < 21) return "Close the paper gently. Rest well tonight.";
+  return "The night is quiet. See you in the morning.";
 }
 
 /** Calm lines while the presses catch up. */
@@ -26,11 +30,24 @@ export const waitingCopy = {
   loading: "Opening today’s paper…",
   emptyTitle: "Today’s paper isn’t ready yet.",
   emptyBody:
-    "When you’re ready, open it below. It usually takes about a minute.",
+    "When you’re ready, we’ll set today’s edition. It usually takes about a minute.",
   openAction: "Open today’s paper",
   preparing: "Setting the type…",
   previous: "Earlier editions",
 } as const;
+
+/**
+ * A full edition can take close to a minute to build. A single static
+ * hint over that long a wait reads as stalled — this gives the presses
+ * a quiet sense of progress without ever feeling technical.
+ */
+export const PREPARING_LINES = [
+  "Setting the type…",
+  "Choosing today’s stories…",
+  "Laying out the morning…",
+  "Proofing the last few lines…",
+  "Almost ready…",
+] as const;
 
 /** Soft Bandit fallbacks when the stored line isn’t ready — same line all day. */
 const BANDIT_DAY_LINES = [

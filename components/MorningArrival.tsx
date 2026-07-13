@@ -78,6 +78,7 @@ export function MorningArrival({
   const enterOp = useRef(new Animated.Value(0)).current;
   const enterY = useRef(new Animated.Value(8)).current;
   const photoOp = useRef(new Animated.Value(0)).current;
+  const markOp = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((v) =>
@@ -136,6 +137,33 @@ export function MorningArrival({
   }, [reduceMotion, enterOp, enterY, dateLabel]);
 
   useEffect(() => {
+    if (reduceMotion) {
+      markOp.setValue(0.7);
+      return;
+    }
+    if (hero) return;
+    markOp.setValue(0.45);
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(markOp, {
+          toValue: 0.75,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(markOp, {
+          toValue: 0.45,
+          duration: 1400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [hero, reduceMotion, markOp]);
+
+  useEffect(() => {
     if (!hero) return;
     if (reduceMotion) {
       photoOp.setValue(1);
@@ -148,7 +176,7 @@ export function MorningArrival({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [hero?.id, reduceMotion, photoOp]);
+  }, [hero?.id, reduceMotion, photoOp, hero]);
 
   const placeWeather = [placeLabel, weatherLine].filter(Boolean).join("  ·  ");
 
@@ -179,31 +207,37 @@ export function MorningArrival({
       </Animated.View>
 
       {/* Signature Kindred hero — always first */}
-      <Animated.View style={[styles.heroBleed, { opacity: photoOp }]}>
+      <View style={styles.heroBleed}>
         {hero ? (
-          <View style={[styles.heroFrame, shadow.photo]}>
-            <Image
-              source={hero.source}
-              style={{ width: bleedWidth, height: heroHeight }}
-              resizeMode="cover"
-              accessibilityLabel={
-                hero.title?.trim()
-                  ? hero.title
-                  : placeWeather
-                    ? placeWeather
-                    : "This morning near you"
-              }
-            />
-          </View>
+          <Animated.View style={{ opacity: photoOp }}>
+            <View style={[styles.heroFrame, shadow.photo]}>
+              <Image
+                source={hero.source}
+                style={{ width: bleedWidth, height: heroHeight }}
+                resizeMode="cover"
+                accessibilityLabel={
+                  hero.title?.trim()
+                    ? hero.title
+                    : placeWeather
+                      ? placeWeather
+                      : "This morning near you"
+                }
+              />
+            </View>
+          </Animated.View>
         ) : (
           <View
             style={[
               styles.heroFallback,
               { width: bleedWidth, height: Math.round(heroHeight * 0.55) },
             ]}
-          />
+          >
+            <Animated.Text style={[styles.heroMark, { opacity: markOp }]}>
+              ◆
+            </Animated.Text>
+          </View>
         )}
-      </Animated.View>
+      </View>
 
       {/* Immediately under hero: weather, greeting, Bandit */}
       <View style={styles.morningCopy}>
@@ -278,6 +312,13 @@ const styles = StyleSheet.create({
   },
   heroFallback: {
     backgroundColor: paper.chrome,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroMark: {
+    fontSize: 11,
+    color: paper.terracotta,
+    letterSpacing: 0,
   },
   morningCopy: {
     paddingRight: 8,

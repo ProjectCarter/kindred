@@ -1,4 +1,34 @@
+import type { EventInfoBadgeId } from "./eventBadges";
+import { inferEventInfoBadges } from "./eventBadges";
+
 export type LocalEventImageSource = "provider_thumbnail";
+export type LocalEventCategory =
+  | "music"
+  | "comedy"
+  | "arts"
+  | "family"
+  | "sports"
+  | "food"
+  | "market"
+  | "nightlife"
+  | "community";
+
+const EVENT_CATEGORY_LABEL: Record<LocalEventCategory, string> = {
+  music: "Music",
+  comedy: "Comedy",
+  arts: "Arts",
+  family: "Family",
+  sports: "Sports",
+  food: "Food & Drink",
+  market: "Market",
+  nightlife: "Nightlife",
+  community: "Community",
+};
+
+export function eventCategoryLabel(category?: LocalEventCategory | null): string | null {
+  if (!category) return null;
+  return EVENT_CATEGORY_LABEL[category] ?? null;
+}
 
 export type LocalEventCard = {
   name: string;
@@ -14,6 +44,10 @@ export type LocalEventCard = {
   imageSource?: LocalEventImageSource | null;
   /** Bandit’s invitation — why this is worth leaving the house. */
   banditNote?: string | null;
+  /** Keyword-inferred genre, e.g. "music" or "food" — never invented. */
+  category?: LocalEventCategory;
+  /** Utility badges — structured metadata from the events provider. */
+  badges?: EventInfoBadgeId[];
 };
 
 export type LocalEventsBody = {
@@ -62,6 +96,82 @@ function normalizeImageUrl(value: unknown): string | null {
   return trimmed;
 }
 
+const VALID_CATEGORIES = new Set<LocalEventCategory>([
+  "music",
+  "comedy",
+  "arts",
+  "family",
+  "sports",
+  "food",
+  "market",
+  "nightlife",
+  "community",
+]);
+
+/** Same keyword heuristic as the server — only used when an older cached edition has no category yet. */
+function inferEventCategoryClient(name: string, venue: string): LocalEventCategory {
+  const hay = `${name} ${venue}`.toLowerCase();
+  if (/\b(comedy|stand-?up|improv)\b/.test(hay)) return "comedy";
+  if (
+    /\b(game|match|tournament|marathon|5k|10k|race|triathlon|football|basketball|baseball|softball|soccer|hockey|golf|tennis|pickleball|fitness|yoga|workout|bootcamp)\b/.test(
+      hay
+    )
+  )
+    return "sports";
+  if (
+    /\b(concert|live music|band|dj\b|jazz|symphony|orchestra|choir|singer|album|open mic|acoustic|karaoke)\b/.test(
+      hay
+    )
+  )
+    return "music";
+  if (
+    /\b(art|gallery|exhibit|museum|theater|theatre|play\b|ballet|film screening|movie screening|poetry|opera|dance recital)\b/.test(
+      hay
+    )
+  )
+    return "arts";
+  if (/\b(kids|children|family|storytime|petting zoo|carnival|toddler)\b/.test(hay))
+    return "family";
+  if (
+    /\b(food|wine|beer|brewery|brewing|tasting|dinner|brunch|culinary|chef|bake sale|bbq|farmers?\s*market)\b/.test(
+      hay
+    )
+  )
+    return "food";
+  if (/\b(market|craft fair|flea market|pop-?up shop|bazaar|vendor)\b/.test(hay))
+    return "market";
+  if (/\b(club\b|nightlife|happy hour|late night)\b/.test(hay)) return "nightlife";
+  return "community";
+}
+
+function normalizeCategory(
+  value: unknown,
+  name: string,
+  venue: string
+): LocalEventCategory {
+  if (typeof value === "string" && VALID_CATEGORIES.has(value as LocalEventCategory)) {
+    return value as LocalEventCategory;
+  }
+  return inferEventCategoryClient(name, venue);
+}
+
+function normalizeBadges(value: unknown): EventInfoBadgeId[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const allowed = new Set<EventInfoBadgeId>([
+    "free",
+    "free_parking",
+    "tickets_required",
+    "dog_friendly",
+    "food_drinks",
+    "live_music",
+  ]);
+  const out = value.filter(
+    (item): item is EventInfoBadgeId =>
+      typeof item === "string" && allowed.has(item as EventInfoBadgeId)
+  );
+  return out.length ? out : undefined;
+}
+
 function normalizeImageSource(
   value: unknown,
   imageUrl: string | null
@@ -75,7 +185,7 @@ function normalizeImageSource(
 export function fallbackBanditNote(event: Pick<LocalEventCard, "venue">): string {
   const venue = event.venue?.trim();
   if (venue && venue !== "Venue TBA") {
-    return `A good reason to step out — ${venue} has something on.`;
+    return `Worth stepping out for — ${venue} has something happening tonight.`;
   }
   return "Worth leaving the house for — a local moment you might otherwise miss.";
 }
@@ -91,12 +201,24 @@ export function parseLocalEventsBody(
       .map((e) => {
         const imageUrl = normalizeImageUrl(e.imageUrl);
         const venue = typeof e.venue === "string" ? e.venue.trim() : "";
+        const name = e.name.trim();
         const banditNote =
           typeof e.banditNote === "string" && e.banditNote.trim()
             ? e.banditNote.trim()
             : fallbackBanditNote({ venue });
+        const category = normalizeCategory(e.category, name, venue);
+        const badges =
+          normalizeBadges(e.badges) ??
+          inferEventInfoBadges({
+            name,
+            venue,
+            date: typeof e.date === "string" ? e.date : undefined,
+            time: typeof e.time === "string" ? e.time : undefined,
+            category,
+            banditNote,
+          });
         return {
-          name: e.name.trim(),
+          name,
           date: typeof e.date === "string" && e.date.trim() ? e.date.trim() : "Date TBA",
           time: typeof e.time === "string" && e.time.trim() ? e.time.trim() : "Time TBA",
           venue,
@@ -109,6 +231,8 @@ export function parseLocalEventsBody(
           imageUrl,
           imageSource: normalizeImageSource(e.imageSource, imageUrl),
           banditNote,
+          category,
+          badges: badges.length ? badges : undefined,
         };
       });
   } catch {
@@ -117,12 +241,33 @@ export function parseLocalEventsBody(
 }
 
 /**
- * Prefer photograph-backed events for the grid, keep provider order among peers.
+ * Prefer photograph-backed events, but don't let the grid's 4 slots fill up
+ * with the same genre when a livelier day has real variety on offer —
+ * a concert, a market, and two food events reads richer than four concerts.
  */
 export function orderEventsForGrid(events: LocalEventCard[]): LocalEventCard[] {
   const withPhoto = events.filter((e) => Boolean(e.imageUrl));
   const without = events.filter((e) => !e.imageUrl);
-  return [...withPhoto, ...without].slice(0, 4);
+  const byPhotoFirst = [...withPhoto, ...without];
+
+  if (byPhotoFirst.length <= 4) return byPhotoFirst.slice(0, 4);
+
+  const picked: LocalEventCard[] = [];
+  const seenCategory = new Set<LocalEventCategory | undefined>();
+
+  for (const event of byPhotoFirst) {
+    if (picked.length >= 4) break;
+    if (event.category && seenCategory.has(event.category)) continue;
+    picked.push(event);
+    if (event.category) seenCategory.add(event.category);
+  }
+  for (const event of byPhotoFirst) {
+    if (picked.length >= 4) break;
+    if (picked.includes(event)) continue;
+    picked.push(event);
+  }
+
+  return picked;
 }
 
 /**

@@ -16,8 +16,11 @@ export {
   classifyGeo,
   classifyTone,
   isHeavyStory,
+  isPublicSafetyStory,
   isUpliftingStory,
+  shouldDeprioritizeForTone,
   HEAVY_TONE_HINTS,
+  PUBLIC_SAFETY_HINTS,
   UPLIFT_TONE_HINTS,
 } from "./tone.ts";
 export {

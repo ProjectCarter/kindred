@@ -121,5 +121,5 @@ function parseNotesJson(text: string, expected: number): string[] {
 
 function fallbackNote(place: NormalizedPlace, category: PlacesCategory): string {
   const label = CATEGORY_LABEL[category];
-  return `A verified ${label} worth knowing about${place.address ? ` on ${place.address}` : ""}.`;
+  return `A ${label} worth knowing about${place.address ? `, on ${place.address}` : ""}.`;
 }

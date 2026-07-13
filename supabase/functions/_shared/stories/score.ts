@@ -14,9 +14,10 @@ import {
   tokenOverlap,
 } from "./diversity.ts";
 import {
-  HEAVY_TONE_HINTS,
   UPLIFT_TONE_HINTS,
   WORLD_SCOPE_HINTS,
+  isPublicSafetyStory,
+  shouldDeprioritizeForTone,
 } from "../editor/tone.ts";
 import type {
   CandidateStory,
@@ -395,8 +396,17 @@ function personalizationScore(
 }
 
 /**
- * Editorial edition scoring — morning relevance, weekend leisure,
- * emotional balance, world desk, doomscrolling resistance.
+ * Editorial edition scoring — morning relevance, emotional balance,
+ * world desk, doomscrolling resistance.
+ *
+ * Kindred's mission is to help people have a better day, not to farm
+ * engagement with fear or outrage. Fear/violence/disaster/scandal
+ * content is meaningfully deprioritized every day (not just weekends),
+ * and community/discovery/nature/culture content is meaningfully
+ * boosted every day. This is a soft ranking preference, not a
+ * blacklist: a story that also reads as a genuine public-safety or
+ * daily-life matter (evacuation, severe weather, road closure, recall)
+ * is exempt from the penalty and still competes normally.
  */
 function editorialEditionScore(
   story: CandidateStory,
@@ -423,42 +433,33 @@ function editorialEditionScore(
     });
   }
 
-  if (leisure) {
-    if (UPLIFT_TONE_HINTS.test(text) || UPLIFTING_HINTS.test(text)) {
-      score += 8;
-      reasons.push({
-        code: "weekend_leisure",
-        label: "Weekend leisure tone — room to breathe",
-        weight: 8,
-      });
-    }
-    if (HEAVY_TONE_HINTS.test(text)) {
-      score -= 8;
-      reasons.push({
-        code: "weekend_heavy_penalty",
-        label: "Heavy tone deprioritized on a weekend edition",
-        weight: -8,
-      });
-    }
-  } else if (HEAVY_TONE_HINTS.test(text)) {
-    // Weekday: soft doomscrolling resistance — still allow important heavy news.
-    score -= 3;
+  if (shouldDeprioritizeForTone(text)) {
+    const weight = leisure ? -18 : -14;
+    score += weight;
     reasons.push({
-      code: "emotional_weight",
-      label: "Heavy tone — counted carefully for balance",
-      weight: -3,
+      code: leisure ? "weekend_heavy_penalty" : "emotional_weight",
+      label: "Fear, violence, or outrage-driven framing — not Kindred's default front page",
+      weight,
     });
+  } else if (isPublicSafetyStory(text)) {
+    reasons.push({
+      code: "public_safety",
+      label: "Genuinely important for safety or daily life — kept regardless of tone",
+      weight: 6,
+    });
+    score += 6;
   }
 
   if (UPLIFT_TONE_HINTS.test(text) || UPLIFTING_HINTS.test(text)) {
-    score += leisure ? 0 : 4; // already counted on weekend
-    if (!leisure) {
-      reasons.push({
-        code: "emotional_lift",
-        label: "Uplifting or curious tone for balance",
-        weight: 4,
-      });
-    }
+    const weight = leisure ? 12 : 10;
+    score += weight;
+    reasons.push({
+      code: leisure ? "weekend_leisure" : "emotional_lift",
+      label: leisure
+        ? "Weekend leisure tone — room to breathe"
+        : "Helps someone discover, learn, or enjoy their community",
+      weight,
+    });
   }
 
   if (

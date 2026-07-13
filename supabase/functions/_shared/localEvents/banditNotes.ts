@@ -4,6 +4,30 @@
  */
 
 import type { LocalEvent } from "./provider.ts";
+import {
+  extractAiHintsFromBanditNote,
+  resolveEventBadges,
+} from "./badgeResolver.ts";
+
+function withRefreshedBadges(event: LocalEvent, banditNote: string): LocalEvent {
+  if (!event.badgeSignals) {
+    return { ...event, banditNote };
+  }
+  const badgeSignals = {
+    ...event.badgeSignals,
+    aiHints: {
+      ...event.badgeSignals.aiHints,
+      ...extractAiHintsFromBanditNote(banditNote),
+    },
+  };
+  const badges = resolveEventBadges(badgeSignals);
+  return {
+    ...event,
+    banditNote,
+    badgeSignals,
+    badges: badges.length ? badges : undefined,
+  };
+}
 
 export async function enrichEventsWithBanditNotes(
   events: LocalEvent[]
@@ -12,10 +36,9 @@ export async function enrichEventsWithBanditNotes(
 
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) {
-    return events.map((e) => ({
-      ...e,
-      banditNote: e.banditNote?.trim() || fallbackBanditNote(e),
-    }));
+    return events.map((e) =>
+      withRefreshedBadges(e, e.banditNote?.trim() || fallbackBanditNote(e))
+    );
   }
 
   try {
@@ -52,10 +75,9 @@ export async function enrichEventsWithBanditNotes(
 
     if (!response.ok) {
       console.error("[localEvents] bandit notes HTTP", response.status);
-      return events.map((e) => ({
-        ...e,
-        banditNote: e.banditNote?.trim() || fallbackBanditNote(e),
-      }));
+      return events.map((e) =>
+        withRefreshedBadges(e, e.banditNote?.trim() || fallbackBanditNote(e))
+      );
     }
 
     const data = await response.json();
@@ -63,18 +85,19 @@ export async function enrichEventsWithBanditNotes(
       typeof data?.content?.[0]?.text === "string" ? data.content[0].text : "";
     const notes = parseNotesJson(text, events.length);
 
-    return events.map((e, i) => ({
-      ...e,
-      banditNote: notes[i]?.trim() || fallbackBanditNote(e),
-    }));
+    return events.map((e, i) =>
+      withRefreshedBadges(
+        e,
+        notes[i]?.trim() || fallbackBanditNote(e)
+      )
+    );
   } catch (err) {
     console.error("[localEvents] bandit notes failure", {
       error: err instanceof Error ? err.message : String(err),
     });
-    return events.map((e) => ({
-      ...e,
-      banditNote: e.banditNote?.trim() || fallbackBanditNote(e),
-    }));
+    return events.map((e) =>
+      withRefreshedBadges(e, e.banditNote?.trim() || fallbackBanditNote(e))
+    );
   }
 }
 
@@ -109,7 +132,7 @@ function parseNotesJson(text: string, expected: number): string[] {
 export function fallbackBanditNote(event: LocalEvent): string {
   const venue = event.venue?.trim();
   if (venue && venue !== "Venue TBA") {
-    return `A good reason to step out — ${venue} has something on.`;
+    return `Worth stepping out for — ${venue} has something happening tonight.`;
   }
   return "Worth leaving the house for — a local moment you might otherwise miss.";
 }

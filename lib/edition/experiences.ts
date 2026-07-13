@@ -147,6 +147,50 @@ export function experienceImageFor(
   return pool[hashId(id) % pool.length] ?? FALLBACK_PHOTOS[0];
 }
 
+/**
+ * Assign a photo per card, preferring each card's own category pool but
+ * avoiding a repeat already used elsewhere in this section — a featured
+ * beach story and a paired beach story shouldn't show the same photograph.
+ */
+function assignExperienceImages(
+  items: RankedDiscoveryItem[]
+): ImageSourcePropType[] {
+  const used = new Set<ImageSourcePropType>();
+  const allPhotos = [
+    ...new Set(
+      Object.values(CATEGORY_PHOTOS)
+        .flat()
+        .concat(FALLBACK_PHOTOS)
+    ),
+  ];
+
+  return items.map((d) => {
+    const pool = CATEGORY_PHOTOS[d.item.category] ?? FALLBACK_PHOTOS;
+    const start = hashId(d.item.id) % pool.length;
+
+    for (let step = 0; step < pool.length; step++) {
+      const candidate = pool[(start + step) % pool.length];
+      if (!used.has(candidate)) {
+        used.add(candidate);
+        return candidate;
+      }
+    }
+
+    // This category's small pool is exhausted — borrow from the wider
+    // catalog rather than repeat, still deterministic per item.
+    const wideStart = hashId(d.item.id) % allPhotos.length;
+    for (let step = 0; step < allPhotos.length; step++) {
+      const candidate = allPhotos[(wideStart + step) % allPhotos.length];
+      if (!used.has(candidate)) {
+        used.add(candidate);
+        return candidate;
+      }
+    }
+
+    return pool[start] ?? FALLBACK_PHOTOS[0];
+  });
+}
+
 export function experienceLocationLine(
   item: RankedDiscoveryItem["item"],
   fallbackCity?: string | null
@@ -248,7 +292,8 @@ export function collectExperienceItems(
 
 function toCard(
   d: RankedDiscoveryItem,
-  city: string | null
+  city: string | null,
+  image: ImageSourcePropType
 ): ExperienceCard {
   return {
     id: d.item.id,
@@ -257,7 +302,7 @@ function toCard(
     headline: d.item.title.trim(),
     dek: inspireExperienceDek(d.item),
     location: experienceLocationLine(d.item, city),
-    image: experienceImageFor(d.item.category, d.item.id),
+    image,
   };
 }
 
@@ -282,10 +327,17 @@ export function selectExperiences(
     return { featured: null, stories: [], pair: [] };
   }
 
-  const featured = toCard(ranked[0], city);
   const rest = ranked.slice(1);
-  const stories = rest.slice(0, maxStories).map((d) => toCard(d, city));
-  const pair = rest.slice(maxStories, maxStories + 2).map((d) => toCard(d, city));
+  const shown = [ranked[0], ...rest.slice(0, maxStories + 2)];
+  const images = assignExperienceImages(shown);
+
+  const featured = toCard(ranked[0], city, images[0]);
+  const stories = rest
+    .slice(0, maxStories)
+    .map((d, i) => toCard(d, city, images[i + 1]));
+  const pair = rest
+    .slice(maxStories, maxStories + 2)
+    .map((d, i) => toCard(d, city, images[maxStories + 1 + i]));
 
   return { featured, stories, pair };
 }

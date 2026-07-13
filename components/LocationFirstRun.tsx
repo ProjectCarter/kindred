@@ -59,13 +59,13 @@ export function LocationFirstRun({
         <View style={styles.card}>
           <Text style={styles.kicker}>Your paper</Text>
           <Text style={styles.title}>
-            Would you like Kindred to use your current location for your daily
-            newspaper?
+            Every morning paper starts with a place.
           </Text>
           <Text style={styles.body}>
-            Location helps with local news, local events, weather, and
-            recommendations. Kindred only uses location while the app is open —
-            never in the background.
+            Use your current location, or choose a home city — local news,
+            local events, weather, and recommendations all follow from there.
+            Kindred only uses location while the app is open, never in the
+            background.
           </Text>
 
           <Pressable

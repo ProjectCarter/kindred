@@ -58,7 +58,9 @@ export function buildEditorialPolicy(
     freshnessHardHours: 84,
     breakingMinScore: 32,
     requireEmotionalBalance: true,
-    maxHeavyStories: 2,
+    // Kindred helps people have a better day, every day — not just on
+    // weekends. Cap heavy/fear-driven stories the same every morning.
+    maxHeavyStories: 1,
     preferWorldBalance: true,
     preferLeisureTone: false,
     morningFreshHours: 6,

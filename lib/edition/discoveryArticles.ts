@@ -516,14 +516,14 @@ export function composeGenericDynamicDiscoveryArticle(input: {
       ? why
       : `It made today's notebook on editorial judgment, not a trending list — worth a look if the idea appeals to you.`;
 
-  const whatToExpect = `Kindred doesn't have a specific, verified place attached to this one yet — it's a category recommendation (the kind of ${categoryLabel} experience worth seeking out) rather than a confirmed listing, so treat it as a nudge rather than a review of one exact address.`;
+  const whatToExpect = `Kindred doesn't have one specific place attached to this idea yet — it's a category recommendation (the kind of ${categoryLabel} experience worth seeking out) rather than a confirmed listing, so treat it as a nudge rather than a review of one exact address.`;
 
   const who =
     "Good for anyone who likes a nudge in a direction, and is happy to find the specific version of it nearby.";
 
   const goodToKnow = input.sourceName
     ? `Good to know: this idea is credited to ${input.sourceName} — worth searching nearby to find a real version of it close to you.`
-    : `Good to know: this is a general idea rather than a specific verified place — worth searching nearby to find a real version of it.`;
+    : `Good to know: this is a general idea rather than one specific place — worth searching nearby to find a real version of it.`;
 
   return {
     body: [opening, worthConsidering, whatToExpect, who, goodToKnow],

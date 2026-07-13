@@ -16,6 +16,7 @@ import * as Linking from "expo-linking";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { isPlausibleEmail } from "../lib/edition/dates";
 import { consumeAuthLinkError } from "../lib/auth/authLinkError";
+import { morningSalutation } from "../lib/edition/morningRitual";
 import { motion, paper, press, type } from "../lib/edition/newspaperTheme";
 
 export default function LoginScreen() {
@@ -148,7 +149,7 @@ export default function LoginScreen() {
             </View>
           ) : (
             <View>
-              <Text style={styles.title}>Good morning.</Text>
+              <Text style={styles.title}>{morningSalutation()}</Text>
               <Text style={styles.subtitle}>
                 Enter your email and we’ll send a sign-in link. No password
                 needed.

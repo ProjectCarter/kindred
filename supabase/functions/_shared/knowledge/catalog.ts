@@ -207,7 +207,7 @@ export function buildKnowledgeCandidates(
         type: "timeline",
         title: "A longer view",
         summary: `History’s reminder from ${ctx.onThisDay.year}: ${ctx.onThisDay.text.slice(0, 160)}`,
-        source: { name: "Smithsonian Magazine", tier: "magazine" },
+        source: { name: "Kindred Desk", tier: "kindred" },
         data: {
           events: [
             {
@@ -230,11 +230,8 @@ export function buildKnowledgeCandidates(
       facet: {
         type: "trusted_explainer",
         title: `A calm explainer on ${topic}`,
-        summary: `Background reading in the spirit of BBC / The Economist — what ${topic} means in plain language, without the noise of the day’s alert cycle.`,
-        source: {
-          name: topic === "climate" || topic === "science" ? "National Geographic" : "BBC",
-          tier: "magazine",
-        },
+        summary: `Plain-language background on what ${topic} means — without the noise of the day’s alert cycle.`,
+        source: { name: "Kindred Desk", tier: "kindred" },
         data: { term: topic },
       },
       targetStoryKeys: [story.storyKey],
@@ -326,8 +323,8 @@ export function buildKnowledgeCandidates(
         facet: {
           type: "map",
           title: "Where this sits",
-          summary: `Geographic context around ${ctx.location.city ?? "your area"} — Nat Geo–style place sense for the morning paper.`,
-          source: { name: "National Geographic", tier: "magazine" },
+          summary: `Geographic context around ${ctx.location.city ?? "your area"} — where this story sits on the map.`,
+          source: { name: "Kindred Desk", tier: "kindred" },
           data: {
             lat: ctx.location.lat,
             lon: ctx.location.lon,

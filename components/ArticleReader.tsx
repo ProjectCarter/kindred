@@ -94,6 +94,7 @@ export function ArticleReader({
   const [progress, setProgress] = useState(0);
   const [heroFailed, setHeroFailed] = useState(false);
   const [heroReady, setHeroReady] = useState(false);
+  const heroReadyRef = useRef(false);
   const [editorialFallback, setEditorialFallback] = useState<{
     source: ImageSourcePropType;
     caption: string;
@@ -115,6 +116,10 @@ export function ArticleReader({
   const briefing = isKindredBriefing(article);
   const canClip = Boolean(clipSectionId);
   const continueItems = companion?.continueReading ?? [];
+
+  useEffect(() => {
+    heroReadyRef.current = heroReady;
+  }, [heroReady]);
 
   useArticleReadingSession(article, progress, { editionId });
 
@@ -140,6 +145,26 @@ export function ArticleReader({
     ]).start();
   }, [article.id, enterOpacity, enterRise, initialScrollY, mastheadScrollY]);
 
+  const swapInEditorialHero = useCallback(() => {
+    const fallback = resolveArticleHero({
+      headline: article.headline,
+      section: article.section,
+      body: article.body,
+      source: article.source,
+    });
+    if (fallback.source) {
+      setEditorialFallback({
+        source: fallback.source,
+        caption: fallback.caption || article.headline,
+        credit: fallback.credit || "Kindred editorial archive",
+      });
+      setHeroFailed(false);
+      setHeroReady(true);
+      return;
+    }
+    setHeroFailed(true);
+  }, [article.body, article.headline, article.section, article.source]);
+
   useEffect(() => {
     setHeroFailed(false);
     setHeroReady(false);
@@ -148,8 +173,25 @@ export function ArticleReader({
     // Local catalog assets are ready immediately.
     if (article.heroImage?.source && !article.heroImage?.uri) {
       setHeroReady(true);
+      return;
     }
-  }, [article.id, article.heroImage?.uri, article.heroImage?.source, heroOpacity]);
+    // A wire photo that never resolves — no onLoad, no onError — would
+    // otherwise leave the hero permanently blank. Give it a generous
+    // window, then quietly swap in an editorial photograph instead.
+    const wireUri = article.heroImage?.uri?.trim();
+    if (wireUri) {
+      const timer = setTimeout(() => {
+        if (!heroReadyRef.current) swapInEditorialHero();
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    article.id,
+    article.heroImage?.uri,
+    article.heroImage?.source,
+    heroOpacity,
+    swapInEditorialHero,
+  ]);
 
   useEffect(() => {
     if (!heroReady) return;
@@ -515,23 +557,7 @@ export function ArticleReader({
                 setHeroReady(true);
                 return;
               }
-              const fallback = resolveArticleHero({
-                headline: article.headline,
-                section: article.section,
-                body: article.body,
-                source: article.source,
-              });
-              if (fallback.source) {
-                setEditorialFallback({
-                  source: fallback.source,
-                  caption: fallback.caption || article.headline,
-                  credit: fallback.credit || "Kindred editorial archive",
-                });
-                setHeroFailed(false);
-                setHeroReady(true);
-                return;
-              }
-              setHeroFailed(true);
+              swapInEditorialHero();
             }}
           />
 

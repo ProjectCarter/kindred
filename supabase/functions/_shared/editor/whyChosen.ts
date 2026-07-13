@@ -2,6 +2,7 @@ import {
   classifyGeo,
   classifyTone,
   isHeavyStory,
+  shouldDeprioritizeForTone,
 } from "./tone.ts";
 import type {
   EditorialCalendar,
@@ -155,7 +156,7 @@ export function summarizeEditorialDecisions(input: {
   }
 
   const heavyCount = input.slate.filter((s) =>
-    isHeavyStory(`${s.story.title} ${s.story.description}`)
+    shouldDeprioritizeForTone(`${s.story.title} ${s.story.description}`)
   ).length;
   if (heavyCount > input.policy.maxHeavyStories) {
     editorNotes.push("Heavy slate — feature counterweight prioritized");

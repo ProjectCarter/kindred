@@ -15,7 +15,7 @@ import type {
   EditorialDecisionSummary,
   EditorialPolicy,
 } from "./types.ts";
-import { isHeavyStory, isUpliftingStory } from "./tone.ts";
+import { isUpliftingStory, shouldDeprioritizeForTone } from "./tone.ts";
 
 export type RunEditorialDecisionsInput = {
   ranking: StoryRankingContext;
@@ -163,7 +163,7 @@ function ensureEmotionalBalance(
   if (!policy.requireEmotionalBalance) return frontPage;
 
   const heavy = frontPage.stories.filter((s) =>
-    isHeavyStory(`${s.story.title} ${s.story.description}`)
+    shouldDeprioritizeForTone(`${s.story.title} ${s.story.description}`)
   ).length;
   const hasLift = frontPage.stories.some(
     (s) =>
@@ -198,7 +198,7 @@ function ensureEmotionalBalance(
     (s) =>
       s.role !== "local" &&
       s.role !== "breaking" &&
-      isHeavyStory(`${s.story.title} ${s.story.description}`)
+      shouldDeprioritizeForTone(`${s.story.title} ${s.story.description}`)
   );
   if (replaceIdx < 0) {
     // Swap last non-local if no heavy found but lift missing.

@@ -7,7 +7,34 @@ import {
   useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
+
+/** Polished stand-in for the rare case a card truly has no photo. */
+function PhotoFallback({
+  width,
+  height,
+}: {
+  width: number;
+  height: number;
+}) {
+  return (
+    <View style={[styles.fallback, { width, height }]}>
+      <SymbolView
+        name="photo"
+        size={18}
+        weight="light"
+        tintColor={paper.inkFaint}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+        fallback={
+          <Ionicons name="image-outline" size={18} color={paper.inkFaint} />
+        }
+      />
+    </View>
+  );
+}
 
 export type TimeStoryCard = {
   id: string;
@@ -89,11 +116,9 @@ export function TimeStylePackage({
               accessibilityLabel={feature.imageLabel || feature.headline}
             />
           ) : (
-            <View
-              style={[
-                styles.fallback,
-                { width: featureW, height: Math.round(featureH * 0.4) },
-              ]}
+            <PhotoFallback
+              width={featureW}
+              height={Math.round(featureH * 0.4)}
             />
           )}
           {feature.kicker ? (
@@ -171,12 +196,7 @@ function SideCard({
           accessibilityLabel={story.imageLabel || story.headline}
         />
       ) : (
-        <View
-          style={[
-            styles.fallback,
-            { width, height: Math.round(photoH * 0.55) },
-          ]}
-        />
+        <PhotoFallback width={width} height={Math.round(photoH * 0.55)} />
       )}
       {story.kicker ? (
         <Text style={styles.cardKicker}>{story.kicker}</Text>
@@ -231,6 +251,8 @@ const styles = StyleSheet.create({
   },
   fallback: {
     backgroundColor: paper.creamDeep,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cardKicker: {
     marginTop: 10,

@@ -138,7 +138,15 @@ export function discoveryItemsForSurface(
   });
 }
 
-/** Calm prose — never mentions scores or algorithms. */
+/**
+ * Calm prose — never mentions scores or algorithms.
+ * Excludes the generic per-item "editorial_quality" reason by code (not by
+ * label text): it's present on every item with the same label, so — while
+ * it should always factor into ranking — showing it as a "why" would make
+ * nearly every card's caption open with the same line.
+ */
+const GENERIC_REASON_CODES = new Set(["editorial_quality"]);
+
 export function formatDiscoveryWhy(item: RankedDiscoveryItem): string {
   const top = (item.reasons ?? [])
     .filter(
@@ -146,6 +154,7 @@ export function formatDiscoveryWhy(item: RankedDiscoveryItem): string {
         r &&
         r.weight > 0 &&
         !String(r.code).startsWith("surface_") &&
+        !GENERIC_REASON_CODES.has(String(r.code)) &&
         typeof r.label === "string" &&
         r.label.trim() &&
         !/editorial quality|magazine desk|matches what you tend|hand-selected|algorithm|score/i.test(
@@ -154,7 +163,7 @@ export function formatDiscoveryWhy(item: RankedDiscoveryItem): string {
     )
     .slice(0, 2)
     .map((r) => r.label);
-  if (top.length) return top.join(" ");
+  if (top.length) return top.join(" · ");
   if (item.item.place?.city) return `Nearby in ${item.item.place.city}.`;
   return "";
 }

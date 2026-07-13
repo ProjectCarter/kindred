@@ -10,9 +10,12 @@ import { SymbolView } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import type { SFSymbol } from "expo-symbols";
 import {
+  eventCategoryLabel,
   parseLocalEventsBody,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
+import { eventInfoBadgesFor } from "../lib/edition/eventBadges";
+import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
 import { paper } from "../lib/edition/newspaperTheme";
 
 type Props = {
@@ -199,12 +202,25 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
                 event.sourceUrl && pressed && styles.actionPressed,
               ]}
             >
+              {eventCategoryLabel(event.category) ? (
+                <Text
+                  style={[styles.eventCategory, { color: colors.terracotta }]}
+                  maxFontSizeMultiplier={1.2}
+                >
+                  {eventCategoryLabel(event.category)}
+                </Text>
+              ) : null}
               <Text
                 style={[styles.eventName, { color: colors.ink }]}
                 maxFontSizeMultiplier={1.4}
               >
                 {event.name}
               </Text>
+
+              <EventInfoBadgeRow
+                badges={eventInfoBadgesFor(event)}
+                style={styles.badgeRow}
+              />
 
               <View style={styles.metaBlock}>
                 <MetaRow
@@ -301,13 +317,23 @@ const styles = StyleSheet.create({
   eventMain: {
     marginBottom: 0,
   },
+  eventCategory: {
+    fontSize: 10,
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
+    fontWeight: "600",
+    marginBottom: 8,
+  },
   eventName: {
     fontSize: 18,
     fontWeight: "600",
     fontFamily: "Georgia",
-    marginBottom: 12,
+    marginBottom: 10,
     lineHeight: 26,
     letterSpacing: -0.1,
+  },
+  badgeRow: {
+    marginBottom: 12,
   },
   metaBlock: {
     gap: 6,

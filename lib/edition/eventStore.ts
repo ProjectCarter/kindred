@@ -39,7 +39,7 @@ export function getStashedEvent(id: string): LocalEventCard | null {
   return event;
 }
 
-export type EventBadge = "Today" | "Free" | "Starts Soon";
+export type EventBadge = "Today" | "Starts Soon";
 
 /** Derive a small editorial badge from schedule text — never invent “Free” without signal. */
 export function deriveEventBadge(
@@ -47,7 +47,6 @@ export function deriveEventBadge(
   now: Date = new Date()
 ): EventBadge | null {
   const hay = `${event.name} ${event.date} ${event.time}`.toLowerCase();
-  if (/\bfree\b/.test(hay)) return "Free";
 
   const todayLabel = now.toLocaleDateString(undefined, {
     weekday: "short",
