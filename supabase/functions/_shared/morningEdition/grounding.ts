@@ -3,6 +3,45 @@ import type {
   MorningEditionComposeInput,
 } from "./types.ts";
 
+/**
+ * "2026-07-13" -> "Monday, July 13" — the masthead's own date style, never a
+ * spelled-out ordinal. Feeding the AI an already-natural date (instead of the
+ * raw ISO string) removes any temptation to invent its own formatting.
+ */
+function naturalEditionDateLabel(editionDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(editionDate);
+  if (!match) return editionDate;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  if (Number.isNaN(date.getTime())) return editionDate;
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/**
+ * Rewrites our own deterministic weather summary ("Current 106°F in Phoenix;
+ * high 106°F / low 78°F; plenty of sunshine.") into one flowing clause
+ * instead of a data readout. Used both as AI grounding and as the no-AI
+ * fallback sentence itself.
+ */
+function naturalizeWeatherBeat(summary: string, city?: string | null): string {
+  const match =
+    /^Current\s+([\d.]+°[CF])\s+in\s+([^;.]+?)(?:;\s*high\s+([\d.]+°[CF])\s*\/\s*low\s+([\d.]+°[CF]))?(?:;\s*([^;.]+?))?\.?$/.exec(
+      summary.trim()
+    );
+  if (!match) return `Weather for the day: ${summary.slice(0, 140)}`;
+  const [, current, place, high, low, condition] = match;
+  const where = place?.trim() || city?.trim() || "your area";
+  const conditionClause = condition ? `, with ${condition.trim()}` : "";
+  if (high && low) {
+    return `Expect a high near ${high} and a low near ${low} in ${where} today${conditionClause}.`;
+  }
+  return `Currently ${current} in ${where}${conditionClause}.`;
+}
+
 function nameAddress(firstName?: string | null): string | null {
   const n = firstName?.trim().split(/\s+/)[0];
   return n || null;
@@ -108,7 +147,7 @@ function weatherLine(input: MorningEditionComposeInput): string | null {
   if (input.signals?.weatherChange) {
     return "A shift in the weather ahead — worth a glance at Looking Ahead.";
   }
-  return `Weather for the day: ${input.weatherSummary.slice(0, 140)}`;
+  return naturalizeWeatherBeat(input.weatherSummary, input.location.city);
 }
 
 function weekendLine(input: MorningEditionComposeInput): string | null {
@@ -201,7 +240,7 @@ export function buildMorningEditionGrounding(
   beats: MorningEditionBeats
 ): string {
   const lines: string[] = [
-    `Edition date: ${input.editionDate}`,
+    `Edition date: ${naturalEditionDateLabel(input.editionDate)}`,
     `Mode: ${input.modeLabel ?? input.editionMode ?? "weekday"}`,
     `City: ${input.location.city ?? "unknown"}`,
   ];

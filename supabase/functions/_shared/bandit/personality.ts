@@ -3,6 +3,8 @@
  * Warm, concise, optimistic, never overwhelming.
  */
 
+import { NEWSPAPER_STYLE_RULES } from "../editorialStyle.ts";
+
 export const BANDIT_NAME = "Bandit";
 
 export const BANDIT_VOICE = {
@@ -31,6 +33,7 @@ export const BANDIT_SYSTEM_PROMPT =
   "Do not say Good morning (the masthead already does). " +
   "Do not restate the full calendar date. " +
   "Do not invent facts, weather, or events — only use the grounding given. " +
+  `${NEWSPAPER_STYLE_RULES} ` +
   "Respond ONLY with valid JSON: {\"line\": string}. No markdown.";
 
 export function banditGroundingPrompt(grounding: string): string {

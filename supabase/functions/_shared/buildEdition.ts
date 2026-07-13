@@ -29,10 +29,12 @@ import {
   formatWeatherSummary,
   resolveTemperatureUnit,
   unitInstruction,
+  weatherConditionPhrase,
   type TemperatureUnit,
   type TemperatureUnitPreference,
 } from "./weather/units.ts";
 import { runStoryEditorSafe } from "./storyEditor/index.ts";
+import { NEWSPAPER_STYLE_RULES } from "./editorialStyle.ts";
 import type { LeadStory } from "./leadStory/types.ts";
 import {
   buildLocalEventsBody,
@@ -339,6 +341,8 @@ async function writeSection(
         "You are Kindred's editor, writing one section of a calm, honest morning edition. " +
         "You write ONLY from the grounding data given to you — never invent a fact, statistic, or event. " +
         "Tone: warm, plain, unhurried, never salesy or exclamation-heavy. " +
+        "Never open with \"Good morning\" — the masthead already greets the reader. " +
+        `${NEWSPAPER_STYLE_RULES} ` +
         "Respond ONLY with valid JSON: {\"headline\": string, \"body\": string}. No markdown, no preamble.",
       messages: [
         {
@@ -821,12 +825,16 @@ export async function buildEditionForUser(
     };
   });
 
+  const weatherConditionCode =
+    weather?.current?.weather_code ?? weather?.daily?.weather_code?.[0] ?? null;
+
   const weatherSummary = formatWeatherSummary({
     city: city ?? location.city,
     currentC: weather?.current?.temperature_2m ?? null,
     highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
     lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
     unit: tempUnit,
+    conditionCode: weatherConditionCode,
   });
 
   console.log("[buildEdition] weather provider", {
@@ -994,12 +1002,19 @@ export async function buildEditionForUser(
     const current = formatTempC(weather.current.temperature_2m, tempUnit);
     const high = formatTempC(weather.daily?.temperature_2m_max?.[0], tempUnit);
     const low = formatTempC(weather.daily?.temperature_2m_min?.[0], tempUnit);
+    const condition = weatherConditionPhrase(weatherConditionCode);
     sections.push({
       section_type: "weather",
       position: 1,
-      groundingData: `Current temperature: ${current} in ${location.city}. Today's high/low: ${high}/${low}. Temperature unit: ${tempUnit}.`,
+      groundingData:
+        `Current temperature: ${current} in ${location.city}. Today's high/low: ${high}/${low}. ` +
+        `Sky condition: ${condition ?? "not available — do not guess it"}. Temperature unit: ${tempUnit}.`,
       instruction:
-        `Write a brief, practical weather section. State the real numbers given. ${unitInstruction(tempUnit)} No invented details. Do not mix temperature units.`,
+        "Write one brief, natural weather sentence for the front page — the way a newspaper editor " +
+        "would say it aloud, never a data readout. For example: “Expect a warm day across " +
+        `${location.city ?? "town"}, with a high near ${high ?? "the day's high"}${condition ? ` and ${condition}` : ""}.” ` +
+        `Use only the real numbers and sky condition given, exactly as formatted. ${unitInstruction(tempUnit)} ` +
+        "Never invent a sky condition (sunshine, rain, clouds) that isn't given. Do not mix temperature units.",
     });
   }
 
