@@ -799,7 +799,16 @@ export default function HomeScreen() {
     try {
       // Always re-resolve — never trust a stale in-memory place for generation.
       const active = await resolveActivePlace({ refreshIfStale: true });
-      if (!mountedRef.current || abort.signal.aborted) return;
+      if (!mountedRef.current) return;
+      if (abort.signal.aborted) {
+        // Resolving location (e.g. a slow GPS fix) ate the whole timeout budget
+        // before we ever reached the invoke — surface it instead of bouncing
+        // back to the empty state with no explanation.
+        setError(
+          "That took longer than expected. Try again in a moment — only one paper at a time."
+        );
+        return;
+      }
       setActiveLocation(active);
 
       if (!active.place) {

@@ -250,6 +250,27 @@ export async function getActiveLocation(): Promise<ActiveLocation> {
   return toActive(prefs);
 }
 
+/** getCurrentPositionAsync has no built-in timeout — a weak/absent GPS fix
+ * can otherwise hang far longer than any caller's own timeout, silently
+ * stalling everything awaiting it (e.g. edition generation). */
+const GPS_FIX_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 /**
  * Read GPS once (foreground). Does not change mode unless `setModeCurrent`.
  */
@@ -271,9 +292,13 @@ export async function fetchCurrentGpsPlace(): Promise<{
       return { place: null, permission: "denied" };
     }
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    const position = await withTimeout(
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }),
+      GPS_FIX_TIMEOUT_MS,
+      "GPS fix timed out"
+    );
     const { latitude, longitude } = position.coords;
     const places = await Location.reverseGeocodeAsync({
       latitude,
