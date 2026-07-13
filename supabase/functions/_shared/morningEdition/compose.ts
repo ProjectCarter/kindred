@@ -1,4 +1,5 @@
 import { BRIEFING_WORD_TARGETS } from "./voice.ts";
+import { stripLeadingSalutation } from "../editorialStyle.ts";
 import type {
   MorningBriefing,
   MorningBriefingLength,
@@ -21,11 +22,13 @@ function makeBriefing(
   length: MorningBriefingLength,
   text: string
 ): MorningBriefing {
-  const cleaned = text
-    .replace(/!+/g, ".")
-    .replace(/\s+/g, " ")
-    .replace(/\n\s*\n/g, "\n\n")
-    .trim();
+  const cleaned = stripLeadingSalutation(
+    text
+      .replace(/!+/g, ".")
+      .replace(/\s+/g, " ")
+      .replace(/\n\s*\n/g, "\n\n")
+      .trim()
+  );
   const paragraphs = paragraphsFrom(cleaned);
   const joined = paragraphs.join("\n\n");
   return {

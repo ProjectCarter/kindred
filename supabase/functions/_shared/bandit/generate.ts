@@ -7,6 +7,7 @@ import {
   composeBanditPayload,
   composeMorningLine,
 } from "./compose.ts";
+import { stripLeadingSalutation } from "../editorialStyle.ts";
 import type { BanditComposeInput, BanditPayload } from "./types.ts";
 
 function parseBanditLine(text: string): string | null {
@@ -73,8 +74,9 @@ export async function polishBanditMorningLine(
     });
 
     if (!line) return fallback;
-    // Guard against exclamation / length drift.
-    return line.replace(/!+/g, ".").slice(0, 220);
+    // Guard against exclamation / length drift, and against a leading
+    // time-of-day greeting — Bandit's line can be read any time of day.
+    return stripLeadingSalutation(line.replace(/!+/g, ".").slice(0, 220));
   } catch (err) {
     console.log("[bandit] polish failed", String(err));
     return fallback;

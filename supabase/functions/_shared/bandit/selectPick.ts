@@ -3,6 +3,7 @@ import type { ScoredCandidate } from "../stories/score.ts";
 import type { CandidateStory } from "../stories/types.ts";
 import {
   HEAVY_TONE_HINTS,
+  isPublicSafetyStory,
   UPLIFT_TONE_HINTS,
 } from "../editor/tone.ts";
 
@@ -61,17 +62,21 @@ const TECHNICAL_PATTERN =
   /\b(?:regulators?|regulatory|peptide|impurit(?:y|ies)|compliance|quarterly earnings|shareholders?|litigation|settlement|merger|acquisition|antitrust|layoffs?|bankrupt(?:cy)?|sec filing|ipo|interest rates?|federal reserve|tariffs?|earnings call|stock (?:price|market)|shares (?:fell|rose|slipped|jumped|plunged)|data breach|supply chain|inflation|gdp|unemployment rate|press release|proxy fight|board of directors|quarterly (?:report|results)|filing with|patent dispute|product recall|drug regulators?)\b/;
 
 const DELIGHT_PATTERN =
-  /\b(hidden|secret|mystery|mysterious|centuries-old|ancient|folklore|tradition|handmade|artisan|first time|rare|unusual|little-known|forgotten|quirky|surprising|remarkable|astonishing|breathtaking)\b/;
+  /\b(hidden|secret|mystery|mysterious|centuries-old|ancient|folklore|tradition|handmade|artisan|first time|rare|unusual|little-known|forgotten|quirky|surprising|remarkable|astonishing|breathtaking|stunning|beautiful|gorgeous|photographs?|photos reveal|images reveal|time-lapse|dazzling)\b/;
 
 function editorialCharacter(story: CandidateStory): {
   technical: boolean;
   heavy: boolean;
+  /** Heavy, but also a safety/daily-life matter — never suppressed for tone. */
+  heavySafety: boolean;
   delightful: boolean;
 } {
   const hay = `${story.title} ${story.description}`.toLowerCase();
+  const heavy = HEAVY_TONE_HINTS.test(hay);
   return {
     technical: TECHNICAL_PATTERN.test(hay),
-    heavy: HEAVY_TONE_HINTS.test(hay),
+    heavy,
+    heavySafety: heavy && isPublicSafetyStory(hay),
     delightful: DELIGHT_PATTERN.test(hay) || UPLIFT_TONE_HINTS.test(hay),
   };
 }
@@ -153,18 +158,41 @@ export function selectBanditsPick(input: {
   const interests = input.interests ?? [];
   const recentKeys = input.recentKeys ?? [];
 
-  const pool = input.scored.filter((c) => {
-    if (!c.story.id || !c.story.title?.trim()) return false;
-    if (leadId && c.story.id === leadId) return false;
+  const excludeHeavy = (c: ScoredCandidate) => {
+    const character = editorialCharacter(c.story);
     // Hard exclusion, not just a score penalty — routine technical /
     // regulatory press-release material (compliance thresholds, impurity
     // limits, filings, earnings, etc.) must never win this slot even
     // when it's the only candidate left. A warm recommendation slot
     // showing nothing is better than showing dry trade-press copy.
-    const character = editorialCharacter(c.story);
-    if (character.technical && !character.delightful) return false;
-    return true;
+    if (character.technical && !character.delightful) return true;
+    // Bandit's Pick is a warm, trusted-friend recommendation, not the
+    // day's hardest news — tragedy (fires, violence, disasters, deaths)
+    // should almost never win this slot. Public-safety matters (an
+    // evacuation notice, a wildfire warning) stay exempt since they're
+    // genuinely useful, not doomscrolling bait.
+    if (character.heavy && !character.heavySafety && !character.delightful) {
+      return true;
+    }
+    return false;
+  };
+
+  const strictPool = input.scored.filter((c) => {
+    if (!c.story.id || !c.story.title?.trim()) return false;
+    if (leadId && c.story.id === leadId) return false;
+    return !excludeHeavy(c);
   });
+
+  // Prefer the tragedy-free pool always. Only fall back to a heavy story
+  // (still scored down for it, see broadenScore) on a day so heavy that
+  // literally nothing else is available — an empty slot some days is
+  // better than a friendly recommendation for a disaster most days, but
+  // Bandit should not simply vanish every time the news is hard.
+  const pool = strictPool.length
+    ? strictPool
+    : input.scored.filter(
+        (c) => c.story.id && c.story.title?.trim() && c.story.id !== leadId
+      );
 
   if (!pool.length) return null;
 

@@ -34,7 +34,7 @@ import {
   type TemperatureUnitPreference,
 } from "./weather/units.ts";
 import { runStoryEditorSafe } from "./storyEditor/index.ts";
-import { NEWSPAPER_STYLE_RULES } from "./editorialStyle.ts";
+import { NEWSPAPER_STYLE_RULES, stripLeadingSalutation } from "./editorialStyle.ts";
 import type { LeadStory } from "./leadStory/types.ts";
 import {
   buildLocalEventsBody,
@@ -355,9 +355,16 @@ async function writeSection(
 
   const data = await response.json();
   const text = data.content?.[0]?.text ?? "";
-  const parsed = text
+  const rawParsed = text
     ? parseSectionJson(text)
     : { headline: "", body: "" };
+  // Same defensive strip as Morning Edition: the greeting section can be
+  // shown any time of day, so a leading "Good morning" (however unlikely
+  // given the prompt above) must never survive to the reader.
+  const parsed = {
+    headline: rawParsed.headline,
+    body: stripLeadingSalutation(rawParsed.body),
+  };
 
   console.log("[buildEdition] writeSection", {
     provider: "Anthropic",
@@ -1106,18 +1113,12 @@ export async function buildEditionForUser(
     onThisDayPresent: Boolean(onThisDay),
   });
 
-  const written = await timer.timed("AI Summaries - Section Writing", () =>
-    Promise.all(sections.map((section) => writeSection(section, anthropicApiKey)))
-  );
-
-  const writtenUsable = written.filter((w) => w.headline && w.body).length;
-  console.log("[buildEdition] write results", {
-    plannedCount: sections.length,
-    usableWrittenCount: writtenUsable,
-    emptyWrittenCount: sections.length - writtenUsable,
-    localEventsStructured: localEvents.length > 0,
-  });
-
+  // Section Writing and Bandit Payload are independent of each other (Bandit
+  // Payload only needs editorialContext + banditsPick, both already
+  // resolvable from data the Story Editor batch already returned — neither
+  // needs the *written* section copy below). They used to run one after the
+  // other for no reason; running them together shaves a few real seconds off
+  // every build with zero change to what either one produces.
   const editorialContext = buildEditionEditorialContext({
     editionDate,
     location: {
@@ -1219,37 +1220,50 @@ export async function buildEditionForUser(
     headline: banditsPick?.story.headline?.slice(0, 60) ?? null,
   });
 
-  const bandit = await timer.timed("AI Summaries - Bandit Payload", () =>
-    generateBanditPayload(
-      {
-        editionDate,
-        now: new Date(),
-        reader: banditReader,
-        location: { city, region, state },
-        weatherSummary,
-        signals: {
-          hasBreakingNews: editorialContext.signals.hasBreakingNews,
-          hasLocalEvents: editorialContext.signals.hasLocalEvents,
-          weatherChange: editorialContext.signals.weatherChange,
-          holidayTomorrow: editorialContext.signals.holidayTomorrow,
-          primaryInterests: editorialContext.signals.primaryInterests,
+  const [written, bandit] = await Promise.all([
+    timer.timed("AI Summaries - Section Writing", () =>
+      Promise.all(sections.map((section) => writeSection(section, anthropicApiKey)))
+    ),
+    timer.timed("AI Summaries - Bandit Payload", () =>
+      generateBanditPayload(
+        {
+          editionDate,
+          now: new Date(),
+          reader: banditReader,
+          location: { city, region, state },
+          weatherSummary,
+          signals: {
+            hasBreakingNews: editorialContext.signals.hasBreakingNews,
+            hasLocalEvents: editorialContext.signals.hasLocalEvents,
+            weatherChange: editorialContext.signals.weatherChange,
+            holidayTomorrow: editorialContext.signals.holidayTomorrow,
+            primaryInterests: editorialContext.signals.primaryInterests,
+          },
+          editorBrief: editorialContext.editorBrief,
+          personalization: {
+            favoriteSources: personalization.favoriteSources,
+            confidence: personalization.affinities.confidence,
+          },
+          discoveryBrief: discovery.editorBrief,
+          discoveryPicks: discovery.picks.map((p) => ({
+            title: p.title,
+            category: p.category,
+            why: p.why,
+          })),
+          pick: banditsPick,
         },
-        editorBrief: editorialContext.editorBrief,
-        personalization: {
-          favoriteSources: personalization.favoriteSources,
-          confidence: personalization.affinities.confidence,
-        },
-        discoveryBrief: discovery.editorBrief,
-        discoveryPicks: discovery.picks.map((p) => ({
-          title: p.title,
-          category: p.category,
-          why: p.why,
-        })),
-        pick: banditsPick,
-      },
-      anthropicApiKey
-    )
-  );
+        anthropicApiKey
+      )
+    ),
+  ]);
+
+  const writtenUsable = written.filter((w) => w.headline && w.body).length;
+  console.log("[buildEdition] write results", {
+    plannedCount: sections.length,
+    usableWrittenCount: writtenUsable,
+    emptyWrittenCount: sections.length - writtenUsable,
+    localEventsStructured: localEvents.length > 0,
+  });
 
   const seasonMonth = new Date(`${editionDate}T12:00:00`).getMonth();
   const seasonHint =
@@ -1627,7 +1641,14 @@ function logTimingSummary(timer: ReturnType<typeof createTimer>) {
     { label: "Events", prefixes: ["Local Events"] },
     { label: "Recommendations", prefixes: ["Recommendations"] },
     { label: "Today in History", prefixes: ["Today in History"] },
-    { label: "AI Summaries", prefixes: ["AI Summaries"] },
+    // "AI Summaries" intentionally excludes "AI Summaries - Morning Edition
+    // Polish" (listed explicitly below, not via a blanket prefix) so the
+    // Editorial Opening line below isn't double-counted into this bucket too.
+    { label: "AI Summaries", prefixes: [
+      "AI Summaries - Story Editor", "AI Summaries - Section Writing",
+      "AI Summaries - Bandit Payload",
+    ] },
+    { label: "Editorial Opening (AI)", prefixes: ["AI Summaries - Morning Edition Polish"] },
     { label: "Database Writes", prefixes: ["Database Write"] },
   ];
 
@@ -1642,6 +1663,10 @@ function logTimingSummary(timer: ReturnType<typeof createTimer>) {
       "\n[buildEdition] (Weather/News/Events/Recommendations run concurrently, " +
       "so their sum can exceed Total — see per-entry [buildEdition] timing logs " +
       "above for exact overlap.)\n" +
+      "[buildEdition] (No 'Image processing' line: event/place images are URLs " +
+      "already returned by SerpAPI/Foursquare, never fetched or transformed " +
+      "server-side. Hero image selection runs client-side after the edition " +
+      "loads, so it's outside this pipeline's generation time.)\n" +
       "[buildEdition] ===========================\n"
   );
 }

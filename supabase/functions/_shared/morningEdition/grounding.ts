@@ -152,12 +152,15 @@ function weatherLine(input: MorningEditionComposeInput): string | null {
 
 function weekendLine(input: MorningEditionComposeInput): string | null {
   if (input.isSunday) {
-    return "Sunday tone — unhurried, with room for curiosity beyond the hard news.";
+    return "It’s an unhurried Sunday for reading, with room to wander beyond the hard news.";
   }
   if (input.isWeekend) {
-    return "Weekend edition — a lighter editorial pace without losing substance.";
+    return "The weekend pace is a little lighter today, without losing the substance.";
   }
-  return "Weekday desk — clear priorities, measured pace.";
+  // A plain weekday doesn't need its own line — this used to read like an
+  // internal editorial memo ("Weekday desk — clear priorities, measured
+  // pace.") rather than something a reader would ever say out loud.
+  return null;
 }
 
 function seasonalLine(input: MorningEditionComposeInput): string | null {

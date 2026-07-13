@@ -3,6 +3,7 @@ import {
   morningEditionPolishPrompt,
 } from "./voice.ts";
 import { composeAllBriefings } from "./compose.ts";
+import { stripLeadingSalutation } from "../editorialStyle.ts";
 import type {
   MorningBriefing,
   MorningBriefingLength,
@@ -32,7 +33,7 @@ function toBriefing(
   text: string,
   seconds: number
 ): MorningBriefing {
-  const cleaned = text.replace(/!+/g, ".").trim();
+  const cleaned = stripLeadingSalutation(text.replace(/!+/g, ".").trim());
   const paragraphs = paragraphsFrom(cleaned);
   const joined = paragraphs.join("\n\n");
   return {
