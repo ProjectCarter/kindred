@@ -7,6 +7,13 @@ import { ArticleReader } from "../../components/ArticleReader";
 import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
 import { articleFromSectionItem, articleFromBanditsPick } from "../../lib/edition/article";
+import {
+  getGoldRelatedArticle,
+  getGoldStandardArticle,
+  getGoldStandardCompanion,
+  GOLD_STANDARD_ARTICLE_ID,
+  isGoldStandardArticleId,
+} from "../../lib/edition/goldStandard/algalBloomArticle";
 import { getStashedArticle } from "../../lib/edition/articleStore";
 import {
   getArticleCompanion,
@@ -61,7 +68,11 @@ export default function ArticleScreen() {
       if (memoryArticle) {
         const built: ArticleSession = {
           article: memoryArticle,
-          companion: getArticleCompanion(articleId!) ?? null,
+          companion:
+            getArticleCompanion(articleId!) ??
+            (isGoldStandardArticleId(articleId!)
+              ? getGoldStandardCompanion()
+              : null),
           editionId:
             typeof editionId === "string" && editionId ? editionId : null,
           backLabel:
@@ -72,6 +83,57 @@ export default function ArticleScreen() {
             typeof clipSectionId === "string" && clipSectionId
               ? clipSectionId
               : null,
+          scrollY: 0,
+          updatedAt: Date.now(),
+        };
+        if (!cancelled) {
+          setSession(built);
+          setReady(true);
+        }
+        return;
+      }
+
+      // Gold-standard blueprint + related pieces — openable without a prior stash.
+      if (articleId === GOLD_STANDARD_ARTICLE_ID) {
+        const built: ArticleSession = {
+          article: getGoldStandardArticle(),
+          companion: getGoldStandardCompanion(),
+          editionId:
+            typeof editionId === "string" && editionId ? editionId : null,
+          backLabel:
+            typeof backLabel === "string" && backLabel.trim()
+              ? backLabel
+              : "← Today’s paper",
+          clipSectionId: null,
+          scrollY: 0,
+          updatedAt: Date.now(),
+        };
+        if (!cancelled) {
+          setSession(built);
+          setReady(true);
+        }
+        return;
+      }
+
+      const goldRelated = getGoldRelatedArticle(articleId!);
+      if (goldRelated) {
+        const built: ArticleSession = {
+          article: goldRelated,
+          companion: {
+            whyThisMatters: null,
+            whyChosen: null,
+            banditNote: goldRelated.banditNote ?? null,
+            knowledgeNotes: [],
+            knowledgeCards: [],
+            continueReading: terminalEditorialContinuation(),
+          },
+          editionId:
+            typeof editionId === "string" && editionId ? editionId : null,
+          backLabel:
+            typeof backLabel === "string" && backLabel.trim()
+              ? backLabel
+              : "← Previous story",
+          clipSectionId: null,
           scrollY: 0,
           updatedAt: Date.now(),
         };
@@ -165,9 +227,26 @@ export default function ArticleScreen() {
     const terminalCompanion = {
       whyThisMatters: null as null,
       whyChosen: null as null,
+      banditNote: null as null,
       knowledgeNotes: [] as [],
+      knowledgeCards: [] as [],
       continueReading: terminalEditorialContinuation(),
     };
+
+    if (item.targetArticleId) {
+      const goldRelated = getGoldRelatedArticle(item.targetArticleId);
+      if (goldRelated) {
+        openKindredArticle(router, goldRelated, {
+          editionId: resolvedEdition,
+          backLabel: "← Previous story",
+          companion: {
+            ...terminalCompanion,
+            banditNote: goldRelated.banditNote ?? null,
+          },
+        });
+        return;
+      }
+    }
 
     if (item.kind === "bandit") {
       const related = articleFromBanditsPick({
@@ -227,10 +306,10 @@ export default function ArticleScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: paper.cream },
+  flex: { flex: 1, backgroundColor: paper.sky },
   centered: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 36,

@@ -45,6 +45,11 @@ export type ArticleCompanion = {
     summary: string;
   } | null;
   whyChosen?: string | null;
+  /**
+   * Bandit’s notebook voice introducing the story.
+   * Prefer this in the reader over raw whyChosen / whyThisMatters labels.
+   */
+  banditNote?: string | null;
   /** Related background, previous coverage, explainers from Knowledge. */
   knowledgeNotes?: KnowledgeNote[];
   /** Calm Knowledge Cards — optional desk glosses after the story. */

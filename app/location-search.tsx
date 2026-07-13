@@ -144,7 +144,7 @@ export default function LocationSearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
   },
   header: {
     paddingHorizontal: 24,

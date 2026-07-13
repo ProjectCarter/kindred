@@ -1,5 +1,10 @@
 node_modules
 .expo
 .env
+.env.local
+.env*.local
 dist
 *.log
+.next
+tsconfig.tsbuildinfo
+supabase/.temp

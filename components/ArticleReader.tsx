@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Text,
   View,
@@ -18,7 +18,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { KindredArticle } from "../lib/edition/article";
+import type { KindredArticle, ArticleFigure } from "../lib/edition/article";
 import {
   formatArticlePublishedAt,
   isKindredBriefing,
@@ -36,7 +36,6 @@ import {
   paper,
   type,
   reader,
-  shadow,
   press,
   motion,
 } from "../lib/edition/newspaperTheme";
@@ -46,14 +45,15 @@ import {
   trackReadingSignal,
 } from "../lib/personalization";
 import { supabase } from "../lib/supabase";
-import { MagazineCallout } from "./MagazineCallout";
-import { KnowledgeCardList } from "./KnowledgeCard";
-import { resolveArticleHero } from "../lib/edition/articleHero";
+import { resolveArticleHero, supportingFiguresForArticle } from "../lib/edition/articleHero";
 import {
-  KindredFullMasthead,
   KindredStickyMasthead,
   MastheadLink,
 } from "./KindredMasthead";
+import { ContentTemplateModules } from "./ContentTemplateModules";
+import {
+  categoryLabelForType,
+} from "../lib/edition/contentSystem";
 
 type Props = {
   article: KindredArticle;
@@ -88,9 +88,6 @@ export function ArticleReader({
     windowWidth - reader.gutter * 2,
     reader.measure
   );
-  /** Magazine bleed — photograph nearly edge-to-edge, never cramped in the column. */
-  const figureWidth = Math.min(windowWidth - 16, readingWidth + 36);
-  const figureBleed = Math.max(0, (figureWidth - readingWidth) / 2);
 
   const [contentHeight, setContentHeight] = useState(1);
   const [viewportHeight, setViewportHeight] = useState(1);
@@ -118,8 +115,6 @@ export function ArticleReader({
   const briefing = isKindredBriefing(article);
   const canClip = Boolean(clipSectionId);
   const continueItems = companion?.continueReading ?? [];
-  const knowledgeNotes = companion?.knowledgeNotes ?? [];
-  const knowledgeCards = companion?.knowledgeCards ?? [];
 
   useArticleReadingSession(article, progress, { editionId });
 
@@ -219,16 +214,57 @@ export function ArticleReader({
 
   const published = formatArticlePublishedAt(article.publishedAt);
   const readLabel = formatReadTime(article.estimatedReadMinutes);
-  const metaParts = [published, readLabel].filter(Boolean) as string[];
+  const metaLine = [readLabel, article.source, published]
+    .filter(Boolean)
+    .join("  ·  ");
 
-  const pullQuote = article.pullQuote;
+  const banditNote =
+    article.banditNote?.trim() ||
+    companion?.banditNote?.trim() ||
+    companion?.whyChosen?.trim() ||
+    companion?.whyThisMatters?.summary?.trim() ||
+    null;
+
+  const pullQuote =
+    article.pullQuote && article.body.length >= 4 ? article.pullQuote : null;
   const pullIndex = useMemo(() => {
-    if (!pullQuote || article.body.length < 2) return -1;
+    if (!pullQuote || article.body.length < 4) return -1;
     return Math.min(
-      Math.max(1, Math.floor(article.body.length * 0.33)),
-      article.body.length - 1
+      Math.max(1, Math.floor(article.body.length * 0.35)),
+      article.body.length - 2
     );
   }, [pullQuote, article.body.length]);
+
+  // Prefer article-supplied figures; skip auto fills so every image is intentional.
+  const figures = useMemo(() => {
+    if (article.figures?.length) {
+      return article.figures.filter((f) => Boolean(f.uri?.trim() || f.source));
+    }
+    return supportingFiguresForArticle(article);
+  }, [article]);
+  const figuresByParagraph = useMemo(() => {
+    const map = new Map<number, typeof figures>();
+    for (const fig of figures) {
+      const list = map.get(fig.afterParagraph) ?? [];
+      list.push(fig);
+      map.set(fig.afterParagraph, list);
+    }
+    return map;
+  }, [figures]);
+
+  const relatedItems = (continueItems ?? []).filter(
+    (i) =>
+      i.kind === "following" ||
+      i.kind === "background" ||
+      i.kind === "local" ||
+      i.kind === "opposing"
+  );
+  const banditPickItems = (continueItems ?? []).filter(
+    (i) => i.kind === "bandit"
+  );
+  const continueNavItems = (continueItems ?? []).filter(
+    (i) => i.kind === "edition" || i.action === "return_to_edition"
+  );
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -425,7 +461,11 @@ export function ArticleReader({
         scrollY={mastheadScrollY}
         style={styles.stickyMasthead}
         subtitle={
-          briefing ? "Briefing" : formatSectionLabel(article.section)
+          briefing
+            ? "Briefing"
+            : article.contentType
+              ? categoryLabelForType(article.contentType)
+              : formatSectionLabel(article.section)
         }
         leading={
           <MastheadLink
@@ -441,10 +481,7 @@ export function ArticleReader({
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingBottom: 96 + insets.bottom,
-            paddingHorizontal: reader.gutter,
-          },
+          { paddingBottom: 96 + insets.bottom },
         ]}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -456,251 +493,190 @@ export function ArticleReader({
         decelerationRate="normal"
       >
         <Animated.View
-          style={[
-            styles.column,
-            {
-              width: readingWidth,
-              opacity: enterOpacity,
-              transform: [{ translateY: enterRise }],
-            },
-          ]}
+          style={{
+            opacity: enterOpacity,
+            transform: [{ translateY: enterRise }],
+            width: "100%",
+            alignItems: "center",
+          }}
         >
-          <KindredFullMasthead
-            eyebrow={briefing ? "Briefing" : null}
-            meta={
-              briefing ? null : formatSectionLabel(article.section)
-            }
-            leading={
-              <MastheadLink
-                label={backLabel}
-                onPress={onBack}
-                accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
-              />
-            }
-            scrollY={mastheadScrollY}
-            style={styles.articleMasthead}
+          {/* 1. Full-width hero */}
+          <HeroFigure
+            article={article}
+            windowWidth={windowWidth}
+            heroFailed={heroFailed}
+            heroReady={heroReady}
+            heroOpacity={heroOpacity}
+            editorialFallback={editorialFallback}
+            onReady={() => setHeroReady(true)}
+            onWireError={() => {
+              const heroUri = article.heroImage?.uri?.trim();
+              if (!heroUri) {
+                setHeroReady(true);
+                return;
+              }
+              const fallback = resolveArticleHero({
+                headline: article.headline,
+                section: article.section,
+                body: article.body,
+                source: article.source,
+              });
+              if (fallback.source) {
+                setEditorialFallback({
+                  source: fallback.source,
+                  caption: fallback.caption || article.headline,
+                  credit: fallback.credit || "Kindred editorial archive",
+                });
+                setHeroFailed(false);
+                setHeroReady(true);
+                return;
+              }
+              setHeroFailed(true);
+            }}
           />
 
-          <Text style={styles.kicker}>
-            {briefing
-              ? "Kindred briefing"
-              : formatSectionLabel(article.section)}
-          </Text>
-
-          <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
-            {article.headline}
-          </Text>
-
-          {article.dek ? (
-            <Text style={styles.dek} maxFontSizeMultiplier={1.25}>
-              {article.dek}
+          <View style={[styles.column, { width: readingWidth }]}>
+            {/* 2. Category — desk label from Universal Content System when known */}
+            <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
+              {briefing
+                ? "Kindred briefing"
+                : article.contentType
+                  ? categoryLabelForType(article.contentType)
+                  : formatSectionLabel(article.section)}
             </Text>
-          ) : null}
 
-          <View style={styles.bylineBlock}>
-            {article.byline ? (
-              <Text style={styles.byline} maxFontSizeMultiplier={1.2}>
+            {/* 3. Headline */}
+            <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
+              {article.headline}
+            </Text>
+
+            {/* 4. Reading time · source · date */}
+            {metaLine ? (
+              <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
+                {metaLine}
+              </Text>
+            ) : article.byline ? (
+              <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
                 {article.byline}
               </Text>
             ) : null}
-            {metaParts.length > 0 ? (
-              <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
-                {metaParts.join("  ·  ")}
-              </Text>
-            ) : (
-              <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
-                {article.source}
-              </Text>
-            )}
-          </View>
 
-          {briefing ? (
-            <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
-              {article.body.length <= 1
-                ? "A short Kindred note — the full report lives with the publisher."
-                : "A Kindred summary for your morning paper — not the publisher’s full article."}
-            </Text>
-          ) : null}
-
-          {(() => {
-            const heroUri = article.heroImage?.uri?.trim() || null;
-            const heroLocal =
-              editorialFallback?.source ??
-              article.heroImage?.source ??
-              null;
-            const showHero =
-              Boolean(heroLocal) || (Boolean(heroUri) && !heroFailed);
-            if (!showHero) {
-              return <View style={styles.noImageRule} />;
-            }
-            const caption =
-              editorialFallback?.caption ||
-              article.heroImage?.caption ||
-              article.headline;
-            const credit =
-              editorialFallback?.credit ||
-              article.heroImage?.credit ||
-              null;
-            return (
-              <View
-                style={[
-                  styles.figure,
-                  {
-                    marginHorizontal: -figureBleed,
-                    width: figureWidth,
-                  },
-                ]}
-              >
-                <View style={[styles.imageFrame, shadow.photo]}>
-                  {!heroReady ? <View style={styles.imagePlaceholder} /> : null}
-                  <Animated.View
-                    style={[styles.imageFade, { opacity: heroOpacity }]}
-                  >
-                    <Image
-                      source={
-                        heroLocal
-                          ? heroLocal
-                          : { uri: heroUri! }
-                      }
-                      style={styles.image}
-                      resizeMode="cover"
-                      accessibilityLabel={caption}
-                      onLoad={() => setHeroReady(true)}
-                      onError={() => {
-                        if (heroUri && !heroLocal) {
-                          const fallback = resolveArticleHero({
-                            headline: article.headline,
-                            section: article.section,
-                            body: article.body,
-                            source: article.source,
-                          });
-                          if (fallback.source) {
-                            setEditorialFallback({
-                              source: fallback.source,
-                              caption: fallback.caption || article.headline,
-                              credit:
-                                fallback.credit || "Kindred editorial archive",
-                            });
-                            setHeroFailed(false);
-                            setHeroReady(true);
-                            return;
-                          }
-                          setHeroFailed(true);
-                        } else {
-                          setHeroReady(true);
-                        }
-                      }}
-                    />
-                  </Animated.View>
-                </View>
-                {(caption || credit) && (
-                  <View style={styles.captionBlock}>
-                    <View style={styles.captionRule} />
-                    <View style={styles.captionCopy}>
-                      {caption ? (
-                        <Text
-                          style={styles.caption}
-                          maxFontSizeMultiplier={1.2}
-                        >
-                          {caption}
-                        </Text>
-                      ) : null}
-                      {credit ? (
-                        <Text
-                          style={styles.credit}
-                          maxFontSizeMultiplier={1.15}
-                        >
-                          {credit}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                )}
+            {/* 5. Bandit's Note */}
+            {banditNote ? (
+              <View style={styles.banditNote} accessibilityRole="text">
+                <Text style={styles.banditNoteKicker}>Bandit’s Note</Text>
+                <Text style={styles.banditNoteBody} maxFontSizeMultiplier={1.25}>
+                  {banditNote}
+                </Text>
               </View>
-            );
-          })()}
+            ) : null}
 
-          {companion?.whyThisMatters?.summary ? (
-            <MagazineCallout
-              kicker="Why this matters"
-              title={
-                companion.whyThisMatters.title !== "Why this matters"
-                  ? companion.whyThisMatters.title
-                  : null
-              }
-              body={companion.whyThisMatters.summary}
-              featured
-            />
-          ) : companion?.whyChosen ? (
-            <MagazineCallout
-              kicker="Why it’s in your paper"
-              body={companion.whyChosen}
-            />
-          ) : null}
-
-          {(article.body ?? []).map((paragraph, index) => (
-            <View key={`p-${index}`}>
-              <BodyParagraph
-                text={paragraph}
-                isLead={index === 0 && !briefing}
-              />
-              {pullQuote && index === pullIndex ? (
-                <PullQuote text={pullQuote} />
-              ) : null}
-            </View>
-          ))}
-
-          {knowledgeCards.length > 0 ? (
-            <KnowledgeCardList cards={knowledgeCards} />
-          ) : knowledgeNotes.length > 0 ? (
-            <View style={styles.knowledgeBlock}>
-              <Text style={styles.knowledgeHeading}>Context</Text>
-              <View style={styles.knowledgeRule} />
-              {knowledgeNotes.map((note, i) => (
-                <MagazineCallout
-                  key={`${note.kicker}-${i}`}
-                  kicker={note.kicker}
-                  title={
-                    note.title && note.title !== note.kicker
-                      ? note.title
-                      : null
-                  }
-                  body={note.summary}
-                />
-              ))}
-            </View>
-          ) : null}
-
-          <View style={styles.colophon}>
-            <View style={styles.footerRule} />
-            <Text style={styles.endMark}>◆</Text>
-            <Text style={styles.attribution}>
-              From this morning’s paper  ·  {article.source}
-            </Text>
-            <Text style={styles.closingCadence} maxFontSizeMultiplier={1.25}>
-              {briefing
-                ? "That is the desk’s note on this story. Sit with it a moment."
-                : "That is the end of this story. Sit with it a moment."}
-            </Text>
-            {briefing && article.sourceUrl ? (
-              <Text style={styles.sourceHint} maxFontSizeMultiplier={1.2}>
-                For the complete piece, open the original source — then return
-                here to continue your paper.
+            {/* 6. Opening summary */}
+            {article.dek ? (
+              <Text style={styles.dek} maxFontSizeMultiplier={1.25}>
+                {article.dek}
               </Text>
             ) : null}
-          </View>
 
-          {continueItems.length > 0 ? (
-            <View style={styles.continueBlock}>
-              <Text style={styles.continueKicker}>Further along</Text>
-              <Text style={styles.continueIntro}>
-                {continueItems.length === 1
-                  ? "One careful next step from today’s paper."
-                  : "A few careful next steps — chosen to deepen understanding, not to keep you scrolling."}
+            {briefing ? (
+              <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
+                {article.body.length <= 1
+                  ? "A short Kindred note — the full report lives with the publisher."
+                  : "A Kindred summary for your morning paper — not the publisher’s full article."}
               </Text>
-              {continueItems.map((item, index) => (
-                <Pressable
-                  key={`${item.kind}-${index}`}
+            ) : null}
+
+            {/* 7–9. Body · supporting images · pull quotes */}
+            {(article.body ?? []).map((paragraph, index) => (
+              <View key={`p-${index}`}>
+                <BodyParagraph
+                  text={paragraph}
+                  isLead={index === 0 && !briefing}
+                />
+                {pullQuote && index === pullIndex ? (
+                  <PullQuote text={pullQuote} />
+                ) : null}
+                {(figuresByParagraph.get(index) ?? []).map((fig, fi) => (
+                  <InlineFigure
+                    key={`fig-${index}-${fi}`}
+                    figure={fig}
+                    width={Math.min(windowWidth - 16, readingWidth + 28)}
+                    bleed={Math.max(
+                      0,
+                      (Math.min(windowWidth - 16, readingWidth + 28) -
+                        readingWidth) /
+                        2
+                    )}
+                  />
+                ))}
+              </View>
+            ))}
+
+            {/* Desk modules — practical questions answered in prose (UCS) */}
+            {(article.modules?.length ?? 0) > 0 ? (
+              <ContentTemplateModules modules={article.modules!} />
+            ) : null}
+
+            <View style={styles.colophon}>
+              <View style={styles.footerRule} />
+              <Text style={styles.endMark}>◆</Text>
+              <Text style={styles.attribution}>
+                From this morning’s paper  ·  {article.source}
+              </Text>
+              <Text style={styles.closingCadence} maxFontSizeMultiplier={1.25}>
+                {briefing
+                  ? "That is the desk’s note on this story. Sit with it a moment."
+                  : "That is the end of this story. Sit with it a moment."}
+              </Text>
+            </View>
+
+            {/* 10. Related stories */}
+            {relatedItems.length > 0 ? (
+              <EndMatterBlock
+                kicker="Related stories"
+                intro="Nearby threads from today’s paper — chosen to deepen the reading, not the scroll."
+              >
+                {relatedItems.map((item, index) => (
+                  <EndMatterItem
+                    key={`related-${item.kind}-${index}`}
+                    item={item}
+                    isLast={index === relatedItems.length - 1}
+                    onPress={() => {
+                      if (item.action === "return_to_edition") {
+                        onBack();
+                        return;
+                      }
+                      onOpenContinue?.(item);
+                    }}
+                  />
+                ))}
+              </EndMatterBlock>
+            ) : null}
+
+            {/* 11. Continue Reading */}
+            <EndMatterBlock
+              kicker="Continue reading"
+              intro="The rest of the morning paper is waiting when you are ready."
+            >
+              {(continueNavItems.length > 0
+                ? continueNavItems
+                : [
+                    {
+                      kind: "edition" as const,
+                      label: "Return to today’s edition",
+                      title: "Back to the morning paper",
+                      summary: "The rest of today’s paper is waiting.",
+                      action: "return_to_edition" as const,
+                    },
+                  ]
+              ).map((item, index, arr) => (
+                <EndMatterItem
+                  key={`continue-${item.kind}-${index}`}
+                  item={item}
+                  isLast={index === arr.length - 1}
+                  linkLabel={
+                    item.action === "return_to_edition" ? "Return" : "Continue"
+                  }
                   onPress={() => {
                     if (item.action === "return_to_edition") {
                       onBack();
@@ -708,79 +684,59 @@ export function ArticleReader({
                     }
                     onOpenContinue?.(item);
                   }}
-                  accessibilityRole="link"
-                  accessibilityLabel={`${item.label}. ${item.title}. ${item.editorWhy ?? "Continue reading."}`}
-                  style={({ pressed }) => [
-                    styles.continueItem,
-                    index === continueItems.length - 1 && styles.continueItemLast,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.continueLabel}>{item.label}</Text>
-                  <Text
-                    style={styles.continueTitle}
-                    maxFontSizeMultiplier={1.25}
-                  >
-                    {item.title}
-                  </Text>
-                  <Text
-                    style={styles.continueSummary}
-                    maxFontSizeMultiplier={1.25}
-                  >
-                    {item.summary}
-                  </Text>
-                  {item.editorWhy ? (
-                    <Text
-                      style={styles.continueWhy}
-                      maxFontSizeMultiplier={1.2}
-                    >
-                      {item.editorWhy}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.continueLink}>
-                    {item.action === "return_to_edition"
-                      ? "Return"
-                      : "Continue"}
-                  </Text>
-                </Pressable>
+                />
               ))}
-            </View>
-          ) : null}
+            </EndMatterBlock>
 
-          <View style={styles.actionsBlock}>
-            <Text style={styles.actionsKicker}>This page</Text>
-            {clipError ? (
-              <Text style={styles.clipError} accessibilityRole="alert">
-                {clipError}
-              </Text>
+            {/* 12. Bandit's Picks */}
+            {banditPickItems.length > 0 ? (
+              <EndMatterBlock
+                kicker="Bandit’s Picks"
+                intro="One quiet recommendation from the desk — personal, not a feed."
+              >
+                {banditPickItems.map((item, index) => (
+                  <EndMatterItem
+                    key={`bandit-${index}`}
+                    item={item}
+                    isLast={index === banditPickItems.length - 1}
+                    onPress={() => onOpenContinue?.(item)}
+                  />
+                ))}
+              </EndMatterBlock>
             ) : null}
-            <View style={styles.actionsList}>
-              {canClip ? (
-                <ActionLink
-                  label={
-                    clipPending
-                      ? "Saving…"
-                      : clipped
-                        ? "Saved"
-                        : "Save for later"
-                  }
-                  onPress={() => void handleToggleClip()}
-                  muted={clipped}
-                  disabled={clipPending}
-                />
+
+            <View style={styles.actionsBlock}>
+              <Text style={styles.actionsKicker}>This page</Text>
+              {clipError ? (
+                <Text style={styles.clipError} accessibilityRole="alert">
+                  {clipError}
+                </Text>
               ) : null}
-              <ActionLink label="Share" onPress={() => void handleShare()} />
-              {article.sourceUrl ? (
+              <View style={styles.actionsList}>
+                {canClip ? (
+                  <ActionLink
+                    label={
+                      clipPending
+                        ? "Saving…"
+                        : clipped
+                          ? "Saved"
+                          : "Save for later"
+                    }
+                    onPress={() => void handleToggleClip()}
+                    muted={clipped}
+                    disabled={clipPending}
+                  />
+                ) : null}
+                <ActionLink label="Share" onPress={() => void handleShare()} />
+                {article.sourceUrl ? (
+                  <ActionLink label="Original source" onPress={openSource} />
+                ) : null}
                 <ActionLink
-                  label="Original source"
-                  onPress={openSource}
+                  label={backLabel.replace(/^←\s*/, "") || "Today’s paper"}
+                  onPress={onBack}
+                  prefix="← "
                 />
-              ) : null}
-              <ActionLink
-                label={backLabel.replace(/^←\s*/, "") || "Today’s paper"}
-                onPress={onBack}
-                prefix="← "
-              />
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -819,6 +775,193 @@ function ActionLink({
   );
 }
 
+function HeroFigure({
+  article,
+  windowWidth,
+  heroFailed,
+  heroReady,
+  heroOpacity,
+  editorialFallback,
+  onReady,
+  onWireError,
+}: {
+  article: KindredArticle;
+  windowWidth: number;
+  heroFailed: boolean;
+  heroReady: boolean;
+  heroOpacity: Animated.Value;
+  editorialFallback: {
+    source: ImageSourcePropType;
+    caption: string;
+    credit: string;
+  } | null;
+  onReady: () => void;
+  onWireError: () => void;
+}) {
+  const heroUri = article.heroImage?.uri?.trim() || null;
+  const heroLocal =
+    editorialFallback?.source ?? article.heroImage?.source ?? null;
+  const showHero = Boolean(heroLocal) || (Boolean(heroUri) && !heroFailed);
+
+  if (!showHero) {
+    return <View style={styles.heroAbsentRule} />;
+  }
+
+  const caption =
+    editorialFallback?.caption ||
+    article.heroImage?.caption ||
+    article.headline;
+  const credit =
+    editorialFallback?.credit || article.heroImage?.credit || null;
+  const heroH = Math.round(windowWidth * 0.72);
+
+  return (
+    <View style={[styles.heroBleed, { width: windowWidth }]}>
+      <View style={[styles.heroFrame, { height: heroH }]}>
+        {!heroReady ? <View style={styles.imagePlaceholder} /> : null}
+        <Animated.View style={[styles.imageFade, { opacity: heroOpacity }]}>
+          <Image
+            source={heroLocal ? heroLocal : { uri: heroUri! }}
+            style={styles.heroImage}
+            resizeMode="cover"
+            accessibilityLabel={caption}
+            onLoad={onReady}
+            onError={onWireError}
+          />
+        </Animated.View>
+      </View>
+      {(caption || credit) && (
+        <View style={styles.heroCaptionBlock}>
+          <View style={styles.captionRule} />
+          <View style={styles.captionCopy}>
+            {caption ? (
+              <Text style={styles.caption} maxFontSizeMultiplier={1.2}>
+                {caption}
+              </Text>
+            ) : null}
+            {credit ? (
+              <Text style={styles.credit} maxFontSizeMultiplier={1.15}>
+                {credit}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function InlineFigure({
+  figure,
+  width,
+  bleed,
+}: {
+  figure: ArticleFigure;
+  width: number;
+  bleed: number;
+}) {
+  const src = figure.source
+    ? figure.source
+    : figure.uri
+      ? { uri: figure.uri }
+      : null;
+  if (!src) return null;
+
+  return (
+    <View
+      style={[
+        styles.inlineFigure,
+        { width, marginHorizontal: -bleed },
+      ]}
+    >
+      <View style={styles.inlineFrame}>
+        <Image
+          source={src}
+          style={styles.inlineImage}
+          resizeMode="cover"
+          accessibilityLabel={figure.caption || "Photograph"}
+        />
+      </View>
+      {(figure.caption || figure.credit) && (
+        <View style={styles.captionBlock}>
+          <View style={styles.captionRule} />
+          <View style={styles.captionCopy}>
+            {figure.caption ? (
+              <Text style={styles.caption} maxFontSizeMultiplier={1.2}>
+                {figure.caption}
+              </Text>
+            ) : null}
+            {figure.credit ? (
+              <Text style={styles.credit} maxFontSizeMultiplier={1.15}>
+                {figure.credit}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function EndMatterBlock({
+  kicker,
+  intro,
+  children,
+}: {
+  kicker: string;
+  intro: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.endMatter}>
+      <Text style={styles.endMatterKicker}>{kicker}</Text>
+      <Text style={styles.endMatterIntro} maxFontSizeMultiplier={1.2}>
+        {intro}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+function EndMatterItem({
+  item,
+  isLast,
+  onPress,
+  linkLabel = "Continue",
+}: {
+  item: ContinueReadingItem;
+  isLast: boolean;
+  onPress: () => void;
+  linkLabel?: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="link"
+      accessibilityLabel={`${item.label}. ${item.title}. ${item.editorWhy ?? linkLabel}`}
+      style={({ pressed }) => [
+        styles.endMatterItem,
+        isLast && styles.endMatterItemLast,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text style={styles.endMatterLabel}>{item.label}</Text>
+      <Text style={styles.endMatterTitle} maxFontSizeMultiplier={1.25}>
+        {item.title}
+      </Text>
+      <Text style={styles.endMatterSummary} maxFontSizeMultiplier={1.25}>
+        {item.summary}
+      </Text>
+      {item.editorWhy ? (
+        <Text style={styles.endMatterWhy} maxFontSizeMultiplier={1.2}>
+          {item.editorWhy}
+        </Text>
+      ) : null}
+      <Text style={styles.endMatterLink}>{linkLabel}</Text>
+    </Pressable>
+  );
+}
+
 function BodyParagraph({
   text,
   isLead,
@@ -826,19 +969,35 @@ function BodyParagraph({
   text: string;
   isLead: boolean;
 }) {
-  if (!isLead || text.length < 2) {
+  const trimmed = text.trim();
+  const isSectionHead =
+    trimmed.length > 0 &&
+    trimmed.length <= 48 &&
+    !/[.!?]$/.test(trimmed) &&
+    !trimmed.startsWith("“") &&
+    !trimmed.startsWith('"');
+
+  if (isSectionHead) {
+    return (
+      <Text style={styles.sectionHead} maxFontSizeMultiplier={1.2}>
+        {trimmed}
+      </Text>
+    );
+  }
+
+  if (!isLead || trimmed.length < 2) {
     return (
       <Text
         style={[styles.paragraph, isLead && styles.leadParagraph]}
         maxFontSizeMultiplier={1.3}
       >
-        {text}
+        {trimmed}
       </Text>
     );
   }
 
-  const first = text.charAt(0);
-  const rest = text.slice(1);
+  const first = trimmed.charAt(0);
+  const rest = trimmed.slice(1);
 
   return (
     <Text
@@ -867,8 +1026,8 @@ function PullQuote({ text }: { text: string }) {
 
 function formatReadTime(minutes: number | null | undefined): string | null {
   if (!minutes || minutes < 1) return null;
-  if (minutes === 1) return "One minute";
-  return `About ${minutes} minutes`;
+  if (minutes === 1) return "1 min";
+  return `${minutes} min`;
 }
 
 function formatSectionLabel(section: string): string {
@@ -899,63 +1058,76 @@ function formatSectionLabel(section: string): string {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.page,
   },
   progressTrack: {
     height: 1.5,
-    backgroundColor: paper.inkRule,
+    backgroundColor: paper.border,
   },
   progressFill: {
     height: 1.5,
     backgroundColor: paper.terracotta,
-    opacity: 0.45,
+    opacity: 0.4,
   },
   stickyMasthead: {
     top: 1.5,
-  },
-  articleMasthead: {
-    alignSelf: "stretch",
-    marginBottom: 28,
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     alignItems: "center",
-    paddingTop: 20,
+    paddingTop: 0,
   },
   column: {
     maxWidth: reader.measure,
+    paddingHorizontal: reader.gutter,
+    paddingTop: 28,
+    alignSelf: "center",
+    width: "100%",
   },
   kicker: {
     ...type.kicker,
     color: paper.terracotta,
-    letterSpacing: 2.2,
-    marginBottom: 14,
+    letterSpacing: 2.4,
+    marginBottom: 16,
   },
   headline: {
     ...reader.headline,
     color: paper.ink,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   dek: {
     ...reader.dek,
     color: paper.inkBody,
-    marginBottom: 22,
-  },
-  bylineBlock: {
-    marginBottom: 28,
-    gap: 8,
-  },
-  byline: {
-    ...reader.byline,
-    color: paper.inkMuted,
+    marginTop: 8,
+    marginBottom: 36,
   },
   meta: {
     ...reader.meta,
-    color: paper.inkFaint,
+    color: paper.inkMuted,
     fontFamily: "Georgia",
     fontStyle: "italic",
+    letterSpacing: 0.2,
+    marginBottom: 28,
+  },
+  banditNote: {
+    marginBottom: 32,
+    paddingVertical: 22,
+    paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.inkRule,
+  },
+  banditNoteKicker: {
+    ...type.kicker,
+    color: paper.terracotta,
+    letterSpacing: 2.2,
+    marginBottom: 12,
+  },
+  banditNoteBody: {
+    ...reader.calloutBody,
+    color: paper.inkBody,
   },
   briefingNote: {
     fontFamily: "Georgia",
@@ -966,16 +1138,47 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     maxWidth: 420,
   },
-  figure: {
-    marginBottom: 48,
+  heroBleed: {
     alignSelf: "center",
+    marginBottom: 8,
   },
-  imageFrame: {
+  heroFrame: {
     width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: 2,
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
+  },
+  heroImage: {
+    width: "100%",
+    height: "100%",
+  },
+  heroCaptionBlock: {
+    flexDirection: "row",
+    marginTop: 14,
+    paddingHorizontal: reader.gutter,
+    gap: 12,
+  },
+  heroAbsentRule: {
+    alignSelf: "stretch",
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: paper.inkRule,
+    marginTop: 12,
+    marginBottom: 8,
+    marginHorizontal: reader.gutter,
+  },
+  inlineFigure: {
+    marginTop: 8,
+    marginBottom: 40,
+    alignSelf: "center",
+  },
+  inlineFrame: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    overflow: "hidden",
+    backgroundColor: paper.creamDeep,
+  },
+  inlineImage: {
+    width: "100%",
+    height: "100%",
   },
   imagePlaceholder: {
     ...StyleSheet.absoluteFillObject,
@@ -985,14 +1188,9 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
-  image: {
-    width: "100%",
-    height: "118%",
-    marginTop: "-8%",
-  },
   captionBlock: {
     flexDirection: "row",
-    marginTop: 16,
+    marginTop: 14,
     paddingRight: 8,
     paddingLeft: 4,
     gap: 12,
@@ -1016,15 +1214,21 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
     textTransform: "uppercase",
   },
-  noImageRule: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkRule,
-    marginBottom: 40,
-  },
   paragraph: {
     ...reader.body,
     color: paper.inkBody,
     marginBottom: 36,
+  },
+  sectionHead: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    letterSpacing: 1.8,
+    textTransform: "uppercase",
+    color: paper.terracotta,
+    marginTop: 12,
+    marginBottom: 20,
   },
   leadParagraph: {
     marginBottom: 38,
@@ -1057,21 +1261,6 @@ const styles = StyleSheet.create({
     height: 1.5,
     backgroundColor: paper.terracotta,
     opacity: 0.6,
-  },
-  knowledgeBlock: {
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  knowledgeHeading: {
-    ...type.kicker,
-    color: paper.inkFaint,
-    letterSpacing: 2,
-    marginBottom: 12,
-  },
-  knowledgeRule: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkRule,
-    marginBottom: 20,
   },
   colophon: {
     marginTop: 28,
@@ -1106,29 +1295,19 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     marginTop: 4,
   },
-  sourceHint: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    lineHeight: 23,
-    fontStyle: "italic",
-    color: paper.inkMuted,
-    marginTop: 4,
-    maxWidth: 380,
-    textAlign: "center",
-  },
-  continueBlock: {
+  endMatter: {
     marginTop: 48,
     paddingTop: 36,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,
   },
-  continueKicker: {
+  endMatterKicker: {
     ...type.kicker,
     color: paper.terracotta,
-    letterSpacing: 2.1,
+    letterSpacing: 2.2,
     marginBottom: 12,
   },
-  continueIntro: {
+  endMatterIntro: {
     fontFamily: "Georgia",
     fontSize: 16,
     lineHeight: 26,
@@ -1137,24 +1316,24 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     maxWidth: 400,
   },
-  continueItem: {
+  endMatterItem: {
     paddingBottom: 26,
     marginBottom: 26,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
-  continueItemLast: {
+  endMatterItemLast: {
     borderBottomWidth: 0,
     marginBottom: 0,
     paddingBottom: 4,
   },
-  continueLabel: {
+  endMatterLabel: {
     ...type.kicker,
     color: paper.inkFaint,
     letterSpacing: 1.8,
     marginBottom: 10,
   },
-  continueTitle: {
+  endMatterTitle: {
     fontFamily: "Georgia",
     fontSize: 21,
     lineHeight: 29,
@@ -1163,14 +1342,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.15,
     marginBottom: 10,
   },
-  continueSummary: {
+  endMatterSummary: {
     fontFamily: "Georgia",
     fontSize: 16,
     lineHeight: 26,
     color: paper.inkBody,
     marginBottom: 10,
   },
-  continueWhy: {
+  endMatterWhy: {
     fontFamily: "Georgia",
     fontSize: 14,
     lineHeight: 22,
@@ -1179,7 +1358,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     maxWidth: 400,
   },
-  continueLink: {
+  endMatterLink: {
     fontFamily: "Georgia",
     fontSize: 15,
     fontStyle: "italic",

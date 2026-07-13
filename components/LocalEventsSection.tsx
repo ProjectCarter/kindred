@@ -4,7 +4,6 @@ import {
   Pressable,
   StyleSheet,
   Linking,
-  useColorScheme,
   type ColorValue,
 } from "react-native";
 import { SymbolView } from "expo-symbols";
@@ -14,6 +13,7 @@ import {
   parseLocalEventsBody,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
+import { paper } from "../lib/edition/newspaperTheme";
 
 type Props = {
   headline: string;
@@ -31,16 +31,13 @@ type NewspaperColors = {
 };
 
 function useNewspaperColors(): NewspaperColors {
-  const scheme = useColorScheme();
-  // Cream pages stay cream; lift muted ink slightly in dark scheme for contrast.
-  const dark = scheme === "dark";
   return {
-    ink: "#2B2620",
-    inkBody: dark ? "#2B2620EE" : "#2B2620DD",
-    inkMuted: dark ? "#2B2620AA" : "#2B262088",
-    inkFaint: dark ? "#2B262055" : "#2B262033",
-    terracotta: "#C1622D",
-    rule: dark ? "#2B262022" : "#2B262014",
+    ink: paper.ink,
+    inkBody: paper.inkBody,
+    inkMuted: paper.inkMuted,
+    inkFaint: paper.inkFaint,
+    terracotta: paper.terracotta,
+    rule: paper.border,
   };
 }
 

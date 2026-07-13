@@ -67,5 +67,7 @@ export function articleFromTopStory(story: TopStoryItem): KindredArticle {
     sourceUrl: story.url,
     publishedAt: story.publishedAt,
     imageUrl: story.imageUrl,
+    role: story.role,
+    tags: story.role ? [story.role] : undefined,
   });
 }

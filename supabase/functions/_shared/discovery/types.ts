@@ -149,6 +149,27 @@ export type DiscoveryRankingContext = {
     sourceUrl?: string;
     sourceName?: string;
   }>;
+  /**
+   * Verified local places (Foursquare today) — become discovery candidates
+   * for Recommendations/Weekend Escapes/Notebook. Cached per metro, so this
+   * list is shared across every reader in the same city, not fetched here.
+   */
+  localPlaces?: Array<{
+    providerId: string;
+    name: string;
+    category:
+      | "coffee"
+      | "restaurants"
+      | "parks"
+      | "museums"
+      | "bookstores"
+      | "scenic_drives"
+      | "attractions";
+    address: string | null;
+    city: string | null;
+    url: string | null;
+    note?: string | null;
+  }>;
   /** Which surfaces to assemble this edition. */
   surfaces?: DiscoverySurface[];
   maxPerSurface?: number;

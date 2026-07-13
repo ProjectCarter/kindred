@@ -5,7 +5,7 @@
  */
 
 import type { ImageSourcePropType } from "react-native";
-import type { KindredArticle } from "./article";
+import type { KindredArticle, ArticleFigure } from "./article";
 import { getHeroCatalog } from "./hero/catalog";
 import type { HeroImageAsset } from "./hero/types";
 import { getSeason } from "./hero/selectHeroImage";
@@ -207,4 +207,72 @@ export function ensureArticleHero(article: KindredArticle): KindredArticle {
       kind: hero.kind,
     },
   };
+}
+
+/**
+ * Calm supporting photographs for longer stories.
+ * Never duplicates the hero; skips briefings and short pieces.
+ */
+export function supportingFiguresForArticle(
+  article: KindredArticle
+): ArticleFigure[] {
+  if (article.figures?.length) {
+    return article.figures.filter(
+      (f) => Boolean(f.uri?.trim() || f.source)
+    );
+  }
+
+  const paras = article.body ?? [];
+  if (paras.length < 4) return [];
+
+  const month = new Date().getMonth() + 1;
+  const seasonName = getSeason(month);
+  const mood = inferMood(
+    article.section,
+    article.headline,
+    paras.join(" ")
+  );
+  const primary = pickEditorialAsset(mood, seasonName);
+  const heroSource = article.heroImage?.source;
+  const catalog = getHeroCatalog();
+  const alternates = catalog.filter((a) => {
+    if (heroSource && a.source === heroSource) return false;
+    if (primary.source && a.source === primary.source) return false;
+    return true;
+  });
+
+  const second =
+    alternates.find((a) => a.id.includes("spring") || a.id.includes("autumn")) ??
+    alternates[0] ??
+    null;
+
+  const figures: ArticleFigure[] = [];
+  const mid = Math.min(
+    Math.max(1, Math.floor(paras.length * 0.4)),
+    paras.length - 2
+  );
+
+  if (primary.source && primary.source !== heroSource) {
+    figures.push({
+      source: primary.source,
+      caption: primary.title,
+      credit: "Kindred editorial archive",
+      afterParagraph: mid,
+    });
+  }
+
+  if (paras.length >= 7 && second?.source) {
+    const later = Math.min(
+      Math.max(mid + 2, Math.floor(paras.length * 0.7)),
+      paras.length - 1
+    );
+    figures.push({
+      source: second.source,
+      caption: second.title,
+      credit: "Kindred editorial archive",
+      afterParagraph: later,
+    });
+  }
+
+  return figures;
 }

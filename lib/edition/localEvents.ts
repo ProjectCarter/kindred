@@ -12,6 +12,8 @@ export type LocalEventCard = {
   imageUrl?: string | null;
   /** Provenance — never filled by HeroImageService / weather stock. */
   imageSource?: LocalEventImageSource | null;
+  /** Bandit’s invitation — why this is worth leaving the house. */
+  banditNote?: string | null;
 };
 
 export type LocalEventsBody = {
@@ -50,6 +52,13 @@ function normalizeImageUrl(value: unknown): string | null {
   if (!/^https?:\/\//i.test(trimmed)) return null;
   if (/google\.com\/maps\/vt/i.test(trimmed)) return null;
   if (/\/favicon/i.test(trimmed) || /faviconV2/i.test(trimmed)) return null;
+  if (
+    /logo|wordmark|brandmark|sprite|badge|seal|emblem|avatar|icon[_-]?only/i.test(
+      trimmed
+    )
+  ) {
+    return null;
+  }
   return trimmed;
 }
 
@@ -59,8 +68,16 @@ function normalizeImageSource(
 ): LocalEventImageSource | null {
   if (!imageUrl) return null;
   if (value === "provider_thumbnail") return "provider_thumbnail";
-  // Older payloads may only have imageUrl — treat as provider listing art.
   return "provider_thumbnail";
+}
+
+/** Client fallback when edition has no Bandit note yet. */
+export function fallbackBanditNote(event: Pick<LocalEventCard, "venue">): string {
+  const venue = event.venue?.trim();
+  if (venue && venue !== "Venue TBA") {
+    return `A good reason to step out — ${venue} has something on.`;
+  }
+  return "Worth leaving the house for — a local moment you might otherwise miss.";
 }
 
 export function parseLocalEventsBody(
@@ -73,11 +90,16 @@ export function parseLocalEventsBody(
       .filter((e) => e && typeof e.name === "string" && e.name.trim().length > 0)
       .map((e) => {
         const imageUrl = normalizeImageUrl(e.imageUrl);
+        const venue = typeof e.venue === "string" ? e.venue.trim() : "";
+        const banditNote =
+          typeof e.banditNote === "string" && e.banditNote.trim()
+            ? e.banditNote.trim()
+            : fallbackBanditNote({ venue });
         return {
           name: e.name.trim(),
           date: typeof e.date === "string" && e.date.trim() ? e.date.trim() : "Date TBA",
           time: typeof e.time === "string" && e.time.trim() ? e.time.trim() : "Time TBA",
-          venue: typeof e.venue === "string" ? e.venue.trim() : "",
+          venue,
           city: typeof e.city === "string" ? e.city.trim() : "",
           sourceUrl: typeof e.sourceUrl === "string" ? e.sourceUrl.trim() : "",
           sourceName:
@@ -86,6 +108,7 @@ export function parseLocalEventsBody(
               : "Listing",
           imageUrl,
           imageSource: normalizeImageSource(e.imageSource, imageUrl),
+          banditNote,
         };
       });
   } catch {
@@ -94,8 +117,16 @@ export function parseLocalEventsBody(
 }
 
 /**
+ * Prefer photograph-backed events for the grid, keep provider order among peers.
+ */
+export function orderEventsForGrid(events: LocalEventCard[]): LocalEventCard[] {
+  const withPhoto = events.filter((e) => Boolean(e.imageUrl));
+  const without = events.filter((e) => !e.imageUrl);
+  return [...withPhoto, ...without].slice(0, 4);
+}
+
+/**
  * Feature the strongest visual story first: prefer an event that has its own photo.
- * Provider order is preserved among peers (Google already ranks relevance).
  */
 export function splitFeaturedEvents(events: LocalEventCard[]): {
   featured: LocalEventCard | null;

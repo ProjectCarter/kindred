@@ -8,6 +8,8 @@ import {
   getLocalEvents,
   type LocalEvent,
 } from "../_shared/localEvents/provider.ts";
+import { enrichEventsWithBanditNotes } from "../_shared/localEvents/banditNotes.ts";
+import { isUsHolidayOrEve } from "../_shared/calendar/holidays.ts";
 
 type ClientLocation = {
   city?: string;
@@ -125,8 +127,16 @@ Deno.serve(async (req) => {
     const date =
       editionDate ??
       new Date().toLocaleDateString("en-CA", { timeZone: "America/Phoenix" });
+    const [dy, dm, dd] = date.split("-").map(Number);
+    const dateObj = new Date(dy, (dm ?? 1) - 1, dd ?? 1);
+    const dayOfWeek = dateObj.getDay();
+    const isBusyDay =
+      dayOfWeek === 0 || dayOfWeek === 6 || isUsHolidayOrEve(dateObj);
 
-    const events: LocalEvent[] = await getLocalEvents(location);
+    const fetched: LocalEvent[] = await getLocalEvents(location, {
+      isBusyDay,
+    });
+    const events = await enrichEventsWithBanditNotes(fetched);
 
     const { data: edition, error: editionError } = await admin
       .from("editions")

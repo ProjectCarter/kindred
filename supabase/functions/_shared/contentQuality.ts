@@ -35,7 +35,17 @@ export function cityAppearsInText(
   return normalizeCity(text).includes(c);
 }
 
-/** Reject SerpApi events that clearly belong to another metro. */
+/**
+ * Reject SerpApi events that clearly belong to another metro entirely.
+ *
+ * This is a safety net, not a same-city gate: a "Events in {city}" query
+ * already asks Google for locally-relevant results, and most towns are
+ * one metro among several nearby suburbs (a Gilbert, AZ resident cares
+ * about Phoenix, Mesa, Chandler, and Tempe events too). Requiring the
+ * event's city field to literally equal the query city discarded almost
+ * everything for suburb-sized queries — this only screens out results
+ * that drifted to a well-known, unrelated big-city metro.
+ */
 export function eventMatchesCity(
   eventCity: string | null | undefined,
   eventVenue: string | null | undefined,
@@ -52,7 +62,8 @@ export function eventMatchesCity(
   // Explicit match on expected city
   if (blob.includes(expected)) return true;
 
-  // Common wrong-city markers when expecting Phoenix
+  // Well-known, unrelated big-city metros — a clear sign the result
+  // drifted away from the requested search, not a same-region suburb.
   const FOREIGN_METROS = [
     "san francisco",
     "san francisco bay",
@@ -77,11 +88,7 @@ export function eventMatchesCity(
     if (blob.includes(metro)) return false;
   }
 
-  // If event city field is empty, keep (SerpApi often omits city when query is local)
-  if (!eventCity?.trim()) return true;
-
-  // Different explicit city → reject
-  return normalizeCity(eventCity) === expected ||
-    normalizeCity(eventCity).includes(expected) ||
-    expected.includes(normalizeCity(eventCity));
+  // Anything else — including nearby suburbs Google already judged
+  // relevant to the query, or listings with no city field at all — passes.
+  return true;
 }

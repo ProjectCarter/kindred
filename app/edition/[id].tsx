@@ -15,6 +15,7 @@ import {
 } from "../../lib/edition/adjacent";
 import { parseLeadStory, type LeadStory } from "../../lib/edition/LeadStory";
 import { openKindredArticle } from "../../lib/edition/openArticle";
+import { openKindredEvent } from "../../lib/edition/openEvent";
 import {
   banditMorningLine,
   banditsPick,
@@ -325,6 +326,7 @@ export default function EditionScreen() {
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
+              discovery={intelligence?.discovery}
               banditsPick={banditsPick(bandit)}
               mastheadScrollY={mastheadScrollY}
               mastheadLeading={
@@ -350,6 +352,11 @@ export default function EditionScreen() {
                   clipSectionId: clipSectionIdForArticle(article),
                 });
               }}
+              onOpenEvent={(event) => {
+                openKindredEvent(router, event, {
+                  backLabel: "← The paper",
+                });
+              }}
               knowledge={intelligence?.knowledge}
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
@@ -372,12 +379,12 @@ export default function EditionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
   },
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 72,
+    paddingHorizontal: 28,
+    paddingTop: 22,
+    paddingBottom: 96,
   },
   error: {
     color: paper.terracotta,

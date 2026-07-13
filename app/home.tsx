@@ -19,6 +19,7 @@ import {
 } from "../lib/edition/adjacent";
 import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
 import { openKindredArticle } from "../lib/edition/openArticle";
+import { openKindredEvent } from "../lib/edition/openEvent";
 import {
   banditMorningLine,
   banditsPick,
@@ -1016,6 +1017,7 @@ export default function HomeScreen() {
               discoveryHeadline={intelligence?.discoveryHeadline}
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
+              discovery={intelligence?.discovery}
               banditsPick={banditsPick(bandit)}
               mastheadScrollY={mastheadScrollY}
               mastheadTrailing={
@@ -1051,6 +1053,11 @@ export default function HomeScreen() {
                   companion,
                   backLabel: "← Today’s paper",
                   clipSectionId: clipSectionIdForArticle(article),
+                });
+              }}
+              onOpenEvent={(event) => {
+                openKindredEvent(router, event, {
+                  backLabel: "← Today’s paper",
                 });
               }}
               knowledge={intelligence?.knowledge}

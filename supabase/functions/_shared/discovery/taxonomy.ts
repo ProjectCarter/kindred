@@ -39,6 +39,7 @@ export const SURFACE_CATEGORIES: Record<DiscoverySurface, DiscoveryCategory[]> =
     "scenic_drives",
     "coffee",
     "experiences",
+    "travel",
   ],
   hidden_gems: [
     "coffee",

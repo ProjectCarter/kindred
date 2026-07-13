@@ -174,16 +174,16 @@ export const reader = {
   gutter: 26,
   headline: {
     fontFamily: "Georgia",
-    fontSize: 34,
-    lineHeight: 42,
+    fontSize: 36,
+    lineHeight: 44,
     fontWeight: "600" as const,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   dek: {
     fontFamily: "Georgia",
-    fontSize: 19,
-    lineHeight: 31,
-    letterSpacing: 0.04,
+    fontSize: 20,
+    lineHeight: 32,
+    letterSpacing: 0.02,
   },
   byline: {
     fontFamily: "Georgia",

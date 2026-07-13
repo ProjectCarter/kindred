@@ -276,7 +276,7 @@ export default function ClippingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
   },
   centered: {
     flex: 1,

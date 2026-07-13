@@ -39,6 +39,9 @@ import {
   getLocalEvents,
   type LocalEvent,
 } from "./localEvents/provider.ts";
+import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { isUsHolidayOrEve } from "./calendar/holidays.ts";
+import { getLocalPlaces } from "./places/index.ts";
 
 export type { LocalEvent } from "./localEvents/provider.ts";
 export {
@@ -47,6 +50,7 @@ export {
   pickProviderEventImage,
   splitEventSchedule,
 } from "./localEvents/provider.ts";
+export { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
 
 export type BuildEditionResult =
   | { ok: true; editionId: string }
@@ -435,6 +439,7 @@ export async function buildEditionForUser(
     NEWS_API_KEY: Boolean(newsApiKey),
     ANTHROPIC_API_KEY: Boolean(anthropicApiKey),
     EVENTS_API_KEY: Boolean(Deno.env.get("EVENTS_API_KEY")),
+    FOURSQUARE_API_KEY: Boolean(Deno.env.get("FOURSQUARE_API_KEY")),
   });
 
   if (!newsApiKey || !anthropicApiKey) {
@@ -536,10 +541,28 @@ export async function buildEditionForUser(
         : "utc-fallback",
   });
 
-  const [weather, onThisDay, localEvents, editorial] = await Promise.all([
+  // Weekends and holidays deserve more local events — people actually go out.
+  const editionDateObj = /^\d{4}-\d{2}-\d{2}$/.test(editionDate)
+    ? new Date(
+        Number(editionDate.slice(0, 4)),
+        Number(editionDate.slice(5, 7)) - 1,
+        Number(editionDate.slice(8, 10))
+      )
+    : new Date();
+  const editionDayOfWeek = editionDateObj.getDay();
+  const isBusyDay =
+    editionDayOfWeek === 0 ||
+    editionDayOfWeek === 6 ||
+    isUsHolidayOrEve(editionDateObj);
+
+  const [weather, onThisDay, localEventsRaw, localPlaces, editorial] =
+    await Promise.all([
     getWeather(weatherLat, weatherLon),
     getOnThisDay(),
-    getLocalEvents(eventsLocation),
+    getLocalEvents(eventsLocation, { isBusyDay }),
+    // Shared per-metro cache (see places/cache.ts) — this call almost
+    // never actually hits Foursquare; it hits the cache row for this city.
+    getLocalPlaces(supabaseAdmin, eventsLocation),
     runEditorialDecisions({
       editionDate,
       newsApiKey,
@@ -566,41 +589,71 @@ export async function buildEditionForUser(
     }),
   ]);
 
+  const localEvents = await enrichEventsWithBanditNotes(localEventsRaw);
+
   const frontPage = editorial.frontPage;
   const topStories = frontPage.stories;
   let leadStory: LeadStory | null = editorial.leadStory;
 
-  // Story Editor — Lead (editorial heart; before knowledge/memory consume summary).
-  if (leadStory && anthropicApiKey) {
-    const edited = await runStoryEditorSafe(
-      {
-        id: leadStory.id,
-        headline: leadStory.headline,
-        sourceText: leadStory.summary || leadStory.headline,
-        source: leadStory.source,
-        url: leadStory.url,
-        publishedAt: leadStory.publishedAt,
-        surfaceRole: "lead",
-        locale: "en",
-        selectionWhy: leadStory.selection.reasons
-          .map((r) => r.label)
-          .slice(0, 4),
-      },
-      anthropicApiKey
-    );
+  // Story Editor — lead + every Top Story, in parallel.
+  // Each call is independent (never a multi-wire mashup article) and can
+  // internally retry up to STORY_EDITOR_MAX_PASSES times, so running the
+  // whole front page one story at a time was the single biggest reason
+  // full edition builds were timing out on Supabase's compute budget —
+  // 5 stories × up to 4 passes each, entirely sequential. Same total work,
+  // now bounded by the slowest single story instead of the sum of all of
+  // them.
+  const [editedLead, ...editedTopStories] = await Promise.all([
+    leadStory && anthropicApiKey
+      ? runStoryEditorSafe(
+          {
+            id: leadStory.id,
+            headline: leadStory.headline,
+            sourceText: leadStory.summary || leadStory.headline,
+            source: leadStory.source,
+            url: leadStory.url,
+            publishedAt: leadStory.publishedAt,
+            surfaceRole: "lead",
+            locale: "en",
+            selectionWhy: leadStory.selection.reasons
+              .map((r) => r.label)
+              .slice(0, 4),
+          },
+          anthropicApiKey
+        )
+      : Promise.resolve(null),
+    ...topStories.map((ranked) =>
+      runStoryEditorSafe(
+        {
+          id: ranked.story.id,
+          headline: ranked.story.title,
+          sourceText: ranked.story.description || ranked.story.title,
+          source: ranked.story.source,
+          url: ranked.story.url,
+          publishedAt: ranked.story.publishedAt,
+          surfaceRole: "top_story",
+          locale: "en",
+          selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
+        },
+        anthropicApiKey
+      )
+    ),
+  ]);
+
+  if (leadStory && editedLead) {
     leadStory = {
       ...leadStory,
-      headline: edited.headline || leadStory.headline,
-      summary: edited.bodyText || leadStory.summary,
-      body: edited.paragraphs,
-      dek: edited.dek,
-      desk: edited.desk as unknown as Record<string, unknown>,
+      headline: editedLead.headline || leadStory.headline,
+      summary: editedLead.bodyText || leadStory.summary,
+      body: editedLead.paragraphs,
+      dek: editedLead.dek,
+      desk: editedLead.desk as unknown as Record<string, unknown>,
     };
     console.log("[buildEdition] storyEditor lead", {
-      path: edited.desk.path,
-      passes: edited.desk.passes,
-      paras: edited.paragraphs.length,
-      scores: edited.desk.scores,
+      path: editedLead.desk.path,
+      passes: editedLead.desk.passes,
+      paras: editedLead.paragraphs.length,
+      scores: editedLead.desk.scores,
     });
   }
 
@@ -618,23 +671,15 @@ export async function buildEditionForUser(
     source: string;
     category: string | null;
     publishedAt: string | null;
-  }> = [];
-  for (const ranked of topStories) {
-    const edited = await runStoryEditorSafe(
-      {
-        id: ranked.story.id,
-        headline: ranked.story.title,
-        sourceText: ranked.story.description || ranked.story.title,
-        source: ranked.story.source,
-        url: ranked.story.url,
-        publishedAt: ranked.story.publishedAt,
-        surfaceRole: "top_story",
-        locale: "en",
-        selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
-      },
-      anthropicApiKey
-    );
-    frontPageStoriesForDesk.push({
+  }> = topStories.map((ranked, i) => {
+    const edited = editedTopStories[i];
+    console.log("[buildEdition] storyEditor top_story", {
+      id: ranked.story.id.slice(0, 40),
+      path: edited.desk.path,
+      passes: edited.desk.passes,
+      paras: edited.paragraphs.length,
+    });
+    return {
       id: ranked.story.id,
       title: edited.headline || ranked.story.title,
       description: edited.bodyText || ranked.story.description,
@@ -647,14 +692,8 @@ export async function buildEditionForUser(
       source: ranked.story.source,
       category: ranked.story.category,
       publishedAt: ranked.story.publishedAt,
-    });
-    console.log("[buildEdition] storyEditor top_story", {
-      id: ranked.story.id.slice(0, 40),
-      path: edited.desk.path,
-      passes: edited.desk.passes,
-      paras: edited.paragraphs.length,
-    });
-  }
+    };
+  });
 
   const weatherSummary = formatWeatherSummary({
     city: city ?? location.city,
@@ -688,7 +727,10 @@ export async function buildEditionForUser(
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localEvents,
-    maxPerSurface: 4,
+    localPlaces,
+    // A newspaper should feel abundant — 4 per surface starved sections
+    // (like Recommendations) that draw from a single category surface.
+    maxPerSurface: 8,
     recentKeys: recentDiscoveryKeys,
   });
 

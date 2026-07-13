@@ -10,7 +10,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { formatEditionDate } from "../lib/edition/types";
-import { parseLocalEventsBody } from "../lib/edition/localEvents";
 import {
   selectHeroImage,
   loadRecentHeroImageIds,
@@ -18,12 +17,12 @@ import {
   type HeroImageContext,
   type HeroImageAsset,
 } from "../lib/edition/HeroImageService";
+import { morningSalutation } from "../lib/edition/morningRitual";
 import {
   KindredFullMasthead,
   mastheadCollapse,
 } from "./KindredMasthead";
-import { DontMissToday } from "./DontMissToday";
-import { paper, shadow } from "../lib/edition/newspaperTheme";
+import { motion, paper, shadow } from "../lib/edition/newspaperTheme";
 
 /** Side inset used by home folio — arrival bleeds past it for a cover photo. */
 const FOLIO_GUTTER = 28;
@@ -35,25 +34,26 @@ type Props = {
   locationState?: string | null;
   weatherHeadline?: string | null;
   weatherBody?: string | null;
-  eventsBody?: string | null;
+  /** Bandit’s morning line — shown under weather/greeting. */
+  banditGreeting?: string | null;
+  /** Optional AI greeting / welcome line. */
+  welcomeMessage?: string | null;
   heroContext?: HeroImageContext | null;
   mastheadTrailing?: ReactNode;
   mastheadScrollY?: Animated.Value;
 };
 
 /**
- * Kindred home arrival — complete reconstruction.
- * Sunday magazine cover: collapsing masthead, one hero, one Don’t Miss.
- * Nothing else competes.
+ * Kindred signature opening — TIME density below, Kindred hero first.
+ * Hero → weather / greeting / Bandit. Local Events follows in the folio.
  */
 export function MorningArrival({
   editionDate,
   locationCity,
-  locationRegion,
-  locationState,
   weatherHeadline,
   weatherBody,
-  eventsBody,
+  banditGreeting,
+  welcomeMessage,
   heroContext,
   mastheadTrailing,
   mastheadScrollY,
@@ -65,7 +65,9 @@ export function MorningArrival({
   const dateLabel = resolveDisplayDate(editionDate);
   const placeLabel = formatPlace(locationCity);
   const weatherLine = usefulWeather(weatherHeadline, weatherBody);
-  const events = (eventsBody ? parseLocalEventsBody(eventsBody) : null) ?? [];
+  const salutation = morningSalutation();
+  const welcome = welcomeMessage?.trim() || null;
+  const bandit = banditGreeting?.trim() || null;
 
   const fallbackScrollY = useRef(new Animated.Value(0)).current;
   const scrollY = mastheadScrollY ?? fallbackScrollY;
@@ -113,24 +115,25 @@ export function MorningArrival({
     if (reduceMotion) {
       enterOp.setValue(1);
       enterY.setValue(0);
-      photoOp.setValue(1);
       return;
     }
+    enterOp.setValue(0);
+    enterY.setValue(8);
     Animated.parallel([
       Animated.timing(enterOp, {
         toValue: 1,
-        duration: 560,
+        duration: 720,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(enterY, {
         toValue: 0,
-        duration: 600,
+        duration: 780,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [reduceMotion, enterOp, enterY, photoOp]);
+  }, [reduceMotion, enterOp, enterY, dateLabel]);
 
   useEffect(() => {
     if (!hero) return;
@@ -141,7 +144,7 @@ export function MorningArrival({
     photoOp.setValue(0);
     Animated.timing(photoOp, {
       toValue: 1,
-      duration: 1200,
+      duration: motion.photoMs,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -150,44 +153,33 @@ export function MorningArrival({
   const placeWeather = [placeLabel, weatherLine].filter(Boolean).join("  ·  ");
 
   return (
-    <View
-      style={styles.wrap}
-      accessibilityRole="header"
-      accessibilityLabel={
-        placeLabel
-          ? `Kindred for ${placeLabel}. ${events[0]?.name ?? weatherLine ?? ""}`
-          : "Kindred"
-      }
+    <Animated.View
+      style={[
+        styles.wrap,
+        { opacity: enterOp, transform: [{ translateY: enterY }] },
+      ]}
     >
-      {/* TIME / NYT confidence — full masthead collapses into sticky chrome */}
       <Animated.View
-        style={{
-          opacity: Animated.multiply(enterOp, collapse.fullOpacity),
-          transform: [
-            { translateY: Animated.add(enterY, collapse.fullTranslateY) },
-          ],
-        }}
+        style={[
+          styles.masthead,
+          {
+            opacity: Animated.multiply(enterOp, collapse.fullOpacity),
+            transform: [
+              { translateY: Animated.add(enterY, collapse.fullTranslateY) },
+            ],
+          },
+        ]}
+        pointerEvents="box-none"
       >
         <KindredFullMasthead
           eyebrow={null}
-          dateLabel={dateLabel}
-          meta={placeLabel}
+          meta={[dateLabel, placeLabel].filter(Boolean).join("  ·  ")}
           trailing={mastheadTrailing}
-          style={styles.masthead}
         />
       </Animated.View>
 
-      {/* Cover photograph */}
-      <Animated.View
-        style={[
-          styles.heroBleed,
-          {
-            width: bleedWidth,
-            marginLeft: -FOLIO_GUTTER,
-            opacity: photoOp,
-          },
-        ]}
-      >
+      {/* Signature Kindred hero — always first */}
+      <Animated.View style={[styles.heroBleed, { opacity: photoOp }]}>
         {hero ? (
           <View style={[styles.heroFrame, shadow.photo]}>
             <Image
@@ -195,18 +187,13 @@ export function MorningArrival({
               style={{ width: bleedWidth, height: heroHeight }}
               resizeMode="cover"
               accessibilityLabel={
-                placeLabel
-                  ? `This morning in ${placeLabel}`
-                  : "This morning near you"
+                hero.title?.trim()
+                  ? hero.title
+                  : placeWeather
+                    ? placeWeather
+                    : "This morning near you"
               }
             />
-            {placeWeather ? (
-              <View style={styles.heroCaption} pointerEvents="none">
-                <Text style={styles.heroCaptionText} numberOfLines={2}>
-                  {placeWeather}
-                </Text>
-              </View>
-            ) : null}
           </View>
         ) : (
           <View
@@ -214,19 +201,36 @@ export function MorningArrival({
               styles.heroFallback,
               { width: bleedWidth, height: Math.round(heroHeight * 0.55) },
             ]}
-          >
-            {placeWeather ? (
-              <Text style={styles.heroFallbackText}>{placeWeather}</Text>
-            ) : null}
-          </View>
+          />
         )}
       </Animated.View>
 
-      {/* Editorial recommendation — event photos come from edition JSON only */}
-      <DontMissToday events={events} />
+      {/* Immediately under hero: weather, greeting, Bandit */}
+      <View style={styles.morningCopy}>
+        {weatherLine ? (
+          <Text style={styles.weather} maxFontSizeMultiplier={1.2}>
+            {placeLabel ? `${placeLabel} · ${weatherLine}` : weatherLine}
+          </Text>
+        ) : placeLabel ? (
+          <Text style={styles.weather} maxFontSizeMultiplier={1.2}>
+            {placeLabel}
+          </Text>
+        ) : null}
+
+        <Text style={styles.greeting} maxFontSizeMultiplier={1.25}>
+          {welcome || salutation}
+        </Text>
+
+        {bandit ? (
+          <Text style={styles.bandit} maxFontSizeMultiplier={1.2}>
+            {bandit}
+            <Text style={styles.banditSign}> — Bandit</Text>
+          </Text>
+        ) : null}
+      </View>
 
       <View style={styles.endRule} accessibilityElementsHidden />
-    </View>
+    </Animated.View>
   );
 }
 
@@ -258,53 +262,59 @@ function usefulWeather(
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 56,
+    marginBottom: 28,
   },
   masthead: {
-    marginBottom: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 0,
+    marginBottom: 16,
+    paddingBottom: 12,
   },
   heroBleed: {
-    marginBottom: 36,
+    marginHorizontal: -FOLIO_GUTTER,
+    marginBottom: 22,
   },
   heroFrame: {
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
   },
-  heroCaption: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: FOLIO_GUTTER,
-    paddingVertical: 16,
-    backgroundColor: "rgba(45, 41, 38, 0.28)",
-  },
-  heroCaptionText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    lineHeight: 20,
-    fontStyle: "italic",
-    color: paper.page,
-    letterSpacing: 0.15,
-  },
   heroFallback: {
     backgroundColor: paper.chrome,
-    justifyContent: "flex-end",
-    paddingHorizontal: FOLIO_GUTTER,
-    paddingBottom: 20,
   },
-  heroFallbackText: {
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 24,
-    fontStyle: "italic",
+  morningCopy: {
+    paddingRight: 8,
+    marginBottom: 8,
+  },
+  weather: {
+    fontSize: 13,
+    lineHeight: 19,
+    letterSpacing: 0.25,
     color: paper.inkMuted,
+    marginBottom: 14,
+  },
+  greeting: {
+    fontFamily: "Georgia",
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: "600",
+    letterSpacing: -0.35,
+    color: paper.ink,
+    marginBottom: 14,
+    maxWidth: 520,
+  },
+  bandit: {
+    fontFamily: "Georgia",
+    fontSize: 17,
+    lineHeight: 26,
+    fontStyle: "italic",
+    color: paper.inkBody,
+    maxWidth: 480,
+  },
+  banditSign: {
+    fontStyle: "italic",
+    color: paper.inkFaint,
   },
   endRule: {
-    marginTop: 52,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.border,
+    marginTop: 28,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.border,
   },
 });

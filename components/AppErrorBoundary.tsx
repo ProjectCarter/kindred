@@ -66,7 +66,7 @@ export class AppErrorBoundary extends Component<Props, State> {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
     justifyContent: "center",
     paddingHorizontal: 28,
   },

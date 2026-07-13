@@ -1,0 +1,64 @@
+---
+description: Kindred editorial design — references as teachers, locked sections, section personality
+alwaysApply: true
+---
+
+# Kindred Editorial Design System
+
+## Locked sections (do not redesign unless explicitly asked)
+
+- Homepage architecture (complete)
+- Hero image
+- Morning greeting
+- Local Events
+- Experiences
+- Recommendations
+- Community / Looking Ahead / Local Articles
+- Bandit’s Notebook (placement + concept)
+- Typography / editorial spacing / overall magazine feel on the homepage
+- Article reader foundation (Phase 1 structure)
+
+Improve **only** the section assigned in the current request. Keep the app visually cohesive.
+
+## Active work: Universal Content System
+
+Every piece of content resolves a **purpose-built editorial template** via `lib/edition/contentSystem`.
+
+- Shared Kindred typography, spacing, navigation, and reader chrome
+- Different desks for News, Local News, Science, History, Local Events, Festivals, Restaurants, Coffee, Bakeries, Hiking, Parks, Beaches, Museums, Attractions, Hidden Gems, Recommendations, Travel
+- Story first (`body`); practical questions as magazine modules (`modules`) — never Yelp, Maps, Wikipedia, or a database dump
+- Adapters + `openKindredArticle` call `withContentSystem` / `applyContentSystem` so future content auto-selects a template
+
+Do **not** redesign the locked homepage or the locked Phase 1 reader foundation. Extend with desk modules only.
+
+## Reference websites are temporary teachers
+
+When given TIME, Monocle, Condé Nast Traveler, Apple Newsroom, or any other reference:
+
+1. Study **why** it is excellent.
+2. Learn rhythm, hierarchy, storytelling, photography, spacing, and UX.
+3. Build that **quality** into Kindred.
+4. Evolve it into Kindred’s own design language.
+
+Do **not** permanently imitate the publication. Do **not** copy branding, colors, or logos.
+If a reference conflicts with Kindred, **choose Kindred**.
+
+## One publication, many desks
+
+| Section | Personality |
+| --- | --- |
+| Homepage | Authoritative morning newspaper |
+| Local Events | Energetic local discovery |
+| Experiences | Inspiring travel editor |
+| Recommendations | Trusted friend and editor |
+| Community | Local neighborhood paper |
+| Bandit’s Picks | Personal handwritten recommendation |
+| Bandit’s Notebook | Personal notebook of discoveries |
+| Article Reader | Premium printed magazine |
+| Content templates | Purpose-built desks inside one magazine |
+
+## Working rules
+
+- Never redesign locked sections unless the user specifically asks.
+- Touch only the assigned section in a sprint.
+- Prefer Kindred paper tokens (`newspaperTheme`) over reference brand palettes.

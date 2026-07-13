@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   card: {
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
     paddingHorizontal: 26,
     paddingTop: 28,
     paddingBottom: 24,

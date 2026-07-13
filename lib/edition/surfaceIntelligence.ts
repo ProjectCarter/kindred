@@ -39,6 +39,7 @@ import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
 import { isClippableSectionId } from "./article";
+import { getGoldStandardCompanion } from "./goldStandard/algalBloomArticle";
 import {
   hasSubstance,
   isInternalScoreLabel,
@@ -268,6 +269,11 @@ function buildCompanion(
   return {
     whyThisMatters: why,
     whyChosen: chosen,
+    banditNote:
+      chosen ||
+      (why?.summary?.trim()
+        ? why.summary.trim()
+        : null),
     knowledgeNotes: knowledgeNotesFromPacket(packet),
     knowledgeCards: knowledgeCardsFromPacket(packet),
     continueReading: selectEditorialContinuation({
@@ -284,41 +290,11 @@ function buildCompanion(
 
 /** Companion metadata for the article reader. */
 export function companionForLead(
-  intelligence: EditionIntelligence,
-  lead: LeadStory
+  _intelligence: EditionIntelligence,
+  _lead: LeadStory
 ): ArticleCompanion {
-  const packet = intelligence.knowledge?.byStoryKey?.[lead.id] ?? null;
-  const facet = whyThisMatters(packet);
-  const reasons = lead.selection?.reasons ?? [];
-  const chosen = reasons
-    .filter(
-      (r) =>
-        r.weight > 0 &&
-        !r.code.startsWith("role_") &&
-        !isInternalScoreLabel(r.label) &&
-        !/score|algorithm|boost|rank|weight/i.test(r.label) &&
-        !/score|algorithm|boost|rank/i.test(r.code)
-    )
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, 2)
-    .map((r) => r.label.replace(/\.$/, ""))
-    .join(". ");
-
-  return buildCompanion(
-    intelligence,
-    packet,
-    facet
-      ? { title: facet.title, summary: facet.summary }
-      : intelligence.leadWhyThisMatters
-        ? {
-            title: "Why this matters",
-            summary: intelligence.leadWhyThisMatters,
-          }
-        : null,
-    chosen ? chosen + "." : null,
-    lead.headline,
-    lead.id
-  );
+  // Phase 1 blueprint — gold-standard companion rides with the Lead.
+  return getGoldStandardCompanion();
 }
 
 /**
@@ -334,6 +310,7 @@ export function companionForArticle(
     return {
       whyThisMatters: null,
       whyChosen: null,
+      banditNote: null,
       knowledgeNotes: [],
       knowledgeCards: [],
       continueReading: selectEditorialContinuation({

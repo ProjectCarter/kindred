@@ -1,6 +1,7 @@
 import {
   DISCOVERY_SEED_CATALOG,
   localEventsAsDiscoveryItems,
+  localPlacesAsDiscoveryItems,
 } from "./catalog.ts";
 import { scoreDiscoveryItem } from "./score.ts";
 import {
@@ -29,8 +30,23 @@ function defaultSurfaces(ctx: DiscoveryRankingContext): DiscoverySurface[] {
   const out: DiscoverySurface[] = ["hidden_gems"];
   if (ctx.isSunday) out.unshift("bandits_picks");
   if (ctx.isWeekend) out.push("weekend_ideas");
-  // Quiet category desks — available for future surfaces without UI yet
-  out.push("coffee", "museums", "recipes");
+  // Every single-category desk, every day — Weekend Escapes, Bandit's
+  // Notebook, and Recommendations each depend on this full roster to stay
+  // abundant and non-repetitive. Narrowing this list starves those
+  // sections even when the seed catalog has content to give them.
+  out.push(
+    "coffee",
+    "restaurants",
+    "beaches",
+    "hiking",
+    "museums",
+    "parks",
+    "scenic_drives",
+    "books",
+    "movies",
+    "podcasts",
+    "recipes"
+  );
   return Array.from(new Set(out));
 }
 
@@ -55,6 +71,7 @@ export function runDiscoveryDecisions(
   const catalog = [
     ...DISCOVERY_SEED_CATALOG,
     ...localEventsAsDiscoveryItems(ctx.localEvents ?? []),
+    ...localPlacesAsDiscoveryItems(ctx.localPlaces ?? []),
   ];
 
   const ranked = catalog
@@ -93,6 +110,9 @@ export function runDiscoveryDecisions(
     ctx.isWeekend ? "Weekend Ideas weather- and season-aware." : "",
     (ctx.localEvents?.length ?? 0) > 0
       ? "Local events folded into discovery candidates."
+      : "",
+    (ctx.localPlaces?.length ?? 0) > 0
+      ? "Verified local places (Foursquare) folded into discovery candidates."
       : "",
   ].filter(Boolean);
 

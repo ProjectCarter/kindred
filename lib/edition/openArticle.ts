@@ -1,5 +1,5 @@
 import type { Router } from "expo-router";
-import type { KindredArticle } from "./article";
+import { withContentSystem, type KindredArticle } from "./article";
 import { ensureArticleHero } from "./articleHero";
 import { stashArticle } from "./articleStore";
 import {
@@ -32,8 +32,10 @@ export function openKindredArticle(
   article: KindredArticle,
   options: OpenArticleOptions = {}
 ): void {
+  // Every piece of content resolves a desk template before opening.
+  const withTemplate = withContentSystem(article);
   // Visual identity is required — wire photo or curated editorial fallback.
-  const withHero = ensureArticleHero(article);
+  const withHero = ensureArticleHero(withTemplate);
   const id = stashArticle(withHero);
   const companion = options.companion ?? null;
   if (companion) {

@@ -292,7 +292,7 @@ export default function LocationSettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.cream,
+    backgroundColor: paper.sky,
   },
   content: {
     paddingHorizontal: 24,
