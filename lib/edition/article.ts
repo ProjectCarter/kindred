@@ -4,7 +4,7 @@ import {
   type RankedDiscoveryItem,
 } from "./discovery";
 import type { KnowledgeFacet } from "./knowledge";
-import { dedupeProse } from "./contentQuality";
+import { dedupeProse, isNearDuplicateProse } from "./contentQuality";
 import { getGoldStandardArticle } from "./goldStandard/algalBloomArticle";
 import {
   applyContentSystem,
@@ -16,6 +16,7 @@ import type { LocalEventCard } from "./localEvents";
 import {
   composeFallbackDiscoveryBody,
   composeGenericDynamicDiscoveryArticle,
+  composePlaceDiscoveryArticle,
   composeVerifiedEventDiscoveryArticle,
   getCuratedDiscoveryArticle,
   matchVerifiedLocalEvent,
@@ -291,15 +292,16 @@ export function articleFromSectionItem(input: {
   const source = input.source?.trim() || "Kindred";
   const dek = input.dek?.trim() || null;
   let body = dedupeProse(splitIntoParagraphs(input.body));
-  // Do not repeat the dek as the body.
-  if (dek && body.length === 1) {
-    const b = body[0].toLowerCase().replace(/\s+/g, " ");
-    const d = dek.toLowerCase().replace(/\s+/g, " ");
-    if (b === d || b.includes(d) || d.includes(b)) {
-      body = [];
-    }
+  // Never repeat the dek verbatim (or near-verbatim) as body content —
+  // it already renders once as the opening summary.
+  if (dek) {
+    body = body.filter((p) => !isNearDuplicateProse(p, dek));
   }
-  if (!body.length && input.body.trim() && input.body.trim() !== dek) {
+  if (
+    !body.length &&
+    input.body.trim() &&
+    !(dek && isNearDuplicateProse(input.body.trim(), dek))
+  ) {
     body = [input.body.trim()];
   }
   if (!body.length) {
@@ -399,6 +401,30 @@ export function articleFromDiscoveryItem(
     });
   }
 
+  // Verified place (Foursquare) with only a single short editorial note —
+  // render a compact briefing rather than stretching one sentence across
+  // dek, body, and a desk module (never repeat the same line three ways).
+  if (item.tags?.includes("local_place")) {
+    const composed = composePlaceDiscoveryArticle({
+      title: item.title,
+      dek: item.dek,
+      city: item.place?.city ?? null,
+      sourceName: item.source?.name ?? null,
+    });
+    return articleFromSectionItem({
+      id: item.id,
+      section: "discovery",
+      headline: item.title,
+      body: composed.body.join("\n\n"),
+      dek: composed.dek,
+      source: item.source?.name ?? "Kindred",
+      sourceUrl: item.url ?? item.source?.url ?? null,
+      discoveryCategory: item.category,
+      tags: [item.category],
+      fieldAnswers: composed.fieldAnswers,
+    });
+  }
+
   const body = composeFallbackDiscoveryBody({
     title: item.title,
     dek: item.dek,
@@ -416,6 +442,10 @@ export function articleFromDiscoveryItem(
     sourceUrl: item.url ?? item.source?.url ?? null,
     discoveryCategory: item.category,
     tags: [item.category],
+    // Explicitly empty — the fallback body already answers the practical
+    // question; auto-seeding a module from the dek here would repeat it
+    // a third time under a labeled section.
+    fieldAnswers: {},
   });
 }
 
@@ -456,6 +486,27 @@ export function articleFromNotebookItem(
       contentType: curated.contentType,
       tags: [item.category],
       fieldAnswers: curated.fieldAnswers,
+    });
+  }
+
+  if (item.tags?.includes("local_place")) {
+    const composed = composePlaceDiscoveryArticle({
+      title: item.title,
+      dek: item.dek,
+      city: item.place?.city ?? null,
+      sourceName: item.source?.name ?? null,
+    });
+    return articleFromSectionItem({
+      id: item.id,
+      section: "discovery",
+      headline: item.title,
+      body: composed.body.join("\n\n"),
+      dek: composed.dek,
+      source: item.source?.name ?? "Kindred",
+      sourceUrl: item.url ?? item.source?.url ?? null,
+      discoveryCategory: item.category,
+      tags: [item.category],
+      fieldAnswers: composed.fieldAnswers,
     });
   }
 

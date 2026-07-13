@@ -58,7 +58,7 @@ function interestOverlap(
  * still doesn't belong in a warm closing note.
  */
 const TECHNICAL_PATTERN =
-  /\b(?:regulators?|regulatory|impurit(?:y|ies)|compliance|quarterly earnings|shareholders?|litigation|settlement|merger|acquisition|antitrust|layoffs?|bankrupt(?:cy)?|sec filing|ipo|interest rates?|federal reserve|tariffs?|earnings call|stock (?:price|market)|shares (?:fell|rose|slipped|jumped|plunged)|data breach|supply chain|inflation|gdp|unemployment rate|press release|proxy fight|board of directors|quarterly (?:report|results)|filing with|patent dispute|product recall)\b/;
+  /\b(?:regulators?|regulatory|peptide|impurit(?:y|ies)|compliance|quarterly earnings|shareholders?|litigation|settlement|merger|acquisition|antitrust|layoffs?|bankrupt(?:cy)?|sec filing|ipo|interest rates?|federal reserve|tariffs?|earnings call|stock (?:price|market)|shares (?:fell|rose|slipped|jumped|plunged)|data breach|supply chain|inflation|gdp|unemployment rate|press release|proxy fight|board of directors|quarterly (?:report|results)|filing with|patent dispute|product recall|drug regulators?)\b/;
 
 const DELIGHT_PATTERN =
   /\b(hidden|secret|mystery|mysterious|centuries-old|ancient|folklore|tradition|handmade|artisan|first time|rare|unusual|little-known|forgotten|quirky|surprising|remarkable|astonishing|breathtaking)\b/;
@@ -156,6 +156,13 @@ export function selectBanditsPick(input: {
   const pool = input.scored.filter((c) => {
     if (!c.story.id || !c.story.title?.trim()) return false;
     if (leadId && c.story.id === leadId) return false;
+    // Hard exclusion, not just a score penalty — routine technical /
+    // regulatory press-release material (compliance thresholds, impurity
+    // limits, filings, earnings, etc.) must never win this slot even
+    // when it's the only candidate left. A warm recommendation slot
+    // showing nothing is better than showing dry trade-press copy.
+    const character = editorialCharacter(c.story);
+    if (character.technical && !character.delightful) return false;
     return true;
   });
 

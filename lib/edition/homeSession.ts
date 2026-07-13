@@ -1,8 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+/**
+ * Homepage scroll persistence, keyed by edition + location so a new day's
+ * paper (or a city change) never inherits yesterday's offset.
+ *
+ * The in-memory `memory` Map is a *module-level* singleton — it survives a
+ * full remount of the Home screen component (React unmounting/remounting
+ * the component tree does not reload this module), which is what makes
+ * restoration reliable even if the navigator doesn't keep Home mounted in
+ * the background across a push/pop. AsyncStorage is the second-tier,
+ * slower fallback that survives an actual app relaunch.
+ */
+
 const PREFIX = "@kindred/home-scroll/";
 
-/** In-memory cache — survives blur; AsyncStorage survives remount. */
 const memory = new Map<string, number>();
 
 function storageKey(key: string): string {

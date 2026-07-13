@@ -158,28 +158,35 @@ export default function HomeScreen() {
     if (key) updateHomeScroll(key, homeScrollYRef.current);
   }
 
+  /**
+   * Re-entrant on purpose: content height can arrive in more than one
+   * layout pass (fonts, images, section counts) while the screen is
+   * remounting. Keep nudging toward the saved offset on every
+   * onContentSizeChange call and only stop once the content is tall
+   * enough to fully satisfy it — otherwise an early, too-short layout
+   * pass would permanently lock in an under-scrolled position.
+   */
   const restoreHomeScrollIfNeeded = useCallback((contentHeight?: number) => {
     if (skipScrollRestoreRef.current || restoredScrollRef.current) return;
     const target = pendingScrollRestoreY.current;
     if (target <= 0) return;
 
-    if (contentHeight != null && contentHeight <= target) {
-      const y = Math.max(0, contentHeight - 1);
-      if (y <= 0) return;
+    const y =
+      contentHeight != null
+        ? Math.max(0, Math.min(target, contentHeight - 1))
+        : target;
+    if (y <= 0) return;
+
+    // Only called without a contentHeight when the screen never lost its
+    // existing layout (focus-time direct restore) — trust it as final.
+    if (contentHeight == null || contentHeight >= target) {
       restoredScrollRef.current = true;
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ y, animated: false });
-        mastheadScrollY.setValue(y);
-        homeScrollYRef.current = y;
-      });
-      return;
     }
 
-    restoredScrollRef.current = true;
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: target, animated: false });
-      mastheadScrollY.setValue(target);
-      homeScrollYRef.current = target;
+      scrollRef.current?.scrollTo({ y, animated: false });
+      mastheadScrollY.setValue(y);
+      homeScrollYRef.current = y;
     });
   }, [mastheadScrollY]);
 
@@ -519,6 +526,39 @@ export default function HomeScreen() {
       return;
     }
 
+    // Resolve the saved scroll offset for this exact edition + location
+    // *here*, from the values this function already knows — rather than
+    // depending on a separate focus-time effect that can run before
+    // editionId has ever been set (e.g. right after the screen remounts
+    // on `router.back()`, before this query has resolved). The lookup
+    // itself hits an in-memory, module-level cache first (populated
+    // synchronously before navigating away), so this resolves instantly
+    // in the common case.
+    if (!resetScroll) {
+      const targetKey = homeScrollSessionKey(
+        edition.id,
+        activeLocationKey(active)
+      );
+      const savedScroll = await loadHomeScroll(targetKey);
+      if (
+        mountedRef.current &&
+        gen === loadGen.current &&
+        savedScroll > 0 &&
+        !skipScrollRestoreRef.current
+      ) {
+        pendingScrollRestoreY.current = savedScroll;
+        restoredScrollRef.current = false;
+        homeScrollYRef.current = savedScroll;
+        mastheadScrollY.setValue(savedScroll);
+        if (__DEV__) {
+          console.log("[home] scroll: resolved restore target", {
+            editionId: edition.id,
+            savedScroll,
+          });
+        }
+      }
+    }
+
     setLocationMismatch(null);
     setSections(loaded);
     setEditionDate(edition.edition_date);
@@ -559,9 +599,11 @@ export default function HomeScreen() {
     if (!mountedRef.current || gen !== loadGen.current) return;
     setLoading(false);
     setRefreshing(false);
-    if (!resetScroll) {
-      restoreHomeScrollIfNeeded();
-    }
+    // Do not call restoreHomeScrollIfNeeded() here without a real content
+    // height — the ScrollView's layout may still reflect the previous
+    // (empty) render at this exact point, and locking in a scroll based
+    // on stale bounds would block the accurate onContentSizeChange-driven
+    // restore that follows once the new sections actually lay out.
     } catch (err) {
       if (__DEV__) {
         console.error(

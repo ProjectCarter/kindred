@@ -58,10 +58,15 @@ export function applyContentSystem(input: {
 }): ApplyContentSystemResult {
   const contentType = resolveContentType(input.resolve);
   const template = getContentTemplate(contentType);
+  // Only auto-seed a module from the dek when the caller supplied no
+  // answers signal at all (undefined). An explicit {} or null means the
+  // caller already decided this piece shouldn't repeat its dek under a
+  // labeled section — respect that rather than reintroducing the
+  // duplicate ourselves.
   const seeded =
-    input.answers && Object.keys(input.answers).length > 0
-      ? input.answers
-      : seedAnswersFromDek(contentType, input.seedDek);
+    input.answers === undefined
+      ? seedAnswersFromDek(contentType, input.seedDek)
+      : input.answers ?? {};
   const modules = composeEditorialModules(contentType, seeded);
 
   return {

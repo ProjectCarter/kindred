@@ -376,23 +376,75 @@ export function composeFallbackDiscoveryBody(input: {
   const why = input.why?.trim() || "";
   const paragraphs: string[] = [];
 
-  if (dek) {
-    paragraphs.push(dek);
-  } else if (input.city) {
-    paragraphs.push(`A recommendation worth a closer look, near ${input.city}.`);
-  } else {
-    paragraphs.push(input.title.trim());
-  }
-
-  if (why && why.toLowerCase() !== dek.toLowerCase()) {
+  if (why && !isNearDuplicateCopy(why, dek)) {
     paragraphs.push(why);
+  } else if (!dek) {
+    if (input.city) {
+      paragraphs.push(`A recommendation worth a closer look, near ${input.city}.`);
+    } else {
+      paragraphs.push(input.title.trim());
+    }
   }
 
-  paragraphs.push(
-    "Kindred flagged this one for today's paper. Worth a look before the day fills in."
-  );
+  if (paragraphs.length === 0 && dek) {
+    paragraphs.push(
+      "Kindred has only a short verified note for this one — the listing below has the latest detail."
+    );
+  } else if (paragraphs.length > 0) {
+    paragraphs.push(
+      "Kindred flagged this for today's paper. Worth a look before the day fills in."
+    );
+  }
 
   return paragraphs;
+}
+
+function isNearDuplicateCopy(a: string, b: string): boolean {
+  const left = a.trim().toLowerCase();
+  const right = b.trim().toLowerCase();
+  if (!left || !right) return false;
+  if (left === right) return true;
+  return left.includes(right) || right.includes(left);
+}
+
+/**
+ * Compact briefing for verified local places (Foursquare) — one grounded
+ * note, never stretched across a long-form template.
+ */
+export function composePlaceDiscoveryArticle(input: {
+  title: string;
+  dek?: string | null;
+  city?: string | null;
+  sourceName?: string | null;
+}): {
+  dek: string;
+  body: string[];
+  fieldAnswers: EditorialFieldAnswers;
+} {
+  const title = input.title.trim();
+  const note = input.dek?.trim() || "";
+  const placeLine = [title, input.city?.trim()].filter(Boolean).join(" · ");
+  const dek =
+    note && !isNearDuplicateCopy(note, title)
+      ? note
+      : placeLine || title;
+
+  const body: string[] = [];
+  if (input.sourceName) {
+    body.push(
+      `Verified listing from ${input.sourceName}. Kindred keeps this brief when only the place name and location are confirmed — not a full review.`
+    );
+  } else {
+    body.push(
+      "Kindred keeps this brief when only the place name and location are confirmed — not a full review."
+    );
+  }
+
+  return {
+    dek,
+    body,
+    fieldAnswers: {},
+  };
 }
 
 /**
@@ -463,7 +515,6 @@ export function composeVerifiedEventDiscoveryArticle(
     : "Good to know: schedules for local happenings can shift close to the date — a quick check before you leave is worth it.";
 
   const body = [
-    opening,
     whyItMadeTheNotebook,
     whatToExpect,
     who,
@@ -472,7 +523,11 @@ export function composeVerifiedEventDiscoveryArticle(
 
   return {
     dek: place || event.name.trim(),
-    body,
+    body: dedupeDiscoveryBody(
+      banditNote && !isNearDuplicateCopy(banditNote, place)
+        ? [banditNote, ...body]
+        : body
+    ),
     contentType: isFestival ? "festival" : "local_event",
     fieldAnswers: {
       when: whenLine,
@@ -509,10 +564,10 @@ export function composeGenericDynamicDiscoveryArticle(input: {
   const why = input.why?.trim() || "";
   const categoryLabel = input.category.replace(/_/g, " ");
 
-  const opening = dek || `${title} — an idea from today's notebook.`;
+  const opening = dek ? null : `${title} — an idea from today's notebook.`;
 
   const worthConsidering =
-    why && why.toLowerCase() !== dek.toLowerCase()
+    why && !isNearDuplicateCopy(why, dek)
       ? why
       : `It made today's notebook on editorial judgment, not a trending list — worth a look if the idea appeals to you.`;
 
@@ -526,9 +581,24 @@ export function composeGenericDynamicDiscoveryArticle(input: {
     : `Good to know: this is a general idea rather than one specific place — worth searching nearby to find a real version of it.`;
 
   return {
-    body: [opening, worthConsidering, whatToExpect, who, goodToKnow],
+    body: dedupeDiscoveryBody(
+      [opening, worthConsidering, whatToExpect, who, goodToKnow].filter(
+        (p): p is string => Boolean(p)
+      )
+    ),
     fieldAnswers: {},
   };
+}
+
+function dedupeDiscoveryBody(body: string[]): string[] {
+  const out: string[] = [];
+  for (const paragraph of body) {
+    const cleaned = paragraph.replace(/\s+/g, " ").trim();
+    if (!cleaned) continue;
+    if (out.some((prev) => isNearDuplicateCopy(prev, cleaned))) continue;
+    out.push(cleaned);
+  }
+  return out;
 }
 
 export type { DiscoveryItem };

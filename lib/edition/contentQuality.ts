@@ -23,28 +23,52 @@ export function isPlaceholderCopy(text: string | null | undefined): boolean {
   return PLACEHOLDER_PATTERNS.some((re) => re.test(t));
 }
 
+/** Normalize prose for duplicate comparison. */
+export function normalizeProseKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[“”"']/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function isNearDuplicateProse(a: string, b: string): boolean {
+  const left = normalizeProseKey(a);
+  const right = normalizeProseKey(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length > right.length ? left : right;
+  if (shorter.length < 24) {
+    return longer.includes(shorter);
+  }
+  const sigA = shorter.slice(0, Math.min(80, shorter.length));
+  const sigB = longer.slice(0, Math.min(80, longer.length));
+  return (
+    longer.includes(sigA) ||
+    shorter.includes(sigB) ||
+    sigA === sigB
+  );
+}
+
 /** Collapse near-duplicate paragraphs / sentences. */
 export function dedupeProse(paragraphs: string[]): string[] {
   const out: string[] = [];
-  const seen = new Set<string>();
+  const seen: string[] = [];
   for (const p of paragraphs) {
     const cleaned = p.replace(/\s+/g, " ").trim();
     if (!cleaned) continue;
-    const key = cleaned.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const key = normalizeProseKey(cleaned);
     if (key.length < 8) continue;
-    // Near-duplicate: same first 80 normalized chars
-    const sig = key.slice(0, 80);
-    if (seen.has(sig)) continue;
-    // Also skip if this paragraph largely repeats a previous one
     let dup = false;
     for (const prev of seen) {
-      if (prev.includes(sig) || sig.includes(prev.slice(0, 60))) {
+      if (isNearDuplicateProse(cleaned, prev)) {
         dup = true;
         break;
       }
     }
     if (dup) continue;
-    seen.add(sig);
+    seen.push(cleaned);
     out.push(cleaned);
   }
   return out;

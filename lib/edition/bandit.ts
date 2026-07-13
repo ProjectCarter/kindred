@@ -1,4 +1,5 @@
 import { banditDayLine } from "./morningRitual";
+import { isDisqualifiedBanditsPickStory } from "./banditPickQuality";
 
 /**
  * Bandit — Kindred’s calm morning newspaper editor.
@@ -165,11 +166,27 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
   };
 }
 
-/** Bandit's Pick for the end of the edition — null when none stored. */
+/**
+ * Bandit's Pick for the end of the edition — null when none stored.
+ * Defensively hides a stale persisted pick that fails the current
+ * editorial quality bar (e.g. dry regulatory/technical copy from an
+ * edition generated before a ranking fix) without requiring a
+ * regeneration — showing nothing beats showing a disqualified story.
+ */
 export function banditsPick(
   payload: BanditPayload | null | undefined
 ): BanditsPick | null {
-  return payload?.pick ?? null;
+  const pick = payload?.pick ?? null;
+  if (!pick) return null;
+  if (
+    isDisqualifiedBanditsPickStory({
+      headline: pick.story.headline,
+      summary: pick.story.summary,
+    })
+  ) {
+    return null;
+  }
+  return pick;
 }
 
 /** Morning line for MorningGreeting — from stored payload. */
