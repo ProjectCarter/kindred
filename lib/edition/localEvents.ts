@@ -245,24 +245,35 @@ export function parseLocalEventsBody(
  * with the same genre when a livelier day has real variety on offer —
  * a concert, a market, and two food events reads richer than four concerts.
  */
-export function orderEventsForGrid(events: LocalEventCard[]): LocalEventCard[] {
+export const LOCAL_EVENTS_GRID_LIMIT = 8;
+
+/**
+ * `limit` defaults to the front page's cap (8). Pass a larger value (or
+ * `events.length`) for a "show everything" surface like the full Events
+ * list — the photo-first / category-diversity ordering still applies, it
+ * just stops trimming once `limit` is reached.
+ */
+export function orderEventsForGrid(
+  events: LocalEventCard[],
+  limit: number = LOCAL_EVENTS_GRID_LIMIT
+): LocalEventCard[] {
   const withPhoto = events.filter((e) => Boolean(e.imageUrl));
   const without = events.filter((e) => !e.imageUrl);
   const byPhotoFirst = [...withPhoto, ...without];
 
-  if (byPhotoFirst.length <= 4) return byPhotoFirst.slice(0, 4);
+  if (byPhotoFirst.length <= limit) return byPhotoFirst.slice(0, limit);
 
   const picked: LocalEventCard[] = [];
   const seenCategory = new Set<LocalEventCategory | undefined>();
 
   for (const event of byPhotoFirst) {
-    if (picked.length >= 4) break;
+    if (picked.length >= limit) break;
     if (event.category && seenCategory.has(event.category)) continue;
     picked.push(event);
     if (event.category) seenCategory.add(event.category);
   }
   for (const event of byPhotoFirst) {
-    if (picked.length >= 4) break;
+    if (picked.length >= limit) break;
     if (picked.includes(event)) continue;
     picked.push(event);
   }

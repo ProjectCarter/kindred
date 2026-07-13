@@ -57,6 +57,8 @@ type Props = {
   onOpenArticle?: (article: KindredArticle) => void;
   /** Opens Local Event detail. */
   onOpenEvent?: (event: LocalEventCard) => void;
+  /** Front-page "See all N events →" — opens the full Events list. */
+  onSeeAllEvents?: () => void;
   /** Stored knowledge payload — used when tapping explainer notes. */
   knowledge?: KnowledgePayload | null;
   heroImageUri?: string | null;
@@ -169,6 +171,7 @@ export function EditionReader({
   leadStory,
   onOpenArticle,
   onOpenEvent,
+  onSeeAllEvents,
   knowledge,
   heroImageUri,
   banditGreeting,
@@ -371,7 +374,11 @@ export function EditionReader({
       />
 
       <FolioReveal index={folioCursor++}>
-        <LocalEventsGrid events={events} onOpenEvent={onOpenEvent} />
+        <LocalEventsGrid
+          events={events}
+          onOpenEvent={onOpenEvent}
+          onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
+        />
       </FolioReveal>
 
       <FolioReveal index={folioCursor++}>

@@ -10,6 +10,7 @@ import { SymbolView } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import {
   orderEventsForGrid,
+  LOCAL_EVENTS_GRID_LIMIT,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
 import {
@@ -23,6 +24,10 @@ import { paper, press } from "../lib/edition/newspaperTheme";
 type Props = {
   events: LocalEventCard[];
   onOpenEvent?: (event: LocalEventCard) => void;
+  /** Front page caps at LOCAL_EVENTS_GRID_LIMIT; the full Events list passes a larger value. */
+  limit?: number;
+  /** Present only on the front page — shown below the grid once there are more events than fit. */
+  onSeeAll?: () => void;
 };
 
 /**
@@ -30,14 +35,20 @@ type Props = {
  * Equal two-column modules, photography-led, thin rules, magazine air.
  * Sharp corners only — no shadows, pills, or button chrome.
  */
-export function LocalEventsGrid({ events, onOpenEvent }: Props) {
+export function LocalEventsGrid({
+  events,
+  onOpenEvent,
+  limit = LOCAL_EVENTS_GRID_LIMIT,
+  onSeeAll,
+}: Props) {
   const { width } = useWindowDimensions();
   /** Page column inside home’s 28px folio padding. */
   const pageW = width - 56;
   const halfGap = 12;
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
-  const visible = orderEventsForGrid(events);
+  const visible = orderEventsForGrid(events, limit);
+  const remainingCount = events.length - visible.length;
 
   if (visible.length === 0) {
     return (
@@ -190,6 +201,23 @@ export function LocalEventsGrid({ events, onOpenEvent }: Props) {
           {row.length === 1 ? <View style={styles.cell} /> : null}
         </View>
       ))}
+
+      {onSeeAll && remainingCount > 0 ? (
+        <Pressable
+          onPress={onSeeAll}
+          style={({ pressed }) => [
+            styles.seeAllRow,
+            pressed && { opacity: press.opacity },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`See all ${events.length} events`}
+        >
+          <Text style={styles.seeAllText} maxFontSizeMultiplier={1.2}>
+            See all {events.length} events{"  "}
+            <Text style={styles.seeAllArrow}>→</Text>
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -294,5 +322,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     color: paper.inkBody,
+  },
+  seeAllRow: {
+    marginTop: 30,
+    paddingVertical: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  seeAllText: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    fontStyle: "italic",
+    letterSpacing: 0.2,
+    color: paper.terracotta,
+    textAlign: "center",
+  },
+  seeAllArrow: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    fontStyle: "normal",
+    color: paper.terracotta,
   },
 });

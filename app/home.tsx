@@ -26,6 +26,7 @@ import { openKindredEvent } from "../lib/edition/openEvent";
 import { resolveArticleForStoryKey } from "../lib/edition/relatedArticle";
 import { stashArticle } from "../lib/edition/articleStore";
 import { parseLocalEventsBody } from "../lib/edition/localEvents";
+import { stashTodaysEvents } from "../lib/edition/eventsListStore";
 import {
   banditMorningLine,
   banditsPick,
@@ -1357,6 +1358,17 @@ export default function HomeScreen() {
                 openKindredEvent(router, event, {
                   backLabel: "← Today’s paper",
                 });
+              }}
+              onSeeAllEvents={() => {
+                const section = sections.find(
+                  (s) => s.section_type === "local_events"
+                );
+                const allEvents = section?.body
+                  ? parseLocalEventsBody(section.body) ?? []
+                  : [];
+                persistHomeScrollNow();
+                stashTodaysEvents(allEvents);
+                router.push("/events");
               }}
               knowledge={intelligence?.knowledge}
               clippedSectionIds={clippedIds}
