@@ -638,6 +638,7 @@ export function localPlacesAsDiscoveryItems(
     city: string | null;
     url: string | null;
     note?: string | null;
+    providerCategories?: string[];
   }>
 ): DiscoveryItem[] {
   return places.map((p) => {
@@ -657,6 +658,8 @@ export function localPlacesAsDiscoveryItems(
         url: p.url ?? null,
       },
       url: p.url ?? null,
+      address: p.address ?? null,
+      venueCategories: p.providerCategories?.filter(Boolean) ?? [],
       tags: ["local_place", "verified"],
       seasons: ["anytime"],
       weatherFit: ["any"],

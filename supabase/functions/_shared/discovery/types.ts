@@ -70,6 +70,10 @@ export type DiscoveryItem = {
   };
   /** Optional deep link or original article. */
   url?: string | null;
+  /** Verified street address (local places only) — never fabricated. */
+  address?: string | null;
+  /** Provider-supplied category names (e.g. Foursquare "Coffee Shop") — editorial context only, never invented. */
+  venueCategories?: string[];
   tags: string[];
   /** Season tags: spring | summer | autumn | winter | anytime */
   seasons: string[];
@@ -169,6 +173,8 @@ export type DiscoveryRankingContext = {
     city: string | null;
     url: string | null;
     note?: string | null;
+    /** Provider-supplied category names — passed through for richer article grounding. */
+    providerCategories?: string[];
   }>;
   /** Which surfaces to assemble this edition. */
   surfaces?: DiscoverySurface[];

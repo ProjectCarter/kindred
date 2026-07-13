@@ -58,6 +58,10 @@ export type DiscoveryItem = {
     url?: string | null;
   };
   url?: string | null;
+  /** Verified street address (local places only) — never fabricated. */
+  address?: string | null;
+  /** Provider-supplied category names (e.g. Foursquare "Coffee Shop") — editorial context only. */
+  venueCategories?: string[];
   tags: string[];
 };
 

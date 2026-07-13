@@ -483,18 +483,60 @@ function isNearDuplicateCopy(a: string, b: string): boolean {
 }
 
 /**
- * Full piece for a verified local place (Foursquare) — grounded in the
- * one real, verified fact Kindred has (the place's name and location),
- * built out with the same category essay the desk already writes for
- * this kind of place, so it reads as a complete newspaper piece rather
- * than one sentence stretched thin. The essay never claims a fact about
- * this specific venue it doesn't have; the verified name/location is
- * always kept distinct from — never blended into — the general guidance.
+ * Natural singular noun for a kind of place, used when Foursquare hasn't
+ * supplied its own (more specific) category name. Keep in sync with the
+ * server's CATEGORY_LABEL in places/notes.ts — same categories, same voice.
+ */
+const PLACE_TYPE_LABEL: Partial<Record<DiscoveryCategory, string>> = {
+  coffee: "coffee shop",
+  restaurants: "restaurant",
+  parks: "park",
+  museums: "museum",
+  books: "bookstore",
+  scenic_drives: "scenic drive or lookout",
+  experiences: "local spot",
+  beaches: "beach",
+  hiking: "trailhead",
+  travel: "destination",
+};
+
+function withIndefiniteArticle(noun: string): string {
+  const trimmed = noun.trim();
+  if (!trimmed) return trimmed;
+  return /^[aeiou]/i.test(trimmed) ? `an ${trimmed}` : `a ${trimmed}`;
+}
+
+/**
+ * The most specific honest label for what kind of place this is —
+ * Foursquare's own category name when Kindred has it (e.g. "Café" or
+ * "Italian Restaurant"), falling back to Kindred's broader category
+ * bucket. Never invented; always traceable to a real field.
+ */
+function venueTypeLabel(
+  venueCategories: string[] | null | undefined,
+  category: DiscoveryCategory | string | null | undefined
+): string {
+  const specific = venueCategories?.find((c) => c && c.trim())?.trim();
+  if (specific) return specific.toLowerCase();
+  return PLACE_TYPE_LABEL[category as DiscoveryCategory] ?? "local place";
+}
+
+/**
+ * Full piece for a verified local place (Foursquare) — leads with the
+ * specific venue and every verified fact Kindred actually has (name,
+ * kind of place, address/city), folds in Kindred's own grounded note,
+ * then honestly widens into the category context the desk already
+ * writes for this kind of place — reframed as "what to look for," not
+ * a disconnected essay. Never claims a fact about this specific venue
+ * Kindred doesn't have; the verified specifics are always kept distinct
+ * from the general guidance that follows them.
  */
 export function composePlaceDiscoveryArticle(input: {
   title: string;
   dek?: string | null;
   city?: string | null;
+  address?: string | null;
+  venueCategories?: string[] | null;
   sourceName?: string | null;
   category?: DiscoveryCategory | string | null;
   seedKey: string;
@@ -505,38 +547,62 @@ export function composePlaceDiscoveryArticle(input: {
 } {
   const title = input.title.trim();
   const note = input.dek?.trim() || "";
-  const placeLine = [title, input.city?.trim()].filter(Boolean).join(" · ");
-  const dek =
-    note && !isNearDuplicateCopy(note, title) ? note : placeLine || title;
+  const city = input.city?.trim() || "";
+  const address = input.address?.trim() || "";
+  const typeLabel = venueTypeLabel(input.venueCategories, input.category);
+  const typeLabelWithArticle = withIndefiniteArticle(typeLabel);
+
+  // Kept as a short, clean subheading distinct from the body — the note
+  // itself is folded into the opening paragraph below, and `articleFromSectionItem`
+  // strips any body paragraph that duplicates the dek, so the dek must never
+  // be the same text as (or a superset of) what the opening paragraph says.
+  const placeLine = [title, city].filter(Boolean).join(" · ");
+  const dek = placeLine || title;
+
+  // Opening: the verified specifics, in a sentence that could only be
+  // about this venue — then Kindred's own grounded note, if it adds
+  // anything beyond what the fact sentence already said.
+  const locationPhrase = address ? `on ${address}` : city ? `in ${city}` : "";
+  const factSentence = `${title} is ${typeLabelWithArticle}${
+    locationPhrase ? ` ${locationPhrase}` : ""
+  } — a real, verified listing, not a category guess.`;
+  const opening =
+    note && !isNearDuplicateCopy(note, factSentence) && !isNearDuplicateCopy(note, title)
+      ? `${factSentence} ${note}`
+      : factSentence;
 
   const essay = getCategoryDiscoveryArticle(input.category, input.seedKey);
   if (essay) {
-    const where = placeLine || title;
-    const grounding = `${where} is the real, verified find behind today's note — worth knowing what kind of place it is before you go.`;
+    const bridge = `Kindred hasn't reviewed every detail of ${title} directly — but here's what tends to separate ${typeLabelWithArticle} worth going back to from one that isn't, worth checking for when you visit.`;
     const attribution = input.sourceName
-      ? `Verified listing from ${input.sourceName}. The notes above describe this kind of place in general — not a confirmed review of every detail at ${title}.`
-      : `The notes above describe this kind of place in general — not a confirmed review of every detail at ${title}.`;
+      ? `The listing itself is verified through ${input.sourceName}; the read above is Kindred's general sense of ${typeLabelWithArticle} like this, not a line-by-line review of ${title}.`
+      : `The name and location above are verified; the read above is Kindred's general sense of ${typeLabelWithArticle} like this, not a line-by-line review of ${title}.`;
+    const closing = city
+      ? `Kindred flagged ${title} because a real, confirmed ${typeLabel} in ${city} beats another algorithmic suggestion — worth going to find out the rest for yourself.`
+      : `Kindred flagged ${title} because a real, confirmed ${typeLabel} beats another algorithmic suggestion — worth going to find out the rest for yourself.`;
     return {
       dek,
-      body: dedupeDiscoveryBody([grounding, ...essay.body, attribution]),
+      body: dedupeDiscoveryBody([
+        opening,
+        bridge,
+        ...essay.body,
+        attribution,
+        closing,
+      ]),
       fieldAnswers: essay.fieldAnswers,
     };
   }
 
-  const body: string[] = [];
-  if (input.sourceName) {
-    body.push(
-      `Verified listing from ${input.sourceName}. Kindred keeps this brief when only the place name and location are confirmed — not a full review.`
-    );
-  } else {
-    body.push(
-      "Kindred keeps this brief when only the place name and location are confirmed — not a full review."
-    );
-  }
+  const body: string[] = [opening];
+  body.push(
+    input.sourceName
+      ? `Verified listing from ${input.sourceName}. Kindred keeps this brief when only the name, kind of place, and location are confirmed — not a full review.`
+      : "Kindred keeps this brief when only the name, kind of place, and location are confirmed — not a full review."
+  );
 
   return {
     dek,
-    body,
+    body: dedupeDiscoveryBody(body),
     fieldAnswers: {},
   };
 }
