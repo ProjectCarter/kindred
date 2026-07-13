@@ -115,5 +115,15 @@ export const STORY_EDITOR_SCORE_KEYS: Array<keyof StoryEditorScores> = [
   "reader_satisfaction",
 ];
 
-/** Infrastructure breaker — editorial intent is excellence; builds must finish. */
-export const STORY_EDITOR_MAX_PASSES = 4;
+/**
+ * Infrastructure breaker — editorial intent is excellence; builds must finish.
+ *
+ * Measured across real generations: when pass 1 doesn't clear every gate,
+ * pass 2 resolves it almost every time (fact issues, score gaps). Passes 3-4
+ * essentially never change the outcome — the breaker fallback below already
+ * publishes the best safe draft or an honest thin briefing when a story
+ * still doesn't clear every gate, so lowering this from 4 to 2 removes a
+ * long, rarely-useful tail of sequential model calls per story without
+ * changing what ends up published in the cases that matter.
+ */
+export const STORY_EDITOR_MAX_PASSES = 2;

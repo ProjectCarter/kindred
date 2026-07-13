@@ -24,14 +24,33 @@ export type MemoryArchive = {
   } | null;
 };
 
+type PreloadedProfileRow = {
+  home_location?: {
+    city?: string | null;
+    region?: string | null;
+    state?: string | null;
+  } | null;
+  travel?: {
+    away?: boolean;
+    city?: string | null;
+    until?: string | null;
+    note?: string | null;
+  } | null;
+} | null;
+
 /**
  * Load prior editions + unfinished reads for the Memory Engine.
  * Failures return empty archive — edition build must not fail.
+ *
+ * Pass `preloadedProfile` when the caller already fetched this same
+ * `profiles` row (buildEditionForUser does, once, up front) — this skips a
+ * redundant DB round trip instead of re-querying the same row.
  */
 export async function loadMemoryArchive(
   supabaseAdmin: SupabaseClient,
   userId: string,
-  options?: { editionLimit?: number; signalDays?: number }
+  options?: { editionLimit?: number; signalDays?: number },
+  preloadedProfile?: PreloadedProfileRow
 ): Promise<MemoryArchive> {
   const editionLimit = options?.editionLimit ?? 14;
   const since = new Date();
@@ -61,11 +80,13 @@ export async function loadMemoryArchive(
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(40),
-    supabaseAdmin
-      .from("profiles")
-      .select("home_location, travel")
-      .eq("id", userId)
-      .maybeSingle(),
+    preloadedProfile !== undefined
+      ? Promise.resolve({ data: preloadedProfile, error: null })
+      : supabaseAdmin
+          .from("profiles")
+          .select("home_location, travel")
+          .eq("id", userId)
+          .maybeSingle(),
   ]);
 
   if (editionsRes.error) {

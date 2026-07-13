@@ -17,26 +17,41 @@ type LocationHint = {
   lon?: number | null;
 };
 
+type PreloadedProfileRow = {
+  interests?: string[] | null;
+  followed_topics?: string[] | null;
+  favorite_sources?: string[] | null;
+  skipped_topics?: string[] | null;
+  location?: LocationHint | null;
+} | null;
+
 /**
  * Load a reusable PersonalizationProfile for ranking.
  * Merges onboarding interests, derived affinities, clippings, and location.
+ *
+ * Pass `preloadedProfile` when the caller already fetched this same
+ * `profiles` row (buildEditionForUser does, once, up front) — this skips a
+ * redundant DB round trip instead of re-querying the same row.
  */
 export async function loadPersonalizationProfile(
   supabaseAdmin: SupabaseClient,
   userId: string,
-  locationHint?: LocationHint
+  locationHint?: LocationHint,
+  preloadedProfile?: PreloadedProfileRow
 ): Promise<PersonalizationProfile> {
   const since = new Date();
   since.setDate(since.getDate() - 45);
 
   const [profileRes, signalsRes, clipsRes] = await Promise.all([
-    supabaseAdmin
-      .from("profiles")
-      .select(
-        "interests, followed_topics, favorite_sources, skipped_topics, location"
-      )
-      .eq("id", userId)
-      .single(),
+    preloadedProfile !== undefined
+      ? Promise.resolve({ data: preloadedProfile, error: null })
+      : supabaseAdmin
+          .from("profiles")
+          .select(
+            "interests, followed_topics, favorite_sources, skipped_topics, location"
+          )
+          .eq("id", userId)
+          .single(),
     supabaseAdmin
       .from("user_reading_signals")
       .select(

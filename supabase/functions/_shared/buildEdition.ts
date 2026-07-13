@@ -77,6 +77,60 @@ type Location = {
   state?: string | null;
 };
 
+// --- Performance instrumentation -------------------------------------------
+// Per-request timer (never module-level state — an Edge Function isolate can
+// serve concurrent requests, so a shared array would mix up two users' timings).
+// Every await-able step in buildEditionForUser is wrapped with `timer.timed`
+// so real, measured durations land in the Edge Function logs on every run —
+// no guessing where the 90-120s currently goes.
+type TimingEntry = { label: string; ms: number };
+
+function createTimer() {
+  const entries: TimingEntry[] = [];
+  const pipelineStart = performance.now();
+
+  function record(label: string, ms: number) {
+    entries.push({ label, ms });
+    console.log("[buildEdition] timing", { label, ms: Math.round(ms) });
+  }
+
+  async function timed<T>(label: string, fn: () => PromiseLike<T>): Promise<T> {
+    const t0 = performance.now();
+    try {
+      return await fn();
+    } finally {
+      record(label, performance.now() - t0);
+    }
+  }
+
+  return {
+    entries,
+    timed,
+    record,
+    elapsedMs: () => performance.now() - pipelineStart,
+  };
+}
+
+/** Sum every recorded entry whose label starts with any of the given prefixes. */
+function sumByPrefix(entries: TimingEntry[], prefixes: string[]): number {
+  return entries
+    .filter((e) => prefixes.some((p) => e.label.startsWith(p)))
+    .reduce((acc, e) => acc + e.ms, 0);
+}
+
+/** Render the "Weather .......... 1.2s" style report the audit asked for. */
+function formatTimingReport(
+  rows: Array<{ label: string; ms: number }>
+): string {
+  const labelWidth = Math.max(...rows.map((r) => r.label.length));
+  return rows
+    .map((r) => {
+      const dotCount = Math.max(1, labelWidth + 2 - r.label.length);
+      return `${r.label} ${".".repeat(dotCount)} ${(r.ms / 1000).toFixed(1)}s`;
+    })
+    .join("\n");
+}
+
 /**
  * No silent Phoenix / San Francisco default.
  * Client GPS, active profiles.location, travel, or home_location only.
@@ -432,6 +486,7 @@ export async function buildEditionForUser(
   locationHint: Location | null,
   options: BuildEditionOptions = {}
 ): Promise<BuildEditionResult> {
+  const timer = createTimer();
   const newsApiKey = Deno.env.get("NEWS_API_KEY");
   const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
 
@@ -446,10 +501,8 @@ export async function buildEditionForUser(
     return { ok: false, error: "Missing NEWS_API_KEY or ANTHROPIC_API_KEY" };
   }
 
-  const location = await resolveEditionLocation(
-    supabaseAdmin,
-    userId,
-    locationHint
+  const location = await timer.timed("Location Resolution (DB)", () =>
+    resolveEditionLocation(supabaseAdmin, userId, locationHint)
   );
 
   if (!location) {
@@ -470,11 +523,20 @@ export async function buildEditionForUser(
     lon: location.lon,
   });
 
+  // Single consolidated `profiles` read. Personalization, Memory, and the
+  // Bandit reader profile each used to run their own separate `profiles`
+  // query for the same row — same table, same userId, four round trips.
+  // Fetching every column any of them need once, here, and threading the
+  // result into all three removes three redundant DB reads per edition.
+  const profileReadStart = performance.now();
   const { data: profile } = await supabaseAdmin
     .from("profiles")
-    .select("interests")
+    .select(
+      "interests, followed_topics, favorite_sources, skipped_topics, location, home_location, travel, first_name, birthday_mmdd"
+    )
     .eq("id", userId)
-    .single();
+    .maybeSingle();
+  timer.record("Profile Reads - Consolidated (DB)", performance.now() - profileReadStart);
 
   // Eligibility still based on onboarding interests.
   const interests: string[] = profile?.interests ?? [];
@@ -491,18 +553,38 @@ export async function buildEditionForUser(
     resolved: tempUnit,
   });
 
-  const [recentStoryKeys, recentDiscoveryKeys, personalization, memoryArchive] =
+  const [recentStoryKeys, recentDiscoveryKeys, personalization, memoryArchive, banditReader] =
     await Promise.all([
-      loadRecentStoryKeys(supabaseAdmin, userId),
-      loadRecentDiscoveryKeys(supabaseAdmin, userId),
-      loadPersonalizationProfile(supabaseAdmin, userId, {
-        city: location.city,
-        region: location.region,
-        state: location.state,
-        lat: location.lat,
-        lon: location.lon,
-      }),
-      loadMemoryArchive(supabaseAdmin, userId),
+      timer.timed("Recent Story Keys (DB)", () =>
+        loadRecentStoryKeys(supabaseAdmin, userId)
+      ),
+      timer.timed("Recent Discovery Keys (DB)", () =>
+        loadRecentDiscoveryKeys(supabaseAdmin, userId)
+      ),
+      timer.timed("Personalization Profile (DB)", () =>
+        loadPersonalizationProfile(
+          supabaseAdmin,
+          userId,
+          {
+            city: location.city,
+            region: location.region,
+            state: location.state,
+            lat: location.lat,
+            lon: location.lon,
+          },
+          profile
+        )
+      ),
+      timer.timed("Memory Archive (DB)", () =>
+        loadMemoryArchive(supabaseAdmin, userId, undefined, profile)
+      ),
+      // Moved here from its old spot after section-writing — it only needs
+      // userId, so it was always independent of everything between here and
+      // there. Now preloaded with `profile`, it's effectively free (no
+      // extra DB round trip) and ready well before Bandit's Pick needs it.
+      timer.timed("Bandit Reader Profile (DB)", () =>
+        loadBanditReaderProfile(supabaseAdmin, userId, profile)
+      ),
     ]);
 
   const city = personalization.city ?? location.city;
@@ -557,88 +639,132 @@ export async function buildEditionForUser(
 
   const [weather, onThisDay, localEventsRaw, localPlaces, editorial] =
     await Promise.all([
-    getWeather(weatherLat, weatherLon),
-    getOnThisDay(),
-    getLocalEvents(eventsLocation, { isBusyDay }),
+    timer.timed("Weather", () => getWeather(weatherLat, weatherLon)),
+    timer.timed("Today in History", () => getOnThisDay()),
+    timer.timed("Local Events", () => getLocalEvents(eventsLocation, { isBusyDay })),
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
-    getLocalPlaces(supabaseAdmin, eventsLocation),
-    runEditorialDecisions({
-      editionDate,
-      newsApiKey,
-      ranking: {
-        interests: personalization.interests.length
-          ? personalization.interests
-          : interests,
-        followedTopics,
-        city,
-        region,
-        state,
-        now: new Date(),
-        maxStories: 4,
-        recentStoryKeys: blendedRecentKeys,
-        personalization: {
-          favoriteSources: personalization.affinities.favoriteSources,
-          followedTopics: personalization.affinities.followedTopics,
-          skippedTopics: personalization.affinities.skippedTopics,
-          engagedStoryKeys: personalization.affinities.engagedStoryKeys,
-          clippedStoryKeys: personalization.affinities.clippedStoryKeys,
-          confidence: personalization.affinities.confidence,
+    timer.timed("Recommendations - Places", () =>
+      getLocalPlaces(supabaseAdmin, eventsLocation)
+    ),
+    timer.timed("News - Editorial Decisions", () =>
+      runEditorialDecisions({
+        editionDate,
+        newsApiKey,
+        ranking: {
+          interests: personalization.interests.length
+            ? personalization.interests
+            : interests,
+          followedTopics,
+          city,
+          region,
+          state,
+          now: new Date(),
+          maxStories: 4,
+          recentStoryKeys: blendedRecentKeys,
+          personalization: {
+            favoriteSources: personalization.affinities.favoriteSources,
+            followedTopics: personalization.affinities.followedTopics,
+            skippedTopics: personalization.affinities.skippedTopics,
+            engagedStoryKeys: personalization.affinities.engagedStoryKeys,
+            clippedStoryKeys: personalization.affinities.clippedStoryKeys,
+            confidence: personalization.affinities.confidence,
+          },
         },
-      },
-    }),
+      })
+    ),
   ]);
-
-  const localEvents = await enrichEventsWithBanditNotes(localEventsRaw);
 
   const frontPage = editorial.frontPage;
   const topStories = frontPage.stories;
   let leadStory: LeadStory | null = editorial.leadStory;
 
-  // Story Editor — lead + every Top Story, in parallel.
-  // Each call is independent (never a multi-wire mashup article) and can
-  // internally retry up to STORY_EDITOR_MAX_PASSES times, so running the
-  // whole front page one story at a time was the single biggest reason
-  // full edition builds were timing out on Supabase's compute budget —
-  // 5 stories × up to 4 passes each, entirely sequential. Same total work,
-  // now bounded by the slowest single story instead of the sum of all of
-  // them.
-  const [editedLead, ...editedTopStories] = await Promise.all([
-    leadStory && anthropicApiKey
-      ? runStoryEditorSafe(
-          {
-            id: leadStory.id,
-            headline: leadStory.headline,
-            sourceText: leadStory.summary || leadStory.headline,
-            source: leadStory.source,
-            url: leadStory.url,
-            publishedAt: leadStory.publishedAt,
-            surfaceRole: "lead",
-            locale: "en",
-            selectionWhy: leadStory.selection.reasons
-              .map((r) => r.label)
-              .slice(0, 4),
-          },
-          anthropicApiKey
-        )
-      : Promise.resolve(null),
-    ...topStories.map((ranked) =>
-      runStoryEditorSafe(
-        {
-          id: ranked.story.id,
-          headline: ranked.story.title,
-          sourceText: ranked.story.description || ranked.story.title,
-          source: ranked.story.source,
-          url: ranked.story.url,
-          publishedAt: ranked.story.publishedAt,
-          surfaceRole: "top_story",
-          locale: "en",
-          selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
-        },
-        anthropicApiKey
-      )
+  // Bandit's Pick candidate selection is pure CPU over the already-scored
+  // candidate pool — it only needs `editorial`, not the edited lead/top
+  // stories. Resolving it now (instead of after the front page is fully
+  // edited) lets its Story Editor pass join the SAME parallel batch below
+  // instead of running afterward on its own — previously the single
+  // biggest sequential AI call sitting after the front-page batch.
+  const banditsPickStory = selectBanditsPick({
+    scored: frontPage.scoredCandidates ?? [],
+    leadId: leadStory?.id ?? null,
+    frontPageIds: topStories.map((s) => s.story.id),
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    recentKeys: blendedRecentKeys,
+  });
+
+  // Story Editor — lead + every Top Story + Bandit's Pick, all in parallel,
+  // alongside the (independent) Local Events Bandit Notes pass. Each Story
+  // Editor call is independent (never a multi-wire mashup article) and can
+  // internally retry up to STORY_EDITOR_MAX_PASSES times, so running these
+  // one at a time was the single biggest reason full edition builds were
+  // timing out on Supabase's compute budget. Same total work, now bounded
+  // by the slowest single call instead of the sum of all of them.
+  const [editedBatch, localEvents] = await Promise.all([
+    timer.timed(
+      "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
+      () =>
+        Promise.all([
+          leadStory && anthropicApiKey
+            ? runStoryEditorSafe(
+                {
+                  id: leadStory.id,
+                  headline: leadStory.headline,
+                  sourceText: leadStory.summary || leadStory.headline,
+                  source: leadStory.source,
+                  url: leadStory.url,
+                  publishedAt: leadStory.publishedAt,
+                  surfaceRole: "lead",
+                  locale: "en",
+                  selectionWhy: leadStory.selection.reasons
+                    .map((r) => r.label)
+                    .slice(0, 4),
+                },
+                anthropicApiKey
+              )
+            : Promise.resolve(null),
+          banditsPickStory && anthropicApiKey
+            ? runStoryEditorSafe(
+                {
+                  id: banditsPickStory.id,
+                  headline: banditsPickStory.headline,
+                  sourceText:
+                    banditsPickStory.summary || banditsPickStory.headline,
+                  source: banditsPickStory.source,
+                  url: banditsPickStory.url,
+                  publishedAt: banditsPickStory.publishedAt,
+                  surfaceRole: "bandits_pick",
+                  locale: "en",
+                  selectionWhy: [banditsPickStory.why].filter(Boolean),
+                },
+                anthropicApiKey
+              )
+            : Promise.resolve(null),
+          ...topStories.map((ranked) =>
+            runStoryEditorSafe(
+              {
+                id: ranked.story.id,
+                headline: ranked.story.title,
+                sourceText: ranked.story.description || ranked.story.title,
+                source: ranked.story.source,
+                url: ranked.story.url,
+                publishedAt: ranked.story.publishedAt,
+                surfaceRole: "top_story",
+                locale: "en",
+                selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
+              },
+              anthropicApiKey
+            )
+          ),
+        ])
+    ),
+    timer.timed("Local Events - Bandit Notes (AI)", () =>
+      enrichEventsWithBanditNotes(localEventsRaw)
     ),
   ]);
+  const [editedLead, editedPick, ...editedTopStories] = editedBatch;
 
   if (leadStory && editedLead) {
     leadStory = {
@@ -965,8 +1091,8 @@ export async function buildEditionForUser(
     onThisDayPresent: Boolean(onThisDay),
   });
 
-  const written = await Promise.all(
-    sections.map((section) => writeSection(section, anthropicApiKey))
+  const written = await timer.timed("AI Summaries - Section Writing", () =>
+    Promise.all(sections.map((section) => writeSection(section, anthropicApiKey)))
   );
 
   const writtenUsable = written.filter((w) => w.headline && w.body).length;
@@ -1037,33 +1163,13 @@ export async function buildEditionForUser(
     ),
   });
 
-  const banditReader = await loadBanditReaderProfile(supabaseAdmin, userId);
-  const banditsPickStory = selectBanditsPick({
-    scored: frontPage.scoredCandidates ?? [],
-    leadId: leadStory?.id ?? null,
-    frontPageIds: topStories.map((s) => s.story.id),
-    interests: personalization.interests.length
-      ? personalization.interests
-      : interests,
-    recentKeys: blendedRecentKeys,
-  });
-
+  // banditReader was preloaded earlier (in the initial DB batch) and
+  // banditsPickStory / editedPick were already resolved above, inside the
+  // same parallel batch as the front-page Story Editor calls — see the
+  // "Bandit's Pick candidate selection" comment near the top of this
+  // function for why that merge is safe.
   let banditsPick: BanditsPick | null = null;
-  if (banditsPickStory) {
-    const editedPick = await runStoryEditorSafe(
-      {
-        id: banditsPickStory.id,
-        headline: banditsPickStory.headline,
-        sourceText: banditsPickStory.summary || banditsPickStory.headline,
-        source: banditsPickStory.source,
-        url: banditsPickStory.url,
-        publishedAt: banditsPickStory.publishedAt,
-        surfaceRole: "bandits_pick",
-        locale: "en",
-        selectionWhy: [banditsPickStory.why].filter(Boolean),
-      },
-      anthropicApiKey
-    );
+  if (banditsPickStory && editedPick) {
     banditsPick = {
       intro: composeBanditsPickIntro(
         {
@@ -1098,34 +1204,36 @@ export async function buildEditionForUser(
     headline: banditsPick?.story.headline?.slice(0, 60) ?? null,
   });
 
-  const bandit = await generateBanditPayload(
-    {
-      editionDate,
-      now: new Date(),
-      reader: banditReader,
-      location: { city, region, state },
-      weatherSummary,
-      signals: {
-        hasBreakingNews: editorialContext.signals.hasBreakingNews,
-        hasLocalEvents: editorialContext.signals.hasLocalEvents,
-        weatherChange: editorialContext.signals.weatherChange,
-        holidayTomorrow: editorialContext.signals.holidayTomorrow,
-        primaryInterests: editorialContext.signals.primaryInterests,
+  const bandit = await timer.timed("AI Summaries - Bandit Payload", () =>
+    generateBanditPayload(
+      {
+        editionDate,
+        now: new Date(),
+        reader: banditReader,
+        location: { city, region, state },
+        weatherSummary,
+        signals: {
+          hasBreakingNews: editorialContext.signals.hasBreakingNews,
+          hasLocalEvents: editorialContext.signals.hasLocalEvents,
+          weatherChange: editorialContext.signals.weatherChange,
+          holidayTomorrow: editorialContext.signals.holidayTomorrow,
+          primaryInterests: editorialContext.signals.primaryInterests,
+        },
+        editorBrief: editorialContext.editorBrief,
+        personalization: {
+          favoriteSources: personalization.favoriteSources,
+          confidence: personalization.affinities.confidence,
+        },
+        discoveryBrief: discovery.editorBrief,
+        discoveryPicks: discovery.picks.map((p) => ({
+          title: p.title,
+          category: p.category,
+          why: p.why,
+        })),
+        pick: banditsPick,
       },
-      editorBrief: editorialContext.editorBrief,
-      personalization: {
-        favoriteSources: personalization.favoriteSources,
-        confidence: personalization.affinities.confidence,
-      },
-      discoveryBrief: discovery.editorBrief,
-      discoveryPicks: discovery.picks.map((p) => ({
-        title: p.title,
-        category: p.category,
-        why: p.why,
-      })),
-      pick: banditsPick,
-    },
-    anthropicApiKey
+      anthropicApiKey
+    )
   );
 
   const seasonMonth = new Date(`${editionDate}T12:00:00`).getMonth();
@@ -1140,8 +1248,10 @@ export async function buildEditionForUser(
       ? "Winter’s threshold — the paper is good company indoors."
       : null;
 
-  const morningEdition: MorningEditionPayload =
-    await runMorningEditionDecisions(
+  const morningEdition: MorningEditionPayload = await timer.timed(
+    "AI Summaries - Morning Edition Polish",
+    () =>
+      runMorningEditionDecisions(
       {
         editionDate,
         now: new Date(),
@@ -1211,7 +1321,8 @@ export async function buildEditionForUser(
         seasonHint,
       },
       anthropicApiKey
-    );
+      )
+  );
 
   console.log("[buildEdition] morning edition", {
     engines: morningEdition.selectionMeta.usedEngines,
@@ -1279,6 +1390,7 @@ export async function buildEditionForUser(
     now: new Date(),
   });
 
+  const editionWriteStart = performance.now();
   let { data: edition, error: editionError } = await supabaseAdmin
     .from("editions")
     .upsert(
@@ -1359,10 +1471,13 @@ export async function buildEditionForUser(
     }
   }
 
+  timer.record("Database Write - Edition Upsert", performance.now() - editionWriteStart);
+
   if (editionError || !edition) {
     return { ok: false, error: editionError?.message ?? "Could not create edition" };
   }
 
+  const sectionsWriteStart = performance.now();
   const { error: deleteError } = await supabaseAdmin
     .from("edition_sections")
     .delete()
@@ -1417,6 +1532,8 @@ export async function buildEditionForUser(
       .update({ status: "failed" })
       .eq("id", edition.id);
 
+    logTimingSummary(timer);
+
     return {
       ok: false,
       error:
@@ -1436,9 +1553,56 @@ export async function buildEditionForUser(
     errorCode: sectionsError?.code ?? null,
   });
 
+  timer.record("Database Write - Sections", performance.now() - sectionsWriteStart);
+
   if (sectionsError) {
+    logTimingSummary(timer);
     return { ok: false, error: sectionsError.message };
   }
 
+  logTimingSummary(timer);
+
   return { ok: true, editionId: edition.id };
+}
+
+/**
+ * Print the per-step timing audit in the exact "Weather ... 1.2s" style —
+ * this is what answers "where did the 90-120s go" on every real build.
+ * Buckets mirror the categories in the performance audit: some entries were
+ * gathered concurrently (inside a Promise.all), so per-bucket seconds can
+ * add up to more than the wall-clock Total — that overlap is expected and
+ * is called out below the report itself.
+ */
+function logTimingSummary(timer: ReturnType<typeof createTimer>) {
+  const entries = timer.entries;
+  const totalMs = timer.elapsedMs();
+
+  const buckets: Array<{ label: string; prefixes: string[] }> = [
+    { label: "Location + Profile Reads", prefixes: [
+      "Location Resolution", "Profile Reads - Consolidated", "Recent Story Keys",
+      "Recent Discovery Keys", "Personalization Profile", "Memory Archive",
+      "Bandit Reader Profile",
+    ] },
+    { label: "Weather", prefixes: ["Weather"] },
+    { label: "News", prefixes: ["News"] },
+    { label: "Events", prefixes: ["Local Events"] },
+    { label: "Recommendations", prefixes: ["Recommendations"] },
+    { label: "Today in History", prefixes: ["Today in History"] },
+    { label: "AI Summaries", prefixes: ["AI Summaries"] },
+    { label: "Database Writes", prefixes: ["Database Write"] },
+  ];
+
+  const rows = buckets
+    .map((b) => ({ label: b.label, ms: sumByPrefix(entries, b.prefixes) }))
+    .filter((r) => r.ms > 0);
+  rows.push({ label: "Total", ms: totalMs });
+
+  console.log(
+    "\n[buildEdition] ===== TIMING REPORT =====\n" +
+      formatTimingReport(rows) +
+      "\n[buildEdition] (Weather/News/Events/Recommendations run concurrently, " +
+      "so their sum can exceed Total — see per-entry [buildEdition] timing logs " +
+      "above for exact overlap.)\n" +
+      "[buildEdition] ===========================\n"
+  );
 }
