@@ -34,6 +34,12 @@ export const waitingCopy = {
   openAction: "Open today’s paper",
   preparing: "Setting the type…",
   previous: "Earlier editions",
+  // Shown instead of the manual-build CTA when the overnight job already
+  // has this edition in progress — no need to ask the reader to wait on it.
+  backgroundTitle: "Tonight’s edition is on the press.",
+  backgroundBody:
+    "It’s already being set — no need to build it yourself. This page will refresh the moment it’s ready.",
+  backgroundBuildNow: "Build it now instead",
 } as const;
 
 /**

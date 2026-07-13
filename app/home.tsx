@@ -23,6 +23,9 @@ import {
 import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { openKindredEvent } from "../lib/edition/openEvent";
+import { resolveArticleForStoryKey } from "../lib/edition/relatedArticle";
+import { stashArticle } from "../lib/edition/articleStore";
+import { parseLocalEventsBody } from "../lib/edition/localEvents";
 import {
   banditMorningLine,
   banditsPick,
@@ -49,6 +52,7 @@ import {
   PREPARING_LINES,
 } from "../lib/edition/morningRitual";
 import { localEditionDate } from "../lib/edition/dates";
+import { syncDeviceTimezone } from "../lib/edition/timezone";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -106,6 +110,11 @@ export default function HomeScreen() {
   const [showFirstRun, setShowFirstRun] = useState(false);
   const [locationMismatch, setLocationMismatch] = useState<string | null>(null);
   const [pendingCityRegen, setPendingCityRegen] = useState(false);
+  /** Overnight job status for today's edition — drives the "on the press" state. */
+  const [backgroundJob, setBackgroundJob] = useState<{
+    status: string;
+    lastError: string | null;
+  } | null>(null);
   const { pending: firstRunPending, dismiss: dismissFirstRun } =
     useLocationFirstRun();
   const loadGen = useRef(0);
@@ -156,6 +165,39 @@ export default function HomeScreen() {
   function persistHomeScrollNow(): void {
     const key = currentHomeScrollKey();
     if (key) updateHomeScroll(key, homeScrollYRef.current);
+  }
+
+  /**
+   * A "Related story" / "Continue reading" card in the article reader
+   * should open the real piece it names, not a thin restatement of its
+   * own summary. Today's edition (sections, top stories, discovery
+   * items) is only fully in memory here on the homepage, so resolve and
+   * pre-stash each continuation item's real destination article right
+   * before the reader opens — cheap (at most a handful of items) and
+   * reuses the same bounded article cache the reader already checks
+   * first when a screen opens.
+   */
+  function prestashRelatedArticles(
+    companion: ReturnType<typeof companionForArticle>,
+    currentArticleId: string
+  ): void {
+    const localEvents = (() => {
+      const section = sections.find((s) => s.section_type === "local_events");
+      return section?.body ? parseLocalEventsBody(section.body) : [];
+    })();
+    for (const item of companion.continueReading ?? []) {
+      if (!item.targetArticleId || item.targetArticleId === currentArticleId) {
+        continue;
+      }
+      const resolved = resolveArticleForStoryKey(item.targetArticleId, {
+        sections,
+        topStories,
+        leadStory,
+        discoveryItems: intelligence?.discoveryItems,
+        localEvents,
+      });
+      if (resolved) stashArticle(resolved);
+    }
   }
 
   /**
@@ -317,6 +359,10 @@ export default function HomeScreen() {
       return;
     }
 
+    // Fire-and-forget — lets overnight generation compute this user's own
+    // local morning instead of one shared UTC instant. Never blocks load.
+    void syncDeviceTimezone(user.id);
+
     const todayStr = localEditionDate();
 
     if (__DEV__) {
@@ -375,7 +421,15 @@ export default function HomeScreen() {
           message: editionError?.message ?? null,
         });
       }
-      const adjacent = await fetchAdjacentEditions(user.id, todayStr);
+      const [adjacent, jobResult] = await Promise.all([
+        fetchAdjacentEditions(user.id, todayStr),
+        supabase
+          .from("generation_jobs")
+          .select("status, last_error")
+          .eq("user_id", user.id)
+          .eq("edition_date", todayStr)
+          .maybeSingle(),
+      ]);
       if (!mountedRef.current || gen !== loadGen.current) return;
       setSections([]);
       setEditionDate(null);
@@ -386,6 +440,11 @@ export default function HomeScreen() {
       setIntelligence(null);
       setClippedIds(new Set());
       setOlder(adjacent.older);
+      setBackgroundJob(
+        jobResult.data
+          ? { status: jobResult.data.status, lastError: jobResult.data.last_error }
+          : null
+      );
       if (editionError) {
         setError("The paper couldn’t be reached. Pull to try again.");
       }
@@ -511,6 +570,7 @@ export default function HomeScreen() {
       setIntelligence(null);
       setClippedIds(new Set());
       setOlder(adjacent.older);
+      setBackgroundJob(null);
       setLocationMismatch(builtCity ?? "another city");
       setLoading(false);
       setRefreshing(false);
@@ -560,6 +620,7 @@ export default function HomeScreen() {
     }
 
     setLocationMismatch(null);
+    setBackgroundJob(null);
     setSections(loaded);
     setEditionDate(edition.edition_date);
     setEditionId(edition.id);
@@ -681,6 +742,22 @@ export default function HomeScreen() {
   useEffect(() => {
     loadEdition();
   }, [loadEdition]);
+
+  // While the overnight job already has today's edition in progress, quietly
+  // recheck rather than leaving the reader on a stale "isn't ready yet" —
+  // no spinner, no scroll reset, just the same query loadEdition already
+  // runs on every focus. Stops the moment the job leaves pending/processing.
+  useEffect(() => {
+    const jobActive =
+      backgroundJob?.status === "pending" || backgroundJob?.status === "processing";
+    if (!jobActive) return;
+    const interval = setInterval(() => {
+      if (mountedRef.current && !generatingRef.current) {
+        void loadEdition();
+      }
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [backgroundJob, loadEdition]);
 
   // Resume: quietly refresh paper + stale GPS when mode is current.
   useEffect(() => {
@@ -1006,6 +1083,9 @@ export default function HomeScreen() {
     );
   }
 
+  const backgroundJobActive =
+    backgroundJob?.status === "pending" || backgroundJob?.status === "processing";
+
   return (
     <SafeAreaView style={styles.container}>
       <LocationFirstRun
@@ -1142,12 +1222,16 @@ export default function HomeScreen() {
             <Text style={styles.emptyKicker}>
               {locationMismatch
                 ? "Today’s paper needs a refresh."
-                : waitingCopy.emptyTitle}
+                : backgroundJobActive
+                  ? waitingCopy.backgroundTitle
+                  : waitingCopy.emptyTitle}
             </Text>
             <Text style={styles.body}>
               {locationMismatch && activeLocation?.place
                 ? `The edition on file was set for ${locationMismatch}. Open a fresh paper for ${activeLocation.place.city}.`
-                : waitingCopy.emptyBody}
+                : backgroundJobActive
+                  ? waitingCopy.backgroundBody
+                  : waitingCopy.emptyBody}
             </Text>
             {activeLocation?.needsSetup ? (
               <Text style={styles.locationHint}>
@@ -1161,7 +1245,7 @@ export default function HomeScreen() {
             ) : null}
             {error && <Text style={styles.error}>{error}</Text>}
             {/* Mismatch refresh lives on the banner — avoid a duplicate CTA. */}
-            {!locationMismatch ? (
+            {!locationMismatch && !backgroundJobActive ? (
               <Pressable
                 style={({ pressed }) => [
                   styles.button,
@@ -1172,6 +1256,19 @@ export default function HomeScreen() {
                 accessibilityLabel={waitingCopy.openAction}
               >
                 <Text style={styles.buttonText}>{waitingCopy.openAction}</Text>
+              </Pressable>
+            ) : null}
+            {/* Emergency fallback only — the overnight job is already running. */}
+            {!locationMismatch && backgroundJobActive ? (
+              <Pressable
+                style={styles.previousLink}
+                onPress={handleGenerate}
+                accessibilityRole="button"
+                accessibilityLabel={waitingCopy.backgroundBuildNow}
+              >
+                <Text style={styles.previousLinkText}>
+                  {waitingCopy.backgroundBuildNow}
+                </Text>
               </Pressable>
             ) : null}
             {activeLocation?.needsSetup ? (
@@ -1247,6 +1344,7 @@ export default function HomeScreen() {
                   article,
                   leadStory
                 );
+                prestashRelatedArticles(companion, article.id);
                 openKindredArticle(router, article, {
                   editionId,
                   companion,

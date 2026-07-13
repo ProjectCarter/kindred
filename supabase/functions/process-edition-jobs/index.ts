@@ -1,6 +1,14 @@
 // Kindred — process-edition-jobs
-// Cron-triggered overnight worker. Enqueues and processes generation_jobs
-// for users who have interests. Does not send email; auth is a shared secret.
+// Frequently-swept overnight worker (see supabase/migrations/0015_edition_reliability.sql
+// for the pg_cron schedule — every 10 minutes). Does not send email/push;
+// auth is a shared secret. Each invocation:
+//   1. Reaps jobs stuck in `processing` from a worker that crashed mid-build.
+//   2. Enqueues one job per eligible user whose *local* clock says it's time
+//      (>= EARLIEST_LOCAL_HOUR) and who doesn't already have a ready edition
+//      for their own local date.
+//   3. Atomically claims a batch of pending/failed jobs — `FOR UPDATE SKIP
+//      LOCKED` under the hood, so overlapping sweeps can't double-build the
+//      same job — and builds the whole batch concurrently.
 
 import {
   buildEditionForUser,
@@ -8,8 +16,17 @@ import {
   resolveEditionLocation,
 } from "../_shared/buildEdition.ts";
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 15;
 const MAX_ATTEMPTS = 3;
+const STALE_PROCESSING_MINUTES = 10;
+// Don't build before 2am local — avoids generating on yesterday's news the
+// instant a user's local midnight ticks over. Everything from here through
+// end-of-day is "catch-up": if a user still has no ready edition, try now
+// rather than waiting for a narrow window that might have been missed.
+const EARLIEST_LOCAL_HOUR = 2;
+// Fallback for any profile that hasn't reported a device timezone yet
+// (lib/edition/timezone.ts populates this opportunistically on the client).
+const DEFAULT_TIMEZONE = "America/Phoenix";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -31,9 +48,50 @@ function isAuthorized(req: Request): boolean {
   return false;
 }
 
-function todayDateString() {
-  return new Date().toISOString().slice(0, 10);
+/** A user's local calendar date + hour, from an IANA timezone name. */
+function localDateAndHour(
+  timeZone: string,
+  now: Date
+): { dateStr: string; hour: number } {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+    });
+    const parts = fmt.formatToParts(now);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+    const year = get("year");
+    const month = get("month");
+    const day = get("day");
+    let hour = Number(get("hour"));
+    if (hour === 24) hour = 0; // some locales render midnight as "24"
+    if (!year || !month || !day || Number.isNaN(hour)) {
+      throw new Error("unparseable parts");
+    }
+    return { dateStr: `${year}-${month}-${day}`, hour };
+  } catch {
+    // Invalid/unknown IANA zone string stored on a profile — fall back
+    // rather than let one bad value break the whole sweep.
+    if (timeZone === DEFAULT_TIMEZONE) {
+      // Guard against DEFAULT_TIMEZONE itself somehow failing.
+      return { dateStr: now.toISOString().slice(0, 10), hour: now.getUTCHours() };
+    }
+    return localDateAndHour(DEFAULT_TIMEZONE, now);
+  }
 }
+
+type GenerationJobRow = {
+  id: string;
+  user_id: string;
+  edition_date: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+};
 
 Deno.serve(async (req) => {
   try {
@@ -46,12 +104,22 @@ Deno.serve(async (req) => {
     }
 
     const supabaseAdmin = createServiceClient();
-    const editionDate = todayDateString();
+    const now = new Date();
 
-    // 1) Enqueue: one pending job per user with interests who lacks today's ready edition.
+    // 0) Recover jobs a crashed worker left stuck in `processing`.
+    const { data: reapedCount, error: reapError } = await supabaseAdmin.rpc(
+      "reap_stale_generation_jobs",
+      { p_stale_after_minutes: STALE_PROCESSING_MINUTES }
+    );
+    if (reapError) {
+      console.error("[process-edition-jobs] reap failed", reapError.message);
+    }
+
+    // 1) Enqueue: one pending job per eligible user whose local clock says
+    // it's time, keyed to THEIR local date — not one shared UTC "today".
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("profiles")
-      .select("id, interests");
+      .select("id, interests, timezone");
 
     if (profilesError) {
       return json({ error: profilesError.message }, 500);
@@ -60,16 +128,27 @@ Deno.serve(async (req) => {
     const eligible = (profiles ?? []).filter(
       (p: { id: string; interests?: string[] | null }) =>
         Array.isArray(p.interests) && p.interests.length > 0
-    );
+    ) as Array<{ id: string; timezone?: string | null }>;
 
     let enqueued = 0;
+    let skippedTooEarly = 0;
+    const localDatesInPlay = new Set<string>();
 
     for (const profile of eligible) {
+      const tz = profile.timezone || DEFAULT_TIMEZONE;
+      const { dateStr: localDate, hour: localHour } = localDateAndHour(tz, now);
+      localDatesInPlay.add(localDate);
+
+      if (localHour < EARLIEST_LOCAL_HOUR) {
+        skippedTooEarly += 1;
+        continue; // still the middle of this user's night — wait for the window
+      }
+
       const { data: existingEdition } = await supabaseAdmin
         .from("editions")
         .select("id")
         .eq("user_id", profile.id)
-        .eq("edition_date", editionDate)
+        .eq("edition_date", localDate)
         .eq("status", "ready")
         .maybeSingle();
 
@@ -80,7 +159,7 @@ Deno.serve(async (req) => {
         .upsert(
           {
             user_id: profile.id,
-            edition_date: editionDate,
+            edition_date: localDate,
             status: "pending",
             updated_at: new Date().toISOString(),
           },
@@ -93,91 +172,83 @@ Deno.serve(async (req) => {
       if (!upsertError) enqueued += 1;
     }
 
-    // 2) Process a batch of pending (or retryable failed) jobs.
-    const { data: jobs, error: jobsError } = await supabaseAdmin
-      .from("generation_jobs")
-      .select("*")
-      .eq("edition_date", editionDate)
-      .in("status", ["pending", "failed"])
-      .lt("attempts", MAX_ATTEMPTS)
-      .order("created_at", { ascending: true })
-      .limit(BATCH_SIZE);
+    // 2) Atomically claim a batch. Not scoped to one edition_date — every
+    // job already carries the correct per-user local date from enqueue, so
+    // a single global claim across all of them is simpler and still correct.
+    const { data: claimedRaw, error: claimError } = await supabaseAdmin.rpc(
+      "claim_generation_jobs",
+      { p_max_attempts: MAX_ATTEMPTS, p_batch_size: BATCH_SIZE }
+    );
 
-    if (jobsError) {
-      return json({ error: jobsError.message }, 500);
+    if (claimError) {
+      return json({ error: claimError.message }, 500);
     }
 
-    let processed = 0;
-    let succeeded = 0;
-    let failed = 0;
+    const claimed = (claimedRaw ?? []) as GenerationJobRow[];
 
-    for (const job of jobs ?? []) {
-      processed += 1;
+    // 3) Build the claimed batch concurrently. Sequential would blow past
+    // the Edge Function's own execution timeout well before a batch
+    // finished — each build can take ~60-90s, so 15 in a row would take
+    // 15-20+ minutes. Concurrent keeps one sweep to roughly one edition's
+    // worth of wall time, regardless of batch size.
+    const results = await Promise.all(
+      claimed.map(async (job) => {
+        const location = await resolveEditionLocation(
+          supabaseAdmin,
+          job.user_id,
+          null
+        );
 
-      await supabaseAdmin
-        .from("generation_jobs")
-        .update({
-          status: "processing",
-          attempts: job.attempts + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
+        if (!location) {
+          await supabaseAdmin
+            .from("generation_jobs")
+            .update({
+              status: "failed",
+              last_error:
+                "No location set. Choose a home city or enable current location.",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+          return { ok: false };
+        }
 
-      const location = await resolveEditionLocation(
-        supabaseAdmin,
-        job.user_id,
-        null
-      );
+        const result = await buildEditionForUser(supabaseAdmin, job.user_id, location, {
+          editionDate: job.edition_date,
+          temperatureUnitPreference: "auto",
+        });
 
-      if (!location) {
-        failed += 1;
         await supabaseAdmin
           .from("generation_jobs")
-          .update({
-            status: "failed",
-            last_error:
-              "No location set. Choose a home city or enable current location.",
-            updated_at: new Date().toISOString(),
-          })
+          .update(
+            result.ok
+              ? {
+                  status: "ready",
+                  last_error: null,
+                  updated_at: new Date().toISOString(),
+                }
+              : {
+                  status: "failed",
+                  last_error: result.error,
+                  updated_at: new Date().toISOString(),
+                }
+          )
           .eq("id", job.id);
-        continue;
-      }
 
-      const result = await buildEditionForUser(
-        supabaseAdmin,
-        job.user_id,
-        location,
-        { temperatureUnitPreference: "auto" }
-      );
+        return { ok: result.ok };
+      })
+    );
 
-      if (result.ok) {
-        succeeded += 1;
-        await supabaseAdmin
-          .from("generation_jobs")
-          .update({
-            status: "ready",
-            last_error: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", job.id);
-      } else {
-        failed += 1;
-        await supabaseAdmin
-          .from("generation_jobs")
-          .update({
-            status: "failed",
-            last_error: result.error,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", job.id);
-      }
-    }
+    const succeeded = results.filter((r) => r.ok).length;
+    const failed = results.length - succeeded;
 
     return json({
       success: true,
-      editionDate,
+      now: now.toISOString(),
+      reaped: reapedCount ?? 0,
+      localDatesInPlay: Array.from(localDatesInPlay),
       enqueued,
-      processed,
+      skippedTooEarly,
+      processed: results.length,
       succeeded,
       failed,
       // Push notifications ship in a follow-up; overnight copy is ready without them.

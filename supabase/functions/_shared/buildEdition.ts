@@ -1390,6 +1390,14 @@ export async function buildEditionForUser(
     now: new Date(),
   });
 
+  // Written as "processing" and only flipped to "ready" after edition_sections
+  // is confirmed written below. Every reader in the app (home, library,
+  // adjacent-editions, refresh-discovery, refresh-local-event-images) treats
+  // status='ready' as a promise that sections exist — writing "ready" here
+  // upfront made that promise false whenever the process died between this
+  // upsert and the sections insert (Edge Function timeout, crash), leaving a
+  // "ready" edition with zero sections that would never be regenerated
+  // (enqueue only skips users who already have a ready edition).
   const editionWriteStart = performance.now();
   let { data: edition, error: editionError } = await supabaseAdmin
     .from("editions")
@@ -1397,7 +1405,7 @@ export async function buildEditionForUser(
       {
         user_id: userId,
         edition_date: editionDate,
-        status: "ready",
+        status: "processing",
         editorial_context: editorialContextWithMorning,
         lead_story: leadStory,
         bandit,
@@ -1429,7 +1437,7 @@ export async function buildEditionForUser(
         {
           user_id: userId,
           edition_date: editionDate,
-          status: "ready",
+          status: "processing",
           editorial_context: editorialContextWithMorning,
           lead_story: leadStory,
           bandit,
@@ -1457,7 +1465,7 @@ export async function buildEditionForUser(
           {
             user_id: userId,
             edition_date: editionDate,
-            status: "ready",
+            status: "processing",
             editorial_context: editorialContextWithMorning,
             lead_story: leadStory,
             bandit,
@@ -1556,8 +1564,24 @@ export async function buildEditionForUser(
   timer.record("Database Write - Sections", performance.now() - sectionsWriteStart);
 
   if (sectionsError) {
+    await supabaseAdmin
+      .from("editions")
+      .update({ status: "failed" })
+      .eq("id", edition.id);
+
     logTimingSummary(timer);
     return { ok: false, error: sectionsError.message };
+  }
+
+  // Only now — sections confirmed written — is this edition actually done.
+  const { error: readyError } = await supabaseAdmin
+    .from("editions")
+    .update({ status: "ready" })
+    .eq("id", edition.id);
+
+  if (readyError) {
+    logTimingSummary(timer);
+    return { ok: false, error: readyError.message };
   }
 
   logTimingSummary(timer);
