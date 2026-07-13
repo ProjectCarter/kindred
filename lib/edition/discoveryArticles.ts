@@ -14,7 +14,7 @@
  */
 
 import type { ContentType, EditorialFieldAnswers } from "./contentSystem";
-import type { DiscoveryItem } from "./discovery";
+import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
 import type { LocalEventCard } from "./localEvents";
 
 export type CuratedDiscoveryArticle = {
@@ -362,6 +362,81 @@ export function getCuratedDiscoveryArticle(
 }
 
 /**
+ * The seed catalog has ~35 entries across 13 categories, but only the
+ * handful above got their own hand-written piece — matched by exact id.
+ * Every catalog id outside that list (plus every Foursquare place and
+ * every local event reshaped into a discovery card, neither of which can
+ * ever match a static id) was falling through to a two-sentence generic
+ * brief. Rather than write one thin filler per missing id, every real
+ * category borrows the curated essay already written for that kind of
+ * place or moment — genuinely rich, honest, category-true writing,
+ * never a fabricated fact about one specific address. Deterministic per
+ * item id so the same seed reads the same way within one session.
+ */
+const CATEGORY_ESSAY_IDS: Partial<Record<DiscoveryCategory, string[]>> = {
+  coffee: ["disc_coffee_third_wave"],
+  restaurants: ["disc_restaurant_neighborhood"],
+  recipes: ["disc_recipe_weeknight", "disc_recipe_weekend_bake"],
+  beaches: ["disc_beach_morning"],
+  hiking: ["disc_hike_ridge"],
+  parks: ["disc_park_afternoon"],
+  scenic_drives: ["disc_drive_coastal"],
+  museums: ["disc_museum_wing"],
+  books: ["disc_book_evening"],
+  movies: ["disc_movie_quiet"],
+  podcasts: ["disc_podcast_walk"],
+  experiences: ["disc_hidden_side_street", "disc_wirecutter_gear_quiet"],
+  travel: ["disc_travel_day_trip"],
+};
+
+function hashKey(key: string): number {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * A category-appropriate curated essay for any discovery item that
+ * doesn't have its own hand-written piece. Every real category has at
+ * least one — this is the second-tier fallback, tried before the plain
+ * generic composer.
+ */
+export function getCategoryDiscoveryArticle(
+  category: DiscoveryCategory | string | null | undefined,
+  seedKey: string
+): CuratedDiscoveryArticle | null {
+  const ids = CATEGORY_ESSAY_IDS[category as DiscoveryCategory];
+  if (!ids?.length) return null;
+  const id = ids[hashKey(seedKey) % ids.length];
+  return CURATED_DISCOVERY_ARTICLES[id] ?? null;
+}
+
+/**
+ * Full-piece composer for any discovery card without its own curated
+ * essay — borrows the matching category essay so it reads as a complete
+ * newspaper piece rather than a two-sentence filler. Returns null only
+ * when the category itself isn't one of the desk's covered categories
+ * (defensive — every current DiscoveryCategory is covered).
+ */
+export function composeCategorySeedArticle(input: {
+  title: string;
+  dek?: string | null;
+  category: DiscoveryCategory | string | null | undefined;
+  seedKey: string;
+}): { dek: string; body: string[]; fieldAnswers: EditorialFieldAnswers } | null {
+  const essay = getCategoryDiscoveryArticle(input.category, input.seedKey);
+  if (!essay) return null;
+  const dek = input.dek?.trim() || essay.dek;
+  return {
+    dek,
+    body: dedupeDiscoveryBody(essay.body),
+    fieldAnswers: essay.fieldAnswers,
+  };
+}
+
+/**
  * Honest, scene-first fallback for discovery items without a curated piece —
  * commonly real local events reshaped into discovery candidates upstream.
  * Never invents a fact beyond the dek / why already supplied by the engine.
@@ -408,14 +483,21 @@ function isNearDuplicateCopy(a: string, b: string): boolean {
 }
 
 /**
- * Compact briefing for verified local places (Foursquare) — one grounded
- * note, never stretched across a long-form template.
+ * Full piece for a verified local place (Foursquare) — grounded in the
+ * one real, verified fact Kindred has (the place's name and location),
+ * built out with the same category essay the desk already writes for
+ * this kind of place, so it reads as a complete newspaper piece rather
+ * than one sentence stretched thin. The essay never claims a fact about
+ * this specific venue it doesn't have; the verified name/location is
+ * always kept distinct from — never blended into — the general guidance.
  */
 export function composePlaceDiscoveryArticle(input: {
   title: string;
   dek?: string | null;
   city?: string | null;
   sourceName?: string | null;
+  category?: DiscoveryCategory | string | null;
+  seedKey: string;
 }): {
   dek: string;
   body: string[];
@@ -425,9 +507,21 @@ export function composePlaceDiscoveryArticle(input: {
   const note = input.dek?.trim() || "";
   const placeLine = [title, input.city?.trim()].filter(Boolean).join(" · ");
   const dek =
-    note && !isNearDuplicateCopy(note, title)
-      ? note
-      : placeLine || title;
+    note && !isNearDuplicateCopy(note, title) ? note : placeLine || title;
+
+  const essay = getCategoryDiscoveryArticle(input.category, input.seedKey);
+  if (essay) {
+    const where = placeLine || title;
+    const grounding = `${where} is the real, verified find behind today's note — worth knowing what kind of place it is before you go.`;
+    const attribution = input.sourceName
+      ? `Verified listing from ${input.sourceName}. The notes above describe this kind of place in general — not a confirmed review of every detail at ${title}.`
+      : `The notes above describe this kind of place in general — not a confirmed review of every detail at ${title}.`;
+    return {
+      dek,
+      body: dedupeDiscoveryBody([grounding, ...essay.body, attribution]),
+      fieldAnswers: essay.fieldAnswers,
+    };
+  }
 
   const body: string[] = [];
   if (input.sourceName) {

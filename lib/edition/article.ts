@@ -14,6 +14,7 @@ import {
 } from "./contentSystem";
 import type { LocalEventCard } from "./localEvents";
 import {
+  composeCategorySeedArticle,
   composeFallbackDiscoveryBody,
   composeGenericDynamicDiscoveryArticle,
   composePlaceDiscoveryArticle,
@@ -401,15 +402,18 @@ export function articleFromDiscoveryItem(
     });
   }
 
-  // Verified place (Foursquare) with only a single short editorial note —
-  // render a compact briefing rather than stretching one sentence across
-  // dek, body, and a desk module (never repeat the same line three ways).
+  // Verified place (Foursquare) — a real, specific venue, but Kindred only
+  // has its name/location confirmed. Build a full piece from the category
+  // essay the desk already writes for this kind of place, grounded by the
+  // one verified fact, rather than stretching a single sentence.
   if (item.tags?.includes("local_place")) {
     const composed = composePlaceDiscoveryArticle({
       title: item.title,
       dek: item.dek,
       city: item.place?.city ?? null,
       sourceName: item.source?.name ?? null,
+      category: item.category,
+      seedKey: item.id,
     });
     return articleFromSectionItem({
       id: item.id,
@@ -425,6 +429,31 @@ export function articleFromDiscoveryItem(
     });
   }
 
+  // Most of the seed catalog (and every local-event card reshaped into a
+  // discovery item) has no hand-written piece of its own — borrow the
+  // category essay so it reads as a full story, not a two-line filler.
+  const categoryArticle = composeCategorySeedArticle({
+    title: item.title,
+    dek: item.dek,
+    category: item.category,
+    seedKey: item.id,
+  });
+  if (categoryArticle) {
+    return articleFromSectionItem({
+      id: item.id,
+      section: "discovery",
+      headline: item.title,
+      body: categoryArticle.body.join("\n\n"),
+      dek: categoryArticle.dek,
+      source: item.source?.name ?? "Kindred",
+      sourceUrl: item.url ?? item.source?.url ?? null,
+      discoveryCategory: item.category,
+      tags: [item.category],
+      fieldAnswers: categoryArticle.fieldAnswers,
+    });
+  }
+
+  // Defensive last resort — only reached if a category has no essay yet.
   const body = composeFallbackDiscoveryBody({
     title: item.title,
     dek: item.dek,
@@ -495,6 +524,8 @@ export function articleFromNotebookItem(
       dek: item.dek,
       city: item.place?.city ?? null,
       sourceName: item.source?.name ?? null,
+      category: item.category,
+      seedKey: item.id,
     });
     return articleFromSectionItem({
       id: item.id,
@@ -533,6 +564,30 @@ export function articleFromNotebookItem(
     });
   }
 
+  // No matching id, no verified event — borrow the category essay so an
+  // event or seed idea without its own piece still reads as a full story.
+  const categoryArticle = composeCategorySeedArticle({
+    title: item.title,
+    dek: item.dek,
+    category: item.category,
+    seedKey: item.id,
+  });
+  if (categoryArticle) {
+    return articleFromSectionItem({
+      id: item.id,
+      section: "discovery",
+      headline: item.title,
+      body: categoryArticle.body.join("\n\n"),
+      dek: categoryArticle.dek,
+      source: item.source?.name ?? "Kindred",
+      sourceUrl: item.url ?? item.source?.url ?? null,
+      discoveryCategory: item.category,
+      tags: [item.category],
+      fieldAnswers: categoryArticle.fieldAnswers,
+    });
+  }
+
+  // Defensive last resort — only reached if a category has no essay yet.
   const composed = composeGenericDynamicDiscoveryArticle({
     title: item.title,
     category: item.category,
