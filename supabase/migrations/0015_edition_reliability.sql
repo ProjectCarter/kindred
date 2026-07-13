@@ -115,8 +115,8 @@ create extension if not exists pg_net;
 --
 --   select vault.create_secret(
 --     'your-long-random-secret',        -- must match `supabase secrets set CRON_SECRET=...`
---     'cron_secret_process_edition_jobs'
---   );
+--     'CRON_SECRET'                     -- Vault secret name — must match the `where name =`
+--   );                                  -- lookup below exactly (case-sensitive string match)
 --
 -- Then replace YOUR-PROJECT-REF below and run this migration.
 --
@@ -137,7 +137,7 @@ select cron.schedule(
       'x-cron-secret', (
         select decrypted_secret
         from vault.decrypted_secrets
-        where name = 'cron_secret_process_edition_jobs'
+        where name = 'CRON_SECRET'
       )
     ),
     body := '{}'::jsonb
