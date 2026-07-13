@@ -54,6 +54,7 @@ import {
 } from "../lib/edition/morningRitual";
 import { localEditionDate } from "../lib/edition/dates";
 import { syncDeviceTimezone } from "../lib/edition/timezone";
+import { maybeTriggerLiveRefresh } from "../lib/edition/liveRefresh";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -666,6 +667,20 @@ export default function HomeScreen() {
     // (empty) render at this exact point, and locking in a scroll based
     // on stale bounds would block the accurate onContentSizeChange-driven
     // restore that follows once the new sections actually lay out.
+
+    // Fire-and-forget — the paper is already open and rendered; this only
+    // patches structured, factual data (event times/cancellations/tickets,
+    // qualifying recommendations) that legitimately changes during the day.
+    // Never a loading state, never a full rebuild. Throttled internally so
+    // repeated focuses/resumes don't hammer external APIs.
+    void maybeTriggerLiveRefresh({
+      editionId: edition.id,
+      editionDate: edition.edition_date,
+      place: active.place,
+      onChanged: () => {
+        if (mountedRef.current) void loadEdition();
+      },
+    });
     } catch (err) {
       if (__DEV__) {
         console.error(
