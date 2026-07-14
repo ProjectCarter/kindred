@@ -197,23 +197,52 @@ export function allocateDiscoverySections(
   }
 ): SectionAllocation {
   const max = options?.max ?? SECTION_MAX;
+  // Sort by score up front — surfaces are concatenated in a fixed order
+  // (coffee before museums before scenic drives, etc.), which used to mean
+  // claim() effectively picked by surface order, not editorial quality.
+  // "Experiences first" (kindred-recommendations.mdc) only means anything
+  // if the highest-scored candidates — now boosted for real experiences
+  // and penalized for chains — are actually considered first.
   const pool = dedupeById([
     ...fullCandidatePool(discovery),
     ...(extraItems ?? []),
-  ]).filter((d) => !isRealEvent(d));
+  ])
+    .filter((d) => !isRealEvent(d))
+    .sort((a, b) => b.score - a.score);
   const claimed = new Set<string>();
+
+  /**
+   * "Hard variety rule" (kindred-recommendations.mdc): never let one
+   * category or venue subtype crowd a section — max two picks per key,
+   * even if a third would otherwise outscore something more different.
+   * `activities` collapses every Foursquare activity subtype into one
+   * DiscoveryCategory, so it needs its own, more specific key (e.g.
+   * "bowling alley") — every other category is specific enough already.
+   */
+  const MAX_PER_CATEGORY = 2;
+
+  function varietyKey(item: RankedDiscoveryItem): string {
+    if (item.item.category !== "activities") return item.item.category;
+    const specific = item.item.venueCategories?.find((c) => c && c.trim());
+    return specific ? specific.trim().toLowerCase() : "activities";
+  }
 
   function claim(
     predicate: (item: RankedDiscoveryItem) => boolean,
     cap: number
   ): RankedDiscoveryItem[] {
     const picked: RankedDiscoveryItem[] = [];
+    const perKey = new Map<string, number>();
     for (const item of pool) {
       if (picked.length >= cap) break;
       if (claimed.has(item.item.id)) continue;
       if (!predicate(item)) continue;
+      const key = varietyKey(item);
+      const count = perKey.get(key) ?? 0;
+      if (count >= MAX_PER_CATEGORY) continue;
       picked.push(item);
       claimed.add(item.item.id);
+      perKey.set(key, count + 1);
     }
     return picked;
   }

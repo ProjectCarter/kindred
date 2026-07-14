@@ -15,6 +15,25 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * "Experiences first" (kindred-recommendations.mdc): escape rooms, axe
+ * throwing, hiking trails, museums, scenic drives — things worth leaving
+ * the house for — should generally rank above coffee, restaurants, and
+ * other everyday errands. `activities` already collapses every Foursquare
+ * activity subtype (kayaking, bowling, mini golf, escape rooms, rock
+ * climbing, axe throwing, go-karts, pickleball) into one category.
+ */
+const EXPERIENCE_CATEGORIES = new Set([
+  "activities",
+  "hiking",
+  "museums",
+  "gardens",
+  "scenic_drives",
+  "beaches",
+  "parks",
+  "experiences",
+]);
+
 function parseEditionDate(editionDate: string, fallback: Date): Date {
   if (/^\d{4}-\d{2}-\d{2}$/.test(editionDate)) {
     const [y, m, d] = editionDate.split("-").map(Number);
@@ -148,6 +167,30 @@ export function scoreDiscoveryItem(
       code: "weather_mismatch",
       label: "Outdoor pick held back for wet weather",
       weight: -10,
+    });
+  }
+
+  // Experience first (kindred-recommendations.mdc): Kindred isn't a
+  // business directory — hands-on experiences and destinations worth the
+  // trip should generally outrank a coffee shop or another everyday
+  // errand.
+  if (EXPERIENCE_CATEGORIES.has(item.category)) {
+    score += 10;
+    reasons.push({
+      code: "experience_first",
+      label: "An experience, not just an errand",
+      weight: 10,
+    });
+  }
+
+  // Local first: a chain is still allowed, but it should never crowd out
+  // a strong local alternative a reader couldn't have found on their own.
+  if (item.tags.includes("chain")) {
+    score -= 16;
+    reasons.push({
+      code: "chain_deprioritized",
+      label: "A local alternative is usually the better find",
+      weight: -16,
     });
   }
 

@@ -67,10 +67,13 @@ export async function writeEditorialNotesForPlaces(
         max_tokens: 1600,
         system:
           `You are Bandit, Kindred's local editor, recommending real ${CATEGORY_LABEL[category]} listings in ${city}. ` +
+          "Kindred isn't a directory — a reader could get the address from Google Maps. Your one sentence has to " +
+          "earn its place by answering 'will this help someone have a better day?' " +
           "For each place, write ONE warm, specific sentence (max 22 words) explaining why it's worth a visit, " +
           "using ONLY the name/address/category given — never invent hours, menu items, ratings, popularity, or atmosphere " +
-          "you weren't told. If little is known beyond the name, write an honest, understated line rather than embellishing. " +
-          "No exclamation points. No hashtags. No 'must-visit' clichés. Respond ONLY with JSON: " +
+          "you weren't told. If it's a small, independent, or local-feeling place, let that come through — that's part " +
+          "of the appeal, not incidental. If little is known beyond the name, write an honest, understated line rather " +
+          "than embellishing. No exclamation points. No hashtags. No 'must-visit' clichés. Respond ONLY with JSON: " +
           '{"notes":["..."]} with one string per place in the same order.',
         messages: [
           {

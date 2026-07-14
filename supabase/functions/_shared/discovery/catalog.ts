@@ -1,5 +1,6 @@
 import type { DiscoveryItem } from "./types.ts";
 import { CATEGORY_FAMILY } from "./taxonomy.ts";
+import { isLikelyChain } from "../places/chains.ts";
 
 function item(
   partial: Omit<DiscoveryItem, "family"> & { family?: DiscoveryItem["family"] }
@@ -657,6 +658,11 @@ export function localPlacesAsDiscoveryItems(
 ): DiscoveryItem[] {
   return places.map((p) => {
     const category = PLACE_CATEGORY_MAP[p.category] ?? "experiences";
+    // "Local First" (kindred-recommendations.mdc): a quality local business
+    // should be recommended before a national chain. We don't exclude
+    // chains outright — sometimes they're genuinely the best option — but
+    // they're tagged here so the scorer can keep them from dominating.
+    const chain = isLikelyChain(p.name);
     return item({
       id: `place_${p.providerId}`,
       title: p.name,
@@ -674,12 +680,14 @@ export function localPlacesAsDiscoveryItems(
       url: p.url ?? null,
       address: p.address ?? null,
       venueCategories: p.providerCategories?.filter(Boolean) ?? [],
-      tags: ["local_place", "verified"],
+      tags: chain
+        ? ["local_place", "verified", "chain"]
+        : ["local_place", "verified"],
       seasons: ["anytime"],
       weatherFit: ["any"],
       popularity: 0.35,
       uniqueness: 0.4,
-      localExpertise: 0.85,
+      localExpertise: chain ? 0.2 : 0.85,
       quality: 0.65,
     });
   });

@@ -1,0 +1,85 @@
+/**
+ * Lightweight, practical chain detection for the "Local First" rule
+ * (kindred-recommendations.mdc). Kindred isn't trying to out-index Google
+ * Maps with a perfect chain database — this only needs to catch the
+ * common national chains that would otherwise crowd out a strong local
+ * alternative. Anything not on this list is treated as local by default,
+ * which is the right default: we'd rather under-flag a chain than
+ * wrongly penalize an independent business.
+ */
+const KNOWN_CHAINS: readonly string[] = [
+  "starbucks",
+  "dunkin",
+  "peet's coffee",
+  "caribou coffee",
+  "dutch bros",
+  "tim hortons",
+  "panera",
+  "mcdonald",
+  "burger king",
+  "wendy's",
+  "wendys",
+  "taco bell",
+  "chipotle",
+  "subway",
+  "chili's",
+  "chilis",
+  "applebee's",
+  "applebees",
+  "olive garden",
+  "denny's",
+  "dennys",
+  "ihop",
+  "buffalo wild wings",
+  "tgi friday",
+  "outback steakhouse",
+  "red lobster",
+  "cracker barrel",
+  "domino's",
+  "dominos",
+  "pizza hut",
+  "papa john",
+  "little caesars",
+  "kfc",
+  "popeyes",
+  "chick-fil-a",
+  "chick fil a",
+  "five guys",
+  "shake shack",
+  "in-n-out",
+  "in n out",
+  "jamba juice",
+  "smoothie king",
+  "panda express",
+  "jimmy john",
+  "jersey mike",
+  "wingstop",
+  "sonic drive-in",
+  "arby's",
+  "arbys",
+  "dairy queen",
+  "baskin-robbins",
+  "baskin robbins",
+  "cold stone creamery",
+  "krispy kreme",
+  "cinnabon",
+  "auntie anne",
+  "great clips",
+  "planet fitness",
+  "regal cinemas",
+  "amc theatres",
+  "walmart",
+  "target",
+  "costco",
+  "whole foods",
+  "trader joe's",
+  "trader joes",
+  "7-eleven",
+  "circle k",
+];
+
+/** Best-effort — a substring match is enough for this use case. */
+export function isLikelyChain(name: string): boolean {
+  const hay = name.toLowerCase();
+  return KNOWN_CHAINS.some((chain) => hay.includes(chain));
+}

@@ -1,0 +1,57 @@
+---
+description: Kindred's recommendation engine philosophy — experiences first, local first, hard variety cap
+alwaysApply: true
+---
+
+# Kindred Is Not a Directory
+
+Kindred is not trying to compete with Google Maps, Yelp, or TripAdvisor.
+Google can tell you where the nearest Starbucks is. Kindred should tell you
+how to have an amazing day. Long-term, Kindred should be known as the app
+that helps people **experience** their city, not just search it.
+
+Every recommendation the engine surfaces (Activities, Recommendations,
+Bandit's Picks, Bandit's Notebook) follows these rules.
+
+## 1. Experiences first
+
+Prioritize experiences over generic, everyday businesses. Highest-priority
+examples: escape rooms, axe throwing, go-karts, paddleboarding, kayaking,
+rock climbing, bowling, mini golf, trivia nights, karaoke, live music,
+comedy clubs, farmers markets, museums, botanical gardens, scenic train
+rides, scenic viewpoints, beaches, parks, hiking trails, local festivals.
+
+These generally rank above coffee shops and other everyday errands
+(`score.ts` — "experience_first").
+
+## 2. Local first
+
+When a quality local business exists, recommend it before a national
+chain — a family-owned bakery over Panera, a neighborhood table over
+Chili's, Joe's Coffee over Starbucks. Chains are still allowed when they're
+genuinely the best option or no strong local alternative exists, but they
+should never dominate a section (`score.ts` — chain deprioritization,
+`places/chains.ts`). Help readers discover places they'd never have found
+on their own.
+
+## 3. Hard variety rule
+
+Never let one category or venue subtype crowd a section. **Maximum of two**
+picks from any single category per section (two coffee shops, not six; two
+museums, not four). This is enforced in the allocator
+(`lib/edition/sectionAllocator.ts`), not a suggestion to be loosely
+followed.
+
+## 4. Curate like a newspaper editor
+
+A section should read like a hand-assembled magazine spread, not a
+category dump: go-karts, axe throwing, a hidden park, karaoke night, a
+local bakery, an art walk, a local ice cream shop, a sunset viewpoint.
+Every scroll should introduce something different.
+
+## 5. The editorial test
+
+Before anything is surfaced, ask: **"Will this help someone have a better
+day?"** If yes, it belongs. A generic chain a reader could instantly find
+on Google Maps should usually be deprioritized in favor of something more
+interesting or more local.
