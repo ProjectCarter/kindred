@@ -7,7 +7,7 @@
 export const DISCOVERY_PUBLISH_MIN_SCORE = 48;
 
 /** Minimum local event score for publication (mirrors server ranking). */
-export const LOCAL_EVENT_PUBLISH_MIN_SCORE = 10;
+export const LOCAL_EVENT_PUBLISH_MIN_SCORE = 14;
 
 /** Homepage first paint — not a publication limit. */
 export const HOMEPAGE_INITIAL_RENDER_COUNT = 8;

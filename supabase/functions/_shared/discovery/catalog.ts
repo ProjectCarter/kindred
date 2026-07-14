@@ -1,6 +1,10 @@
 import type { DiscoveryItem } from "./types.ts";
 import { CATEGORY_FAMILY } from "./taxonomy.ts";
 import { isLikelyChain } from "../places/chains.ts";
+import {
+  isScenicOrHiddenGem,
+  venueHayFromParts,
+} from "../editorial/venueQuality.ts";
 
 function item(
   partial: Omit<DiscoveryItem, "family"> & { family?: DiscoveryItem["family"] }
@@ -733,8 +737,9 @@ export function localPlacesAsDiscoveryItems(
 ): DiscoveryItem[] {
   return places.map((p) => {
     const category = PLACE_CATEGORY_MAP[p.category] ?? "experiences";
-    const venueHay = (p.providerCategories ?? []).join(" ").toLowerCase();
+    const venueHay = venueHayFromParts([p.name, ...(p.providerCategories ?? []), p.note]);
     const chain = isLikelyChain(p.name);
+    const scenic = isScenicOrHiddenGem(venueHay);
     const indoorActivity =
       /bowling|escape room|arcade|climbing gym|laser tag|indoor|billiards|ice skating rink/i.test(
         venueHay
@@ -775,9 +780,9 @@ export function localPlacesAsDiscoveryItems(
       seasons: ["anytime"],
       weatherFit,
       popularity: 0.35,
-      uniqueness: 0.4,
-      localExpertise: chain ? 0.2 : 0.85,
-      quality: 0.65,
+      uniqueness: chain ? 0.25 : scenic ? 0.72 : 0.4,
+      localExpertise: chain ? 0.2 : scenic ? 0.9 : 0.85,
+      quality: chain ? 0.48 : scenic ? 0.82 : 0.65,
     });
   });
 }

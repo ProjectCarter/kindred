@@ -14,6 +14,10 @@ import { resolveVenueClassification } from "./venueClassification";
 import { resolveActionsForActivity } from "./actionBar";
 import type { ImageCategoryTag } from "./imageTaxonomy";
 import { NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
+import {
+  isParticipatoryActivityVenue,
+  venueHayFromParts,
+} from "./venueQuality";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -199,6 +203,16 @@ export function activityNote(item: RankedDiscoveryItem["item"]): string | null {
 function activitySortScore(d: RankedDiscoveryItem): number {
   let s = d.score ?? 0;
   if (d.item.category === "hiking") s += 2;
+  if (d.item.tags?.includes("chain")) s -= 6;
+  const hay = venueHayFromParts([
+    d.item.title,
+    d.item.dek,
+    ...(d.item.venueCategories ?? []),
+  ]);
+  if (d.item.category === "activities" && !isParticipatoryActivityVenue(hay)) {
+    s -= 20;
+  }
+  if (isParticipatoryActivityVenue(hay)) s += 4;
   return s;
 }
 

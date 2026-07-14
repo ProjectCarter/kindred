@@ -16,7 +16,7 @@ import type { RankedDiscoveryItem } from "../discovery/types.ts";
 export const DISCOVERY_PUBLISH_MIN_SCORE = 48;
 
 /** Minimum local event editorial score — see localEvents/ranking.ts. */
-export const LOCAL_EVENT_PUBLISH_MIN_SCORE = 10;
+export const LOCAL_EVENT_PUBLISH_MIN_SCORE = 14;
 
 /** Homepage first paint — rendering only. */
 export const HOMEPAGE_INITIAL_RENDER_COUNT = 8;

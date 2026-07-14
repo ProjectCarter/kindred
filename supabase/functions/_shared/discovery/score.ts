@@ -9,6 +9,12 @@ import {
   sumWeatherIntelligenceScore,
   weatherIntelligenceAdjustments,
 } from "../weather/scoring.ts";
+import {
+  isLowValueVenue,
+  isParticipatoryActivityVenue,
+  isScenicOrHiddenGem,
+  venueHayFromParts,
+} from "../editorial/venueQuality.ts";
 import type {
   DiscoveryItem,
   DiscoveryRankingContext,
@@ -257,11 +263,21 @@ export function scoreDiscoveryItem(
     reasons.push(...intelReasons);
   }
 
+  const venueHay = venueHayFromParts([
+    item.title,
+    item.dek,
+    ...(item.venueCategories ?? []),
+    item.address,
+  ]);
+
+  const participatory =
+    item.category !== "activities" || isParticipatoryActivityVenue(venueHay);
+
   // Experience first (kindred-recommendations.mdc): Kindred isn't a
   // business directory — hands-on experiences and destinations worth the
   // trip should generally outrank a coffee shop or another everyday
   // errand.
-  if (EXPERIENCE_CATEGORIES.has(item.category)) {
+  if (EXPERIENCE_CATEGORIES.has(item.category) && participatory) {
     score += 10;
     reasons.push({
       code: "experience_first",
@@ -273,11 +289,63 @@ export function scoreDiscoveryItem(
   // Local first: a chain is still allowed, but it should never crowd out
   // a strong local alternative a reader couldn't have found on their own.
   if (item.tags.includes("chain")) {
-    score -= 16;
+    score -= 20;
     reasons.push({
       code: "chain_deprioritized",
       label: "A local alternative is usually the better find",
-      weight: -16,
+      weight: -20,
+    });
+  }
+
+  if (item.tags.includes("local_place")) {
+    if (isLowValueVenue(venueHay)) {
+      score -= 28;
+      reasons.push({
+        code: "low_value_venue",
+        label: "Held back — not the kind of place worth recommending",
+        weight: -28,
+      });
+    }
+    if (isScenicOrHiddenGem(venueHay)) {
+      score += 12;
+      reasons.push({
+        code: "scenic_gem",
+        label: "A scenic or neighborhood find worth discovering",
+        weight: 12,
+      });
+    }
+    if (item.category === "activities" && !participatory) {
+      score -= 32;
+      reasons.push({
+        code: "not_participatory",
+        label: "Held back — not a real activity to go do",
+        weight: -32,
+      });
+    }
+    if (item.category === "gardens" || /botanical|arboretum/i.test(venueHay)) {
+      score += 8;
+      reasons.push({
+        code: "botanical_gem",
+        label: "A beautiful garden worth a slow visit",
+        weight: 8,
+      });
+    }
+    if (/historic|heritage|landmark|neighborhood/i.test(venueHay)) {
+      score += 6;
+      reasons.push({
+        code: "local_institution",
+        label: "A place with local character and history",
+        weight: 6,
+      });
+    }
+  }
+
+  if (isScenicOrHiddenGem(venueHay) && item.uniqueness >= 0.5) {
+    score += 6;
+    reasons.push({
+      code: "hidden_gem_signal",
+      label: "A quieter find — worth leaving the usual route",
+      weight: 6,
     });
   }
 
@@ -285,7 +353,7 @@ export function scoreDiscoveryItem(
   score += item.popularity * 4;
 
   // Uniqueness / hidden gem
-  const uniq = item.uniqueness * 10;
+  const uniq = item.uniqueness * 12;
   score += uniq;
   if (item.uniqueness >= 0.75) {
     reasons.push({
@@ -340,24 +408,23 @@ export function scoreDiscoveryItem(
   if (item.tags.includes("local_place")) {
     const noteLen = (item.dek?.trim().length ?? 0);
     const everyday = item.category === "coffee" || item.category === "restaurants";
-    const venueHay = [
+    const venueHayLocal = venueHayFromParts([
       ...(item.venueCategories ?? []),
       item.title,
       item.dek ?? "",
-    ]
-      .join(" ")
-      .toLowerCase();
+    ]);
     const experienceVenue =
-      /escape room|bowling|museum|dog park|trail|garden|theater|mini golf|climbing|axe|kayak|paddle|observatory|planetarium|farmers market/i.test(
-        venueHay
+      isParticipatoryActivityVenue(venueHayLocal) ||
+      /museum|dog park|trail|garden|theater|observatory|planetarium|farmers market/i.test(
+        venueHayLocal
       );
 
     if (everyday && noteLen < 32 && !experienceVenue) {
-      score -= 16;
+      score -= 18;
       reasons.push({
         code: "thin_recommendation",
         label: "Held back — not enough reason to recommend today",
-        weight: -16,
+        weight: -18,
       });
     }
 

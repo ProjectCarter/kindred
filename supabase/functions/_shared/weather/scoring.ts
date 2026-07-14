@@ -22,9 +22,17 @@ function isFarmersMarket(item: DiscoveryItem): boolean {
   return /farmers market|farmer'?s market|produce market/i.test(venueHay(item));
 }
 
+function isComedyVenue(item: DiscoveryItem): boolean {
+  return /comedy club|stand.?up|improv/i.test(venueHay(item));
+}
+
+function isAquarium(item: DiscoveryItem): boolean {
+  return /aquarium|sea life|marine center/i.test(venueHay(item));
+}
+
 function isIndoorActivity(item: DiscoveryItem): boolean {
   if (item.category !== "activities") return false;
-  return /bowling|escape room|arcade|climbing gym|laser tag|indoor|billiards|mini golf|axe throwing|go-kart|karaoke/i.test(
+  return /bowling|escape room|arcade|climbing gym|laser tag|indoor|billiards|mini golf|axe throwing|go-kart|karaoke|comedy club|aquarium|planetarium/i.test(
     venueHay(item)
   );
 }
@@ -72,7 +80,19 @@ export function weatherIntelligenceAdjustments(
   }
 
   if (item.category === "museums" && intel.isIndoorPreferred) {
-    add("weather_museum_indoor", "A good indoor day for a museum visit", 10);
+    add("weather_museum_indoor", "A good indoor day for a museum visit", 12);
+  }
+
+  if (isAquarium(item) && intel.isIndoorPreferred) {
+    add("weather_aquarium_indoor", "Rain or heat — an aquarium visit fits the day", 12);
+  }
+
+  if (isComedyVenue(item) && intel.isIndoorPreferred) {
+    add("weather_comedy_indoor", "Rain or heat — a comedy show fits the evening", 10);
+  }
+
+  if (item.category === "gardens" && intel.bucket === "fair" && !intel.isHot) {
+    add("weather_garden_fair", "Fine weather for a garden stroll", 10);
   }
 
   if (item.category === "books" && intel.isIndoorPreferred) {
@@ -124,7 +144,7 @@ export function weatherIntelligenceAdjustments(
   }
 
   if (isIndoorActivity(item) && intel.isIndoorPreferred) {
-    add("weather_indoor_activity", "Rain or heat — indoor activity fits the day", 10);
+    add("weather_indoor_activity", "Rain or heat — indoor activity fits the day", 12);
   }
 
   if (isFarmersMarket(item)) {

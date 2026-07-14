@@ -9,6 +9,7 @@ import {
   meetsLocalEventPublishThreshold,
   sliceForInitialRender,
 } from "./editorialPublishing";
+import { isGenericEventTitle } from "./venueQuality";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -350,18 +351,27 @@ export const LOCAL_EVENTS_GRID_LIMIT = HOMEPAGE_INITIAL_RENDER_COUNT;
 export { LOCAL_EVENT_PUBLISH_MIN_SCORE, HOMEPAGE_INITIAL_RENDER_COUNT };
 
 function scoreEventForGrid(event: LocalEventCard, now: Date): number {
-  let score = 0;
   const schedule = `${event.date} ${event.time}`.trim().toLowerCase();
-  if (/\btoday\b/.test(schedule)) score += 20;
-  else if (/\btomorrow\b/.test(schedule)) score += 16;
-  else if (event.time && event.time !== "Time TBA") score += 8;
-  else if (event.date && event.date !== "Date TBA") score += 5;
-  else score -= 4;
+  let score = 0;
 
-  if (event.sourceUrl?.trim()) score += 5;
-  if (event.venue?.trim()) score += 3;
+  if (!schedule || schedule === "date tba" || schedule === "time tba") {
+    score -= 8;
+  } else if (/\btoday\b/.test(schedule)) {
+    score += 22;
+  } else if (/\btomorrow\b/.test(schedule)) {
+    score += 18;
+  } else if (event.time && event.time !== "Time TBA") {
+    score += 8;
+  } else if (event.date && event.date !== "Date TBA") {
+    score += 6;
+  }
+
+  if (event.sourceUrl?.trim()) score += 6;
+  if (event.venue?.trim() && event.venue.trim() !== "Venue TBA") score += 4;
   if (event.city?.trim()) score += 2;
-  if (event.imageUrl?.trim()) score += 2;
+  if (isGenericEventTitle(event.name)) score -= 12;
+  if (!event.venue?.trim() || event.venue.trim() === "Venue TBA") score -= 10;
+  if (event.imageUrl?.trim()) score += 1;
   return score;
 }
 

@@ -14,6 +14,11 @@ import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
 import { resolveVenueClassification } from "./venueClassification";
 import { resolveActionsForRecommendation } from "./actionBar";
+import {
+  isLowValueVenue,
+  isScenicOrHiddenGem,
+  venueHayFromParts,
+} from "./venueQuality";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -86,7 +91,17 @@ function isRecommendationItem(d: RankedDiscoveryItem): boolean {
 
 function recommendationSortScore(d: RankedDiscoveryItem): number {
   let s = d.score ?? 0;
-  if (d.surfaces.includes("hidden_gems")) s += 3;
+  if (d.surfaces.includes("hidden_gems")) s += 6;
+  if (d.item.tags?.includes("hidden_gem")) s += 4;
+  if (d.item.tags?.includes("chain")) s -= 8;
+  const hay = venueHayFromParts([
+    d.item.title,
+    d.item.dek,
+    ...(d.item.venueCategories ?? []),
+    d.item.address,
+  ]);
+  if (isScenicOrHiddenGem(hay)) s += 6;
+  if (isLowValueVenue(hay)) s -= 20;
   return s;
 }
 

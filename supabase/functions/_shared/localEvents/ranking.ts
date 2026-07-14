@@ -6,6 +6,10 @@
 
 import type { WeatherIntelligence } from "../weather/providers/types.ts";
 import { LOCAL_EVENT_PUBLISH_MIN_SCORE } from "../editorial/publishing.ts";
+import {
+  isGenericEventTitle,
+  venueHayFromParts,
+} from "../editorial/venueQuality.ts";
 import type { LocalEvent } from "./provider.ts";
 
 const OUTDOOR_EVENT_PATTERN =
@@ -41,20 +45,44 @@ export function timelinessScore(startDateTime: string, now: Date): number {
 
 function completenessScore(event: LocalEvent): number {
   let score = 0;
-  if (event.sourceUrl?.trim()) score += 5;
-  if (event.venue?.trim()) score += 3;
+  if (event.sourceUrl?.trim()) score += 6;
+  if (event.venue?.trim() && event.venue.trim() !== "Venue TBA") score += 4;
   if (event.city?.trim()) score += 2;
   if (
     event.startDateTime.trim() &&
     event.startDateTime !== "Time TBA" &&
     event.startDateTime !== "Date TBA"
   ) {
-    score += 4;
+    score += 6;
   }
   if (OFFICIAL_SOURCE_PATTERN.test(`${event.sourceUrl} ${event.sourceName}`)) {
-    score += 3;
+    score += 6;
   }
-  if (event.imageUrl?.trim()) score += 2;
+  if (event.banditNote?.trim()) score += 3;
+  if (event.imageUrl?.trim()) score += 1;
+  return score;
+}
+
+function editorialQualityAdjustments(event: LocalEvent): number {
+  let score = 0;
+  if (isGenericEventTitle(event.name)) score -= 12;
+  const venue = event.venue?.trim().toLowerCase() ?? "";
+  if (!venue || venue === "venue tba") score -= 10;
+  const schedule = event.startDateTime.trim().toLowerCase();
+  if (
+    schedule === "time tba" ||
+    schedule === "date tba" ||
+    schedule === "date tba time tba"
+  ) {
+    score -= 8;
+  }
+  const hay = venueHayFromParts([event.name, event.venue, event.category]);
+  if (/\b(ticket|tickets|admission|register|rsvp)\b/i.test(`${event.sourceUrl} ${event.name}`)) {
+    score += 4;
+  }
+  if (/\b(farmers market|food truck|block party|street fair|parade|festival)\b/i.test(hay)) {
+    score += 4;
+  }
   return score;
 }
 
@@ -77,6 +105,7 @@ export function scoreLocalEventForEdition(
   return (
     timelinessScore(event.startDateTime, now) +
     completenessScore(event) +
+    editorialQualityAdjustments(event) +
     weatherAdjustment(event, options?.weatherIntel)
   );
 }

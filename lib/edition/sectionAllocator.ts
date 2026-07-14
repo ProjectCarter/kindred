@@ -57,6 +57,10 @@ import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
   sliceForInitialRender,
 } from "./editorialPublishing";
+import {
+  isParticipatoryActivityVenue,
+  venueHayFromParts,
+} from "./venueQuality";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -124,6 +128,26 @@ const CONTEXTUAL_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
 
 const ACTIVE_PARTICIPATION_PATTERN =
   /paddleboard|paddle board|kayak|surf|snorkel|scuba|dive|swim|hike|hiking|trail|climb|bike|cycling|kite|sail|canoe|walking tour|guided tour|workshop|class\b/i;
+
+/** Does this item belong in Activities — a real thing to go do? */
+function belongsInActivities(item: RankedDiscoveryItem): boolean {
+  if (ACTIVITIES_CATEGORIES.has(item.item.category)) {
+    if (item.item.category === "hiking") return true;
+    const hay = venueHayFromParts([
+      item.item.title,
+      item.item.dek,
+      ...(item.item.venueCategories ?? []),
+    ]);
+    return isParticipatoryActivityVenue(hay);
+  }
+  if (
+    CONTEXTUAL_CATEGORIES.has(item.item.category) &&
+    readsAsActive(item)
+  ) {
+    return true;
+  }
+  return false;
+}
 
 /** Does this item's own copy frame it as something to *do*, not just see? */
 function readsAsActive(item: RankedDiscoveryItem): boolean {
@@ -257,11 +281,7 @@ export function allocateDiscoverySections(
       : picked;
   }
 
-  const activities = claim(
-    (item) =>
-      ACTIVITIES_CATEGORIES.has(item.item.category) ||
-      (CONTEXTUAL_CATEGORIES.has(item.item.category) && readsAsActive(item))
-  );
+  const activities = claim((item) => belongsInActivities(item));
 
   const notebook = claim((item) => NOTEBOOK_CATEGORIES.has(item.item.category));
 
