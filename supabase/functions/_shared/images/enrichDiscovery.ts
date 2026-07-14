@@ -115,6 +115,7 @@ export async function enrichDiscoveryImages(
           venueCategories: item.venueCategories,
           discoveryCategory: item.category,
           address: item.address,
+          city: item.place?.city ?? null,
           environment: discovery.location.state,
           orientation: isBanditPick ? "landscape" : "portrait",
         },

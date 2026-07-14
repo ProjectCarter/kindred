@@ -16,6 +16,7 @@
 import type { ContentType, EditorialFieldAnswers } from "./contentSystem";
 import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
 import type { LocalEventCard } from "./localEvents";
+import { resolveVenueClassification } from "./venueClassification";
 
 export type CuratedDiscoveryArticle = {
   /** Editorial subheading for the reader — distinct from the homepage card dek. */
@@ -618,11 +619,83 @@ function withIndefiniteArticle(noun: string): string {
  */
 function venueTypeLabel(
   venueCategories: string[] | null | undefined,
-  category: DiscoveryCategory | string | null | undefined
+  category: DiscoveryCategory | string | null | undefined,
+  title?: string | null
 ): string {
-  const specific = venueCategories?.find((c) => c && c.trim())?.trim();
-  if (specific) return specific.toLowerCase();
-  return PLACE_TYPE_LABEL[category as DiscoveryCategory] ?? "local place";
+  return resolveVenueClassification({
+    title,
+    venueCategories,
+    discoveryCategory: category,
+  }).displayLabel;
+}
+
+function editorialBriefForVenueType(typeLabel: string): {
+  who: string;
+  howLong: string;
+  tips: string;
+} {
+  const t = typeLabel.toLowerCase();
+  if (/dog park/.test(t)) {
+    return {
+      who: "Dog owners who want a real off-leash outing — and anyone who enjoys watching a park actually being used.",
+      howLong: "Plan for 45–90 minutes, depending on how social your dog is.",
+      tips: "Bring water, waste bags, and shade if it's warm. Mid-morning is usually calmer than late afternoon.",
+    };
+  }
+  if (/escape room/.test(t)) {
+    return {
+      who: "Groups of two to six who like puzzles, a little pressure, and something to talk about afterward.",
+      howLong: "Most rooms run 60 minutes — arrive a few minutes early for the briefing.",
+      tips: "Book ahead on weekends. Split up to search the room; the first ten minutes matter.",
+    };
+  }
+  if (/museum|history/.test(t)) {
+    return {
+      who: "Anyone curious about the place they live — especially visitors who want context, not just a photo stop.",
+      howLong: "Allow 60–90 minutes for a first visit; longer if there's a special exhibit.",
+      tips: "Check hours before you go. Weekday mornings tend to be the calmest time to look.",
+    };
+  }
+  if (/restaurant|sushi|steakhouse/.test(t)) {
+    return {
+      who: "Anyone planning a meal worth leaving the house for — not just the nearest convenient option.",
+      howLong: "Plan for a full sit-down visit; add time if you're going on a weekend.",
+      tips: "Reservations help on Friday and Saturday. If the kitchen has a specialty, order that before anything safe.",
+    };
+  }
+  if (/coffee/.test(t)) {
+    return {
+      who: "Morning people, remote workers, and anyone who measures a neighborhood by its coffee.",
+      howLong: "Twenty minutes for a quick stop; longer if you're staying to read or meet someone.",
+      tips: "Go earlier than feels necessary — the best pastries and quiet seats go first.",
+    };
+  }
+  if (/bowling|mini golf|arcade|climbing|axe|go-kart|kayak|paddle/.test(t)) {
+    return {
+      who: "Friends, families, and anyone who'd rather do something than scroll through options all afternoon.",
+      howLong: "Budget 60–120 minutes, including setup and the inevitable rematch.",
+      tips: "Book ahead when you can on weekends. Closed-toe shoes are almost always the right call.",
+    };
+  }
+  if (/country club|golf/.test(t)) {
+    return {
+      who: "Golfers, members' guests, and anyone who wants a lake-and-fairway afternoon without a generic resort feel.",
+      howLong: "A round or a meal is usually a half-day commitment — don't rush the parking lot.",
+      tips: "Call ahead about guest policies and dress code. This is a club, not a public beach.",
+    };
+  }
+  if (/park|garden|trail|hiking|beach/.test(t)) {
+    return {
+      who: "Anyone who needs an hour outside without a complicated plan.",
+      howLong: "Plan for 45–90 minutes of unhurried time — longer if you're staying for sunset.",
+      tips: "Sunscreen, water, and comfortable shoes. Weekday mornings are the quietest window.",
+    };
+  }
+  return {
+    who: "Anyone looking for a real local option rather than another algorithmic suggestion.",
+    howLong: "Plan for about an hour — enough to actually see the place, not just drive by.",
+    tips: "Confirm hours before you go; local spots can shift schedules without much notice.",
+  };
 }
 
 /**
@@ -653,63 +726,70 @@ export function composePlaceDiscoveryArticle(input: {
   const note = input.dek?.trim() || "";
   const city = input.city?.trim() || "";
   const address = input.address?.trim() || "";
-  const typeLabel = venueTypeLabel(input.venueCategories, input.category);
+  const venue = resolveVenueClassification({
+    title,
+    venueCategories: input.venueCategories,
+    discoveryCategory: input.category,
+    dek: note,
+    address,
+  });
+  const typeLabel = venue.displayLabel;
   const typeLabelWithArticle = withIndefiniteArticle(typeLabel);
+  const brief = editorialBriefForVenueType(typeLabel);
 
-  // Kept as a short, clean subheading distinct from the body — the note
-  // itself is folded into the opening paragraph below, and `articleFromSectionItem`
-  // strips any body paragraph that duplicates the dek, so the dek must never
-  // be the same text as (or a superset of) what the opening paragraph says.
   const placeLine = [title, city].filter(Boolean).join(" · ");
   const dek = placeLine || title;
 
-  // Opening: the verified specifics, in a sentence that could only be
-  // about this venue — then Kindred's own grounded note, if it adds
-  // anything beyond what the fact sentence already said.
   const locationPhrase = address ? `on ${address}` : city ? `in ${city}` : "";
   const factSentence = `${title} is ${typeLabelWithArticle}${
     locationPhrase ? ` ${locationPhrase}` : ""
-  } — a real, verified listing, not a category guess.`;
-  const opening =
+  } — a verified local listing, not a category guess.`;
+
+  const whyVisit =
     note && !isNearDuplicateCopy(note, factSentence) && !isNearDuplicateCopy(note, title)
-      ? `${factSentence} ${note}`
-      : factSentence;
+      ? note
+      : `${title} earned a spot in today's paper because it's a real ${typeLabel}${city ? ` in ${city}` : ""} — the kind of place worth knowing about before another generic suggestion wins the afternoon.`;
+
+  const uniqueness = `What makes ${title} worth the trip is the specific combination of name, place, and kind — a ${typeLabel} you can actually go to${city ? ` in ${city}` : ""}, not a mood board version of one.`;
 
   const essay = getCategoryDiscoveryArticle(input.category, input.seedKey, {
     venueCategories: input.venueCategories,
   });
-  if (essay) {
-    const bridge = `Kindred hasn't reviewed every detail of ${title} directly — but here's what tends to separate ${typeLabelWithArticle} worth going back to from one that isn't, worth checking for when you visit.`;
-    const attribution = input.sourceName
-      ? `The listing itself is verified through ${input.sourceName}; the read above is Kindred's general sense of ${typeLabelWithArticle} like this, not a line-by-line review of ${title}.`
-      : `The name and location above are verified; the read above is Kindred's general sense of ${typeLabelWithArticle} like this, not a line-by-line review of ${title}.`;
-    const closing = city
-      ? `Kindred flagged ${title} because a real, confirmed ${typeLabel} in ${city} beats another algorithmic suggestion — worth going to find out the rest for yourself.`
-      : `Kindred flagged ${title} because a real, confirmed ${typeLabel} beats another algorithmic suggestion — worth going to find out the rest for yourself.`;
-    return {
-      dek,
-      body: dedupeDiscoveryBody([
-        opening,
-        bridge,
-        ...essay.body,
-        attribution,
-        closing,
-      ]),
-      fieldAnswers: essay.fieldAnswers,
-    };
-  }
 
-  const body: string[] = [opening];
-  body.push(
-    input.sourceName
-      ? `Verified listing from ${input.sourceName}. Kindred keeps this brief when only the name, kind of place, and location are confirmed — not a full review.`
-      : "Kindred keeps this brief when only the name, kind of place, and location are confirmed — not a full review."
-  );
+  const practicalTips =
+    typeof essay?.fieldAnswers?.tips === "string" && essay.fieldAnswers.tips.trim()
+      ? essay.fieldAnswers.tips
+      : typeof essay?.fieldAnswers?.booking === "string" && essay.fieldAnswers.booking.trim()
+        ? essay.fieldAnswers.booking
+        : brief.tips;
+
+  const closing = city
+    ? `Kindred flagged ${title} because a confirmed ${typeLabel} in ${city} beats another algorithmic suggestion — worth going to find out the rest for yourself.`
+    : `Kindred flagged ${title} because a confirmed ${typeLabel} beats another algorithmic suggestion — worth going to find out the rest for yourself.`;
+
+  const attribution = input.sourceName
+    ? `The listing is verified through ${input.sourceName}. Kindred's read above is grounded in what we could confirm about ${title} — not a line-by-line review of every detail.`
+    : `The name and location above are verified. Kindred's read is grounded in what we could confirm — not a line-by-line review of every detail.`;
 
   return {
     dek,
-    body: dedupeDiscoveryBody(body),
-    fieldAnswers: {},
+    body: dedupeDiscoveryBody([
+      factSentence,
+      whyVisit,
+      uniqueness,
+      brief.who,
+      brief.howLong,
+      practicalTips,
+      attribution,
+      closing,
+    ]),
+    fieldAnswers: {
+      why_go: whyVisit,
+      best_for: brief.who,
+      how_long: brief.howLong,
+      tips: practicalTips,
+      ...(essay?.fieldAnswers ?? {}),
+    },
   };
 }
 

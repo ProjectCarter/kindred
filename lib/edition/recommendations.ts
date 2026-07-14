@@ -12,6 +12,7 @@ import type { ImageSourcePropType } from "react-native";
 import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
+import { resolveVenueClassification } from "./venueClassification";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -88,6 +89,22 @@ function recommendationSortScore(d: RankedDiscoveryItem): number {
   return s;
 }
 
+function recommendationOverline(item: RankedDiscoveryItem["item"]): string {
+  if (item.tags?.includes("local_place")) {
+    const venue = resolveVenueClassification({
+      title: item.title,
+      venueCategories: item.venueCategories,
+      discoveryCategory: item.category,
+      dek: item.dek,
+    });
+    if (venue.confidence !== "low") {
+      const label = venue.displayLabel;
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    }
+  }
+  return recommendationCategoryLabel(item.category);
+}
+
 export function selectRecommendationCards(
   items: RankedDiscoveryItem[] | null | undefined,
   options?: { city?: string | null }
@@ -100,7 +117,7 @@ export function selectRecommendationCards(
   return ranked.map((d) => ({
     id: d.item.id,
     image: recommendationImageFor(d.item),
-    overline: recommendationCategoryLabel(d.item.category),
+    overline: recommendationOverline(d.item),
     title: d.item.title.trim(),
     subtitle: recommendationLocationLine(d.item, options?.city),
     note: recommendationNote(d.item),

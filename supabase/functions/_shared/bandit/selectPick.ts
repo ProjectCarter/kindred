@@ -126,6 +126,35 @@ const TECHNICAL_PATTERN =
 const DELIGHT_PATTERN =
   /\b(hidden|secret|mystery|mysterious|centuries-old|ancient|folklore|tradition|handmade|artisan|family[- ]owned|first time|rare|unusual|little-known|forgotten|quirky|surprising|remarkable|astonishing|breathtaking|stunning|beautiful|gorgeous|photographs?|photos reveal|images reveal|time-lapse|dazzling|since 19\d\d|since 20[0-2]\d|generations|neighborhood institution|beloved|tucked away|one[- ]of[- ]a[- ]kind)\b/;
 
+/** Minimum score to earn Bandit's Pick — must feel friend-worthy, not filler. */
+const BANDIT_PICK_MIN_SCORE = 54;
+
+function passesFriendTest(discoveryItem: DiscoveryItem): boolean {
+  const hay = `${discoveryItem.title} ${discoveryItem.dek}`.toLowerCase();
+  if (isDisqualifyingTone(hay)) return false;
+  if (discoveryItem.tags.includes("chain")) return false;
+
+  const delightful = DELIGHT_PATTERN.test(hay);
+  const worthTheTrip = WORTH_THE_TRIP_CATEGORIES.has(discoveryItem.category);
+  const groundedNote = (discoveryItem.dek?.trim().length ?? 0) >= 35;
+  const venueHay = [
+    ...(discoveryItem.venueCategories ?? []),
+    discoveryItem.title,
+  ]
+    .join(" ")
+    .toLowerCase();
+  const experienceVenue =
+    /escape room|bowling|museum|dog park|trail|garden|theater|mini golf|climbing|axe|kayak|observatory|planetarium/i.test(
+      venueHay
+    );
+
+  if (discoveryItem.category === "coffee" || discoveryItem.category === "restaurants") {
+    return (delightful && groundedNote) || experienceVenue;
+  }
+
+  return worthTheTrip || delightful || groundedNote || experienceVenue;
+}
+
 function isDisqualifyingTone(text: string): boolean {
   const hay = text.toLowerCase();
   if (TECHNICAL_PATTERN.test(hay)) return true;
@@ -290,6 +319,7 @@ function placeCandidates(
     const hay = `${discoveryItem.title} ${discoveryItem.dek}`;
     if (isDisqualifyingTone(hay)) return;
     if (matchesTitle(recentKeys, discoveryItem.title)) return;
+    if (!passesFriendTest(discoveryItem)) return;
 
     const delightful = DELIGHT_PATTERN.test(hay.toLowerCase());
     const worthTheTrip = WORTH_THE_TRIP_CATEGORIES.has(discoveryItem.category);
@@ -472,7 +502,9 @@ export function selectBanditsPick(input: {
 
   if (!pool.length) return null;
 
-  const winner = [...pool].sort((a, b) => b.score - a.score)[0];
+  const sorted = [...pool].sort((a, b) => b.score - a.score);
+  const winner =
+    sorted.find((c) => c.score >= BANDIT_PICK_MIN_SCORE) ?? sorted[0];
   return winner.story;
 }
 

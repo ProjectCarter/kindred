@@ -72,6 +72,25 @@ export async function findLibraryImageByProvider(
   return (data as ImageLibraryRow | null) ?? null;
 }
 
+/** Reuse a photo previously matched to this exact venue. */
+export async function findLibraryImageForVenue(
+  admin: SupabaseClient,
+  venueTag: string,
+  excludeIds: Set<string>
+): Promise<ImageLibraryRow | null> {
+  const { data } = await admin
+    .from("kindred_image_library")
+    .select("*")
+    .contains("secondary_tags", [venueTag])
+    .eq("approval_status", "approved")
+    .order("quality_score", { ascending: false })
+    .order("last_used_at", { ascending: true, nullsFirst: true })
+    .limit(8);
+
+  const rows = (data as ImageLibraryRow[] | null) ?? [];
+  return rows.find((row) => !excludeIds.has(row.id)) ?? null;
+}
+
 export async function findUnusedLibraryMatch(
   admin: SupabaseClient,
   category: ImageCategoryTag,
@@ -155,6 +174,8 @@ export async function ingestStockImage(
       tags: string[]
     ) => string | null;
     inferDominantColor?: (tags: string[]) => string | null;
+    /** Store venue key for future reuse — e.g. venue:cosmo-dog-park:gilbert */
+    venueTag?: string | null;
   }
 ): Promise<EditorialImageRecord | null> {
   const existing = await findLibraryImageByProvider(
@@ -245,7 +266,10 @@ export async function ingestStockImage(
       candidate.sourcePageUrl
     ),
     primary_category: category,
-    secondary_tags: secondaryTags,
+    secondary_tags: [
+      ...secondaryTags,
+      ...(options?.venueTag ? [options.venueTag] : []),
+    ],
     environment_tags: environmentTags,
     orientation: candidate.orientation,
     dominant_subject: compositionTag ?? category,

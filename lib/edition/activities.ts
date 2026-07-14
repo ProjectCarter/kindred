@@ -10,6 +10,8 @@ import type { ImageSourcePropType } from "react-native";
 import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
+import { resolveVenueClassification } from "./venueClassification";
+import type { ImageCategoryTag } from "./imageTaxonomy";
 import { NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
@@ -113,21 +115,52 @@ const SUBTYPE_MATCHERS: Array<{ subtype: ActivitySubtype; pattern: RegExp }> = [
 
 function inferSubtype(item: RankedDiscoveryItem["item"]): ActivitySubtype {
   if (item.category === "hiking") return "hiking";
+
+  const venue = resolveVenueClassification({
+    title: item.title,
+    venueCategories: item.venueCategories,
+    discoveryCategory: item.category,
+    dek: item.dek,
+    address: item.address,
+  });
+
+  const fromVenue: Partial<Record<ImageCategoryTag, ActivitySubtype>> = {
+    kayaking: "water_recreation",
+    paddleboarding: "water_recreation",
+    escape_room: "escape_rooms",
+    bowling: "bowling",
+    mini_golf: "mini_golf",
+    rock_climbing: "rock_climbing",
+    axe_throwing: "axe_throwing",
+    go_karts: "go_karts",
+    arcade: "arcades",
+    hiking: "hiking",
+  };
+
+  if (venue.confidence !== "low") {
+    const mapped = fromVenue[venue.editorialType];
+    if (mapped) return mapped;
+  }
+
   const hay = [item.title, item.dek, ...(item.venueCategories ?? [])]
     .filter(Boolean)
     .join(" ");
   for (const { subtype, pattern } of SUBTYPE_MATCHERS) {
     if (pattern.test(hay)) return subtype;
   }
-  // Never guess a specific-but-possibly-wrong scene (e.g. kayaking/beach)
-  // for a venue whose own text doesn't actually say so — a country club,
-  // a fitness studio, or anything else outside the known subtypes gets a
-  // tasteful neutral photo instead (kindred-mission.mdc: accuracy over a
-  // beautiful-but-misleading image).
   return "general";
 }
 
 export function activityOverline(item: RankedDiscoveryItem["item"]): string {
+  const venue = resolveVenueClassification({
+    title: item.title,
+    venueCategories: item.venueCategories,
+    discoveryCategory: item.category,
+    dek: item.dek,
+  });
+  if (venue.confidence !== "low") {
+    return venue.displayLabel.charAt(0).toUpperCase() + venue.displayLabel.slice(1);
+  }
   const specific = item.venueCategories?.find((c) => c && c.trim())?.trim();
   if (specific) return specific;
   return SUBTYPE_LABEL[inferSubtype(item)];

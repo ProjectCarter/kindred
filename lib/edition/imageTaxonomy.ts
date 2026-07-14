@@ -4,6 +4,12 @@
  * than hard-coding throughout the app.
  */
 
+import {
+  resolveVenueClassification,
+  buildEditorialImageSearchQueries,
+  extractCityState,
+} from "./venueClassification";
+
 export type ImageCategoryTag =
   | "coffee_shop"
   | "restaurant"
@@ -56,6 +62,7 @@ export type ClassificationInput = {
   discoveryCategory?: string | null;
   eventType?: string | null;
   address?: string | null;
+  city?: string | null;
   environment?: string | null;
 };
 
@@ -64,7 +71,10 @@ export type ClassificationResult = {
   secondary: ImageCategoryTag[];
   confidence: "high" | "medium" | "low";
   searchQuery: string;
+  /** Priority-ordered queries: venue+place, venue+category, editorial substitute. */
+  searchQueries: string[];
   environmentTags: string[];
+  displayLabel: string;
 };
 
 type Rule = {
@@ -186,6 +196,16 @@ export function classifyImageSubject(
   input: ClassificationInput
 ): ClassificationResult {
   const blob = haystack(input);
+
+  const venueClass = resolveVenueClassification({
+    title: input.title,
+    venueCategories: input.venueCategories,
+    providerCategory: input.providerCategory,
+    discoveryCategory: input.discoveryCategory,
+    dek: input.dek,
+    address: input.address,
+  });
+
   const scores = new Map<ImageCategoryTag, number>();
 
   for (const rule of RULES) {
@@ -201,19 +221,36 @@ export function classifyImageSubject(
     scores.set(discoveryHint, (scores.get(discoveryHint) ?? 0) + 3);
   }
 
-  // Down-rank beach when text says country club / rock shop.
-  if (/country club|golf club|rock shop|gem shop/i.test(blob)) {
+  if (/country club|golf club|rock shop|gem shop|neighborhood|observatory|planetarium|dog park|cosmo dog/i.test(blob)) {
     scores.delete("beach");
   }
+  if (/dog park|cosmo dog/i.test(blob)) {
+    scores.delete("playground");
+  }
+  if (/observatory|planetarium/i.test(blob)) {
+    scores.delete("scenic_drive");
+  }
+
+  scores.set(
+    venueClass.editorialType,
+    (scores.get(venueClass.editorialType) ?? 0) +
+      (venueClass.confidence === "high" ? 14 : venueClass.confidence === "medium" ? 10 : 4)
+  );
 
   const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1]);
-  const primary = ranked[0]?.[0] ?? discoveryHint ?? "general_activity";
+  const primary =
+    venueClass.confidence !== "low"
+      ? venueClass.editorialType
+      : ranked[0]?.[0] ?? discoveryHint ?? "general_activity";
   const topScore = ranked[0]?.[1] ?? 0;
   const secondScore = ranked[1]?.[1] ?? 0;
 
-  let confidence: ClassificationResult["confidence"] = "low";
-  if (topScore >= 9) confidence = "high";
-  else if (topScore >= 6 && topScore > secondScore + 2) confidence = "medium";
+  let confidence: ClassificationResult["confidence"] = venueClass.confidence;
+  if (venueClass.confidence === "low") {
+    if (topScore >= 9) confidence = "high";
+    else if (topScore >= 6 && topScore > secondScore + 2) confidence = "medium";
+    else confidence = "low";
+  }
 
   const secondary = ranked
     .slice(1, 4)
@@ -225,12 +262,26 @@ export function classifyImageSubject(
   if (input.address && /az|arizona/i.test(input.address)) envTags.push("arizona");
   if (/desert/i.test(blob)) envTags.push("desert");
 
-  let searchQuery = SEARCH_QUERY_BY_TAG[primary];
+  const { city: parsedCity, state } = extractCityState(input.address);
+  const city = input.city?.trim() || parsedCity;
+  const searchQueries = buildEditorialImageSearchQueries({
+    title: input.title?.trim() ?? "",
+    city,
+    state,
+    classification: {
+      ...venueClass,
+      editorialType: primary,
+    },
+  });
+
+  let searchQuery = searchQueries[searchQueries.length - 1] ?? SEARCH_QUERY_BY_TAG[primary];
   if (envTags.includes("arizona") && primary === "hiking") {
     searchQuery = "Arizona desert hiking trail";
+    searchQueries[searchQueries.length - 1] = searchQuery;
   }
   if (envTags.includes("arizona") && primary === "golf_course") {
     searchQuery = "Arizona desert golf course";
+    searchQueries[searchQueries.length - 1] = searchQuery;
   }
 
   return {
@@ -238,7 +289,9 @@ export function classifyImageSubject(
     secondary,
     confidence,
     searchQuery,
+    searchQueries,
     environmentTags: envTags,
+    displayLabel: venueClass.displayLabel,
   };
 }
 

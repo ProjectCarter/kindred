@@ -249,6 +249,41 @@ export function scoreDiscoveryItem(
     });
   }
 
+  // Curation bar — don't recommend a place just because it exists.
+  if (item.tags.includes("local_place")) {
+    const noteLen = (item.dek?.trim().length ?? 0);
+    const everyday = item.category === "coffee" || item.category === "restaurants";
+    const venueHay = [
+      ...(item.venueCategories ?? []),
+      item.title,
+      item.dek ?? "",
+    ]
+      .join(" ")
+      .toLowerCase();
+    const experienceVenue =
+      /escape room|bowling|museum|dog park|trail|garden|theater|mini golf|climbing|axe|kayak|paddle|observatory|planetarium|farmers market/i.test(
+        venueHay
+      );
+
+    if (everyday && noteLen < 32 && !experienceVenue) {
+      score -= 16;
+      reasons.push({
+        code: "thin_recommendation",
+        label: "Held back — not enough reason to recommend today",
+        weight: -16,
+      });
+    }
+
+    if (experienceVenue) {
+      score += 8;
+      reasons.push({
+        code: "experience_venue",
+        label: "A real experience worth leaving the house for",
+        weight: 8,
+      });
+    }
+  }
+
   return {
     item,
     score,

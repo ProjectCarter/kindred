@@ -5,6 +5,7 @@ import { EditionImageRegistry } from "./editionRegistry.ts";
 import { getEditorialSearchProviders } from "./providers.ts";
 import { getCachedSearch, setCachedSearch } from "./searchCache.ts";
 import {
+  findLibraryImageForVenue,
   findUnusedLibraryMatch,
   incrementLibrarySkipCount,
   ingestStockImage,
@@ -12,7 +13,7 @@ import {
   rowToRecord,
 } from "./library.ts";
 import type { StockSearchCandidate } from "./types.ts";
-import { computeBaselineQualityScore } from "./quality.ts";
+import { computeBaselineQualityScore, stockCandidateConflictsWithVenue } from "./quality.ts";
 import {
   compositionSearchQuery,
   inferCompositionTag,
@@ -20,6 +21,10 @@ import {
   pickCompositionSlot,
   rankStockCandidates,
 } from "./variety.ts";
+import {
+  extractCityState,
+  venueLibraryTag,
+} from "../venueClassification.ts";
 
 export type ImageSelectionInput = ClassificationInput & {
   providerImageUrl?: string | null;
@@ -62,11 +67,58 @@ function stockCandidateQuality(
   }).score;
 }
 
+function tryClaimLibraryRow(
+  admin: SupabaseClient,
+  row: Awaited<ReturnType<typeof findUnusedLibraryMatch>>,
+  registry: EditionImageRegistry,
+  compositionSlot: string,
+  classificationPrimary: string
+): EditorialImageRecord | null {
+  if (!row) return null;
+
+  const variety = registry.varietyLedger();
+  const varietyConflict =
+    registry.hasLibraryId(row.id) ||
+    registry.hasUrl(row.hosted_url) ||
+    registry.hasContentHash(row.content_hash) ||
+    registry.hasPhotographer(row.photographer_name) ||
+    registry.hasComposition(row.composition_tag) ||
+    registry.hasDominantSubject(row.dominant_subject) ||
+    registry.hasDominantColor(row.dominant_color);
+
+  if (varietyConflict) {
+    void incrementLibrarySkipCount(admin, row.id);
+    return null;
+  }
+
+  const record = rowToRecord(row);
+  if (
+    registry.claim({
+      libraryId: record.libraryId,
+      url: record.url,
+      source: record.source,
+      providerImageId: row.original_source_image_id,
+      contentHash: row.content_hash,
+      photographerName: record.photographerName,
+      compositionTag: row.composition_tag,
+      dominantSubject: row.dominant_subject ?? classificationPrimary,
+      dominantColor: row.dominant_color,
+    })
+  ) {
+    void markLibraryImageUsed(admin, record.libraryId);
+    return record;
+  }
+
+  void incrementLibrarySkipCount(admin, row.id);
+  return null;
+}
+
 /**
  * Priority chain:
  * 1 provider URL (caller passes if present)
- * 2 curated library unused match (ranked by quality_score)
- * 3 provider search ingest (Pexels → Pixabay → future museum sources)
+ * 2 curated library match for this exact venue (reuse)
+ * 3 curated library unused match by category
+ * 4 provider search — venue+place, venue+category, editorial substitute
  * null when confidence is low or no acceptable unique image exists
  */
 export async function selectEditorialImage(
@@ -84,11 +136,12 @@ export async function selectEditorialImage(
     classification.primary,
     registry.nextCompositionSlotIndex(classification.primary)
   );
-  const editorialQuery = compositionSearchQuery(
-    classification.searchQuery,
-    compositionSlot
-  );
   const variety = registry.varietyLedger();
+
+  const title = input.title?.trim() ?? "";
+  const { city: parsedCity } = extractCityState(input.address);
+  const city = input.city?.trim() || parsedCity;
+  const venueTag = title ? venueLibraryTag(title, city) : null;
 
   if (input.providerImageUrl?.trim()) {
     const url = input.providerImageUrl.trim();
@@ -112,6 +165,22 @@ export async function selectEditorialImage(
     }
   }
 
+  if (venueTag) {
+    const venueMatch = await findLibraryImageForVenue(
+      admin,
+      venueTag,
+      registry.usedLibraryIdSet()
+    );
+    const claimed = tryClaimLibraryRow(
+      admin,
+      venueMatch,
+      registry,
+      compositionSlot,
+      classification.primary
+    );
+    if (claimed) return claimed;
+  }
+
   const libraryMatch = await findUnusedLibraryMatch(
     admin,
     classification.primary,
@@ -123,90 +192,77 @@ export async function selectEditorialImage(
       avoidColors: variety.colors,
     }
   );
-  if (libraryMatch) {
-    const varietyConflict =
-      registry.hasLibraryId(libraryMatch.id) ||
-      registry.hasUrl(libraryMatch.hosted_url) ||
-      registry.hasContentHash(libraryMatch.content_hash) ||
-      registry.hasPhotographer(libraryMatch.photographer_name) ||
-      registry.hasComposition(libraryMatch.composition_tag) ||
-      registry.hasDominantSubject(libraryMatch.dominant_subject) ||
-      registry.hasDominantColor(libraryMatch.dominant_color);
+  const categoryClaimed = tryClaimLibraryRow(
+    admin,
+    libraryMatch,
+    registry,
+    compositionSlot,
+    classification.primary
+  );
+  if (categoryClaimed) return categoryClaimed;
 
-    if (varietyConflict) {
-      await incrementLibrarySkipCount(admin, libraryMatch.id);
-    } else {
-      const record = rowToRecord(libraryMatch);
-      if (
-        registry.claim({
-          libraryId: record.libraryId,
-          url: record.url,
-          source: record.source,
-          providerImageId: libraryMatch.original_source_image_id,
-          contentHash: libraryMatch.content_hash,
-          photographerName: record.photographerName,
-          compositionTag: libraryMatch.composition_tag,
-          dominantSubject: libraryMatch.dominant_subject,
-          dominantColor: libraryMatch.dominant_color,
-        })
-      ) {
-        await markLibraryImageUsed(admin, record.libraryId);
-        return record;
-      }
-      await incrementLibrarySkipCount(admin, libraryMatch.id);
-    }
-  }
+  const baseQueries =
+    classification.searchQueries?.length > 0
+      ? classification.searchQueries
+      : [classification.searchQuery];
 
   for (const provider of getEditorialSearchProviders()) {
-    const results = await cachedProviderSearch(
-      admin,
-      provider.id,
-      editorialQuery,
-      orientation,
-      provider.search.bind(provider)
-    );
-
-    const ranked = rankStockCandidates(
-      results,
-      (candidate) => stockCandidateQuality(candidate, orientation, compositionSlot),
-      variety,
-      compositionSlot,
-      classification.primary
-    );
-
-    for (const candidate of ranked) {
-      if (registry.hasProviderId(provider.id, candidate.providerImageId)) continue;
-      if (registry.hasPhotographer(candidate.photographerName)) continue;
-
-      const ingested = await ingestStockImage(
+    for (const baseQuery of baseQueries) {
+      const editorialQuery = compositionSearchQuery(baseQuery, compositionSlot);
+      const results = await cachedProviderSearch(
         admin,
-        candidate,
-        classification.primary,
-        classification.secondary,
-        classification.environmentTags,
-        {
-          compositionTag: compositionSlot,
-          inferComposition: inferCompositionTag,
-          inferDominantColor,
-        }
+        provider.id,
+        editorialQuery,
+        orientation,
+        provider.search.bind(provider)
       );
-      if (!ingested) continue;
 
-      const dominantColor = inferDominantColor(candidate.tags);
-      if (
-        registry.claim({
-          libraryId: ingested.libraryId,
-          url: ingested.url,
-          source: ingested.source,
-          providerImageId: candidate.providerImageId,
-          photographerName: ingested.photographerName,
-          compositionTag: compositionSlot,
-          dominantSubject: compositionSlot,
-          dominantColor,
-        })
-      ) {
-        await markLibraryImageUsed(admin, ingested.libraryId);
-        return ingested;
+      const ranked = rankStockCandidates(
+        results.filter(
+          (candidate) =>
+            !stockCandidateConflictsWithVenue(candidate, classification.primary)
+        ),
+        (candidate) => stockCandidateQuality(candidate, orientation, compositionSlot),
+        variety,
+        compositionSlot,
+        classification.primary
+      );
+
+      for (const candidate of ranked) {
+        if (registry.hasProviderId(provider.id, candidate.providerImageId)) continue;
+        if (registry.hasPhotographer(candidate.photographerName)) continue;
+
+        const ingested = await ingestStockImage(
+          admin,
+          candidate,
+          classification.primary,
+          classification.secondary,
+          classification.environmentTags,
+          {
+            compositionTag: compositionSlot,
+            inferComposition: inferCompositionTag,
+            inferDominantColor,
+            venueTag,
+          }
+        );
+        if (!ingested) continue;
+
+        const dominantColor = inferDominantColor(candidate.tags);
+        if (
+          registry.claim({
+            libraryId: ingested.libraryId,
+            url: ingested.url,
+            source: ingested.source,
+            providerImageId: candidate.providerImageId,
+            photographerName: ingested.photographerName,
+            compositionTag: compositionSlot,
+            dominantSubject: compositionSlot,
+            dominantColor,
+          })
+        ) {
+          await markLibraryImageUsed(admin, ingested.libraryId);
+          return ingested;
+        }
       }
     }
   }

@@ -25,7 +25,9 @@ const CATEGORY_CONTRADICTIONS: Partial<Record<string, RegExp>> = {
   museums: /rock shop|gem shop|mineral|jewelry|antique mall|hardware|pharmacy|coffee|café|cafe/i,
   restaurants: /coffee|café|cafe|espresso|roaster|bakery|bake shop/i,
   coffee: /restaurant|steakhouse|grill|pizzeria|diner|tavern/i,
-  scenic_drives: /rock shop|gem shop|indoor|mall\b|plaza\b|retail/i,
+  scenic_drives: /rock shop|gem shop|indoor|mall\b|plaza\b|retail|dog park|observatory|planetarium|restaurant|neighborhood/i,
+  parks: /restaurant|coffee|bowling|escape room|country club|observatory/i,
+  hiking: /restaurant|coffee shop|bowling|country club|indoor mall/i,
 };
 
 /**

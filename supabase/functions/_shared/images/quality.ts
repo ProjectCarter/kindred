@@ -1,4 +1,5 @@
 import type { ImageOrientation } from "./types.ts";
+import type { ImageCategoryTag } from "./taxonomy.ts";
 
 /**
  * Per-dimension quality signals (0–100 each). Future versions can populate
@@ -133,4 +134,31 @@ export function isLibraryRowSelectable(
   if (skipCount >= 20 && qualityScore < 45) return false;
   if (skipCount >= 35) return false;
   return true;
+}
+
+/** Reject stock photos whose tags obviously conflict with the venue type. */
+const STOCK_CONFLICT_PATTERNS: Partial<Record<ImageCategoryTag, RegExp>> = {
+  dog_park: /\bplayground\b|\bswing set\b|\bslide\b(?!.*\bdog)/i,
+  country_club: /\bbeach\b|\bocean\b|\bsurf\b|\bsandy shore/i,
+  restaurant: /\bbeach\b|\bocean\b|\bhiking trail\b|\bkayak/i,
+  coffee_shop: /\bbeach\b|\bowling\b|\bgolf course\b/i,
+  museum: /\bbeach\b|\bowling\b|\bcoffee shop\b|\bdog park/i,
+  history_museum: /\bbeach\b|\bowling\b|\bcoffee shop\b/i,
+  escape_room: /\bbeach\b|\bgolf\b|\bdog park\b|\bhiking/i,
+  bowling: /\bbeach\b|\bkayak\b|\bgolf course\b|\bdog park/i,
+  scenic_drive: /\bindoor\b|\bmuseum\b|\brestaurant\b|\bcoffee\b/i,
+  specialty_museum: /\bbeach\b|\bowling\b|\brestaurant dining/i,
+  park: /\brestaurant interior\b|\bbowling\b|\bescape room\b/i,
+};
+
+export function stockCandidateConflictsWithVenue(
+  candidate: { tags?: string[]; alt?: string | null },
+  primary: ImageCategoryTag
+): boolean {
+  const pattern = STOCK_CONFLICT_PATTERNS[primary];
+  if (!pattern) return false;
+  const hay = [...(candidate.tags ?? []), candidate.alt ?? ""]
+    .join(" ")
+    .toLowerCase();
+  return pattern.test(hay);
 }
