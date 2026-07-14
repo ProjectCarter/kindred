@@ -23,6 +23,14 @@ type ActivitySubtype =
   | "axe_throwing"
   | "go_karts"
   | "pickleball"
+  | "arcades"
+  | "laser_tag"
+  | "paintball"
+  | "billiards"
+  | "roller_skating"
+  | "ice_skating"
+  | "karaoke"
+  | "batting_cages"
   | "hiking";
 
 const SUBTYPE_LABEL: Record<ActivitySubtype, string> = {
@@ -34,6 +42,14 @@ const SUBTYPE_LABEL: Record<ActivitySubtype, string> = {
   axe_throwing: "Axe Throwing",
   go_karts: "Go-Karts",
   pickleball: "Pickleball",
+  arcades: "Arcade",
+  laser_tag: "Laser Tag",
+  paintball: "Paintball",
+  billiards: "Billiards",
+  roller_skating: "Roller Skating",
+  ice_skating: "Ice Skating",
+  karaoke: "Karaoke",
+  batting_cages: "Batting Cages",
   hiking: "Hiking",
 };
 
@@ -46,6 +62,14 @@ const SUBTYPE_PHOTOS: Record<ActivitySubtype, ImageSourcePropType[]> = {
   axe_throwing: [require("../../assets/discovery/activity-axe-throwing.jpg")],
   go_karts: [require("../../assets/discovery/activity-go-karts.jpg")],
   pickleball: [require("../../assets/discovery/activity-pickleball.jpg")],
+  arcades: [require("../../assets/discovery/activity-arcade.jpg")],
+  laser_tag: [require("../../assets/discovery/activity-laser-tag.jpg")],
+  paintball: [require("../../assets/discovery/activity-paintball.jpg")],
+  billiards: [require("../../assets/discovery/activity-billiards.jpg")],
+  roller_skating: [require("../../assets/discovery/activity-roller-skating.jpg")],
+  ice_skating: [require("../../assets/discovery/activity-ice-skating.jpg")],
+  karaoke: [require("../../assets/discovery/activity-karaoke.jpg")],
+  batting_cages: [require("../../assets/discovery/activity-batting-cages.jpg")],
   hiking: [
     require("../../assets/heroes/hero-mountain-morning.jpg"),
     require("../../assets/heroes/hero-autumn-leaves.jpg"),
@@ -57,11 +81,19 @@ const SUBTYPE_MATCHERS: Array<{ subtype: ActivitySubtype; pattern: RegExp }> = [
   { subtype: "mini_golf", pattern: /mini.?golf|miniature golf|putt.?putt/i },
   { subtype: "water_recreation", pattern: /kayak|paddleboard|paddle board|surf/i },
   { subtype: "escape_rooms", pattern: /escape room/i },
+  { subtype: "roller_skating", pattern: /roller.?(skat|rink)/i },
+  { subtype: "ice_skating", pattern: /ice.?(skat|rink)/i },
   { subtype: "bowling", pattern: /bowl/i },
   { subtype: "rock_climbing", pattern: /climbing/i },
   { subtype: "axe_throwing", pattern: /axe/i },
   { subtype: "go_karts", pattern: /go.?kart|karting/i },
   { subtype: "pickleball", pattern: /pickleball/i },
+  { subtype: "laser_tag", pattern: /laser tag/i },
+  { subtype: "paintball", pattern: /paintball/i },
+  { subtype: "billiards", pattern: /billiards|pool hall/i },
+  { subtype: "karaoke", pattern: /karaoke/i },
+  { subtype: "batting_cages", pattern: /batting cage/i },
+  { subtype: "arcades", pattern: /arcade/i },
 ];
 
 function inferSubtype(item: RankedDiscoveryItem["item"]): ActivitySubtype {

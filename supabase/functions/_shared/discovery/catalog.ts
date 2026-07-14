@@ -556,6 +556,71 @@ export const DISCOVERY_SEED_CATALOG: DiscoveryItem[] = [
     localExpertise: 0.1,
     quality: 0.85,
   }),
+
+  // — Activities desk fallback —
+  // "What should I go do?" almost never runs dry, but the Foursquare
+  // coverage backing it (escape rooms, axe throwing, go-karts, etc.) is
+  // genuinely thin in smaller metros. These generic, location-agnostic
+  // prompts exist purely as a safety net: `select.ts` only ever surfaces
+  // them for a city+day where zero verified activity venues came back —
+  // real, named venues always win when they exist. See
+  // `isVerifiedPlaceItem` for the fallback rule.
+  item({
+    id: "disc_activity_try_something",
+    title: "Do something with your hands this weekend",
+    dek: "An escape room, an axe-throwing lane, a round of mini golf — pick one and actually go.",
+    category: "activities",
+    source: { name: "Kindred Desk", tier: "kindred" },
+    tags: ["weekend", "playful"],
+    seasons: ["anytime"],
+    weatherFit: ["any"],
+    popularity: 0.4,
+    uniqueness: 0.4,
+    localExpertise: 0.1,
+    quality: 0.8,
+  }),
+  item({
+    id: "disc_activity_friendly_competition",
+    title: "Gather a few people for something competitive",
+    dek: "Bowling, laser tag, go-karts — low stakes, real fun, better as a group than alone.",
+    category: "activities",
+    source: { name: "Kindred Desk", tier: "kindred" },
+    tags: ["weekend", "social", "playful"],
+    seasons: ["anytime"],
+    weatherFit: ["any"],
+    popularity: 0.45,
+    uniqueness: 0.35,
+    localExpertise: 0.1,
+    quality: 0.78,
+  }),
+  item({
+    id: "disc_activity_water",
+    title: "Get out on the water while you still can",
+    dek: "A kayak or paddleboard rental turns an ordinary afternoon into the thing you talk about later.",
+    category: "activities",
+    source: { name: "Kindred Desk", tier: "kindred" },
+    tags: ["outdoors", "weekend"],
+    seasons: ["spring", "summer", "autumn"],
+    weatherFit: ["fair"],
+    popularity: 0.4,
+    uniqueness: 0.45,
+    localExpertise: 0.1,
+    quality: 0.8,
+  }),
+  item({
+    id: "disc_activity_new_skill",
+    title: "Learn something you'll actually use again",
+    dek: "A rock climbing gym or a pickleball court — the first visit is always the hardest part.",
+    category: "activities",
+    source: { name: "Kindred Desk", tier: "kindred" },
+    tags: ["weekend", "practical"],
+    seasons: ["anytime"],
+    weatherFit: ["any"],
+    popularity: 0.35,
+    uniqueness: 0.4,
+    localExpertise: 0.1,
+    quality: 0.78,
+  }),
 ];
 
 /**
@@ -635,6 +700,14 @@ const PLACE_CATEGORY_MAP: Record<string, DiscoveryItem["category"]> = {
   axe_throwing: "activities",
   go_karts: "activities",
   pickleball: "activities",
+  arcades: "activities",
+  laser_tag: "activities",
+  paintball: "activities",
+  billiards: "activities",
+  roller_skating: "activities",
+  ice_skating: "activities",
+  karaoke: "activities",
+  batting_cages: "activities",
 };
 
 /**

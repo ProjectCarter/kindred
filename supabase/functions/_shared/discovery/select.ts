@@ -68,15 +68,28 @@ export function whyLine(item: RankedDiscoveryItem): string {
   return "From today’s paper.";
 }
 
-function isVerifiedPlaceItem(item: RankedDiscoveryItem): boolean {
+/**
+ * @param allowSeedFallback When false (the default pass), Kindred Desk seed
+ *   templates never count as a "verified" place — real, named venues should
+ *   always win when they exist. `selectDiscoverySurface` only flips this to
+ *   true for a surface where the strict pass came back completely empty,
+ *   so a generic desk pick can act as a safety net (e.g. Activities on a
+ *   city+day where Foursquare's niche categories all came back empty)
+ *   without ever crowding out real local data.
+ */
+function isVerifiedPlaceItem(
+  item: RankedDiscoveryItem,
+  allowSeedFallback = false
+): boolean {
   const cat = item.item.category;
   if (!PLACE_CATEGORIES.has(cat)) return true;
   // Local events / provider URLs count as verified
   if (item.item.id.startsWith("event_")) return true;
   if (item.item.source?.tier === "local" && item.item.url) return true;
   if (item.item.place?.city && item.item.source?.url) return true;
-  // Seed Kindred Desk place templates are not verified recommendations
-  if (item.item.source?.name === "Kindred Desk") return false;
+  // Seed Kindred Desk place templates are not verified recommendations —
+  // except as an explicit, opt-in fallback (see doc comment above).
+  if (item.item.source?.name === "Kindred Desk") return allowSeedFallback;
   if (isPlaceholderCopy(item.item.title) || isPlaceholderCopy(item.item.dek)) {
     return false;
   }
@@ -99,9 +112,21 @@ export function selectDiscoverySurface(
   const used = new Set<string>();
   const usedCategories = new Set<string>();
 
-  const pool = ranked
-    .filter((r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r))
-    .sort((a, b) => b.score - a.score);
+  const strictPool = ranked.filter(
+    (r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r, false)
+  );
+  // Nothing verified came back for this surface at all (e.g. Foursquare's
+  // niche Activities categories returned zero results for this metro) —
+  // fall back to Kindred Desk's generic picks rather than showing nothing.
+  // Real venues always win when even one exists, so this never displaces
+  // verified local data.
+  const pool = (
+    strictPool.length > 0
+      ? strictPool
+      : ranked.filter(
+          (r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r, true)
+        )
+  ).sort((a, b) => b.score - a.score);
 
   // Hidden gems: prefer uniqueness
   const ordered =

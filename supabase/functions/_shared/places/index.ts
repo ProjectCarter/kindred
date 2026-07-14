@@ -39,6 +39,14 @@ export const ACTIVITY_PLACES_CATEGORIES: PlacesCategory[] = [
   "axe_throwing",
   "go_karts",
   "pickleball",
+  "arcades",
+  "laser_tag",
+  "paintball",
+  "billiards",
+  "roller_skating",
+  "ice_skating",
+  "karaoke",
+  "batting_cages",
 ];
 
 /** Full roster fetched per metro — Recommendations + Activities combined. */

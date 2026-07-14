@@ -190,7 +190,15 @@ export type DiscoveryRankingContext = {
       | "rock_climbing"
       | "axe_throwing"
       | "go_karts"
-      | "pickleball";
+      | "pickleball"
+      | "arcades"
+      | "laser_tag"
+      | "paintball"
+      | "billiards"
+      | "roller_skating"
+      | "ice_skating"
+      | "karaoke"
+      | "batting_cages";
     address: string | null;
     city: string | null;
     url: string | null;

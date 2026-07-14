@@ -29,6 +29,14 @@ const CATEGORY_LABEL: Record<PlacesCategory, string> = {
   axe_throwing: "axe throwing venue",
   go_karts: "go-kart track",
   pickleball: "pickleball court",
+  arcades: "arcade",
+  laser_tag: "laser tag venue",
+  paintball: "paintball field",
+  billiards: "billiards hall",
+  roller_skating: "roller skating rink",
+  ice_skating: "ice skating rink",
+  karaoke: "karaoke bar",
+  batting_cages: "batting cages",
 };
 
 export async function writeEditorialNotesForPlaces(

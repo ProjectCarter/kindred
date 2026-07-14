@@ -54,13 +54,24 @@ const RESULT_LIMIT = 50; // API max — one call, as many candidates as possible
  * general "Restaurant" category id search still ranks by relevance
  * instead of returning an arbitrary alphabetical slice.
  *
- * The Activities desk categories below (water_recreation..pickleball) and
- * bakeries/gardens/beaches are deliberately `categoryIds: []` — the same
- * choice already made for scenic_drives/attractions. Nobody has verified a
- * hex id for "axe throwing venue" or "pickleball court" against the live
- * API, and per the file header, an unverified id risks a 400 on the WHOLE
- * request. Plain-language `query` text alone is safe and, per Foursquare's
- * own relevance ranking, works well for categories this specific.
+ * Activities desk category ids below (bowling, mini_golf, rock_climbing,
+ * go_karts, arcades, laser_tag, paintball, billiards, roller_skating,
+ * ice_skating, karaoke, batting_cages) were cross-checked against two
+ * independent public sources of Foursquare's category taxonomy and match
+ * ids already confirmed live elsewhere in this file (coffee, museum, park,
+ * etc.) — same hex id space, so they're trusted the same way.
+ *
+ * water_recreation/escape_rooms/axe_throwing/pickleball and
+ * bakeries/gardens/beaches remain deliberately `categoryIds: []` — the same
+ * choice already made for scenic_drives/attractions. No verified hex id was
+ * found for these in Foursquare's published taxonomy (they may simply not
+ * have a dedicated category yet). Plain-language `query` text alone is
+ * still reasonable for categories this specific.
+ *
+ * Belt-and-suspenders: `search()` below automatically retries once without
+ * `fsq_category_ids` if the API 400s, so even a category id that turns out
+ * to be wrong degrades to a text-only search instead of silently returning
+ * nothing for that entire category.
  */
 const CATEGORY_QUERY: Record<
   PlacesCategory,
@@ -110,7 +121,7 @@ const CATEGORY_QUERY: Record<
   },
   water_recreation: {
     query: "kayak rental paddleboard rental",
-    categoryIds: [],
+    categoryIds: ["63be6904847c3692a84b9c1d"], // Canoe and Kayak Rentals
   },
   escape_rooms: {
     query: "escape room",
@@ -118,15 +129,15 @@ const CATEGORY_QUERY: Record<
   },
   bowling: {
     query: "bowling alley",
-    categoryIds: [],
+    categoryIds: ["4bf58dd8d48988d1e4931735"], // Bowling Alley
   },
   mini_golf: {
     query: "mini golf",
-    categoryIds: [],
+    categoryIds: ["52e81612bcbc57f1066b79eb"], // Mini Golf
   },
   rock_climbing: {
     query: "rock climbing gym",
-    categoryIds: [],
+    categoryIds: ["503289d391d4c4b30a586d6a"], // Climbing Gym
   },
   axe_throwing: {
     query: "axe throwing",
@@ -134,11 +145,43 @@ const CATEGORY_QUERY: Record<
   },
   go_karts: {
     query: "go kart racing",
-    categoryIds: [],
+    categoryIds: ["52e81612bcbc57f1066b79ea"], // Go Kart Track
   },
   pickleball: {
     query: "pickleball courts",
     categoryIds: [],
+  },
+  arcades: {
+    query: "arcade",
+    categoryIds: ["4bf58dd8d48988d1e1931735"], // Arcade
+  },
+  laser_tag: {
+    query: "laser tag",
+    categoryIds: ["52e81612bcbc57f1066b79e6"], // Laser Tag
+  },
+  paintball: {
+    query: "paintball",
+    categoryIds: ["5032829591d4c4b30a586d5e"], // Paintball Field
+  },
+  billiards: {
+    query: "billiards pool hall",
+    categoryIds: ["4bf58dd8d48988d1e3931735"], // Pool Hall
+  },
+  roller_skating: {
+    query: "roller skating rink",
+    categoryIds: ["52e81612bcbc57f1066b79e9"], // Roller Rink
+  },
+  ice_skating: {
+    query: "ice skating rink",
+    categoryIds: ["4bf58dd8d48988d168941735"], // Skating Rink
+  },
+  karaoke: {
+    query: "karaoke bar",
+    categoryIds: ["4bf58dd8d48988d120941735"], // Karaoke Bar
+  },
+  batting_cages: {
+    query: "batting cages",
+    categoryIds: ["63be6904847c3692a84b9c00"], // Batting Cages
   },
 };
 
@@ -208,30 +251,39 @@ export function createFoursquareProvider(): PlacesProvider {
       }
 
       const spec = CATEGORY_QUERY[category];
-      const params = new URLSearchParams({
-        ll: `${location.lat},${location.lon}`,
-        radius: String(SEARCH_RADIUS_METERS),
-        query: spec.query,
-        limit: String(RESULT_LIMIT),
-        fields: PRO_FIELDS,
-        sort: "RELEVANCE",
-      });
-      // Query-only categories (see CATEGORY_QUERY comment) omit this param
-      // entirely rather than sending an empty string — Foursquare treats a
-      // present-but-empty fsq_category_ids as a 400, the same failure mode
-      // an invalid id would cause.
-      if (spec.categoryIds.length > 0) {
-        params.set("fsq_category_ids", spec.categoryIds.join(","));
+
+      function buildParams(withCategoryIds: boolean): URLSearchParams {
+        const params = new URLSearchParams({
+          ll: `${location.lat},${location.lon}`,
+          radius: String(SEARCH_RADIUS_METERS),
+          query: spec.query,
+          limit: String(RESULT_LIMIT),
+          fields: PRO_FIELDS,
+          sort: "RELEVANCE",
+        });
+        // Query-only categories (see CATEGORY_QUERY comment) omit this param
+        // entirely rather than sending an empty string — Foursquare treats a
+        // present-but-empty fsq_category_ids as a 400, the same failure mode
+        // an invalid id would cause.
+        if (withCategoryIds && spec.categoryIds.length > 0) {
+          params.set("fsq_category_ids", spec.categoryIds.join(","));
+        }
+        return params;
       }
 
-      try {
-        const res = await fetch(`${FOURSQUARE_SEARCH_URL}?${params}`, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "X-Places-Api-Version": API_VERSION,
-            Accept: "application/json",
-          },
-        });
+      async function run(
+        withCategoryIds: boolean
+      ): Promise<{ ok: true; result: PlacesSearchResult } | { ok: false; status: number }> {
+        const res = await fetch(
+          `${FOURSQUARE_SEARCH_URL}?${buildParams(withCategoryIds)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "X-Places-Api-Version": API_VERSION,
+              Accept: "application/json",
+            },
+          }
+        );
 
         if (!res.ok) {
           const body = await res.text().catch(() => "");
@@ -239,9 +291,10 @@ export function createFoursquareProvider(): PlacesProvider {
             status: res.status,
             category,
             city: location.city,
+            withCategoryIds,
             body: body.slice(0, 300),
           });
-          return { places: [], candidateCount: 0 };
+          return { ok: false, status: res.status };
         }
 
         const data = (await res.json()) as { results?: unknown[] };
@@ -253,11 +306,35 @@ export function createFoursquareProvider(): PlacesProvider {
         console.log("[places:foursquare] search ok", {
           category,
           city: location.city,
+          withCategoryIds,
           candidateCount: rawResults.length,
           normalizedCount: places.length,
         });
 
-        return { places, candidateCount: rawResults.length };
+        return {
+          ok: true,
+          result: { places, candidateCount: rawResults.length },
+        };
+      }
+
+      try {
+        const first = await run(true);
+        if (first.ok) return first.result;
+
+        // A category id that turns out to be wrong 400s the WHOLE request
+        // rather than just returning zero results — retry once, text-only,
+        // so one bad id degrades gracefully instead of silently emptying
+        // this category for the whole metro all week (cache is weekly).
+        if (first.status === 400 && spec.categoryIds.length > 0) {
+          console.warn("[places:foursquare] retrying without category ids", {
+            category,
+            city: location.city,
+          });
+          const retry = await run(false);
+          if (retry.ok) return retry.result;
+        }
+
+        return { places: [], candidateCount: 0 };
       } catch (err) {
         console.error("[places:foursquare] search failure", {
           category,
