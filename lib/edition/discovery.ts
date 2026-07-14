@@ -69,6 +69,16 @@ export type DiscoveryItem = {
   /** Provider-supplied category names (e.g. Foursquare "Coffee Shop") — editorial context only. */
   venueCategories?: string[];
   tags: string[];
+  /** Server-enriched Kindred library / stock photo (never searched client-side). */
+  editorialImage?: {
+    url: string;
+    libraryId: string;
+    source: "pexels" | "pixabay" | "provider" | "kindred";
+    orientation?: "portrait" | "landscape" | "square";
+    photographerName?: string | null;
+    sourcePageUrl?: string | null;
+    attributionText?: string | null;
+  } | null;
 };
 
 export type RankedDiscoveryItem = {

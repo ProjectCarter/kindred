@@ -42,7 +42,7 @@ import {
   type LocalEventsLoadStatus,
 } from "../lib/edition/localEventsPipeline";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
-import { resetImageRegistry } from "../lib/edition/imageRegistry";
+import { resetImageRegistry, claimRemoteImage } from "../lib/edition/imageRegistry";
 import {
   freezeEdition,
   getFrozenDiscovery,
@@ -174,10 +174,19 @@ const SEASONAL_IMAGE_BY_MONTH: ImageSourcePropType[] = [
 function banditsPickImage(
   pick: BanditsPickData,
   editionDate?: string | null
-): ImageSourcePropType {
+): ImageSourcePropType | null {
   const { kind, story } = pick;
   const realPhoto = story.imageUrl?.trim();
   if (realPhoto) return { uri: realPhoto };
+
+  if (story.discoveryItem?.editorialImage?.url?.trim()) {
+    const remote = claimRemoteImage(
+      story.id,
+      story.discoveryItem.editorialImage.url.trim(),
+      story.discoveryItem.editorialImage.libraryId
+    );
+    if (remote) return remote;
+  }
 
   if (kind === "article") {
     return wireOrFallbackImage({
@@ -210,16 +219,9 @@ function banditsPickImage(
   );
 }
 
-/**
- * Local businesses (coffee, restaurants) never carry a provider photo —
- * Foursquare's photo field is a paid tier Kindred doesn't use. Give each
- * a real category-matched photograph instead of leaving the side card
- * blank — the shared image registry already keeps this pair (and every
- * other photo in today's edition) visually distinct from one another.
- */
 function localBizSideImages(
   items: RankedDiscoveryItem[]
-): ImageSourcePropType[] {
+): Array<ImageSourcePropType | null> {
   return items.map((d) => experienceImageFor(d.item.category, d.item.id, d.item));
 }
 

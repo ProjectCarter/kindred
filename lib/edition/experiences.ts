@@ -13,7 +13,7 @@ import type {
 } from "./discovery";
 import { discoveryItemsForSurface } from "./discovery";
 import { claimImage, NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
-import { categoryImageIsConfident } from "./imageConfidence";
+import { resolveDiscoveryItemImage } from "./resolveItemImage";
 
 /** Categories that read as “go there today” experiences. */
 export const EXPERIENCE_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
@@ -115,7 +115,7 @@ export type ExperienceCard = {
   headline: string;
   dek: string;
   location: string | null;
-  image: ImageSourcePropType;
+  image: ImageSourcePropType | null;
 };
 
 export type ExperiencesSelection = {
@@ -138,11 +138,17 @@ export function experienceCategoryLabel(category: string): string {
 export function experienceImageFor(
   category: string,
   id: string,
-  context?: { title?: string | null; dek?: string | null; venueCategories?: string[] | null }
-): ImageSourcePropType {
-  const confident = context ? categoryImageIsConfident(category, context) : true;
-  const pool = confident ? CATEGORY_PHOTOS[category] ?? FALLBACK_PHOTOS : NEUTRAL_PLACEHOLDERS;
-  return claimImage(id, pool);
+  context?: RankedDiscoveryItem["item"]
+): ImageSourcePropType | null {
+  const pool = CATEGORY_PHOTOS[category] ?? FALLBACK_PHOTOS;
+  if (!context) {
+    return claimImage(id, pool, NEUTRAL_PLACEHOLDERS, false);
+  }
+  return resolveDiscoveryItemImage({
+    id,
+    item: context,
+    bundledPool: pool,
+  });
 }
 
 /**
@@ -153,7 +159,7 @@ export function experienceImageFor(
  */
 function assignExperienceImages(
   items: RankedDiscoveryItem[]
-): ImageSourcePropType[] {
+): Array<ImageSourcePropType | null> {
   return items.map((d) => experienceImageFor(d.item.category, d.item.id, d.item));
 }
 
@@ -259,7 +265,7 @@ export function collectExperienceItems(
 function toCard(
   d: RankedDiscoveryItem,
   city: string | null,
-  image: ImageSourcePropType
+  image: ImageSourcePropType | null
 ): ExperienceCard {
   return {
     id: d.item.id,

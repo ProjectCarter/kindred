@@ -73,9 +73,7 @@ export function EditorialCardGrid({
   const halfGap = 12;
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
-  const completeCards = cards.filter(
-    (card) => Boolean(card.title?.trim()) && Boolean(card.image)
-  );
+  const completeCards = cards.filter((card) => Boolean(card.title?.trim()));
   const visible =
     typeof limit === "number" ? completeCards.slice(0, limit) : completeCards;
   const remainingCount = completeCards.length - visible.length;

@@ -42,7 +42,7 @@ import {
   getLocalEvents,
   type LocalEvent,
 } from "./localEvents/provider.ts";
-import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDiscovery.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlaces } from "./places/index.ts";
 
@@ -920,6 +920,27 @@ export async function buildEditionForUser(
     recentKeys: recentDiscoveryKeys,
   });
 
+  let discoveryWithImages: DiscoveryPayload = discovery;
+  try {
+    discoveryWithImages = await enrichDiscoveryImages(supabaseAdmin, discovery, {
+      banditPickItemId: banditsPickStory?.discoveryItem?.id ?? null,
+      seedIfSparse: true,
+    });
+    if (banditsPickStory?.discoveryItem?.id) {
+      const enrichedItem = findDiscoveryItemById(
+        discoveryWithImages,
+        banditsPickStory.discoveryItem.id
+      );
+      if (enrichedItem?.editorialImage) {
+        banditsPickStory.discoveryItem.editorialImage =
+          enrichedItem.editorialImage;
+      }
+    }
+    console.log("[buildEdition] discovery images enriched");
+  } catch (imageErr) {
+    console.warn("[buildEdition] discovery image enrichment failed", imageErr);
+  }
+
   const knowledgeStories: KnowledgeStoryInput[] = [];
   if (leadStory) {
     knowledgeStories.push({
@@ -1514,7 +1535,7 @@ export async function buildEditionForUser(
         editorial_context: editorialContextWithMorning,
         lead_story: leadStory,
         bandit,
-        discovery,
+        discovery: discoveryWithImages,
         knowledge,
         memory,
         morning_edition: morningEdition,
@@ -1546,7 +1567,7 @@ export async function buildEditionForUser(
           editorial_context: editorialContextWithMorning,
           lead_story: leadStory,
           bandit,
-          discovery,
+          discovery: discoveryWithImages,
           knowledge,
           memory,
         },

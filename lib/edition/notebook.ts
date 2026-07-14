@@ -12,8 +12,7 @@ import type {
   RankedDiscoveryItem,
 } from "./discovery";
 import { discoveryItemsForSurface } from "./discovery";
-import { claimImage } from "./imageRegistry";
-import { categoryImageIsConfident } from "./imageConfidence";
+import { resolveDiscoveryItemImage } from "./resolveItemImage";
 
 /** Editor’s notebook mix — places, culture, and quiet media. */
 const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
@@ -134,7 +133,7 @@ export type NotebookCard = {
   category: string;
   headline: string;
   note: string;
-  image: ImageSourcePropType;
+  image: ImageSourcePropType | null;
 };
 
 function categoryLabel(category: string): string {
@@ -247,15 +246,18 @@ function diversify(
  */
 function assignUniqueImages(
   items: RankedDiscoveryItem[]
-): ImageSourcePropType[] {
+): Array<ImageSourcePropType | null> {
   return items.map((d) => {
-    const confident = categoryImageIsConfident(d.item.category, d.item);
-    const prefs = confident ? CATEGORY_PHOTO_PREFS[d.item.category] ?? [] : [];
+    const prefs = CATEGORY_PHOTO_PREFS[d.item.category] ?? [];
     const preferredPool = prefs
       .filter((i) => i >= 0 && i < NOTEBOOK_PHOTO_POOL.length)
       .map((i) => NOTEBOOK_PHOTO_POOL[i]);
     const pool = preferredPool.length > 0 ? preferredPool : NOTEBOOK_PHOTO_POOL;
-    return claimImage(d.item.id, pool, NOTEBOOK_PHOTO_POOL);
+    return resolveDiscoveryItemImage({
+      id: d.item.id,
+      item: d.item,
+      bundledPool: pool,
+    });
   });
 }
 

@@ -67,7 +67,7 @@ export function eventFallbackImage(
 ): ImageSourcePropType {
   const primary = EVENT_FALLBACK_IMAGE[category ?? "community"] ?? EVENT_FALLBACK_IMAGE.community;
   if (!id) return primary;
-  return claimImage(id, [primary], ALL_EVENT_FALLBACK_IMAGES);
+  return claimImage(id, [primary], ALL_EVENT_FALLBACK_IMAGES) ?? primary;
 }
 
 export type LocalEventCard = {

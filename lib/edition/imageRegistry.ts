@@ -29,6 +29,8 @@ export const NEUTRAL_PLACEHOLDERS: ImageSourcePropType[] = [
 let currentEditionKey: string | null = null;
 let assignedByItemId = new Map<string, ImageSourcePropType>();
 let usedImages = new Set<ImageSourcePropType>();
+let usedRemoteUrls = new Set<string>();
+let usedLibraryIds = new Set<string>();
 
 /**
  * Call once per edition (keyed by edition date or id) before any section
@@ -41,6 +43,8 @@ export function resetImageRegistry(editionKey: string | null | undefined): void 
   currentEditionKey = key;
   assignedByItemId = new Map();
   usedImages = new Set();
+  usedRemoteUrls = new Set();
+  usedLibraryIds = new Set();
 }
 
 function hashId(id: string): number {
@@ -61,8 +65,9 @@ function hashId(id: string): number {
 export function claimImage(
   id: string,
   pool: ImageSourcePropType[],
-  extraPool: ImageSourcePropType[] = NEUTRAL_PLACEHOLDERS
-): ImageSourcePropType {
+  extraPool: ImageSourcePropType[] = NEUTRAL_PLACEHOLDERS,
+  allowReuseWhenExhausted = true
+): ImageSourcePropType | null {
   const already = assignedByItemId.get(id);
   if (already) return already;
 
@@ -90,13 +95,41 @@ export function claimImage(
     }
   }
 
-  // Every candidate already shown today — reuse rather than render nothing.
+  // Pool exhausted — prefer an honest no-image card over repeating photography.
+  if (!allowReuseWhenExhausted) {
+    return null;
+  }
+
   const fallback = safePool[start] ?? extraPool[0];
   assignedByItemId.set(id, fallback);
   return fallback;
 }
 
+/**
+ * Claim a remote library URL for this edition. Same id is stable across
+ * re-renders; duplicate URLs are rejected so one photo never appears twice.
+ */
+export function claimRemoteImage(
+  id: string,
+  uri: string,
+  libraryId?: string | null
+): ImageSourcePropType | null {
+  const already = assignedByItemId.get(id);
+  if (already) return already;
+
+  const trimmed = uri.trim();
+  if (!trimmed) return null;
+  if (usedRemoteUrls.has(trimmed)) return null;
+  if (libraryId && usedLibraryIds.has(libraryId)) return null;
+
+  const source: ImageSourcePropType = { uri: trimmed };
+  usedRemoteUrls.add(trimmed);
+  if (libraryId) usedLibraryIds.add(libraryId);
+  assignedByItemId.set(id, source);
+  return source;
+}
+
 /** A subject-neutral placeholder, still deduped against everything else claimed today. */
-export function claimPlaceholder(id: string): ImageSourcePropType {
+export function claimPlaceholder(id: string): ImageSourcePropType | null {
   return claimImage(id, NEUTRAL_PLACEHOLDERS, NEUTRAL_PLACEHOLDERS);
 }

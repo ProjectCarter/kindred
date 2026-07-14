@@ -121,12 +121,16 @@ function NotebookPage({
       ]}
     >
       <View style={styles.photoFrame}>
-        <Image
-          source={card.image}
-          style={{ width: "100%", height: photoH }}
-          resizeMode="cover"
-          accessibilityLabel={card.headline}
-        />
+        {card.image ? (
+          <Image
+            source={card.image}
+            style={{ width: "100%", height: photoH }}
+            resizeMode="cover"
+            accessibilityLabel={card.headline}
+          />
+        ) : (
+          <View style={[styles.photoFallback, { height: photoH }]} />
+        )}
       </View>
       <View style={styles.copy}>
         <Text style={styles.rubric} maxFontSizeMultiplier={1.1}>
@@ -201,6 +205,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
     width: "100%",
+  },
+  photoFallback: {
+    backgroundColor: paper.creamDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.border,
   },
   copy: {
     paddingTop: 20,

@@ -9,7 +9,8 @@
 import type { ImageSourcePropType } from "react-native";
 import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
-import { claimImage, NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
+import { resolveDiscoveryItemImage } from "./resolveItemImage";
+import { NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -134,9 +135,14 @@ export function activityOverline(item: RankedDiscoveryItem["item"]): string {
 
 export function activityImageFor(
   item: RankedDiscoveryItem["item"]
-): ImageSourcePropType {
-  const pool = SUBTYPE_PHOTOS[inferSubtype(item)];
-  return claimImage(item.id, pool);
+): ImageSourcePropType | null {
+  const subtype = inferSubtype(item);
+  const pool = SUBTYPE_PHOTOS[subtype];
+  return resolveDiscoveryItemImage({
+    id: item.id,
+    item,
+    bundledPool: pool,
+  });
 }
 
 export function activityLocationLine(
