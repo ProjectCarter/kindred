@@ -71,10 +71,148 @@ export function isThirdPartyListingUrl(url: string | null | undefined): boolean 
   return /foursquare\.com/i.test(url);
 }
 
+const TICKET_PROVIDER_PATTERN =
+  /\b(ticketmaster|eventbrite|axs|dice\.fm|seatgeek|stubhub|universe\.com|tickets\.com|showclix)\b/i;
+
+export function isThirdPartyTicketUrl(url: string | null | undefined): boolean {
+  if (!url?.trim()) return false;
+  return TICKET_PROVIDER_PATTERN.test(url);
+}
+
 export function isOfficialProviderUrl(url: string | null | undefined): boolean {
   if (!url?.trim()) return false;
   if (isThirdPartyListingUrl(url)) return false;
+  if (isThirdPartyTicketUrl(url)) return false;
   return true;
+}
+
+/** Split listing URL into ticket vs official website — never duplicate the same third-party link twice. */
+export function resolveEventSourceUrls(event: LocalEventCard): {
+  ticketUrl: string | null;
+  websiteUrl: string | null;
+} {
+  const listingUrl = event.sourceUrl?.trim() || null;
+  if (!listingUrl) return { ticketUrl: null, websiteUrl: null };
+
+  const badges = eventInfoBadgesFor(event);
+  const isFree = badges.includes("free");
+  const ticketsRequired = badges.includes("tickets_required");
+  const ticketProvider = isThirdPartyTicketUrl(listingUrl);
+  const official = isOfficialProviderUrl(listingUrl);
+
+  if (ticketsRequired && !isFree) {
+    return {
+      ticketUrl: listingUrl,
+      websiteUrl: ticketProvider ? null : official ? null : null,
+    };
+  }
+
+  if (official) {
+    return { ticketUrl: null, websiteUrl: listingUrl };
+  }
+
+  return { ticketUrl: null, websiteUrl: null };
+}
+
+function hasVerifiedEventLocation(event: LocalEventCard): boolean {
+  const venue = event.venue?.trim();
+  if (venue && venue !== "Venue TBA") return true;
+  if (event.city?.trim()) return true;
+  if (
+    typeof event.lat === "number" &&
+    Number.isFinite(event.lat) &&
+    typeof event.lon === "number" &&
+    Number.isFinite(event.lon)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Event article — discovery stays on cards; decision-making lives in the reader. */
+export function resolveEventArticleActions(
+  event: LocalEventCard
+): ActionBarAction[] {
+  const out: ActionBarAction[] = [];
+  const seen = new Set<string>();
+  const badges = eventInfoBadgesFor(event);
+  const isFree = badges.includes("free");
+  const ticketsRequired = badges.includes("tickets_required");
+  const { ticketUrl, websiteUrl } = resolveEventSourceUrls(event);
+
+  if (ticketsRequired && !isFree && ticketUrl) {
+    pushUniqueUrl(
+      out,
+      {
+        id: "buy_tickets",
+        label: "Buy Tickets",
+        icon: "🎟",
+        kind: "url",
+        url: ticketUrl,
+      },
+      seen
+    );
+  }
+
+  if (hasVerifiedEventLocation(event)) {
+    const maps = mapsAction(localEventMapsDestination(event));
+    if (maps) {
+      pushUniqueUrl(
+        out,
+        { ...maps, label: "Open in Maps" },
+        seen
+      );
+    }
+  }
+
+  const site = websiteAction(websiteUrl, "Official Website");
+  if (site) pushUniqueUrl(out, site, seen);
+
+  return out;
+}
+
+export function resolveEventArticleActionsFromArticle(
+  article: KindredArticle
+): ActionBarAction[] {
+  const ctx = article.actionContext;
+  if (ctx?.surface !== "event") return [];
+
+  const savedPlace = article.savedLocation?.trim() ?? "";
+  const placeParts = savedPlace.split(",").map((p) => p.trim()).filter(Boolean);
+  const venue = placeParts.length > 1 ? placeParts.slice(0, -1).join(", ") : placeParts[0] ?? "";
+  const city = placeParts.length > 1 ? placeParts[placeParts.length - 1] ?? "" : "";
+
+  return resolveEventArticleActions({
+    name: article.headline,
+    date: "",
+    time: "",
+    venue,
+    city,
+    sourceUrl: ctx.ticketUrl ?? ctx.websiteUrl ?? article.sourceUrl ?? "",
+    sourceName: article.source,
+    lat: ctx.mapsDestination?.lat,
+    lon: ctx.mapsDestination?.lon,
+    badges: ctx.isFreeEvent
+      ? ["free"]
+      : ctx.ticketsRequired
+        ? ["tickets_required"]
+        : undefined,
+  });
+}
+
+/** @deprecated Homepage cards no longer show actions — use resolveEventArticleActions in the reader. */
+export function resolveActionsForLocalEvent(
+  event: LocalEventCard,
+  options?: { includeSave?: boolean }
+): ActionBarAction[] {
+  if (options?.includeSave === false) {
+    return resolveEventArticleActions(event);
+  }
+  const out = resolveEventArticleActions(event);
+  const seen = new Set(out.map((a) => a.id));
+  pushUniqueUrl(out, saveAction(), seen);
+  pushUniqueUrl(out, shareAction(), seen);
+  return out;
 }
 
 function pushUniqueUrl(
@@ -145,67 +283,6 @@ function localEventMapsDestination(event: LocalEventCard): MapsDestination {
     name: event.venue?.trim() || event.name?.trim() || null,
     city: event.city?.trim() || null,
   };
-}
-
-/** Local Events card / article actions. */
-export function resolveActionsForLocalEvent(
-  event: LocalEventCard,
-  options?: { includeSave?: boolean }
-): ActionBarAction[] {
-  const out: ActionBarAction[] = [];
-  const seen = new Set<string>();
-  const badges = eventInfoBadgesFor(event);
-  const isFree = badges.includes("free");
-  const ticketsRequired = badges.includes("tickets_required");
-  const listingUrl = event.sourceUrl?.trim() || null;
-
-  if (listingUrl) {
-    if (ticketsRequired && !isFree) {
-      pushUniqueUrl(
-        out,
-        {
-          id: "buy_tickets",
-          label: "Buy Tickets",
-          icon: "🎟",
-          kind: "url",
-          url: listingUrl,
-        },
-        seen
-      );
-    } else if (isFree) {
-      pushUniqueUrl(
-        out,
-        {
-          id: "reserve_spot",
-          label: "Reserve Spot",
-          icon: "✅",
-          kind: "url",
-          url: listingUrl,
-        },
-        seen
-      );
-    } else {
-      pushUniqueUrl(
-        out,
-        {
-          id: "official_event_page",
-          label: "Official Event Page",
-          icon: "🌐",
-          kind: "url",
-          url: listingUrl,
-        },
-        seen
-      );
-    }
-  }
-
-  const maps = mapsAction(localEventMapsDestination(event));
-  if (maps) pushUniqueUrl(out, maps, seen);
-
-  if (options?.includeSave !== false) pushUniqueUrl(out, saveAction(), seen);
-  pushUniqueUrl(out, shareAction(), seen);
-
-  return out;
 }
 
 function discoveryMapsDestination(
@@ -393,6 +470,58 @@ function mapsDestinationFromSavedLocation(
   return { address: line };
 }
 
+/** Practical article actions only — no Pin / Save / Share (those stay in the hero row). */
+export function resolveArticleContextActions(
+  article: KindredArticle,
+  options?: { fallbackCity?: string | null }
+): ActionBarAction[] {
+  const ctx = article.actionContext;
+  let actions: ActionBarAction[];
+
+  if (!ctx) {
+    const out: ActionBarAction[] = [];
+    const seen = new Set<string>();
+    const fallbackDest = mapsDestinationFromSavedLocation(article.savedLocation);
+    if (fallbackDest) {
+      const maps = mapsAction(fallbackDest);
+      if (maps) pushUniqueUrl(out, maps, seen);
+    }
+    const site = websiteAction(
+      article.sourceUrl,
+      article.section === "bandits_pick" ? "Learn More" : "Official Website",
+      article.section === "bandits_pick" ? "learn_more" : "website"
+    );
+    if (site) pushUniqueUrl(out, site, seen);
+    actions = out;
+  } else if (ctx.surface === "event") {
+    actions = resolveEventArticleActionsFromArticle(article);
+  } else if (ctx.surface === "activity") {
+    actions = resolveActionsForActivity(discoveryItemFromContext(article, ctx), {
+      fallbackCity: options?.fallbackCity,
+      includeSave: false,
+    });
+  } else if (ctx.surface === "bandits_pick") {
+    actions = resolveActionsForBanditsPick({
+      url: ctx.websiteUrl ?? article.sourceUrl,
+      mapsDestination:
+        ctx.mapsDestination ??
+        mapsDestinationFromSavedLocation(article.savedLocation),
+      includeSave: false,
+    });
+  } else {
+    actions = resolveActionsForRecommendation(
+      discoveryItemFromContext(article, ctx),
+      { fallbackCity: options?.fallbackCity, includeSave: false }
+    );
+  }
+
+  return actions
+    .filter((a) => a.kind !== "save" && a.kind !== "share")
+    .map((a) =>
+      a.id === "maps" ? { ...a, label: "Open in Maps" } : a
+    );
+}
+
 /** Resolve from a KindredArticle + optional stored context. */
 export function resolveActionsForArticle(
   article: KindredArticle,
@@ -419,25 +548,7 @@ export function resolveActionsForArticle(
   }
 
   if (ctx.surface === "event") {
-    return resolveActionsForLocalEvent(
-      {
-        name: article.headline,
-        date: "",
-        time: "",
-        venue: article.savedLocation?.split(",")[0]?.trim() ?? "",
-        city: article.savedLocation?.split(",").slice(-1)[0]?.trim() ?? "",
-        sourceUrl: ctx.ticketUrl ?? ctx.websiteUrl ?? article.sourceUrl ?? "",
-        sourceName: article.source,
-        lat: ctx.mapsDestination?.lat,
-        lon: ctx.mapsDestination?.lon,
-        badges: ctx.isFreeEvent
-          ? ["free"]
-          : ctx.ticketsRequired
-            ? ["tickets_required"]
-            : undefined,
-      },
-      { includeSave: true }
-    );
+    return resolveEventArticleActionsFromArticle(article);
   }
 
   if (ctx.surface === "activity") {
@@ -492,11 +603,12 @@ function discoveryItemFromContext(
 
 export function actionContextFromLocalEvent(event: LocalEventCard): ActionBarContext {
   const badges = eventInfoBadgesFor(event);
+  const { ticketUrl, websiteUrl } = resolveEventSourceUrls(event);
   return {
     surface: "event",
     mapsDestination: localEventMapsDestination(event),
-    websiteUrl: event.sourceUrl?.trim() || null,
-    ticketUrl: event.sourceUrl?.trim() || null,
+    websiteUrl,
+    ticketUrl,
     isFreeEvent: badges.includes("free"),
     ticketsRequired: badges.includes("tickets_required"),
   };

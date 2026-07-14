@@ -13,7 +13,6 @@ import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
 import { resolveVenueClassification } from "./venueClassification";
-import { resolveActionsForRecommendation } from "./actionBar";
 import {
   isLowValueVenue,
   isScenicOrHiddenGem,
@@ -137,10 +136,6 @@ export function selectRecommendationCards(
     title: d.item.title.trim(),
     subtitle: recommendationLocationLine(d.item, options?.city),
     note: recommendationNote(d.item),
-    actions: resolveActionsForRecommendation(d.item, {
-      fallbackCity: options?.city,
-      includeSave: false,
-    }),
   }));
 }
 

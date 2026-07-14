@@ -3,11 +3,16 @@ import {
   resolveActionsForBanditsPick,
   resolveActionsForLocalEvent,
   resolveActionsForRecommendation,
+  resolveArticleContextActions,
+  resolveEventArticleActions,
+  resolveEventSourceUrls,
   buildMapsUrl,
   isThirdPartyListingUrl,
+  isThirdPartyTicketUrl,
   GOOGLE_MAPS_ACTION_LABEL,
 } from "./actionBar";
 import { buildGoogleMapsSearchUrl } from "./googleMaps";
+import { articleFromLocalEvent } from "./article";
 import type { DiscoveryItem } from "./discovery";
 import type { LocalEventCard } from "./localEvents";
 
@@ -100,12 +105,13 @@ function npsParkItem(): DiscoveryItem {
 }
 
 describe("Universal Action Bar", () => {
-  it("paid event surfaces Buy Tickets and Google Maps, not fabricated links", () => {
-    const actions = resolveActionsForLocalEvent(paidEvent(), { includeSave: false });
-    expect(actions.some((a) => a.label === "Buy Tickets")).toBe(true);
-    expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
-    expect(actions.some((a) => a.label === "Share")).toBe(true);
-    expect(actions.some((a) => a.label === "Reserve Spot")).toBe(false);
+  it("paid event article surfaces Buy Tickets and Open in Maps without Share", () => {
+    const actions = resolveEventArticleActions(paidEvent());
+    expect(actions.map((a) => a.label)).toEqual([
+      "Buy Tickets",
+      "Open in Maps",
+    ]);
+    expect(actions.some((a) => a.label === "Share")).toBe(false);
   });
 
   it("event with coordinates builds a coordinate Google Maps URL", () => {
@@ -114,18 +120,45 @@ describe("Universal Action Bar", () => {
       lat: 33.4617,
       lon: -111.9446,
     };
-    const actions = resolveActionsForLocalEvent(event, { includeSave: false });
+    const actions = resolveEventArticleActions(event);
     const maps = actions.find((a) => a.id === "maps");
-    expect(maps?.label).toBe(GOOGLE_MAPS_ACTION_LABEL);
+    expect(maps?.label).toBe("Open in Maps");
     expect(maps?.url).toContain("33.4617");
     expect(maps?.url).toContain("-111.9446");
     expect(maps?.url).toContain("google.com/maps/search");
   });
 
-  it("free event surfaces Reserve Spot instead of Buy Tickets", () => {
-    const actions = resolveActionsForLocalEvent(freeEvent(), { includeSave: false });
-    expect(actions.some((a) => a.label === "Reserve Spot")).toBe(true);
+  it("free official event surfaces Official Website instead of Buy Tickets", () => {
+    const actions = resolveEventArticleActions(freeEvent());
+    expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === "Buy Tickets")).toBe(false);
+    expect(actions.some((a) => a.label === "Reserve Spot")).toBe(false);
+  });
+
+  it("ticket provider URL is used for tickets, not as official website", () => {
+    const urls = resolveEventSourceUrls({
+      ...paidEvent(),
+      sourceUrl: "https://www.eventbrite.com/e/summer-concert-123",
+      sourceName: "Eventbrite",
+    });
+    expect(urls.ticketUrl).toContain("eventbrite.com");
+    expect(urls.websiteUrl).toBeNull();
+    expect(isThirdPartyTicketUrl(urls.ticketUrl)).toBe(true);
+  });
+
+  it("legacy resolveActionsForLocalEvent with includeSave adds save and share", () => {
+    const actions = resolveActionsForLocalEvent(paidEvent());
+    expect(actions.some((a) => a.label === "Share")).toBe(true);
+    expect(actions.some((a) => a.label === "Save to Today's Board")).toBe(true);
+  });
+
+  it("article context actions omit save and share", () => {
+    const article = articleFromLocalEvent(paidEvent());
+    const actions = resolveArticleContextActions(article);
+    expect(actions.some((a) => a.kind === "save")).toBe(false);
+    expect(actions.some((a) => a.kind === "share")).toBe(false);
+    expect(actions.some((a) => a.label === "Buy Tickets")).toBe(true);
+    expect(actions.some((a) => a.label === "Open in Maps")).toBe(true);
   });
 
   it("restaurant surfaces menu, Google Maps, website, and call when provider data exists", () => {

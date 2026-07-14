@@ -63,10 +63,10 @@ import { ContentTemplateModules } from "./ContentTemplateModules";
 import {
   categoryLabelForType,
 } from "../lib/edition/contentSystem";
-import { ActionBar } from "./ActionBar";
 import {
-  resolveActionsForArticle,
+  resolveArticleContextActions,
 } from "../lib/edition/actionBar";
+import { ArticleActionList } from "./ArticleActionList";
 
 type Props = {
   article: KindredArticle;
@@ -129,8 +129,8 @@ export function ArticleReader({
   const briefing = isKindredBriefing(article);
   const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
   const canClip = Boolean(clipTarget);
-  const articleActions = useMemo(
-    () => resolveActionsForArticle(article),
+  const articleContextActions = useMemo(
+    () => resolveArticleContextActions(article),
     [article]
   );
   const continueItems = companion?.continueReading ?? [];
@@ -746,6 +746,10 @@ export function ArticleReader({
               </Text>
             ) : null}
 
+            {articleContextActions.length > 0 ? (
+              <ArticleActionList actions={articleContextActions} />
+            ) : null}
+
             {/* 2. Category — desk label from Universal Content System when known */}
             <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
               {briefing
@@ -913,26 +917,6 @@ export function ArticleReader({
                   />
                 ))}
               </EndMatterBlock>
-            ) : null}
-
-            {articleActions.length > 0 ? (
-              <View style={styles.actionsBlock}>
-                <Text style={styles.actionsKicker}>Take the next step</Text>
-                <ActionBar
-                  actions={articleActions}
-                  variant="article"
-                  clipped={clipped}
-                  onSave={canClip ? () => void handleToggleClip() : undefined}
-                  shareMessage={[
-                    article.headline,
-                    article.dek,
-                    article.sourceUrl,
-                  ]
-                    .filter(Boolean)
-                    .join("\n\n")}
-                  shareTitle={article.headline}
-                />
-              </View>
             ) : null}
 
             <View style={styles.actionsBlock}>
