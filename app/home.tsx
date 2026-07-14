@@ -59,6 +59,19 @@ import {
 import { localEditionDate } from "../lib/edition/dates";
 import { syncDeviceTimezone } from "../lib/edition/timezone";
 import { maybeTriggerLiveRefresh } from "../lib/edition/liveRefresh";
+import {
+  clearEditionFreeze,
+  freezeEdition,
+  isEditionFrozen,
+  mergeFrozenSections,
+  setFrozenHeroImageId,
+} from "../lib/edition/editionFreeze";
+import {
+  loadCachedEdition,
+  saveCachedEdition,
+  type CachedEditionBundle,
+} from "../lib/edition/editionCache";
+import { loadWithRetry } from "../lib/edition/loadWithRetry";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -133,6 +146,10 @@ export default function HomeScreen() {
   const mastheadScrollY = useRef(new Animated.Value(0)).current;
   /** One auto-regen per edition id + active city. */
   const autoRegenKey = useRef<string | null>(null);
+  /** True once today's ready edition has been painted — blocks disruptive reloads. */
+  const editionFrozenRef = useRef(false);
+  /** Cached bundle used when the network is slow or unavailable. */
+  const cachedBundleRef = useRef<CachedEditionBundle | null>(null);
 
   /** Tracks location when home last focused — reload edition if it changes. */
   const focusedLocationKeyRef = useRef<string | null>(null);
@@ -301,21 +318,60 @@ export default function HomeScreen() {
     day: "numeric",
   });
 
-  const loadEdition = useCallback(async (isRefresh = false) => {
+  function applyCachedBundle(bundle: CachedEditionBundle): void {
+    cachedBundleRef.current = bundle;
+    setSections(bundle.sections);
+    setEditionDate(bundle.editionDate);
+    setEditionId(bundle.editionId);
+    setLeadStory(bundle.leadStory);
+    setTopStories(bundle.topStories);
+    setBandit(bundle.bandit);
+    setIntelligence(bundle.intelligence);
+    freezeEdition({
+      editionId: bundle.editionId,
+      editionDate: bundle.editionDate,
+      discovery: bundle.intelligence?.discovery ?? null,
+      discoveryItems: bundle.intelligence?.discoveryItems ?? null,
+      heroImageId: bundle.heroImageId ?? null,
+    });
+    if (bundle.heroImageId) setFrozenHeroImageId(bundle.heroImageId);
+    editionFrozenRef.current = true;
+  }
+
+  type LoadEditionOptions = {
+    isRefresh?: boolean;
+    /** Background fetch — never clear the folio or show a spinner. */
+    quiet?: boolean;
+    /** Only patch structured local event facts; ignore discovery reshuffles. */
+    eventsOnly?: boolean;
+  };
+
+  function parseLoadOptions(
+    input?: boolean | LoadEditionOptions
+  ): LoadEditionOptions {
+    if (typeof input === "boolean") return { isRefresh: input };
+    return input ?? {};
+  }
+
+  const loadEdition = useCallback(async (input?: boolean | LoadEditionOptions) => {
+    const { isRefresh = false, quiet = false, eventsOnly = false } =
+      parseLoadOptions(input);
     const gen = ++loadGen.current;
-    const resetScroll = isRefresh || resetScrollOnLoadRef.current;
+    const resetScroll = isRefresh && !quiet;
     if (resetScroll) {
       resetScrollOnLoadRef.current = false;
       markHomeScrollForReset();
-    } else {
+    } else if (!quiet) {
       skipScrollRestoreRef.current = false;
     }
-    if (isRefresh) setRefreshing(true);
-    setError(null);
+    if (isRefresh && !quiet) setRefreshing(true);
+    if (!quiet) setError(null);
 
     // Withhold the previous folio immediately so a reload never flashes a
     // wrong-city or superseded edition while location/edition resolve.
     if (mountedRef.current && resetScroll) {
+      editionFrozenRef.current = false;
+      clearEditionFreeze();
       setSections([]);
       setEditionDate(null);
       setEditionId(null);
@@ -337,6 +393,7 @@ export default function HomeScreen() {
       return;
     }
 
+    const fetchEdition = async () => {
     const {
       data: { user },
       error: userError,
@@ -345,6 +402,8 @@ export default function HomeScreen() {
     if (__DEV__) {
       console.log("[home] loadEdition: start", {
         isRefresh,
+        quiet,
+        eventsOnly,
         userId: user?.id ?? null,
         userError: userError?.message ?? null,
       });
@@ -352,17 +411,7 @@ export default function HomeScreen() {
 
     if (!user) {
       if (__DEV__) console.warn("[home] loadEdition: no user", userError?.message);
-      if (mountedRef.current && gen === loadGen.current) {
-        const msg = userError?.message ?? "";
-        if (/jwt|expired|invalid.*token|refresh token/i.test(msg)) {
-          void supabase.auth.signOut();
-        } else if (userError) {
-          setError("The paper couldn’t be reached. Pull to try again.");
-        }
-        setLoading(false);
-        setRefreshing(false);
-      }
-      return;
+      return { kind: "no_user" as const, userError };
     }
 
     // Fire-and-forget — lets overnight generation compute this user's own
@@ -376,6 +425,21 @@ export default function HomeScreen() {
         localEditionDate: todayStr,
         timezoneOffsetMinutes: new Date().getTimezoneOffset(),
       });
+    }
+
+    // Show a cached paper immediately on cold start while the network loads.
+    if (!quiet && !isRefresh && !editionIdRef.current) {
+      const cached = await loadCachedEdition(user.id, todayStr);
+      if (cached && mountedRef.current && gen === loadGen.current) {
+        applyCachedBundle(cached);
+        setLoading(false);
+        if (__DEV__) {
+          console.log("[home] loadEdition: hydrated from cache", {
+            editionId: cached.editionId,
+            sectionCount: cached.sections.length,
+          });
+        }
+      }
     }
 
     const {
@@ -436,27 +500,13 @@ export default function HomeScreen() {
           .eq("edition_date", todayStr)
           .maybeSingle(),
       ]);
-      if (!mountedRef.current || gen !== loadGen.current) return;
-      setSections([]);
-      setEditionDate(null);
-      setEditionId(null);
-      setLeadStory(null);
-      setTopStories([]);
-      setBandit(null);
-      setIntelligence(null);
-      setClippedIds(new Set());
-      setOlder(adjacent.older);
-      setBackgroundJob(
-        jobResult.data
-          ? { status: jobResult.data.status, lastError: jobResult.data.last_error }
-          : null
-      );
-      if (editionError) {
-        setError("The paper couldn’t be reached. Pull to try again.");
-      }
-      setLoading(false);
-      setRefreshing(false);
-      return;
+      return {
+        kind: "not_ready" as const,
+        user,
+        adjacent,
+        jobResult,
+        editionError,
+      };
     }
 
     const [
@@ -500,15 +550,89 @@ export default function HomeScreen() {
       httpStatus: sectionsStatus ?? null,
     });
 
-    __DEV__ && console.log("[home] loadEdition: render decision", {
-      willShowEmptyState: loaded.length === 0,
-      reason:
-        loaded.length === 0
-          ? "sections.length === 0 (empty-state branch)"
-          : "sections.length > 0 (EditionReader branch)",
+    return {
+      kind: "ready" as const,
+      user,
+      edition,
+      loaded,
+      adjacent,
+      sectionsError,
+    };
+    };
+
+    const result = await loadWithRetry(fetchEdition, {
+      label: "loadEdition",
+      onAttempt: (attempt, error) => {
+        if (__DEV__) {
+          console.log("[home] loadEdition: attempt", {
+            attempt,
+            error: error?.message ?? null,
+            hasCache: Boolean(cachedBundleRef.current),
+          });
+        }
+      },
     });
 
     if (!mountedRef.current || gen !== loadGen.current) return;
+
+    if (!result.ok) {
+      if (cachedBundleRef.current || editionFrozenRef.current) {
+        if (__DEV__) {
+          console.warn("[home] loadEdition: network failed, keeping printed paper", {
+            message: result.error.message,
+            elapsedMs: result.elapsedMs,
+          });
+        }
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setError("The paper couldn’t be reached. Pull to try again.");
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    const payload = result.value;
+
+    if (payload.kind === "no_user") {
+      const msg = payload.userError?.message ?? "";
+      if (/jwt|expired|invalid.*token|refresh token/i.test(msg)) {
+        void supabase.auth.signOut();
+      } else if (payload.userError) {
+        setError("The paper couldn’t be reached. Pull to try again.");
+      }
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (payload.kind === "not_ready") {
+      if (!cachedBundleRef.current && !editionFrozenRef.current) {
+        setSections([]);
+        setEditionDate(null);
+        setEditionId(null);
+        setLeadStory(null);
+        setTopStories([]);
+        setBandit(null);
+        setIntelligence(null);
+        setClippedIds(new Set());
+      }
+      setOlder(payload.adjacent.older);
+      setBackgroundJob(
+        payload.jobResult.data
+          ? { status: payload.jobResult.data.status, lastError: payload.jobResult.data.last_error }
+          : null
+      );
+      if (payload.editionError && !cachedBundleRef.current) {
+        setError("The paper couldn’t be reached. Pull to try again.");
+      }
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    const { user, edition, loaded, adjacent } = payload;
 
     // Resolve active location before deciding whether this edition is fresh.
     // Current Location mode always refreshes GPS when stale.
@@ -566,6 +690,8 @@ export default function HomeScreen() {
           editionId: edition.id,
         });
       }
+      editionFrozenRef.current = false;
+      clearEditionFreeze();
       markHomeScrollForReset();
       setSections([]);
       setEditionDate(null);
@@ -627,28 +753,49 @@ export default function HomeScreen() {
 
     setLocationMismatch(null);
     setBackgroundJob(null);
-    setSections(loaded);
-    setEditionDate(edition.edition_date);
-    setEditionId(edition.id);
-    setLeadStory(lead);
-    setTopStories(
-      topStoriesFromEditorialContext(
-        (edition as { editorial_context?: unknown }).editorial_context
-      )
-    );
-    setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
-    setIntelligence(intel);
-    setOlder(adjacent.older);
+
+    const frozenNow = isEditionFrozen({
+      editionId: edition.id,
+      editionDate: edition.edition_date,
+    });
+    const patchEventsOnly =
+      eventsOnly || (frozenNow && (quiet || editionFrozenRef.current));
+
+    if (patchEventsOnly && editionFrozenRef.current) {
+      setSections((prev) => mergeFrozenSections(prev, loaded));
+      setOlder(adjacent.older);
+    } else {
+      setSections(loaded);
+      setEditionDate(edition.edition_date);
+      setEditionId(edition.id);
+      setLeadStory(lead);
+      setTopStories(
+        topStoriesFromEditorialContext(
+          (edition as { editorial_context?: unknown }).editorial_context
+        )
+      );
+      setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
+      setIntelligence(intel);
+      freezeEdition({
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        discovery: intel.discovery ?? null,
+        discoveryItems: intel.discoveryItems ?? null,
+        heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+      });
+      editionFrozenRef.current = true;
+      setOlder(adjacent.older);
+    }
 
     if (loaded.length > 0) {
+      const sectionIdsForClips = patchEventsOnly
+        ? loaded.map((s) => s.id)
+        : loaded.map((s) => s.id);
       const { data: clips, error: clipsError } = await supabase
         .from("clippings")
         .select("section_id")
         .eq("user_id", user.id)
-        .in(
-          "section_id",
-          loaded.map((s) => s.id)
-        );
+        .in("section_id", sectionIdsForClips);
 
       if (clipsError && __DEV__) {
         console.error("[home] loadEdition: clippings query error", {
@@ -658,31 +805,56 @@ export default function HomeScreen() {
       }
 
       if (!mountedRef.current || gen !== loadGen.current) return;
-      setClippedIds(new Set((clips ?? []).map((c) => c.section_id)));
-    } else {
+      if (!patchEventsOnly) {
+        setClippedIds(new Set((clips ?? []).map((c) => c.section_id)));
+      }
+    } else if (!patchEventsOnly) {
       setClippedIds(new Set());
     }
 
     if (!mountedRef.current || gen !== loadGen.current) return;
+
+    if (!patchEventsOnly) {
+      const bundle: CachedEditionBundle = {
+        userId: user.id,
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        cachedAt: Date.now(),
+        sections: loaded,
+        leadStory: lead,
+        topStories: topStoriesFromEditorialContext(
+          (edition as { editorial_context?: unknown }).editorial_context
+        ),
+        bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
+        intelligence: intel,
+        heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+      };
+      cachedBundleRef.current = bundle;
+      void saveCachedEdition(bundle);
+    }
+
     setLoading(false);
     setRefreshing(false);
-    // Do not call restoreHomeScrollIfNeeded() here without a real content
-    // height — the ScrollView's layout may still reflect the previous
-    // (empty) render at this exact point, and locking in a scroll based
-    // on stale bounds would block the accurate onContentSizeChange-driven
-    // restore that follows once the new sections actually lay out.
 
-    // Fire-and-forget — the paper is already open and rendered; this only
-    // patches structured, factual data (event times/cancellations/tickets,
-    // qualifying recommendations) that legitimately changes during the day.
-    // Never a loading state, never a full rebuild. Throttled internally so
-    // repeated focuses/resumes don't hammer external APIs.
+    if (__DEV__) {
+      console.log("[home] loadEdition: render decision", {
+        patchEventsOnly,
+        sectionCount: loaded.length,
+        elapsedMs: result.elapsedMs,
+        attempt: result.attempt,
+      });
+    }
+
+    // Fire-and-forget — only structured event facts may patch through.
+    // Discovery reshuffles are ignored on the client for frozen editions.
     void maybeTriggerLiveRefresh({
       editionId: edition.id,
       editionDate: edition.edition_date,
       place: active.place,
-      onChanged: () => {
-        if (mountedRef.current) void loadEdition();
+      onEventsChanged: () => {
+        if (mountedRef.current) {
+          void loadEdition({ quiet: true, eventsOnly: true });
+        }
       },
     });
     } catch (err) {
@@ -693,7 +865,9 @@ export default function HomeScreen() {
         );
       }
       if (mountedRef.current && gen === loadGen.current) {
-        setError("The paper couldn’t be reached. Pull to try again.");
+        if (!editionFrozenRef.current && !cachedBundleRef.current) {
+          setError("The paper couldn’t be reached. Pull to try again.");
+        }
         setLoading(false);
         setRefreshing(false);
       }
@@ -763,6 +937,24 @@ export default function HomeScreen() {
     loadEdition();
   }, [loadEdition]);
 
+  // Never leave the reader on a spinner for minutes on cold start.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (
+        mountedRef.current &&
+        !editionIdRef.current &&
+        !cachedBundleRef.current
+      ) {
+        if (__DEV__) {
+          console.warn("[home] initial load exceeded 30s without a paper");
+        }
+        setError("The paper is taking longer than usual. Pull to try again.");
+        setLoading(false);
+      }
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // While the overnight job already has today's edition in progress, quietly
   // recheck rather than leaving the reader on a stale "isn't ready yet" —
   // no spinner, no scroll reset, just the same query loadEdition already
@@ -793,7 +985,7 @@ export default function HomeScreen() {
           setActiveLocation(active);
           focusedLocationKeyRef.current = activeLocationKey(active);
         }
-        void loadEdition(true);
+        void loadEdition({ quiet: true });
       })();
     };
     const sub = AppState.addEventListener("change", onChange);
@@ -940,8 +1132,10 @@ export default function HomeScreen() {
 
       setLocationMismatch(null);
       autoRegenKey.current = null;
+      editionFrozenRef.current = false;
+      clearEditionFreeze();
       resetScrollOnLoadRef.current = true;
-      await loadEdition();
+      await loadEdition(true);
       __DEV__ && console.log("[home] generate-edition: loadEdition finished");
     } catch (err) {
       if (!mountedRef.current) return;
@@ -1145,7 +1339,13 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => loadEdition(true)}
+            onRefresh={() =>
+              loadEdition(
+                editionFrozenRef.current
+                  ? { quiet: true, eventsOnly: true }
+                  : true
+              )
+            }
             tintColor={paper.terracotta}
             colors={[paper.terracotta]}
           />
@@ -1304,6 +1504,7 @@ export default function HomeScreen() {
           <>
             <EditionReader
               sections={sections}
+              editionId={editionId}
               editionDate={editionDate}
               leadStory={leadStory}
               topStories={topStories}

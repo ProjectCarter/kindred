@@ -1,6 +1,7 @@
 import type { ImageSourcePropType } from "react-native";
 import type { EventInfoBadgeId } from "./eventBadges";
 import { inferEventInfoBadges } from "./eventBadges";
+import { claimImage } from "./imageRegistry";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -50,10 +51,22 @@ const EVENT_FALLBACK_IMAGE: Record<LocalEventCategory, ImageSourcePropType> = {
   community: require("../../assets/discovery/event-community.jpg"),
 };
 
+const ALL_EVENT_FALLBACK_IMAGES = Object.values(EVENT_FALLBACK_IMAGE);
+
+/**
+ * `id` (e.g. the event's own name/venue) lets several photo-less events in
+ * the same genre rotate through different fallback art instead of all
+ * showing the exact same stock photo (kindred-mission.mdc: no duplicate
+ * images) — still deduped against every other photo claimed in today's
+ * edition, and stable across re-renders for the same event.
+ */
 export function eventFallbackImage(
-  category?: LocalEventCategory | null
+  category?: LocalEventCategory | null,
+  id?: string | null
 ): ImageSourcePropType {
-  return EVENT_FALLBACK_IMAGE[category ?? "community"] ?? EVENT_FALLBACK_IMAGE.community;
+  const primary = EVENT_FALLBACK_IMAGE[category ?? "community"] ?? EVENT_FALLBACK_IMAGE.community;
+  if (!id) return primary;
+  return claimImage(id, [primary], ALL_EVENT_FALLBACK_IMAGES);
 }
 
 export type LocalEventCard = {

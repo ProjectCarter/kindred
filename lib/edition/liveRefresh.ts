@@ -45,15 +45,24 @@ function markRefreshed(editionId: string): void {
   );
 }
 
+export type LiveRefreshPatch = {
+  /** True when structured event facts changed (times, cancellations, etc.). */
+  eventsChanged: boolean;
+  /** Discovery may change server-side — callers must ignore for frozen editions. */
+  discoveryChanged: boolean;
+};
+
 export async function maybeTriggerLiveRefresh(params: {
   editionId: string;
   editionDate: string;
   place: KindredPlace | null;
-  onChanged?: () => void;
-}): Promise<void> {
-  const { editionId, editionDate, place, onChanged } = params;
-  if (!editionId || !place) return;
-  if (!(await shouldRefresh(editionId))) return;
+  /** Called only when event-specific facts changed — never for discovery alone. */
+  onEventsChanged?: () => void;
+}): Promise<LiveRefreshPatch> {
+  const { editionId, editionDate, place, onEventsChanged } = params;
+  const noop: LiveRefreshPatch = { eventsChanged: false, discoveryChanged: false };
+  if (!editionId || !place) return noop;
+  if (!(await shouldRefresh(editionId))) return noop;
 
   // Claim the slot before the network call resolves — a slow response
   // must never let a second trigger (e.g. a quick re-focus) fire again.
@@ -71,14 +80,24 @@ export async function maybeTriggerLiveRefresh(params: {
     );
     if (error) {
       if (__DEV__) console.warn("[liveRefresh] invoke error", error.message);
-      return;
+      return noop;
     }
     if (__DEV__) {
       console.log("[liveRefresh] result", data);
     }
-    if (data && typeof data === "object" && (data as { changed?: boolean }).changed) {
-      onChanged?.();
+    const body = data as {
+      events?: { changed?: boolean };
+      discovery?: { changed?: boolean };
+      changed?: boolean;
+    } | null;
+    const eventsChanged = Boolean(
+      body?.events?.changed ?? (body?.changed && !body?.discovery?.changed)
+    );
+    const discoveryChanged = Boolean(body?.discovery?.changed);
+    if (eventsChanged) {
+      onEventsChanged?.();
     }
+    return { eventsChanged, discoveryChanged };
   } catch (err) {
     if (__DEV__) {
       console.warn(
@@ -86,5 +105,6 @@ export async function maybeTriggerLiveRefresh(params: {
         err instanceof Error ? err.message : String(err)
       );
     }
+    return noop;
   }
 }

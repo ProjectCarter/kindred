@@ -157,6 +157,23 @@ function fullCandidatePool(
   return [...byId.values()];
 }
 
+function normalizeVenueKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[''`]/g, "")
+    .replace(/\b(the|a|an)\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function venueKeysForItem(item: RankedDiscoveryItem): string[] {
+  const keys = new Set<string>();
+  const title = item.item.title?.trim();
+  if (title) keys.add(normalizeVenueKey(title));
+  return [...keys];
+}
+
 export type SectionAllocation = {
   /**
    * Full pool with real events removed, minus every item already claimed
@@ -194,9 +211,16 @@ export function allocateDiscoverySections(
      * page's first 8.
      */
     max?: number;
+    /**
+     * Normalized venue/business keys already introduced elsewhere on the page
+     * (Local Events, Bandit's Pick) — the same business must never appear
+     * twice in one edition (kindred-mission.mdc: no duplicates).
+     */
+    excludeVenueNames?: ReadonlySet<string>;
   }
 ): SectionAllocation {
   const max = options?.max ?? SECTION_MAX;
+  const excludeVenueNames = options?.excludeVenueNames;
   // Sort by score up front — surfaces are concatenated in a fixed order
   // (coffee before museums before scenic drives, etc.), which used to mean
   // claim() effectively picked by surface order, not editorial quality.
@@ -208,6 +232,13 @@ export function allocateDiscoverySections(
     ...(extraItems ?? []),
   ])
     .filter((d) => !isRealEvent(d))
+    // A card with no real title is broken, not beautiful — drop it rather
+    // than render a blank headline (kindred-mission.mdc).
+    .filter((d) => Boolean(d.item.title?.trim()))
+    .filter((d) => {
+      if (!excludeVenueNames?.size) return true;
+      return !venueKeysForItem(d).some((key) => excludeVenueNames.has(key));
+    })
     .sort((a, b) => b.score - a.score);
   const claimed = new Set<string>();
 

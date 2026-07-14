@@ -12,6 +12,8 @@ import type {
   RankedDiscoveryItem,
 } from "./discovery";
 import { discoveryItemsForSurface } from "./discovery";
+import { claimImage } from "./imageRegistry";
+import { categoryImageIsConfident } from "./imageConfidence";
 
 /** Editor’s notebook mix — places, culture, and quiet media. */
 const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
@@ -238,36 +240,22 @@ function diversify(
 }
 
 /**
- * Assign one unique photo per card — never repeat within the carousel.
+ * Assign one photo per card — preferring the mood-matched pool for
+ * categories the item's own text actually supports, deduped against
+ * everything else claimed anywhere in today's edition (not just this
+ * carousel) via the shared image registry, and stable across re-renders.
  */
 function assignUniqueImages(
   items: RankedDiscoveryItem[]
 ): ImageSourcePropType[] {
-  const used = new Set<number>();
-  const poolLen = NOTEBOOK_PHOTO_POOL.length;
-
   return items.map((d) => {
-    const prefs = CATEGORY_PHOTO_PREFS[d.item.category] ?? [];
-    let chosen = prefs.find((i) => i >= 0 && i < poolLen && !used.has(i));
-
-    if (chosen === undefined) {
-      const start = hashId(d.item.id) % poolLen;
-      for (let step = 0; step < poolLen; step++) {
-        const i = (start + step) % poolLen;
-        if (!used.has(i)) {
-          chosen = i;
-          break;
-        }
-      }
-    }
-
-    // If pool exhausted (shouldn't happen at max 6 / 8 photos), reuse last.
-    if (chosen === undefined) {
-      chosen = Math.max(0, poolLen - 1);
-    }
-
-    used.add(chosen);
-    return NOTEBOOK_PHOTO_POOL[chosen];
+    const confident = categoryImageIsConfident(d.item.category, d.item);
+    const prefs = confident ? CATEGORY_PHOTO_PREFS[d.item.category] ?? [] : [];
+    const preferredPool = prefs
+      .filter((i) => i >= 0 && i < NOTEBOOK_PHOTO_POOL.length)
+      .map((i) => NOTEBOOK_PHOTO_POOL[i]);
+    const pool = preferredPool.length > 0 ? preferredPool : NOTEBOOK_PHOTO_POOL;
+    return claimImage(d.item.id, pool, NOTEBOOK_PHOTO_POOL);
   });
 }
 

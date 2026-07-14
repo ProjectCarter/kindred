@@ -12,6 +12,8 @@ import type {
   RankedDiscoveryItem,
 } from "./discovery";
 import { discoveryItemsForSurface } from "./discovery";
+import { claimImage, NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
+import { categoryImageIsConfident } from "./imageConfidence";
 
 /** Categories that read as “go there today” experiences. */
 export const EXPERIENCE_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
@@ -104,10 +106,7 @@ const CATEGORY_PHOTOS: Record<string, ImageSourcePropType[]> = {
   books: [require("../../assets/heroes/hero-autumn-leaves.jpg")],
 };
 
-const FALLBACK_PHOTOS: ImageSourcePropType[] = [
-  require("../../assets/heroes/hero-default-morning.jpg"),
-  require("../../assets/heroes/hero-summer-sunrise.jpg"),
-];
+const FALLBACK_PHOTOS: ImageSourcePropType[] = NEUTRAL_PLACEHOLDERS;
 
 export type ExperienceCard = {
   id: string;
@@ -127,68 +126,35 @@ export type ExperiencesSelection = {
   pair: ExperienceCard[];
 };
 
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
 export function experienceCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category] ?? category.replace(/_/g, " ");
 }
 
+/**
+ * `context` (title/dek/venueCategories) lets the caller corroborate the
+ * category before using its scene-specific photo — without it, the
+ * category is trusted as-is (kept for call sites that only have an id).
+ */
 export function experienceImageFor(
   category: string,
-  id: string
+  id: string,
+  context?: { title?: string | null; dek?: string | null; venueCategories?: string[] | null }
 ): ImageSourcePropType {
-  const pool = CATEGORY_PHOTOS[category] ?? FALLBACK_PHOTOS;
-  return pool[hashId(id) % pool.length] ?? FALLBACK_PHOTOS[0];
+  const confident = context ? categoryImageIsConfident(category, context) : true;
+  const pool = confident ? CATEGORY_PHOTOS[category] ?? FALLBACK_PHOTOS : NEUTRAL_PLACEHOLDERS;
+  return claimImage(id, pool);
 }
 
 /**
- * Assign a photo per card, preferring each card's own category pool but
- * avoiding a repeat already used elsewhere in this section — a featured
- * beach story and a paired beach story shouldn't show the same photograph.
+ * Assign a photo per card — deduped against everything else claimed in
+ * today's edition (not just this section) via the shared image registry,
+ * and only using a category's scene-specific photo when the item's own
+ * text actually supports it.
  */
 function assignExperienceImages(
   items: RankedDiscoveryItem[]
 ): ImageSourcePropType[] {
-  const used = new Set<ImageSourcePropType>();
-  const allPhotos = [
-    ...new Set(
-      Object.values(CATEGORY_PHOTOS)
-        .flat()
-        .concat(FALLBACK_PHOTOS)
-    ),
-  ];
-
-  return items.map((d) => {
-    const pool = CATEGORY_PHOTOS[d.item.category] ?? FALLBACK_PHOTOS;
-    const start = hashId(d.item.id) % pool.length;
-
-    for (let step = 0; step < pool.length; step++) {
-      const candidate = pool[(start + step) % pool.length];
-      if (!used.has(candidate)) {
-        used.add(candidate);
-        return candidate;
-      }
-    }
-
-    // This category's small pool is exhausted — borrow from the wider
-    // catalog rather than repeat, still deterministic per item.
-    const wideStart = hashId(d.item.id) % allPhotos.length;
-    for (let step = 0; step < allPhotos.length; step++) {
-      const candidate = allPhotos[(wideStart + step) % allPhotos.length];
-      if (!used.has(candidate)) {
-        used.add(candidate);
-        return candidate;
-      }
-    }
-
-    return pool[start] ?? FALLBACK_PHOTOS[0];
-  });
+  return items.map((d) => experienceImageFor(d.item.category, d.item.id, d.item));
 }
 
 export function experienceLocationLine(

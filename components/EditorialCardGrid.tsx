@@ -73,11 +73,15 @@ export function EditorialCardGrid({
   const halfGap = 12;
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
-  const visible = typeof limit === "number" ? cards.slice(0, limit) : cards;
-  const remainingCount = cards.length - visible.length;
+  const completeCards = cards.filter(
+    (card) => Boolean(card.title?.trim()) && Boolean(card.image)
+  );
+  const visible =
+    typeof limit === "number" ? completeCards.slice(0, limit) : completeCards;
+  const remainingCount = completeCards.length - visible.length;
   // The "See all" destination page caps at SEE_ALL_MAX (kindred-mission.mdc)
   // — never promise a bigger number here than what that page will show.
-  const seeAllTotal = Math.min(cards.length, SEE_ALL_MAX);
+  const seeAllTotal = Math.min(completeCards.length, SEE_ALL_MAX);
 
   if (visible.length === 0) {
     return (

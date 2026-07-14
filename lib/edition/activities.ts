@@ -9,6 +9,11 @@
 import type { ImageSourcePropType } from "react-native";
 import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
+import { claimImage, NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
+
+function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
+  return Boolean(item.title?.trim());
+}
 
 /** Real per-city venue kind, inferred from Foursquare's own category text
  *  (never invented) — the underlying DiscoveryCategory is one flat
@@ -31,7 +36,14 @@ type ActivitySubtype =
   | "ice_skating"
   | "karaoke"
   | "batting_cages"
-  | "hiking";
+  | "hiking"
+  /**
+   * Real venue, but its own text didn't confidently match any specific
+   * subtype above — a tasteful, neutral photo beats guessing wrong (e.g.
+   * defaulting to a kayaking/beach photo for a venue that isn't on the
+   * water at all).
+   */
+  | "general";
 
 const SUBTYPE_LABEL: Record<ActivitySubtype, string> = {
   water_recreation: "Kayaking & Paddleboarding",
@@ -51,6 +63,7 @@ const SUBTYPE_LABEL: Record<ActivitySubtype, string> = {
   karaoke: "Karaoke",
   batting_cages: "Batting Cages",
   hiking: "Hiking",
+  general: "Activity",
 };
 
 const SUBTYPE_PHOTOS: Record<ActivitySubtype, ImageSourcePropType[]> = {
@@ -74,6 +87,7 @@ const SUBTYPE_PHOTOS: Record<ActivitySubtype, ImageSourcePropType[]> = {
     require("../../assets/heroes/hero-mountain-morning.jpg"),
     require("../../assets/heroes/hero-autumn-leaves.jpg"),
   ],
+  general: NEUTRAL_PLACEHOLDERS,
 };
 
 /** Ordered so a more specific phrase (e.g. "mini golf") wins over a looser one. */
@@ -104,15 +118,12 @@ function inferSubtype(item: RankedDiscoveryItem["item"]): ActivitySubtype {
   for (const { subtype, pattern } of SUBTYPE_MATCHERS) {
     if (pattern.test(hay)) return subtype;
   }
-  return "water_recreation";
-}
-
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return h;
+  // Never guess a specific-but-possibly-wrong scene (e.g. kayaking/beach)
+  // for a venue whose own text doesn't actually say so — a country club,
+  // a fitness studio, or anything else outside the known subtypes gets a
+  // tasteful neutral photo instead (kindred-mission.mdc: accuracy over a
+  // beautiful-but-misleading image).
+  return "general";
 }
 
 export function activityOverline(item: RankedDiscoveryItem["item"]): string {
@@ -125,7 +136,7 @@ export function activityImageFor(
   item: RankedDiscoveryItem["item"]
 ): ImageSourcePropType {
   const pool = SUBTYPE_PHOTOS[inferSubtype(item)];
-  return pool[hashId(item.id) % pool.length];
+  return claimImage(item.id, pool);
 }
 
 export function activityLocationLine(
@@ -155,9 +166,9 @@ export function selectActivityCards(
   items: RankedDiscoveryItem[] | null | undefined,
   options?: { city?: string | null }
 ): EditorialGridCard[] {
-  const ranked = [...(items ?? [])].sort(
-    (a, b) => activitySortScore(b) - activitySortScore(a)
-  );
+  const ranked = [...(items ?? [])]
+    .filter((d) => isCompleteCard(d.item))
+    .sort((a, b) => activitySortScore(b) - activitySortScore(a));
 
   return ranked.map((d) => ({
     id: d.item.id,

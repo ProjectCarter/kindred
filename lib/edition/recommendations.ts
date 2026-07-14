@@ -11,6 +11,12 @@
 import type { ImageSourcePropType } from "react-native";
 import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
+import { claimImage, NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
+import { categoryImageIsConfident } from "./imageConfidence";
+
+function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
+  return Boolean(item.title?.trim());
+}
 
 const CATEGORY_LABEL: Record<string, string> = {
   coffee: "Coffee",
@@ -40,57 +46,28 @@ const CATEGORY_PHOTOS: Record<string, ImageSourcePropType[]> = {
   gardens: [require("../../assets/discovery/recommendation-garden.jpg")],
 };
 
-const FALLBACK_PHOTOS: ImageSourcePropType[] = [
-  require("../../assets/heroes/hero-default-morning.jpg"),
-];
-
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
+const FALLBACK_PHOTOS: ImageSourcePropType[] = NEUTRAL_PLACEHOLDERS;
 
 export function recommendationCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category] ?? category.replace(/_/g, " ");
 }
 
 /**
- * Assign a photo per card, preferring each card's own category pool but
- * avoiding a repeat already used elsewhere in this section — two beach
- * cards on the same page shouldn't show the same photograph.
+ * Assign a photo per card — each card's own category pool when the venue's
+ * own text actually corroborates that category (accuracy over a beautiful
+ * guess), a tasteful neutral photo otherwise, deduped across the *entire*
+ * edition via the shared image registry (not just this section) and
+ * stable across re-renders for the same item.
  */
 function assignRecommendationImages(
   items: RankedDiscoveryItem[]
 ): ImageSourcePropType[] {
-  const used = new Set<ImageSourcePropType>();
-  const allPhotos = [
-    ...new Set(Object.values(CATEGORY_PHOTOS).flat().concat(FALLBACK_PHOTOS)),
-  ];
-
   return items.map((d) => {
-    const pool = CATEGORY_PHOTOS[d.item.category] ?? FALLBACK_PHOTOS;
-    const start = hashId(d.item.id) % pool.length;
-
-    for (let step = 0; step < pool.length; step++) {
-      const candidate = pool[(start + step) % pool.length];
-      if (!used.has(candidate)) {
-        used.add(candidate);
-        return candidate;
-      }
-    }
-
-    const wideStart = hashId(d.item.id) % allPhotos.length;
-    for (let step = 0; step < allPhotos.length; step++) {
-      const candidate = allPhotos[(wideStart + step) % allPhotos.length];
-      if (!used.has(candidate)) {
-        used.add(candidate);
-        return candidate;
-      }
-    }
-
-    return pool[start] ?? FALLBACK_PHOTOS[0];
+    const confident = categoryImageIsConfident(d.item.category, d.item);
+    const pool = confident
+      ? CATEGORY_PHOTOS[d.item.category] ?? FALLBACK_PHOTOS
+      : NEUTRAL_PLACEHOLDERS;
+    return claimImage(d.item.id, pool);
   });
 }
 
@@ -138,6 +115,7 @@ export function selectRecommendationCards(
 ): EditorialGridCard[] {
   const ranked = [...(items ?? [])]
     .filter(isRecommendationItem)
+    .filter((d) => isCompleteCard(d.item))
     .sort((a, b) => recommendationSortScore(b) - recommendationSortScore(a));
   const images = assignRecommendationImages(ranked);
 

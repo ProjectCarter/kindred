@@ -37,6 +37,12 @@ import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localEvents";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
+import { resetImageRegistry } from "../lib/edition/imageRegistry";
+import {
+  freezeEdition,
+  getFrozenDiscovery,
+  isEditionFrozen,
+} from "../lib/edition/editionFreeze";
 import { resolveArticleHero } from "../lib/edition/articleHero";
 import { experienceImageFor } from "../lib/edition/experiences";
 import { activityImageFor } from "../lib/edition/activities";
@@ -52,6 +58,7 @@ import { BanditCharacter } from "./BanditCharacter";
 
 type Props = {
   sections: EditionSection[];
+  editionId?: string | null;
   editionDate?: string | null;
   leadStory?: LeadStory | null;
   /** Opens any Kindred article in the shared native reader. */
@@ -190,29 +197,24 @@ function banditsPickImage(
   }
 
   // event / place / hidden_gem without a real listing photo
-  return experienceImageFor(story.discoveryItem?.category ?? "experiences", story.id);
+  return experienceImageFor(
+    story.discoveryItem?.category ?? "experiences",
+    story.id,
+    story.discoveryItem ?? undefined
+  );
 }
 
 /**
  * Local businesses (coffee, restaurants) never carry a provider photo —
  * Foursquare's photo field is a paid tier Kindred doesn't use. Give each
  * a real category-matched photograph instead of leaving the side card
- * blank, and keep the pair visually distinct from one another.
+ * blank — the shared image registry already keeps this pair (and every
+ * other photo in today's edition) visually distinct from one another.
  */
 function localBizSideImages(
   items: RankedDiscoveryItem[]
 ): ImageSourcePropType[] {
-  const used = new Set<ImageSourcePropType>();
-  return items.map((d) => {
-    const primary = experienceImageFor(d.item.category, d.item.id);
-    if (!used.has(primary)) {
-      used.add(primary);
-      return primary;
-    }
-    const alt = experienceImageFor(d.item.category, `${d.item.id}:alt`);
-    used.add(alt);
-    return alt;
-  });
+  return items.map((d) => experienceImageFor(d.item.category, d.item.id, d.item));
 }
 
 /**
@@ -236,6 +238,7 @@ function folioTeaser(body: string): { dek: string; clamped: boolean } {
 
 export function EditionReader({
   sections,
+  editionId,
   editionDate,
   leadStory,
   onOpenArticle,
@@ -303,14 +306,82 @@ export function EditionReader({
     greetingSection?.body?.trim()?.split(/\n/)[0] ||
     null;
 
+  // Today's edition is generated once and must read the same on every
+  // re-render (scrolling, clip toggles, live-refresh patches) — reset the
+  // shared cross-section image ledger only when the edition itself
+  // changes, never on every render, so a photo never flips under the
+  // reader mid-scroll (kindred-mission.mdc: freeze today's edition).
+  useMemo(() => {
+    resetImageRegistry(editionId ?? editionDate ?? null);
+  }, [editionId, editionDate]);
+
+  // Freeze the discovery pool on first render of this edition — Activities,
+  // Recommendations, and Bandit's Pick sides all derive from this snapshot
+  // so live-refresh discovery patches never reshuffle the printed paper.
+  useMemo(() => {
+    if (!editionId || !editionDate) return;
+    if (!isEditionFrozen({ editionId, editionDate })) {
+      freezeEdition({
+        editionId,
+        editionDate,
+        discovery,
+        discoveryItems,
+      });
+    }
+  }, [editionId, editionDate, discovery, discoveryItems]);
+
+  const frozenDiscovery = getFrozenDiscovery();
+  const stableDiscovery = frozenDiscovery.discovery ?? discovery;
+  const stableDiscoveryItems =
+    frozenDiscovery.discoveryItems ?? discoveryItems;
+
+  // A business already introduced in Local Events should never resurface
+  // as a "new" Activity or Recommendation later on the same page — same
+  // venue, same day, one appearance (kindred-mission.mdc: no duplicates).
+  const eventVenueNames = useMemo(
+    () =>
+      new Set(
+        events.flatMap((e) => {
+          const keys: string[] = [];
+          const venue = e.venue?.trim();
+          if (venue && venue.toLowerCase() !== "venue tba") {
+            keys.push(
+              venue
+                .toLowerCase()
+                .replace(/[''`]/g, "")
+                .replace(/\b(the|a|an)\b/g, "")
+                .replace(/[^a-z0-9]+/g, " ")
+                .trim()
+            );
+          }
+          const name = e.name?.trim();
+          if (name) {
+            keys.push(
+              name
+                .toLowerCase()
+                .replace(/[''`]/g, "")
+                .replace(/\b(the|a|an)\b/g, "")
+                .replace(/[^a-z0-9]+/g, " ")
+                .trim()
+            );
+          }
+          return keys;
+        })
+      ),
+    [events]
+  );
+
   // One discovery pool — every surface, flattened — partitioned once so
   // Weekend Escapes (Experiences), Bandit's Notebook, and Recommendations
   // never show the same item twice. Real local events are excluded here
   // entirely: they live only in Local Events, above, which reads `events`
   // directly and never touches this pool.
   const sectionAllocation = useMemo(
-    () => allocateDiscoverySections(discovery, discoveryItems),
-    [discovery, discoveryItems]
+    () =>
+      allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
+        excludeVenueNames: eventVenueNames,
+      }),
+    [stableDiscovery, stableDiscoveryItems, eventVenueNames]
   );
 
   // Activities/Recommendations need the true full claimed list on the
@@ -321,8 +392,12 @@ export function EditionReader({
   // make "See more" never appear. Notebook/localBiz below intentionally
   // keep using the capped `sectionAllocation` — unrelated to this fix.
   const fullSectionAllocation = useMemo(
-    () => allocateDiscoverySections(discovery, discoveryItems, { max: Infinity }),
-    [discovery, discoveryItems]
+    () =>
+      allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
+        max: Infinity,
+        excludeVenueNames: eventVenueNames,
+      }),
+    [stableDiscovery, stableDiscoveryItems, eventVenueNames]
   );
 
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>

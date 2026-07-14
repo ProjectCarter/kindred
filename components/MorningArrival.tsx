@@ -14,9 +14,14 @@ import {
   selectHeroImage,
   loadRecentHeroImageIds,
   rememberHeroImageShown,
+  getHeroCatalog,
   type HeroImageContext,
   type HeroImageAsset,
 } from "../lib/edition/HeroImageService";
+import {
+  getFrozenHeroImageId,
+  setFrozenHeroImageId,
+} from "../lib/edition/editionFreeze";
 import { morningSalutation } from "../lib/edition/morningRitual";
 import {
   KindredFullMasthead,
@@ -86,9 +91,22 @@ export function MorningArrival({
     );
   }, []);
 
+  // Hero is chosen once per edition date and frozen — weather/location
+  // tweaks during the day must never swap the cover photo mid-read.
   useEffect(() => {
     let cancelled = false;
+    const editionKey = heroContext?.date ?? editionDate ?? null;
+
     (async () => {
+      const frozenId = getFrozenHeroImageId();
+      if (frozenId) {
+        const hit = getHeroCatalog().find((asset) => asset.id === frozenId);
+        if (hit && !cancelled) {
+          setHero(hit);
+          return;
+        }
+      }
+
       try {
         const recent = await loadRecentHeroImageIds();
         const next = selectHeroImage({
@@ -97,20 +115,23 @@ export function MorningArrival({
         });
         if (cancelled) return;
         setHero(next);
-        if (next?.id) await rememberHeroImageShown(next.id);
+        if (next?.id) {
+          setFrozenHeroImageId(next.id);
+          await rememberHeroImageShown(next.id);
+        }
       } catch {
-        if (!cancelled) setHero(selectHeroImage(heroContext ?? {}));
+        if (!cancelled) {
+          const fallback = selectHeroImage(heroContext ?? {});
+          setHero(fallback);
+          if (fallback?.id) setFrozenHeroImageId(fallback.id);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [
-    heroContext?.date,
-    heroContext?.weatherText,
-    heroContext?.location?.city,
-    heroContext?.birthdayMMDD,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- freeze hero per edition only
+  }, [editionDate, heroContext?.date]);
 
   useEffect(() => {
     if (reduceMotion) {

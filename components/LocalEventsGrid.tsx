@@ -153,7 +153,10 @@ export function LocalEventsGrid({
                     source={
                       event.imageUrl
                         ? { uri: event.imageUrl }
-                        : eventFallbackImage(event.category)
+                        : eventFallbackImage(
+                            event.category,
+                            `${event.name}-${event.venue}-${event.date}`
+                          )
                     }
                     style={{ width: "100%", height: photoH }}
                     resizeMode="cover"
