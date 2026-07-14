@@ -18,6 +18,7 @@
     "node_modules",
     ".next",
     "supabase/functions",
-    "app/layout.tsx"
+    "app/layout.tsx",
+    "**/*.test.ts"
   ]
 }

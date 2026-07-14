@@ -11,6 +11,7 @@ import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
 import { resolveVenueClassification } from "./venueClassification";
+import { resolveActionsForActivity } from "./actionBar";
 import type { ImageCategoryTag } from "./imageTaxonomy";
 import { NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
 
@@ -216,5 +217,9 @@ export function selectActivityCards(
     title: d.item.title.trim(),
     subtitle: activityLocationLine(d.item, options?.city),
     note: activityNote(d.item),
+    actions: resolveActionsForActivity(d.item, {
+      fallbackCity: options?.city,
+      includeSave: false,
+    }),
   }));
 }

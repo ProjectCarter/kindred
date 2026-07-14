@@ -63,6 +63,10 @@ import { ContentTemplateModules } from "./ContentTemplateModules";
 import {
   categoryLabelForType,
 } from "../lib/edition/contentSystem";
+import { ActionBar } from "./ActionBar";
+import {
+  resolveActionsForArticle,
+} from "../lib/edition/actionBar";
 
 type Props = {
   article: KindredArticle;
@@ -125,6 +129,10 @@ export function ArticleReader({
   const briefing = isKindredBriefing(article);
   const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
   const canClip = Boolean(clipTarget);
+  const articleActions = useMemo(
+    () => resolveActionsForArticle(article),
+    [article]
+  );
   const continueItems = companion?.continueReading ?? [];
 
   useEffect(() => {
@@ -524,20 +532,6 @@ export function ArticleReader({
     }
   }
 
-  function openSource() {
-    if (!article.sourceUrl) return;
-    updateArticleSessionScroll(article.id, scrollYRef.current);
-    stashArticleSession({
-      article,
-      companion,
-      editionId: editionId ?? null,
-      backLabel,
-      scrollY: scrollYRef.current,
-      updatedAt: Date.now(),
-    });
-    void Linking.openURL(article.sourceUrl).catch(() => {});
-  }
-
   function handleBack() {
     updateArticleSessionScroll(article.id, scrollYRef.current);
     stashArticleSession({
@@ -921,14 +915,31 @@ export function ArticleReader({
               </EndMatterBlock>
             ) : null}
 
+            {articleActions.length > 0 ? (
+              <View style={styles.actionsBlock}>
+                <Text style={styles.actionsKicker}>Take the next step</Text>
+                <ActionBar
+                  actions={articleActions}
+                  variant="article"
+                  clipped={clipped}
+                  onSave={canClip ? () => void handleToggleClip() : undefined}
+                  shareMessage={[
+                    article.headline,
+                    article.dek,
+                    article.sourceUrl,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n")}
+                  shareTitle={article.headline}
+                />
+              </View>
+            ) : null}
+
             <View style={styles.actionsBlock}>
               <Text style={styles.actionsKicker}>This page</Text>
               <View style={styles.actionsList}>
-                {article.sourceUrl ? (
-                  <ActionLink label="Original source" onPress={openSource} />
-                ) : null}
                 <ActionLink
-                  label={backLabel.replace(/^←\s*/, "") || "Today’s paper"}
+                  label={backLabel.replace(/^←\s*/, "") || "Today's paper"}
                   onPress={handleBack}
                   prefix="← "
                 />

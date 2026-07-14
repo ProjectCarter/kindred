@@ -19,6 +19,8 @@ import {
 import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
 import { BanditCharacter } from "./BanditCharacter";
+import { ActionBar } from "./ActionBar";
+import { resolveActionsForLocalEvent } from "../lib/edition/actionBar";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 import type { LocalEventsLoadStatus } from "../lib/edition/localEventsPipeline";
@@ -212,6 +214,21 @@ export function LocalEventsGrid({
                       {note}
                     </Text>
                   ) : null}
+
+                  <ActionBar
+                    actions={resolveActionsForLocalEvent(event, {
+                      includeSave: false,
+                    })}
+                    variant="card"
+                    shareMessage={[
+                      event.name,
+                      venue,
+                      event.sourceUrl,
+                    ]
+                      .filter(Boolean)
+                      .join("\n")}
+                    shareTitle={event.name}
+                  />
                 </View>
               </Pressable>
             );

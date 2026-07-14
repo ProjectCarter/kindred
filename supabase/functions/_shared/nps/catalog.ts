@@ -53,6 +53,8 @@ export function npsParksAsDiscoveryItems(parks: NpsParkRecord[]): DiscoveryItem[
         url: park.url,
       },
       url: park.url,
+      lat: park.lat,
+      lon: park.lon,
       venueCategories: [park.designation, "National Park Service"],
       tags: ["nps_park", "outdoors", "verified", "national_park"],
       seasons: ["anytime"],

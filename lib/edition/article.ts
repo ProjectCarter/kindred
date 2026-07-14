@@ -26,6 +26,11 @@ import {
   matchVerifiedLocalEvent,
 } from "./discoveryArticles";
 import { attributionFromEditorialImage } from "./imageAttribution";
+import {
+  actionContextFromBanditsPick,
+  actionContextFromDiscoveryItem,
+  actionContextFromLocalEvent,
+} from "./actionBar";
 
 import type { ImageSourcePropType } from "react-native";
 
@@ -106,6 +111,8 @@ export type KindredArticle = {
   savedLocation?: string | null;
   /** Human-readable date/time line, for the Clippings card (events). */
   savedEventTime?: string | null;
+  /** Provider-backed actions — never invented URLs. */
+  actionContext?: import("./actionBar").ActionBarContext | null;
   /**
    * ISO timestamp for when this event actually ends — resolved once, at
    * adapter time, from the event's own date/time (never from when it was
@@ -223,26 +230,35 @@ export function articleFromLeadStory(lead: LeadStory): KindredArticle {
 /**
  * Adapter: Bandit's Pick → KindredArticle.
  */
-export function articleFromBanditsPick(pick: {
-  id: string;
-  headline: string;
-  summary: string;
-  source: string;
-  url: string | null;
-  publishedAt: string | null;
-  imageUrl?: string | null;
-}): KindredArticle {
-  return articleFromSectionItem({
-    id: pick.id,
-    section: "bandits_pick",
-    headline: pick.headline,
-    body: pick.summary,
-    source: pick.source,
-    sourceUrl: pick.url,
-    publishedAt: pick.publishedAt,
-    imageUrl: pick.imageUrl,
-    dek: null,
-  });
+export function articleFromBanditsPick(
+  pick: {
+    id: string;
+    headline: string;
+    summary: string;
+    source: string;
+    url: string | null;
+    publishedAt: string | null;
+    imageUrl?: string | null;
+    discoveryItem?: DiscoveryItem | null;
+  }
+): KindredArticle {
+  return {
+    ...articleFromSectionItem({
+      id: pick.id,
+      section: "bandits_pick",
+      headline: pick.headline,
+      body: pick.summary,
+      source: pick.source,
+      sourceUrl: pick.url,
+      publishedAt: pick.publishedAt,
+      imageUrl: pick.imageUrl,
+      dek: null,
+    }),
+    actionContext: actionContextFromBanditsPick({
+      url: pick.url,
+      discoveryItem: pick.discoveryItem ?? null,
+    }),
+  };
 }
 
 /**
@@ -425,12 +441,24 @@ function withDiscoveryEditorialHero(
   };
 }
 
-/**
- * Discovery recommendation → KindredArticle (native reader, not the publisher).
- * Curated pieces get a full editorial treatment (Monocle desire, Smithsonian
- * narrative, Kindred's own calm voice); uncurated items fall back to an
- * honest brief built only from what the engine actually knows.
- */
+function discoveryActionSurface(
+  item: DiscoveryItem
+): "activity" | "recommendation" {
+  return item.category === "activities" ? "activity" : "recommendation";
+}
+
+function attachDiscoveryActionContext(
+  article: KindredArticle,
+  item: DiscoveryItem
+): KindredArticle {
+  return {
+    ...article,
+    actionContext: actionContextFromDiscoveryItem(
+      item,
+      discoveryActionSurface(item)
+    ),
+  };
+}
 export function articleFromDiscoveryItem(
   ranked: RankedDiscoveryItem
 ): KindredArticle {
@@ -441,24 +469,27 @@ export function articleFromDiscoveryItem(
   const curated = getCuratedDiscoveryArticle(item.id);
 
   if (curated) {
-    return withDiscoveryEditorialHero(
-      {
-        ...articleFromSectionItem({
-          id: item.id,
-          section: "discovery",
-          headline: item.title,
-          body: curated.body.join("\n\n"),
-          dek: curated.dek,
-          pullQuote: curated.pullQuote ?? null,
-          source: item.source?.name ?? "Kindred",
-          sourceUrl: item.url ?? item.source?.url ?? null,
-          discoveryCategory: item.category,
-          contentType: curated.contentType,
-          tags: [item.category],
-          fieldAnswers: curated.fieldAnswers,
-        }),
-        savedLocation,
-      },
+    return attachDiscoveryActionContext(
+      withDiscoveryEditorialHero(
+        {
+          ...articleFromSectionItem({
+            id: item.id,
+            section: "discovery",
+            headline: item.title,
+            body: curated.body.join("\n\n"),
+            dek: curated.dek,
+            pullQuote: curated.pullQuote ?? null,
+            source: item.source?.name ?? "Kindred",
+            sourceUrl: item.url ?? item.source?.url ?? null,
+            discoveryCategory: item.category,
+            contentType: curated.contentType,
+            tags: [item.category],
+            fieldAnswers: curated.fieldAnswers,
+          }),
+          savedLocation,
+        },
+        item
+      ),
       item
     );
   }
@@ -479,22 +510,25 @@ export function articleFromDiscoveryItem(
       seedKey: item.id,
       knowledgeGrounding: item.knowledgeGrounding ?? null,
     });
-    return withDiscoveryEditorialHero(
-      {
-        ...articleFromSectionItem({
-          id: item.id,
-          section: "discovery",
-          headline: item.title,
-          body: composed.body.join("\n\n"),
-          dek: composed.dek,
-          source: item.source?.name ?? "Kindred",
-          sourceUrl: item.url ?? item.source?.url ?? null,
-          discoveryCategory: item.category,
-          tags: [item.category],
-          fieldAnswers: composed.fieldAnswers,
-        }),
-        savedLocation,
-      },
+    return attachDiscoveryActionContext(
+      withDiscoveryEditorialHero(
+        {
+          ...articleFromSectionItem({
+            id: item.id,
+            section: "discovery",
+            headline: item.title,
+            body: composed.body.join("\n\n"),
+            dek: composed.dek,
+            source: item.source?.name ?? "Kindred",
+            sourceUrl: item.url ?? item.source?.url ?? null,
+            discoveryCategory: item.category,
+            tags: [item.category],
+            fieldAnswers: composed.fieldAnswers,
+          }),
+          savedLocation,
+        },
+        item
+      ),
       item
     );
   }
@@ -509,22 +543,25 @@ export function articleFromDiscoveryItem(
     seedKey: item.id,
   });
   if (categoryArticle) {
-    return withDiscoveryEditorialHero(
-      {
-        ...articleFromSectionItem({
-          id: item.id,
-          section: "discovery",
-          headline: item.title,
-          body: categoryArticle.body.join("\n\n"),
-          dek: categoryArticle.dek,
-          source: item.source?.name ?? "Kindred",
-          sourceUrl: item.url ?? item.source?.url ?? null,
-          discoveryCategory: item.category,
-          tags: [item.category],
-          fieldAnswers: categoryArticle.fieldAnswers,
-        }),
-        savedLocation,
-      },
+    return attachDiscoveryActionContext(
+      withDiscoveryEditorialHero(
+        {
+          ...articleFromSectionItem({
+            id: item.id,
+            section: "discovery",
+            headline: item.title,
+            body: categoryArticle.body.join("\n\n"),
+            dek: categoryArticle.dek,
+            source: item.source?.name ?? "Kindred",
+            sourceUrl: item.url ?? item.source?.url ?? null,
+            discoveryCategory: item.category,
+            tags: [item.category],
+            fieldAnswers: categoryArticle.fieldAnswers,
+          }),
+          savedLocation,
+        },
+        item
+      ),
       item
     );
   }
@@ -537,25 +574,28 @@ export function articleFromDiscoveryItem(
     city: item.place?.city ?? null,
   });
 
-  return withDiscoveryEditorialHero(
-    {
-      ...articleFromSectionItem({
-        id: item.id,
-        section: "discovery",
-        headline: item.title,
-        body: body.join("\n\n"),
-        dek: item.dek,
-        source: item.source?.name ?? "Kindred",
-        sourceUrl: item.url ?? item.source?.url ?? null,
-        discoveryCategory: item.category,
-        tags: [item.category],
-        // Explicitly empty — the fallback body already answers the practical
-        // question; auto-seeding a module from the dek here would repeat it
-        // a third time under a labeled section.
-        fieldAnswers: {},
-      }),
-      savedLocation,
-    },
+  return attachDiscoveryActionContext(
+    withDiscoveryEditorialHero(
+      {
+        ...articleFromSectionItem({
+          id: item.id,
+          section: "discovery",
+          headline: item.title,
+          body: body.join("\n\n"),
+          dek: item.dek,
+          source: item.source?.name ?? "Kindred",
+          sourceUrl: item.url ?? item.source?.url ?? null,
+          discoveryCategory: item.category,
+          tags: [item.category],
+          // Explicitly empty — the fallback body already answers the practical
+          // question; auto-seeding a module from the dek here would repeat it
+          // a third time under a labeled section.
+          fieldAnswers: {},
+        }),
+        savedLocation,
+      },
+      item
+    ),
     item
   );
 }
@@ -764,6 +804,7 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
     savedLocation: place || null,
     savedEventTime: whenLine || null,
     savedEventEndsAt: resolveEventEndsAt(event.date, event.time),
+    actionContext: actionContextFromLocalEvent(event),
   };
 }
 

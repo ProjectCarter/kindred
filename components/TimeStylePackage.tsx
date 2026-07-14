@@ -10,6 +10,8 @@ import {
 import { SymbolView } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
+import { ActionBar } from "./ActionBar";
+import type { ActionBarAction } from "../lib/edition/actionBar";
 
 /** Polished stand-in for the rare case a card truly has no photo. */
 function PhotoFallback({
@@ -44,6 +46,7 @@ export type TimeStoryCard = {
   byline?: string | null;
   image?: ImageSourcePropType | null;
   imageLabel?: string | null;
+  actions?: ActionBarAction[];
 };
 
 type Props = {
@@ -137,6 +140,16 @@ export function TimeStylePackage({
           ) : null}
           {feature.byline ? (
             <Text style={styles.byline}>{feature.byline}</Text>
+          ) : null}
+          {feature.actions?.length ? (
+            <ActionBar
+              actions={feature.actions}
+              variant="card"
+              shareMessage={[feature.headline, feature.dek]
+                .filter(Boolean)
+                .join("\n\n")}
+              shareTitle={feature.headline}
+            />
           ) : null}
         </Pressable>
 

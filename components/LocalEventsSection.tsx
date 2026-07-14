@@ -16,6 +16,7 @@ import {
 } from "../lib/edition/localEvents";
 import { eventInfoBadgesFor } from "../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
+import { openGoogleMapsDestination } from "../lib/edition/googleMaps";
 import { paper } from "../lib/edition/newspaperTheme";
 
 type Props = {
@@ -45,10 +46,11 @@ function useNewspaperColors(): NewspaperColors {
 }
 
 function openMaps(event: LocalEventCard) {
-  const query = [event.venue, event.city].filter(Boolean).join(", ");
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-  void Linking.openURL(url).catch(() => {
-    /* Ignore — device may have no browser/handler. */
+  void openGoogleMapsDestination({
+    lat: event.lat,
+    lon: event.lon,
+    name: event.venue?.trim() || event.name?.trim() || null,
+    city: event.city?.trim() || null,
   });
 }
 
@@ -259,7 +261,7 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
 
             <View style={styles.actions}>
               <ActionLink
-                label="Directions"
+                label="Open in Google Maps"
                 onPress={() => openMaps(event)}
                 colors={colors}
               />

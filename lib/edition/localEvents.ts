@@ -76,6 +76,9 @@ export type LocalEventCard = {
   time: string;
   venue: string;
   city: string;
+  /** Optional coordinates from the events provider — never fabricated. */
+  lat?: number | null;
+  lon?: number | null;
   sourceUrl: string;
   sourceName: string;
   /** Authentic listing photograph when the provider supplies one. */

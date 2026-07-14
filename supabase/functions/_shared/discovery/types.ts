@@ -83,6 +83,9 @@ export type DiscoveryItem = {
   url?: string | null;
   /** Verified street address (local places only) — never fabricated. */
   address?: string | null;
+  /** Verified coordinates from provider data — never fabricated. */
+  lat?: number | null;
+  lon?: number | null;
   /** Provider-supplied category names (e.g. Foursquare "Coffee Shop") — editorial context only, never invented. */
   venueCategories?: string[];
   tags: string[];

@@ -725,6 +725,8 @@ export function localPlacesAsDiscoveryItems(
     address: string | null;
     city: string | null;
     url: string | null;
+    lat?: number | null;
+    lon?: number | null;
     note?: string | null;
     providerCategories?: string[];
   }>
@@ -752,6 +754,8 @@ export function localPlacesAsDiscoveryItems(
       },
       url: p.url ?? null,
       address: p.address ?? null,
+      lat: p.lat ?? null,
+      lon: p.lon ?? null,
       venueCategories: p.providerCategories?.filter(Boolean) ?? [],
       tags: chain
         ? ["local_place", "verified", "chain"]

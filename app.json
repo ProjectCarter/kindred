@@ -13,7 +13,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.kindred.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Kindred uses your location while the app is open for local news, local events, weather, and recommendations — never in the background."
+        "NSLocationWhenInUseUsageDescription": "Kindred uses your location while the app is open for local news, local events, weather, and recommendations — never in the background.",
+        "LSApplicationQueriesSchemes": ["comgooglemaps"]
       }
     },
     "android": {

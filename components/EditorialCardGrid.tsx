@@ -12,6 +12,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 import { BanditCharacter } from "./BanditCharacter";
+import { ActionBar } from "./ActionBar";
+import type { ActionBarAction } from "../lib/edition/actionBar";
 
 export type EditorialGridCard = {
   id: string;
@@ -24,6 +26,8 @@ export type EditorialGridCard = {
   subtitle?: string | null;
   /** Kindred's own one-line editorial voice for this card. */
   note?: string | null;
+  /** Provider-backed next steps — never invented URLs. */
+  actions?: ActionBarAction[];
 };
 
 type Props = {
@@ -212,6 +216,21 @@ export function EditorialCardGrid({
                     >
                       {card.note}
                     </Text>
+                  ) : null}
+
+                  {card.actions?.length ? (
+                    <ActionBar
+                      actions={card.actions}
+                      variant="card"
+                      shareMessage={[
+                        card.title,
+                        card.subtitle,
+                        card.actions.find((a) => a.url)?.url,
+                      ]
+                        .filter(Boolean)
+                        .join("\n")}
+                      shareTitle={card.title}
+                    />
                   ) : null}
                 </View>
               </Pressable>

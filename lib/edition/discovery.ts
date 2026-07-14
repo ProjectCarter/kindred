@@ -66,6 +66,13 @@ export type DiscoveryItem = {
   url?: string | null;
   /** Verified street address (local places only) — never fabricated. */
   address?: string | null;
+  /** Provider-supplied phone when available — never fabricated. */
+  phone?: string | null;
+  /** Provider-supplied menu URL when available — never fabricated. */
+  menuUrl?: string | null;
+  /** Verified coordinates when the provider supplies them — never fabricated. */
+  lat?: number | null;
+  lon?: number | null;
   /** Provider-supplied category names (e.g. Foursquare "Coffee Shop") — editorial context only. */
   venueCategories?: string[];
   tags: string[];

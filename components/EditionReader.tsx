@@ -33,6 +33,7 @@ import {
 import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
+import { resolveActionsForBanditsPick } from "../lib/edition/actionBar";
 import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { parseLocalEventsBody, orderEventsForGrid, type LocalEventCard } from "../lib/edition/localEvents";
@@ -639,6 +640,21 @@ export function EditionReader({
                   ? `by ${banditsPick.story.source}`
                   : "— Bandit",
               image: banditsPickImage(banditsPick, editionDate),
+              actions: resolveActionsForBanditsPick({
+                url: banditsPick.story.url,
+                mapsDestination: banditsPick.story.discoveryItem
+                  ? {
+                      lat: banditsPick.story.discoveryItem.lat,
+                      lon: banditsPick.story.discoveryItem.lon,
+                      address: banditsPick.story.discoveryItem.address,
+                      name: banditsPick.story.discoveryItem.title,
+                      city: banditsPick.story.discoveryItem.place?.city ?? null,
+                      region: banditsPick.story.discoveryItem.place?.region ?? null,
+                      state: banditsPick.story.discoveryItem.place?.state ?? null,
+                    }
+                  : null,
+                includeSave: false,
+              }),
             }}
             sides={banditPickSides.map((d, i) => ({
               id: d.item.id,
@@ -665,7 +681,10 @@ export function EditionReader({
                         );
                         return;
                       }
-                      onOpenArticle(articleFromBanditsPick(banditsPick.story));
+                      onOpenArticle(articleFromBanditsPick({
+                        ...banditsPick.story,
+                        discoveryItem: banditsPick.story.discoveryItem ?? null,
+                      }));
                       return;
                     }
                     const hit = localBiz.find((d) => d.item.id === id);
