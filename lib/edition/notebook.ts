@@ -13,6 +13,7 @@ import type {
 } from "./discovery";
 import { discoveryItemsForSurface } from "./discovery";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
+import { DISCOVERY_PUBLISH_MIN_SCORE } from "./editorialPublishing";
 
 /** Editor’s notebook mix — places, culture, and quiet media. */
 const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
@@ -211,39 +212,6 @@ function collect(
   return [...byId.values()].sort((a, b) => score(b) - score(a));
 }
 
-/**
- * Prefer a mixed notebook: different categories first, then fill.
- * Caps at `max` (typically 4–6).
- */
-function diversify(
-  ranked: RankedDiscoveryItem[],
-  max: number
-): RankedDiscoveryItem[] {
-  const picked: RankedDiscoveryItem[] = [];
-  const seenCat = new Set<string>();
-
-  for (const item of ranked) {
-    if (picked.length >= max) break;
-    if (seenCat.has(item.item.category)) continue;
-    picked.push(item);
-    seenCat.add(item.item.category);
-  }
-
-  for (const item of ranked) {
-    if (picked.length >= max) break;
-    if (picked.some((p) => p.item.id === item.item.id)) continue;
-    picked.push(item);
-  }
-
-  return picked;
-}
-
-/**
- * Assign one photo per card — preferring the mood-matched pool for
- * categories the item's own text actually supports, deduped against
- * everything else claimed anywhere in today's edition (not just this
- * carousel) via the shared image registry, and stable across re-renders.
- */
 function assignUniqueImages(
   items: RankedDiscoveryItem[]
 ): Array<ImageSourcePropType | null> {
@@ -262,24 +230,45 @@ function assignUniqueImages(
 }
 
 /**
- * Finite notebook pages — typically 4–6, never infinite.
- * Returns [] when there isn’t enough for a calm carousel (min 3).
+ * Publish every notebook item above the editorial quality threshold —
+ * ranked continuously, no arbitrary caps or category quotas.
+ */
+function publishNotebookItems(
+  ranked: RankedDiscoveryItem[],
+  minScore: number = DISCOVERY_PUBLISH_MIN_SCORE
+): RankedDiscoveryItem[] {
+  return ranked
+    .filter((item) => item.score >= minScore)
+    .sort((a, b) => score(b) - score(a));
+}
+
+/**
+ * Finite notebook pages — requires at least three qualifying items for a calm carousel.
  */
 export function selectNotebookCards(
   discoveryItems: RankedDiscoveryItem[] | null | undefined,
   options?: {
     discovery?: DiscoveryPayload | null;
+    publishMinScore?: number;
+    /** Carousel first paint — rendering only. */
+    initialRenderCount?: number;
+    /** @deprecated Use initialRenderCount */
     max?: number;
   }
 ): NotebookCard[] {
-  const max = Math.min(options?.max ?? 6, NOTEBOOK_PHOTO_POOL.length);
-  const ranked = diversify(collect(options?.discovery, discoveryItems), max);
+  const minScore = options?.publishMinScore ?? DISCOVERY_PUBLISH_MIN_SCORE;
+  const ranked = publishNotebookItems(collect(options?.discovery, discoveryItems), minScore);
 
   if (ranked.length < 3) return [];
 
-  const images = assignUniqueImages(ranked);
+  const renderCount =
+    options?.initialRenderCount ??
+    (typeof options?.max === "number" ? options.max : ranked.length);
+  const visible = ranked.slice(0, Math.min(renderCount, ranked.length));
 
-  return ranked.map((d, i) => ({
+  const images = assignUniqueImages(visible);
+
+  return visible.map((d, i) => ({
     id: d.item.id,
     ranked: d,
     category: categoryLabel(d.item.category),

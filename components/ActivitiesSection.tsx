@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
 import { selectActivityCards } from "../lib/edition/activities";
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../lib/edition/editorialPublishing";
 import { EditorialCardGrid } from "./EditorialCardGrid";
 import { ACTIVITIES_GRID_LIMIT } from "../lib/edition/activitiesListStore";
 
@@ -8,7 +9,9 @@ type Props = {
   items: RankedDiscoveryItem[];
   locationCity?: string | null;
   onOpenItem?: (item: RankedDiscoveryItem) => void;
-  /** Front page caps at ACTIVITIES_GRID_LIMIT; the full list screen passes a larger value. */
+  /** Homepage first paint — rendering only. */
+  initialRenderCount?: number;
+  /** @deprecated Use initialRenderCount */
   limit?: number;
   /** Present only on the front page — shown below the grid once there are more items than fit. */
   onSeeAll?: () => void;
@@ -23,7 +26,8 @@ export function ActivitiesSection({
   items,
   locationCity,
   onOpenItem,
-  limit = ACTIVITIES_GRID_LIMIT,
+  initialRenderCount = ACTIVITIES_GRID_LIMIT,
+  limit,
   onSeeAll,
 }: Props) {
   const byId = useMemo(() => {
@@ -43,7 +47,7 @@ export function ActivitiesSection({
     <EditorialCardGrid
       kicker="Activities"
       cards={cards}
-      limit={limit}
+      initialRenderCount={initialRenderCount ?? limit}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} activities`}
       emptyCopy="Nothing new to try nearby today — check back tomorrow."

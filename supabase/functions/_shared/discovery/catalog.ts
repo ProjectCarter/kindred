@@ -636,7 +636,7 @@ export function localEventsAsDiscoveryItems(
     sourceName?: string;
   }>
 ): DiscoveryItem[] {
-  return events.slice(0, 12).map((e, i) => {
+  return events.map((e, i) => {
     const hay = `${e.name} ${e.venue}`.toLowerCase();
     let category: DiscoveryItem["category"] = "experiences";
     if (/museum|gallery|exhibit/.test(hay)) category = "museums";
@@ -733,11 +733,23 @@ export function localPlacesAsDiscoveryItems(
 ): DiscoveryItem[] {
   return places.map((p) => {
     const category = PLACE_CATEGORY_MAP[p.category] ?? "experiences";
-    // "Local First" (kindred-recommendations.mdc): a quality local business
-    // should be recommended before a national chain. We don't exclude
-    // chains outright — sometimes they're genuinely the best option — but
-    // they're tagged here so the scorer can keep them from dominating.
+    const venueHay = (p.providerCategories ?? []).join(" ").toLowerCase();
     const chain = isLikelyChain(p.name);
+    const indoorActivity =
+      /bowling|escape room|arcade|climbing gym|laser tag|indoor|billiards|ice skating rink/i.test(
+        venueHay
+      );
+    const outdoorPlace =
+      /park|trail|beach|garden|kayak|paddle|dog park|botanical|scenic/i.test(venueHay) ||
+      category === "parks" ||
+      category === "beaches" ||
+      category === "hiking";
+    const weatherFit = indoorActivity
+      ? ["any", "rainy", "cool", "fair"]
+      : outdoorPlace
+      ? ["fair", "cool"]
+      : ["any"];
+
     return item({
       id: `place_${p.providerId}`,
       title: p.name,
@@ -761,7 +773,7 @@ export function localPlacesAsDiscoveryItems(
         ? ["local_place", "verified", "chain"]
         : ["local_place", "verified"],
       seasons: ["anytime"],
-      weatherFit: ["any"],
+      weatherFit,
       popularity: 0.35,
       uniqueness: 0.4,
       localExpertise: chain ? 0.2 : 0.85,

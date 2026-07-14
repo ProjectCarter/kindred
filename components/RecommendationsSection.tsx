@@ -8,7 +8,9 @@ type Props = {
   items: RankedDiscoveryItem[];
   locationCity?: string | null;
   onOpenItem?: (item: RankedDiscoveryItem) => void;
-  /** Front page caps at RECOMMENDATIONS_GRID_LIMIT; the full list screen passes a larger value. */
+  /** Homepage first paint — rendering only. */
+  initialRenderCount?: number;
+  /** @deprecated Use initialRenderCount */
   limit?: number;
   /** Present only on the front page — shown below the grid once there are more items than fit. */
   onSeeAll?: () => void;
@@ -24,7 +26,8 @@ export function RecommendationsSection({
   items,
   locationCity,
   onOpenItem,
-  limit = RECOMMENDATIONS_GRID_LIMIT,
+  initialRenderCount = RECOMMENDATIONS_GRID_LIMIT,
+  limit,
   onSeeAll,
 }: Props) {
   const byId = useMemo(() => {
@@ -44,7 +47,7 @@ export function RecommendationsSection({
     <EditorialCardGrid
       kicker="Recommendations"
       cards={cards}
-      limit={limit}
+      initialRenderCount={initialRenderCount ?? limit}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} recommendations`}
       emptyCopy="Nothing new to recommend nearby today — check back tomorrow."

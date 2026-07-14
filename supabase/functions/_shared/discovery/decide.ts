@@ -131,7 +131,7 @@ export function runDiscoveryDecisions(
       state: ctx.state,
     },
     surfaces,
-    picks: picks.slice(0, 16),
+    picks,
     editorBrief: formatDiscoveryBrief(surfaces),
     selectionMeta: {
       candidateCount: catalog.length,

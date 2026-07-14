@@ -1721,7 +1721,7 @@ export default function HomeScreen() {
                 const full = allocateDiscoverySections(
                   intelligence?.discovery,
                   intelligence?.discoveryItems,
-                  { max: Infinity }
+                  {}
                 );
                 persistHomeScrollNow();
                 stashTodaysActivities(full.activities);
@@ -1731,7 +1731,7 @@ export default function HomeScreen() {
                 const full = allocateDiscoverySections(
                   intelligence?.discovery,
                   intelligence?.discoveryItems,
-                  { max: Infinity }
+                  {}
                 );
                 persistHomeScrollNow();
                 stashTodaysRecommendations(full.recommendations);

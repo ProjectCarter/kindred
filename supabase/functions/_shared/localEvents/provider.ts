@@ -11,6 +11,11 @@ import {
   type EventBadgeSignals,
   type EventInfoBadgeId,
 } from "./badgeResolver.ts";
+import { rankLocalEventsForEdition } from "./ranking.ts";
+import {
+  SERPAPI_CANDIDATE_CAP,
+  SERPAPI_MAX_PAGES,
+} from "../editorial/publishing.ts";
 
 export type LocalEventLocation = {
   lat: number;
@@ -112,14 +117,10 @@ export function inferEventCategory(
   return "community";
 }
 
-/** Quiet baseline — a normal weekday still deserves a full page of events. */
-const BASE_TARGET_EVENTS = 16;
-/** Weekends and holidays are when people actually go out — show more. */
-const BUSY_TARGET_EVENTS = 24;
-/** Keep every valid raw candidate; only the target slice truncates. */
-const CANDIDATE_CAP = 80;
-/** Pay for one more page than before when a quieter city still falls short. */
-const MAX_PAGES = 3;
+/** Provider retrieval safety — not an editorial publication cap. */
+const CANDIDATE_CAP = SERPAPI_CANDIDATE_CAP;
+/** Provider pagination safety — not an editorial publication cap. */
+const MAX_PAGES = SERPAPI_MAX_PAGES;
 const RESULTS_PER_PAGE = 20;
 
 export type LocalEventsFetchOptions = {
@@ -418,10 +419,6 @@ export async function probeLocalEventsPipeline(
     options?.htichips === undefined ? "date:week" : options.htichips;
   const dateRange = htichips ? `htichips=${htichips}` : "htichips=none";
 
-  const targetEvents = options?.isBusyDay
-    ? BUSY_TARGET_EVENTS
-    : BASE_TARGET_EVENTS;
-
   const pages: LocalEventsPipelineProbe["pages"] = [];
   let rawEventsTotal = 0;
   let rawResponseSample: unknown = null;
@@ -446,7 +443,7 @@ export async function probeLocalEventsPipeline(
   let rawEvents = first.rawEvents;
 
   while (
-    candidates.length < targetEvents &&
+    candidates.length < CANDIDATE_CAP &&
     rawEvents.length >= RESULTS_PER_PAGE &&
     pagesFetched < MAX_PAGES
   ) {
@@ -491,9 +488,7 @@ export async function probeLocalEventsPipeline(
   }
 
   const afterDedupe = candidates.length;
-  const withPhoto = candidates.filter((e) => Boolean(e.imageUrl));
-  const withoutPhoto = candidates.filter((e) => !e.imageUrl);
-  const ranked = [...withPhoto, ...withoutPhoto].slice(0, targetEvents);
+  const ranked = rankLocalEventsForEdition(candidates.slice(0, CANDIDATE_CAP));
 
   const probe: LocalEventsPipelineProbe = {
     provider: "SerpApi Google Events",
@@ -926,10 +921,6 @@ async function fetchLocalEventsFromSerpApi(
     return [];
   }
 
-  const targetEvents = options?.isBusyDay
-    ? BUSY_TARGET_EVENTS
-    : BASE_TARGET_EVENTS;
-
   const firstPage = await fetchEventsPageWithRecovery(
     cityQuery,
     apiKey,
@@ -966,9 +957,7 @@ async function fetchLocalEventsFromSerpApi(
   }
 
   // Photo-first: the grid needs real photography whenever possible.
-  const withPhoto = candidates.filter((e) => Boolean(e.imageUrl));
-  const withoutPhoto = candidates.filter((e) => !e.imageUrl);
-  const ranked = [...withPhoto, ...withoutPhoto].slice(0, targetEvents);
+  const ranked = rankLocalEventsForEdition(candidates.slice(0, CANDIDATE_CAP));
 
   console.log("[localEvents] getLocalEvents filtered", {
     provider: "SerpApi Google Events",
@@ -988,9 +977,9 @@ async function fetchLocalEventsFromSerpApi(
           activeStrategy.htichips !== "date:week")
     ),
     pagesFetched,
-    targetEvents,
+    candidateCap: CANDIDATE_CAP,
     candidateCount: candidates.length,
-    filteredCount: ranked.length,
+    publishedCount: ranked.length,
     eventsWithImages: ranked.filter((e) => Boolean(e.imageUrl)).length,
   });
 

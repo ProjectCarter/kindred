@@ -176,7 +176,6 @@ export async function refreshDiscoveryData(
         sourceName: e.sourceName,
       })),
       localPlaces,
-      maxPerSurface: 8,
       recentKeys: [],
     });
 

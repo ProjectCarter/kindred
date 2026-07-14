@@ -71,6 +71,7 @@ export {
   splitEventSchedule,
 } from "./localEvents/provider.ts";
 import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { rankLocalEventsForEdition } from "./localEvents/ranking.ts";
 export { enrichEventsWithBanditNotes };
 
 export type BuildEditionResult =
@@ -721,6 +722,17 @@ export async function buildEditionForUser(
   const weatherIntel = buildWeatherIntelligence(weatherForecast, weatherSummary);
   const weatherAttribution = weatherSourceAttribution(weatherForecast);
 
+  const localEventsRanked = rankLocalEventsForEdition(localEventsRaw, {
+    now: editionDateObj,
+    weatherIntel,
+  });
+
+  console.log("[buildEdition] local events ranked", {
+    raw: localEventsRaw.length,
+    ranked: localEventsRanked.length,
+    topEvent: localEventsRanked[0]?.name?.slice(0, 48) ?? null,
+  });
+
   console.log("[buildEdition] weather provider", {
     provider: weatherForecast?.provider ?? null,
     hasAlerts: Boolean(weatherIntel?.hasActiveAlerts),
@@ -753,6 +765,8 @@ export async function buildEditionForUser(
     city,
     region: region ?? null,
     state: state ?? null,
+    readerLat: weatherLat,
+    readerLon: weatherLon,
     interests: personalization.interests.length
       ? personalization.interests
       : interests,
@@ -775,7 +789,7 @@ export async function buildEditionForUser(
       ? personalization.interests
       : interests,
     recentKeys: blendedRecentKeys,
-    localEvents: localEventsRaw,
+    localEvents: localEventsRanked,
     discovery: banditDiscoveryCtx,
   });
 
@@ -786,12 +800,16 @@ export async function buildEditionForUser(
   const claim = banditsPickStory?.claim ?? null;
   const localEventsForBandit =
     claim?.kind === "event"
-      ? localEventsRaw.filter((_e, i) => i !== claim.index)
-      : localEventsRaw;
+      ? localEventsRanked.filter((_e, i) => i !== claim.index)
+      : localEventsRanked;
   const localPlacesForDiscovery =
     claim?.kind === "place"
       ? localPlaces.filter((p) => p.providerId !== claim.providerId)
       : localPlaces;
+  const npsParksForDiscovery =
+    claim?.kind === "nps"
+      ? npsParks.filter((p) => p.parkCode !== claim.parkCode)
+      : npsParks;
 
   // Story Editor — lead + every Top Story + Bandit's Pick, all in parallel,
   // alongside the (independent) Local Events Bandit Notes pass. Each Story
@@ -930,6 +948,8 @@ export async function buildEditionForUser(
     city,
     region,
     state,
+    readerLat: weatherLat,
+    readerLon: weatherLon,
     interests: personalization.interests.length
       ? personalization.interests
       : interests,
@@ -937,14 +957,11 @@ export async function buildEditionForUser(
     favoriteSources: personalization.favoriteSources,
     weatherSummary,
     weatherIntel,
-    npsParks,
+    npsParks: npsParksForDiscovery,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
-    localEvents,
+    localEvents: localEventsForBandit,
     localPlaces: localPlacesForDiscovery,
-    // A newspaper should feel abundant — 4 per surface starved sections
-    // (like Recommendations) that draw from a single category surface.
-    maxPerSurface: 8,
     recentKeys: recentDiscoveryKeys,
   });
 

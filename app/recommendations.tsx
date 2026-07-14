@@ -12,22 +12,14 @@ import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
-import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
-/**
- * The full Recommendations list — reached from the front page's
- * "See all N recommendations →" call-to-action. Same grid, capped at
- * SEE_ALL_MAX (exploration, not an endless directory — kindred-mission.mdc).
- */
+/** Full published Recommendations list — every qualifying place in today's edition. */
 export default function RecommendationsScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.recommendations
   );
-  const items = useMemo(
-    () => getTodaysRecommendations().slice(0, SEE_ALL_MAX),
-    []
-  );
+  const items = useMemo(() => getTodaysRecommendations(), []);
   const cards = useMemo(() => selectRecommendationCards(items), [items]);
 
   return (
@@ -59,7 +51,7 @@ export default function RecommendationsScreen() {
         <EditorialCardGrid
           kicker="Recommendations"
           cards={cards}
-          limit={Math.max(cards.length, 1)}
+          initialRenderCount={Math.max(cards.length, 1)}
           fallbackIcon="mappin.and.ellipse"
           fallbackIconIonicon="location-outline"
           emptyCopy="Nothing new to recommend nearby today — check back tomorrow."

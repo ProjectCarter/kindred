@@ -1,4 +1,5 @@
 import { sourceQualityPrior } from "./sources.ts";
+import { haversineKm } from "./geo.ts";
 import {
   interestToDiscoveryCategories,
   seasonForDate,
@@ -44,6 +45,14 @@ function parseEditionDate(editionDate: string, fallback: Date): Date {
     return new Date(y, m - 1, d);
   }
   return fallback;
+}
+
+function isValidCoord(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function normalizeSource(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 /**
@@ -109,6 +118,22 @@ export function scoreDiscoveryItem(
     }
   }
 
+  // Personalization — favorite publishers (same signal family as news scoring).
+  const sourceKey = normalize(item.source.name);
+  for (const fav of (ctx.favoriteSources ?? []).slice(0, 6)) {
+    const key = normalizeSource(fav);
+    if (!key) continue;
+    if (sourceKey.includes(key) || key.includes(sourceKey)) {
+      score += 10;
+      reasons.push({
+        code: "favorite_source",
+        label: `From a source you often read (${item.source.name})`,
+        weight: 10,
+      });
+      break;
+    }
+  }
+
   // Location
   if (ctx.city) {
     const city = normalize(ctx.city);
@@ -127,6 +152,58 @@ export function scoreDiscoveryItem(
         code: "location_match",
         label: "Fits your place",
         weight: 14,
+      });
+    }
+  }
+
+  // Proximity — verified coordinates only; never geocode or guess.
+  if (
+    isValidCoord(ctx.readerLat) &&
+    isValidCoord(ctx.readerLon) &&
+    isValidCoord(item.lat) &&
+    isValidCoord(item.lon)
+  ) {
+    const km = haversineKm(ctx.readerLat, ctx.readerLon, item.lat, item.lon);
+    if (km <= 25) {
+      score += 12;
+      reasons.push({
+        code: "proximity_near",
+        label: "Close enough for a real outing today",
+        weight: 12,
+      });
+    } else if (km <= 80) {
+      score += 6;
+      reasons.push({
+        code: "proximity_regional",
+        label: "A reasonable day trip from home",
+        weight: 6,
+      });
+    } else if (item.tags.includes("nps_park") && km > 200) {
+      score -= 10;
+      reasons.push({
+        code: "proximity_far_nps",
+        label: "National park held back — too far for today",
+        weight: -10,
+      });
+    }
+  }
+
+  // NPS geographic confidence from provider — low-confidence parks stay off desk.
+  if (item.tags.includes("nps_park")) {
+    const confidence = item.providerConfidence ?? 0.75;
+    if (confidence >= 0.9) {
+      score += 8;
+      reasons.push({
+        code: "nps_high_confidence",
+        label: "National Park Service listing near you",
+        weight: 8,
+      });
+    } else if (confidence < 0.6) {
+      score -= 12;
+      reasons.push({
+        code: "nps_low_confidence",
+        label: "Park held back — not geographically relevant",
+        weight: -12,
       });
     }
   }

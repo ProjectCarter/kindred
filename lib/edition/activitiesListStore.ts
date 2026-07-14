@@ -1,7 +1,9 @@
 import type { RankedDiscoveryItem } from "./discovery";
 
-/** Front page caps at this; the full "See all" screen passes a larger value. */
-export const ACTIVITIES_GRID_LIMIT = 8;
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing";
+
+/** Homepage first paint — rendering only, not a publication cap. */
+export const ACTIVITIES_GRID_LIMIT = HOMEPAGE_INITIAL_RENDER_COUNT;
 
 /**
  * In-memory handoff of today's full Activities list, for the "See all N

@@ -10,7 +10,7 @@ import {
 import { SymbolView, type SFSymbol } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
-import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
+import { HOMEPAGE_INITIAL_RENDER_COUNT, sliceForInitialRender } from "../lib/edition/editorialPublishing";
 import { BanditCharacter } from "./BanditCharacter";
 import { ActionBar } from "./ActionBar";
 import type { ActionBarAction } from "../lib/edition/actionBar";
@@ -34,7 +34,9 @@ type Props = {
   kicker: string;
   cards: EditorialGridCard[];
   onOpenCard?: (card: EditorialGridCard) => void;
-  /** Front page caps at `limit`; the full list screen passes a larger value. */
+  /** Homepage first paint — rendering only. Omit for the full published list. */
+  initialRenderCount?: number;
+  /** @deprecated Use initialRenderCount */
   limit?: number;
   /** Present only on the front page — shown below the grid once there are more items than fit. */
   onSeeAll?: () => void;
@@ -63,6 +65,7 @@ export function EditorialCardGrid({
   kicker,
   cards,
   onOpenCard,
+  initialRenderCount,
   limit,
   onSeeAll,
   seeAllLabel,
@@ -78,12 +81,16 @@ export function EditorialCardGrid({
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
   const completeCards = cards.filter((card) => Boolean(card.title?.trim()));
+  const renderCount =
+    initialRenderCount ??
+    (typeof limit === "number" ? limit : undefined) ??
+    HOMEPAGE_INITIAL_RENDER_COUNT;
   const visible =
-    typeof limit === "number" ? completeCards.slice(0, limit) : completeCards;
+    renderCount != null && Number.isFinite(renderCount)
+      ? sliceForInitialRender(completeCards, renderCount)
+      : completeCards;
   const remainingCount = completeCards.length - visible.length;
-  // The "See all" destination page caps at SEE_ALL_MAX (kindred-mission.mdc)
-  // — never promise a bigger number here than what that page will show.
-  const seeAllTotal = Math.min(completeCards.length, SEE_ALL_MAX);
+  const seeAllTotal = completeCards.length;
 
   if (visible.length === 0) {
     return (

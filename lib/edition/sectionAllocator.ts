@@ -52,6 +52,11 @@ import type {
   RankedDiscoveryItem,
 } from "./discovery";
 import { discoveryItemsForSurface } from "./discovery";
+import {
+  DISCOVERY_PUBLISH_MIN_SCORE,
+  HOMEPAGE_INITIAL_RENDER_COUNT,
+  sliceForInitialRender,
+} from "./editorialPublishing";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -186,55 +191,49 @@ export type SectionAllocation = {
   recommendations: RankedDiscoveryItem[];
 };
 
-/** Per-section cap — matches Local Events' "up to 8, then See More" rhythm. */
-const SECTION_MAX = 8;
-
 /**
  * Partition the shared discovery pool once per edition render.
  * Priority order (Activities → Notebook → Recommendations) decides who
- * wins a contested item; everyone downstream only ever sees what's left,
- * so no item can appear in more than one of these three sections — a
- * beach claimed by Activities (shown for paddleboarding) can never also
- * turn up in Recommendations (shown for its view). Notebook claims before
- * Recommendations specifically so this locked carousel always has enough
- * depth, even on a thin catalog day.
+ * wins a contested item; everyone downstream only ever sees what's left.
+ * Publication is quality-gated — every item above the editorial threshold
+ * is included; no arbitrary section maximums or category quotas.
  */
 export function allocateDiscoverySections(
   discovery: DiscoveryPayload | null | undefined,
   extraItems?: RankedDiscoveryItem[] | null,
   options?: {
     /**
-     * Override the per-section cap. The front page always uses
-     * SECTION_MAX (8); a "See all" destination screen passes Infinity
-     * here to get every claimed item under the same editorial priority
-     * (Activities → Notebook → Recommendations), not just the front
-     * page's first 8.
+     * Minimum discovery score required for publication in a section.
+     * Defaults to DISCOVERY_PUBLISH_MIN_SCORE.
+     */
+    publishMinScore?: number;
+    /**
+     * Homepage initial render count — UI only. When set, each section's
+     * returned array is sliced for first paint; the full published pool
+     * remains in the edition. Omit (or pass Infinity) for the complete list.
+     */
+    initialRenderCount?: number;
+    /**
+     * @deprecated Use initialRenderCount — arbitrary section caps removed.
      */
     max?: number;
-    /**
-     * Normalized venue/business keys already introduced elsewhere on the page
-     * (Local Events, Bandit's Pick) — the same business must never appear
-     * twice in one edition (kindred-mission.mdc: no duplicates).
-     */
     excludeVenueNames?: ReadonlySet<string>;
   }
 ): SectionAllocation {
-  const max = options?.max ?? SECTION_MAX;
+  const minScore = options?.publishMinScore ?? DISCOVERY_PUBLISH_MIN_SCORE;
+  const initialRender =
+    options?.initialRenderCount ??
+    (options?.max != null && Number.isFinite(options.max)
+      ? options.max
+      : undefined);
   const excludeVenueNames = options?.excludeVenueNames;
-  // Sort by score up front — surfaces are concatenated in a fixed order
-  // (coffee before museums before scenic drives, etc.), which used to mean
-  // claim() effectively picked by surface order, not editorial quality.
-  // "Experiences first" (kindred-recommendations.mdc) only means anything
-  // if the highest-scored candidates — now boosted for real experiences
-  // and penalized for chains — are actually considered first.
   const pool = dedupeById([
     ...fullCandidatePool(discovery),
     ...(extraItems ?? []),
   ])
     .filter((d) => !isRealEvent(d))
-    // A card with no real title is broken, not beautiful — drop it rather
-    // than render a blank headline (kindred-mission.mdc).
     .filter((d) => Boolean(d.item.title?.trim()))
+    .filter((d) => d.score >= minScore)
     .filter((d) => {
       if (!excludeVenueNames?.size) return true;
       return !venueKeysForItem(d).some((key) => excludeVenueNames.has(key));
@@ -242,57 +241,32 @@ export function allocateDiscoverySections(
     .sort((a, b) => b.score - a.score);
   const claimed = new Set<string>();
 
-  /**
-   * "Hard variety rule" (kindred-recommendations.mdc): never let one
-   * category or venue subtype crowd a section — max two picks per key,
-   * even if a third would otherwise outscore something more different.
-   * `activities` collapses every Foursquare activity subtype into one
-   * DiscoveryCategory, so it needs its own, more specific key (e.g.
-   * "bowling alley") — every other category is specific enough already.
-   */
-  const MAX_PER_CATEGORY = 2;
-
-  function varietyKey(item: RankedDiscoveryItem): string {
-    if (item.item.category !== "activities") return item.item.category;
-    const specific = item.item.venueCategories?.find((c) => c && c.trim());
-    return specific ? specific.trim().toLowerCase() : "activities";
-  }
-
   function claim(
-    predicate: (item: RankedDiscoveryItem) => boolean,
-    cap: number
+    predicate: (item: RankedDiscoveryItem) => boolean
   ): RankedDiscoveryItem[] {
     const picked: RankedDiscoveryItem[] = [];
-    const perKey = new Map<string, number>();
     for (const item of pool) {
-      if (picked.length >= cap) break;
+      if (item.score < minScore) continue;
       if (claimed.has(item.item.id)) continue;
       if (!predicate(item)) continue;
-      const key = varietyKey(item);
-      const count = perKey.get(key) ?? 0;
-      if (count >= MAX_PER_CATEGORY) continue;
       picked.push(item);
       claimed.add(item.item.id);
-      perKey.set(key, count + 1);
     }
-    return picked;
+    return initialRender != null && Number.isFinite(initialRender)
+      ? sliceForInitialRender(picked, initialRender)
+      : picked;
   }
 
   const activities = claim(
     (item) =>
       ACTIVITIES_CATEGORIES.has(item.item.category) ||
-      (CONTEXTUAL_CATEGORIES.has(item.item.category) && readsAsActive(item)),
-    max
+      (CONTEXTUAL_CATEGORIES.has(item.item.category) && readsAsActive(item))
   );
 
-  const notebook = claim(
-    (item) => NOTEBOOK_CATEGORIES.has(item.item.category),
-    max
-  );
+  const notebook = claim((item) => NOTEBOOK_CATEGORIES.has(item.item.category));
 
-  const recommendations = claim(
-    (item) => RECOMMENDATION_CATEGORIES.has(item.item.category),
-    max
+  const recommendations = claim((item) =>
+    RECOMMENDATION_CATEGORIES.has(item.item.category)
   );
 
   return {
@@ -302,3 +276,8 @@ export function allocateDiscoverySections(
     recommendations,
   };
 }
+
+export {
+  DISCOVERY_PUBLISH_MIN_SCORE,
+  HOMEPAGE_INITIAL_RENDER_COUNT,
+};

@@ -1,7 +1,9 @@
 /**
- * "See All" philosophy (kindred-mission.mdc): exploration, not an endless
- * directory. Every "See All" destination screen (Events, Activities,
- * Recommendations) shows up to this many curated results — no pagination
- * or infinite scroll in Version 1.
+ * @deprecated Publication no longer caps at a fixed count.
+ * See `editorialPublishing.ts` — full published editions are shown on See All screens.
+ * HOMEPAGE_INITIAL_RENDER_COUNT is rendering-only (homepage first paint).
  */
-export const SEE_ALL_MAX = 20;
+export {
+  HOMEPAGE_INITIAL_RENDER_COUNT,
+  LOCAL_EVENTS_GRID_LIMIT,
+} from "./editorialPublishing";

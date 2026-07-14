@@ -10,22 +10,14 @@ import { openKindredEvent } from "../lib/edition/openEvent";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
-import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
-/**
- * The full Local Events list — reached from the front page's
- * "See all N events →" call-to-action. Same two-column grid, capped at
- * SEE_ALL_MAX (exploration, not an endless directory — kindred-mission.mdc).
- */
+/** Full published Local Events list — every qualifying event in today's edition. */
 export default function EventsScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.events
   );
-  const events = useMemo(
-    () => getTodaysEvents().slice(0, SEE_ALL_MAX),
-    []
-  );
+  const events = useMemo(() => getTodaysEvents(), []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -55,7 +47,7 @@ export default function EventsScreen() {
 
         <LocalEventsGrid
           events={events}
-          limit={Math.max(events.length, 1)}
+          initialRenderCount={Math.max(events.length, 1)}
           showBanditWhenEmpty
           onOpenEvent={(event) => {
             persistNow();

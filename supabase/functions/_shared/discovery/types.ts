@@ -86,6 +86,8 @@ export type DiscoveryItem = {
   /** Verified coordinates from provider data — never fabricated. */
   lat?: number | null;
   lon?: number | null;
+  /** Provider relevance confidence 0–1 (NPS distance, etc.) — never fabricated. */
+  providerConfidence?: number | null;
   /** Provider-supplied category names (e.g. Foursquare "Coffee Shop") — editorial context only, never invented. */
   venueCategories?: string[];
   tags: string[];
@@ -172,6 +174,9 @@ export type DiscoveryRankingContext = {
   recentKeys?: string[];
   /** Structured weather signals from WeatherProvider — optional enrichment. */
   weatherIntel?: import("../weather/providers/types.ts").WeatherIntelligence | null;
+  /** Reader coordinates for proximity scoring — never fabricated. */
+  readerLat?: number | null;
+  readerLon?: number | null;
   /** NPS parks near the reader — become hiking / scenic discovery candidates. */
   npsParks?: import("../nps/types.ts").NpsParkRecord[];
   /** Local events from the edition — become discovery candidates. */
@@ -227,5 +232,8 @@ export type DiscoveryRankingContext = {
   }>;
   /** Which surfaces to assemble this edition. */
   surfaces?: DiscoverySurface[];
+  /** Minimum score to publish on a discovery surface — quality gate, not a count cap. */
+  publishMinScore?: number;
+  /** @deprecated Use publishMinScore — arbitrary per-surface counts are no longer enforced. */
   maxPerSurface?: number;
 };

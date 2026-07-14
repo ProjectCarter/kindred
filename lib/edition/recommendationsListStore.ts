@@ -1,7 +1,8 @@
 import type { RankedDiscoveryItem } from "./discovery";
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing";
 
-/** Front page caps at this; the full "See all" screen passes a larger value. */
-export const RECOMMENDATIONS_GRID_LIMIT = 8;
+/** Homepage first paint — rendering only, not a publication cap. */
+export const RECOMMENDATIONS_GRID_LIMIT = HOMEPAGE_INITIAL_RENDER_COUNT;
 
 /**
  * In-memory handoff of today's full Recommendations list, for the "See all

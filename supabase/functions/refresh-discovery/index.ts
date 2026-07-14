@@ -132,7 +132,6 @@ Deno.serve(async (req) => {
         sourceName: e.sourceName,
       })),
       localPlaces,
-      maxPerSurface: 8,
       recentKeys: [],
     });
 

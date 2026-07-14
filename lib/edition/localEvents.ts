@@ -3,6 +3,12 @@ import type { EventInfoBadgeId } from "./eventBadges";
 import { inferEventInfoBadges } from "./eventBadges";
 import { claimImage } from "./imageRegistry";
 import { filterValidEvents } from "./localEventsValidation";
+import {
+  HOMEPAGE_INITIAL_RENDER_COUNT,
+  LOCAL_EVENT_PUBLISH_MIN_SCORE,
+  meetsLocalEventPublishThreshold,
+  sliceForInitialRender,
+} from "./editorialPublishing";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -315,44 +321,48 @@ export function parseLocalEventsBody(
 }
 
 /**
- * Prefer photograph-backed events, but don't let the grid's 4 slots fill up
- * with the same genre when a livelier day has real variety on offer —
- * a concert, a market, and two food events reads richer than four concerts.
+ * Rank every published local event — continuous editorial order, no category quotas.
  */
-export const LOCAL_EVENTS_GRID_LIMIT = 8;
+export function orderEventsForEdition(events: LocalEventCard[]): LocalEventCard[] {
+  const now = new Date();
+  return events
+    .map((event) => ({ event, score: scoreEventForGrid(event, now) }))
+    .filter((row) => meetsLocalEventPublishThreshold(row.score))
+    .sort((a, b) => b.score - a.score)
+    .map((row) => row.event);
+}
 
 /**
- * `limit` defaults to the front page's cap (8). Pass a larger value (or
- * `events.length`) for a "show everything" surface like the full Events
- * list — the photo-first / category-diversity ordering still applies, it
- * just stops trimming once `limit` is reached.
+ * Homepage grids pass `initialRenderCount` (default HOMEPAGE_INITIAL_RENDER_COUNT)
+ * for first paint only — the stored edition retains every qualifying event.
  */
 export function orderEventsForGrid(
   events: LocalEventCard[],
-  limit: number = LOCAL_EVENTS_GRID_LIMIT
+  initialRenderCount: number = HOMEPAGE_INITIAL_RENDER_COUNT
 ): LocalEventCard[] {
-  const withPhoto = events.filter((e) => Boolean(e.imageUrl));
-  const without = events.filter((e) => !e.imageUrl);
-  const byPhotoFirst = [...withPhoto, ...without];
+  const published = orderEventsForEdition(events);
+  return sliceForInitialRender(published, initialRenderCount);
+}
 
-  if (byPhotoFirst.length <= limit) return byPhotoFirst.slice(0, limit);
+/** @deprecated Use HOMEPAGE_INITIAL_RENDER_COUNT — rendering only */
+export const LOCAL_EVENTS_GRID_LIMIT = HOMEPAGE_INITIAL_RENDER_COUNT;
 
-  const picked: LocalEventCard[] = [];
-  const seenCategory = new Set<LocalEventCategory | undefined>();
+export { LOCAL_EVENT_PUBLISH_MIN_SCORE, HOMEPAGE_INITIAL_RENDER_COUNT };
 
-  for (const event of byPhotoFirst) {
-    if (picked.length >= limit) break;
-    if (event.category && seenCategory.has(event.category)) continue;
-    picked.push(event);
-    if (event.category) seenCategory.add(event.category);
-  }
-  for (const event of byPhotoFirst) {
-    if (picked.length >= limit) break;
-    if (picked.includes(event)) continue;
-    picked.push(event);
-  }
+function scoreEventForGrid(event: LocalEventCard, now: Date): number {
+  let score = 0;
+  const schedule = `${event.date} ${event.time}`.trim().toLowerCase();
+  if (/\btoday\b/.test(schedule)) score += 20;
+  else if (/\btomorrow\b/.test(schedule)) score += 16;
+  else if (event.time && event.time !== "Time TBA") score += 8;
+  else if (event.date && event.date !== "Date TBA") score += 5;
+  else score -= 4;
 
-  return picked;
+  if (event.sourceUrl?.trim()) score += 5;
+  if (event.venue?.trim()) score += 3;
+  if (event.city?.trim()) score += 2;
+  if (event.imageUrl?.trim()) score += 2;
+  return score;
 }
 
 /**

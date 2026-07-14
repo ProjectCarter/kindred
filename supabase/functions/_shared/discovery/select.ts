@@ -1,5 +1,9 @@
 import { isPlaceholderCopy } from "../contentQuality.ts";
 import {
+  DISCOVERY_PUBLISH_MIN_SCORE,
+  publishDiscoveryItems,
+} from "../editorial/publishing.ts";
+import {
   SURFACE_CATEGORIES,
   SURFACE_EDITOR_NOTES,
   SURFACE_HEADLINES,
@@ -10,8 +14,6 @@ import type {
   DiscoverySurfaceResult,
   RankedDiscoveryItem,
 } from "./types.ts";
-
-const DEFAULT_MAX = 4;
 
 /** Place-like categories must come from verified local data, not seed templates. */
 const PLACE_CATEGORIES = new Set([
@@ -82,13 +84,22 @@ function isVerifiedPlaceItem(
   allowSeedFallback = false
 ): boolean {
   const cat = item.item.category;
+  if (item.item.tags.includes("nps_park")) {
+    const confidence = item.item.providerConfidence ?? 0.75;
+    if (confidence < 0.6) return false;
+    const npsCategories = new Set([
+      "hiking",
+      "parks",
+      "scenic_drives",
+      "museums",
+      "experiences",
+    ]);
+    if (!npsCategories.has(cat)) return false;
+  }
   if (!PLACE_CATEGORIES.has(cat)) return true;
-  // Local events / provider URLs count as verified
   if (item.item.id.startsWith("event_")) return true;
   if (item.item.source?.tier === "local" && item.item.url) return true;
   if (item.item.place?.city && item.item.source?.url) return true;
-  // Seed Kindred Desk place templates are not verified recommendations —
-  // except as an explicit, opt-in fallback (see doc comment above).
   if (item.item.source?.name === "Kindred Desk") return allowSeedFallback;
   if (isPlaceholderCopy(item.item.title) || isPlaceholderCopy(item.item.dek)) {
     return false;
@@ -97,8 +108,8 @@ function isVerifiedPlaceItem(
 }
 
 /**
- * Assemble one discovery surface — magazine desk curation, not a feed dump.
- * Recently shown picks stay off the desk until fresher options run out.
+ * Assemble one discovery surface — publish every candidate above the
+ * editorial quality threshold, ranked highest to lowest. No arbitrary caps.
  */
 export function selectDiscoverySurface(
   ranked: RankedDiscoveryItem[],
@@ -106,20 +117,12 @@ export function selectDiscoverySurface(
   ctx: DiscoveryRankingContext
 ): DiscoverySurfaceResult {
   const allowed = new Set(SURFACE_CATEGORIES[surface]);
-  const max = ctx.maxPerSurface ?? DEFAULT_MAX;
+  const minScore = ctx.publishMinScore ?? DISCOVERY_PUBLISH_MIN_SCORE;
   const recentKeys = ctx.recentKeys ?? [];
-  const selected: RankedDiscoveryItem[] = [];
-  const used = new Set<string>();
-  const usedCategories = new Set<string>();
 
   const strictPool = ranked.filter(
     (r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r, false)
   );
-  // Nothing verified came back for this surface at all (e.g. Foursquare's
-  // niche Activities categories returned zero results for this metro) —
-  // fall back to Kindred Desk's generic picks rather than showing nothing.
-  // Real venues always win when even one exists, so this never displaces
-  // verified local data.
   const pool = (
     strictPool.length > 0
       ? strictPool
@@ -128,7 +131,6 @@ export function selectDiscoverySurface(
         )
   ).sort((a, b) => b.score - a.score);
 
-  // Hidden gems: prefer uniqueness
   const ordered =
     surface === "hidden_gems"
       ? [...pool].sort(
@@ -139,54 +141,13 @@ export function selectDiscoverySurface(
         )
       : pool;
 
-  function consider(
-    candidate: RankedDiscoveryItem,
-    allowRecent: boolean
-  ): boolean {
-    if (selected.length >= max) return false;
-    if (used.has(candidate.item.id)) return false;
-    if (!allowRecent && isRecentlyRecommended(candidate.item, recentKeys)) {
-      return false;
-    }
+  const fresh = ordered.filter(
+    (candidate) => !isRecentlyRecommended(candidate.item, recentKeys)
+  );
+  let selected = publishDiscoveryItems(fresh, minScore);
 
-    // Soft category diversity within a surface (except single-category surfaces)
-    if (
-      allowed.size > 1 &&
-      usedCategories.has(candidate.item.category) &&
-      selected.length < max - 1
-    ) {
-      // Prefer unused categories first; allow repeat later if needed.
-      const hasUnused = ordered.some(
-        (c) =>
-          !used.has(c.item.id) &&
-          !usedCategories.has(c.item.category) &&
-          (allowRecent || !isRecentlyRecommended(c.item, recentKeys))
-      );
-      if (hasUnused) return false;
-    }
-
-    // Bandit's Picks: never overwhelm — keep calm mix
-    if (surface === "bandits_picks" && selected.length >= 3) return false;
-
-    selected.push({
-      ...candidate,
-      surfaces: [...new Set([...candidate.surfaces, surface])],
-    });
-    used.add(candidate.item.id);
-    usedCategories.add(candidate.item.category);
-    return true;
-  }
-
-  for (const candidate of ordered) {
-    consider(candidate, false);
-  }
-
-  // Fill if variety pass left gaps — only then reuse recent recommendations.
-  if (selected.length < Math.min(2, max)) {
-    for (const candidate of ordered) {
-      if (selected.length >= Math.min(3, max)) break;
-      consider(candidate, true);
-    }
+  if (!selected.length) {
+    selected = publishDiscoveryItems(ordered, minScore);
   }
 
   return {
@@ -195,7 +156,7 @@ export function selectDiscoverySurface(
     editorNote: SURFACE_EDITOR_NOTES[surface],
     items: selected.map((s) => ({
       ...s,
-      // Attach why for consumers
+      surfaces: [...new Set([...s.surfaces, surface])],
       reasons: [
         {
           code: `surface_${surface}`,

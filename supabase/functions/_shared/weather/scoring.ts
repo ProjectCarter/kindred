@@ -22,6 +22,13 @@ function isFarmersMarket(item: DiscoveryItem): boolean {
   return /farmers market|farmer'?s market|produce market/i.test(venueHay(item));
 }
 
+function isIndoorActivity(item: DiscoveryItem): boolean {
+  if (item.category !== "activities") return false;
+  return /bowling|escape room|arcade|climbing gym|laser tag|indoor|billiards|mini golf|axe throwing|go-kart|karaoke/i.test(
+    venueHay(item)
+  );
+}
+
 function isOutdoorConcert(item: DiscoveryItem): boolean {
   return /concert|live music|outdoor show|amphitheater|music festival/i.test(
     venueHay(item)
@@ -114,6 +121,10 @@ export function weatherIntelligenceAdjustments(
     } else if (intel.isIdealBeachWeather || intel.bucket === "fair") {
       add("weather_water_fair", "Good conditions for being on the water", 8);
     }
+  }
+
+  if (isIndoorActivity(item) && intel.isIndoorPreferred) {
+    add("weather_indoor_activity", "Rain or heat — indoor activity fits the day", 10);
   }
 
   if (isFarmersMarket(item)) {

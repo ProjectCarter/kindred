@@ -33,7 +33,7 @@ type Props = {
  */
 export function BanditsNotebook({ items, discovery, onOpenItem }: Props) {
   const { width: screenW } = useWindowDimensions();
-  const cards = selectNotebookCards(items, { discovery, max: 6 });
+  const cards = selectNotebookCards(items, { discovery });
 
   if (!cards.length) return null;
 

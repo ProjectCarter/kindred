@@ -12,22 +12,14 @@ import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
-import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
-/**
- * The full Activities list — reached from the front page's
- * "See all N activities →" call-to-action. Same grid, capped at
- * SEE_ALL_MAX (exploration, not an endless directory — kindred-mission.mdc).
- */
+/** Full published Activities list — every qualifying activity in today's edition. */
 export default function ActivitiesScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.activities
   );
-  const items = useMemo(
-    () => getTodaysActivities().slice(0, SEE_ALL_MAX),
-    []
-  );
+  const items = useMemo(() => getTodaysActivities(), []);
   const cards = useMemo(() => selectActivityCards(items), [items]);
 
   return (
@@ -59,7 +51,7 @@ export default function ActivitiesScreen() {
         <EditorialCardGrid
           kicker="Activities"
           cards={cards}
-          limit={Math.max(cards.length, 1)}
+          initialRenderCount={Math.max(cards.length, 1)}
           fallbackIcon="figure.run"
           fallbackIconIonicon="walk-outline"
           emptyCopy="Nothing new to try nearby today — check back tomorrow."

@@ -10,6 +10,8 @@ import {
   localEventsAsDiscoveryItems,
   localPlacesAsDiscoveryItems,
 } from "../discovery/catalog.ts";
+import { npsParksAsDiscoveryItems } from "../nps/catalog.ts";
+import type { NpsParkRecord } from "../nps/types.ts";
 import { scoreDiscoveryItem } from "../discovery/score.ts";
 import { whyLine as discoveryWhyLine } from "../discovery/select.ts";
 import type {
@@ -55,6 +57,7 @@ export type BanditsPickStory = {
   claim:
     | { kind: "event"; index: number }
     | { kind: "place"; providerId: string }
+    | { kind: "nps"; parkCode: string }
     | null;
   /** Internal — feeds composeBanditsPickIntro. Never persisted. */
   voice: BanditVoiceBucket;
@@ -362,12 +365,61 @@ function placeCandidates(
   return out;
 }
 
+function npsParkCandidates(
+  parks: NpsParkRecord[] | undefined,
+  ctx: DiscoveryRankingContext,
+  recentKeys: string[]
+): Candidate[] {
+  const list = (parks ?? []).filter((p) => (p.confidence ?? 0) >= 0.75);
+  if (!list.length) return [];
+
+  const items = npsParksAsDiscoveryItems(list);
+  const out: Candidate[] = [];
+
+  list.forEach((park, i) => {
+    const discoveryItem = items[i];
+    if (!discoveryItem) return;
+
+    const hay = `${discoveryItem.title} ${discoveryItem.dek}`;
+    if (isDisqualifyingTone(hay)) return;
+    if (matchesTitle(recentKeys, discoveryItem.title)) return;
+    if (!passesFriendTest(discoveryItem)) return;
+
+    const ranked = scoreDiscoveryItem(discoveryItem, ctx);
+    let score = ranked.score + 10;
+
+    const kind: BanditsPickKind =
+      discoveryItem.category === "hiking" ? "activity" : "hidden_gem";
+
+    out.push({
+      score,
+      story: {
+        kind,
+        id: discoveryItem.id,
+        headline: discoveryItem.title,
+        summary: discoveryItem.dek,
+        source: discoveryItem.source.name,
+        url: discoveryItem.url ?? null,
+        publishedAt: null,
+        imageUrl: park.imageUrl,
+        category: discoveryItem.category,
+        why: discoveryWhyLine(ranked),
+        discoveryItem,
+        claim: { kind: "nps", parkCode: park.parkCode },
+        voice: kind === "activity" ? "activity" : "hidden_gem",
+      },
+    });
+  });
+
+  return out;
+}
+
 function eventCandidates(
   events: LocalEvent[] | undefined,
   ctx: DiscoveryRankingContext,
   recentKeys: string[]
 ): Candidate[] {
-  const list = (events ?? []).slice(0, 12);
+  const list = events ?? [];
   if (!list.length) return [];
   const items = localEventsAsDiscoveryItems(list);
   const out: Candidate[] = [];
@@ -478,6 +530,11 @@ export function selectBanditsPick(input: {
     ),
     ...placeCandidates(
       input.discovery.localPlaces,
+      input.discovery,
+      discoveryRecentKeys
+    ),
+    ...npsParkCandidates(
+      input.discovery.npsParks,
       input.discovery,
       discoveryRecentKeys
     ),

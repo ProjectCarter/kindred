@@ -8,8 +8,9 @@ import {
 } from "react-native";
 import {
   orderEventsForGrid,
+  orderEventsForEdition,
   eventFallbackImage,
-  LOCAL_EVENTS_GRID_LIMIT,
+  HOMEPAGE_INITIAL_RENDER_COUNT,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
 import {
@@ -22,14 +23,13 @@ import { BanditCharacter } from "./BanditCharacter";
 import { ActionBar } from "./ActionBar";
 import { resolveActionsForLocalEvent } from "../lib/edition/actionBar";
 import { paper, press } from "../lib/edition/newspaperTheme";
-import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 import type { LocalEventsLoadStatus } from "../lib/edition/localEventsPipeline";
 
 type Props = {
   events: LocalEventCard[];
   onOpenEvent?: (event: LocalEventCard) => void;
-  /** Front page caps at LOCAL_EVENTS_GRID_LIMIT; the full Events list passes a larger value. */
-  limit?: number;
+  /** Homepage first paint count — rendering only; full edition may contain more. */
+  initialRenderCount?: number;
   /** Present only on the front page — shown below the grid once there are more events than fit. */
   onSeeAll?: () => void;
   /**
@@ -50,7 +50,7 @@ type Props = {
 export function LocalEventsGrid({
   events,
   onOpenEvent,
-  limit = LOCAL_EVENTS_GRID_LIMIT,
+  initialRenderCount = HOMEPAGE_INITIAL_RENDER_COUNT,
   onSeeAll,
   showBanditWhenEmpty = false,
   loadStatus = "ready",
@@ -61,11 +61,10 @@ export function LocalEventsGrid({
   const halfGap = 12;
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
-  const visible = orderEventsForGrid(events, limit);
-  const remainingCount = events.length - visible.length;
-  // The "See all" destination page caps at SEE_ALL_MAX (kindred-mission.mdc)
-  // — never promise a bigger number here than what that page will show.
-  const seeAllTotal = Math.min(events.length, SEE_ALL_MAX);
+  const published = orderEventsForEdition(events);
+  const visible = orderEventsForGrid(events, initialRenderCount);
+  const remainingCount = published.length - visible.length;
+  const seeAllTotal = published.length;
 
   if (visible.length === 0) {
     const emptyCopy =
