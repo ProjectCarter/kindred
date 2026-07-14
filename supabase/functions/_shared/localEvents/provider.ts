@@ -125,6 +125,44 @@ const RESULTS_PER_PAGE = 20;
 export type LocalEventsFetchOptions = {
   /** Widen the target on Saturdays, Sundays, and recognized holidays. */
   isBusyDay?: boolean;
+  /** Override SerpAPI date chip — pass null to omit htichips entirely. */
+  htichips?: string | null;
+};
+
+export type LocalEventsPipelineProbe = {
+  provider: "SerpApi Google Events";
+  apiKeyPresent: boolean;
+  cityQuery: string | null;
+  location: LocalEventLocation;
+  dateRange: string;
+  pages: Array<{
+    start: number;
+    httpStatus: number;
+    ok: boolean;
+    timedOut: boolean;
+    rawEventCount: number;
+    apiError: string | null;
+    serpStatus: string | null;
+    responseKeys: string[];
+  }>;
+  rawEventsTotal: number;
+  parse: {
+    rawTotal: number;
+    rejectedNoTitle: number;
+    rejectedNoSource: number;
+    rejectedForeignCity: number;
+    candidateCount: number;
+    sampleRejections: Array<{
+      reason: "no_title" | "no_source" | "foreign_city";
+      title: string | null;
+      venue: string | null;
+      resolvedCity: string | null;
+    }>;
+  };
+  afterDedupe: number;
+  afterPhotoRank: number;
+  finalCount: number;
+  rawResponseSample: unknown;
 };
 
 /** Strip filler words so near-duplicate titles compare on the words that matter. */
@@ -243,17 +281,295 @@ export async function getLocalEvents(
   }
 }
 
-async function fetchEventsPage(
+async function fetchEventsPageWithProbe(
   cityQuery: string,
   apiKey: string,
-  start: number
-): Promise<unknown[]> {
+  start: number,
+  htichips = "date:week"
+): Promise<{
+  rawEvents: unknown[];
+  httpStatus: number;
+  ok: boolean;
+  timedOut: boolean;
+  apiError: string | null;
+  serpStatus: string | null;
+  responseKeys: string[];
+  rawData: unknown;
+}> {
   const params = new URLSearchParams({
     engine: "google_events",
     q: `Events in ${cityQuery}`,
-    htichips: "date:week",
     api_key: apiKey,
+    hl: "en",
+    gl: "us",
   });
+  if (htichips) params.set("htichips", htichips);
+  if (start > 0) params.set("start", String(start));
+
+  let res: Response;
+  let timedOut = false;
+  try {
+    res = await fetch(`https://serpapi.com/search.json?${params}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    timedOut = /timeout|timed out|abort/i.test(message);
+    return {
+      rawEvents: [],
+      httpStatus: 0,
+      ok: false,
+      timedOut,
+      apiError: message,
+      serpStatus: null,
+      responseKeys: [],
+      rawData: null,
+    };
+  }
+
+  const data = await res.json();
+  const rawEvents: unknown[] = Array.isArray(data.events_results)
+    ? data.events_results
+    : [];
+
+  const apiError = data.error ? String(data.error) : null;
+  const serpStatus =
+    data.search_metadata?.status != null
+      ? String(data.search_metadata.status)
+      : null;
+  const responseKeys =
+    data && typeof data === "object" ? Object.keys(data as object) : [];
+
+  console.log("[localEvents] probe page", {
+    start,
+    httpStatus: res.status,
+    ok: res.ok,
+    rawEventCount: rawEvents.length,
+    apiError,
+    serpStatus,
+    responseKeys,
+    rawResponseSample: JSON.stringify(data).slice(0, 4000),
+  });
+
+  if (!res.ok || apiError) {
+    return {
+      rawEvents: [],
+      httpStatus: res.status,
+      ok: res.ok,
+      timedOut: false,
+      apiError,
+      serpStatus,
+      responseKeys,
+      rawData: data,
+    };
+  }
+
+  return {
+    rawEvents,
+    httpStatus: res.status,
+    ok: res.ok,
+    timedOut: false,
+    apiError: null,
+    serpStatus,
+    responseKeys,
+    rawData: data,
+  };
+}
+
+/**
+ * Server-side diagnostic trace for getLocalEvents — returns stage counts and
+ * a sanitized raw-response sample without exposing the API key.
+ */
+export async function probeLocalEventsPipeline(
+  location: LocalEventLocation,
+  options?: LocalEventsFetchOptions
+): Promise<LocalEventsPipelineProbe> {
+  const apiKey = Deno.env.get("EVENTS_API_KEY");
+  const cityQuery =
+    location.city && location.city !== "your area" ? location.city : null;
+
+  const emptyProbe = (
+    overrides: Partial<LocalEventsPipelineProbe> = {}
+  ): LocalEventsPipelineProbe => ({
+    provider: "SerpApi Google Events",
+    apiKeyPresent: Boolean(apiKey),
+    cityQuery,
+    location,
+    dateRange: "htichips=date:week",
+    pages: [],
+    rawEventsTotal: 0,
+    parse: {
+      rawTotal: 0,
+      rejectedNoTitle: 0,
+      rejectedNoSource: 0,
+      rejectedForeignCity: 0,
+      candidateCount: 0,
+      sampleRejections: [],
+    },
+    afterDedupe: 0,
+    afterPhotoRank: 0,
+    finalCount: 0,
+    rawResponseSample: null,
+    ...overrides,
+  });
+
+  if (!apiKey) return emptyProbe();
+  if (!cityQuery) return emptyProbe();
+
+  const htichips =
+    options?.htichips === undefined ? "date:week" : options.htichips;
+  const dateRange = htichips ? `htichips=${htichips}` : "htichips=none";
+
+  const targetEvents = options?.isBusyDay
+    ? BUSY_TARGET_EVENTS
+    : BASE_TARGET_EVENTS;
+
+  const pages: LocalEventsPipelineProbe["pages"] = [];
+  let rawEventsTotal = 0;
+  let rawResponseSample: unknown = null;
+
+  const first = await fetchEventsPageWithProbe(cityQuery, apiKey, 0, htichips);
+  pages.push({
+    start: 0,
+    httpStatus: first.httpStatus,
+    ok: first.ok,
+    timedOut: first.timedOut,
+    rawEventCount: first.rawEvents.length,
+    apiError: first.apiError,
+    serpStatus: first.serpStatus,
+    responseKeys: first.responseKeys,
+  });
+  rawEventsTotal += first.rawEvents.length;
+  rawResponseSample = first.rawData;
+
+  let parseStats = parseCandidatesWithStats(first.rawEvents, cityQuery);
+  let candidates = dedupeEvents(parseStats.candidates);
+  let pagesFetched = 1;
+  let rawEvents = first.rawEvents;
+
+  while (
+    candidates.length < targetEvents &&
+    rawEvents.length >= RESULTS_PER_PAGE &&
+    pagesFetched < MAX_PAGES
+  ) {
+    const next = await fetchEventsPageWithProbe(
+      cityQuery,
+      apiKey,
+      pagesFetched * RESULTS_PER_PAGE,
+      htichips
+    );
+    pages.push({
+      start: pagesFetched * RESULTS_PER_PAGE,
+      httpStatus: next.httpStatus,
+      ok: next.ok,
+      timedOut: next.timedOut,
+      rawEventCount: next.rawEvents.length,
+      apiError: next.apiError,
+      serpStatus: next.serpStatus,
+      responseKeys: next.responseKeys,
+    });
+    pagesFetched += 1;
+    if (!next.rawEvents.length) break;
+    rawEventsTotal += next.rawEvents.length;
+    rawEvents = next.rawEvents;
+    const nextStats = parseCandidatesWithStats(next.rawEvents, cityQuery);
+    parseStats = {
+      candidates: [...parseStats.candidates, ...nextStats.candidates],
+      rawTotal: parseStats.rawTotal + nextStats.rawTotal,
+      rejectedNoTitle: parseStats.rejectedNoTitle + nextStats.rejectedNoTitle,
+      rejectedNoSource:
+        parseStats.rejectedNoSource + nextStats.rejectedNoSource,
+      rejectedForeignCity:
+        parseStats.rejectedForeignCity + nextStats.rejectedForeignCity,
+      sampleRejections: [
+        ...parseStats.sampleRejections,
+        ...nextStats.sampleRejections,
+      ].slice(0, 5),
+    };
+    candidates = dedupeEvents([
+      ...candidates,
+      ...nextStats.candidates,
+    ]);
+  }
+
+  const afterDedupe = candidates.length;
+  const withPhoto = candidates.filter((e) => Boolean(e.imageUrl));
+  const withoutPhoto = candidates.filter((e) => !e.imageUrl);
+  const ranked = [...withPhoto, ...withoutPhoto].slice(0, targetEvents);
+
+  const probe: LocalEventsPipelineProbe = {
+    provider: "SerpApi Google Events",
+    apiKeyPresent: true,
+    cityQuery,
+    location,
+    dateRange,
+    pages,
+    rawEventsTotal,
+    parse: {
+      rawTotal: parseStats.rawTotal,
+      rejectedNoTitle: parseStats.rejectedNoTitle,
+      rejectedNoSource: parseStats.rejectedNoSource,
+      rejectedForeignCity: parseStats.rejectedForeignCity,
+      candidateCount: parseStats.candidates.length,
+      sampleRejections: parseStats.sampleRejections,
+    },
+    afterDedupe,
+    afterPhotoRank: ranked.length,
+    finalCount: ranked.length,
+    rawResponseSample,
+  };
+
+  console.log("[localEvents] probeLocalEventsPipeline", probe);
+  return probe;
+}
+
+const SERP_RETRY_DELAY_MS = 1500;
+const SERP_EMPTY_RETRIES = 2;
+
+type EventsPageStrategy = {
+  cityQuery: string;
+  htichips: string | null;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildPageStrategies(
+  cityQuery: string,
+  location: LocalEventLocation
+): EventsPageStrategy[] {
+  const strategies: EventsPageStrategy[] = [
+    { cityQuery, htichips: "date:week" },
+  ];
+  const state = location.state?.trim();
+  if (state && !cityQuery.toLowerCase().includes(state.toLowerCase())) {
+    strategies.push({
+      cityQuery: `${cityQuery}, ${state}`,
+      htichips: "date:week",
+    });
+  }
+  strategies.push({ cityQuery, htichips: null });
+  return strategies;
+}
+
+async function fetchEventsPageOnce(
+  strategy: EventsPageStrategy,
+  apiKey: string,
+  start: number
+): Promise<{
+  rawEvents: unknown[];
+  httpStatus: number;
+  ok: boolean;
+  apiError: string | null;
+  eventsState: string | null;
+}> {
+  const params = new URLSearchParams({
+    engine: "google_events",
+    q: `Events in ${strategy.cityQuery}`,
+    api_key: apiKey,
+    hl: "en",
+    gl: "us",
+  });
+  if (strategy.htichips) params.set("htichips", strategy.htichips);
   if (start > 0) params.set("start", String(start));
 
   const res = await fetch(`https://serpapi.com/search.json?${params}`);
@@ -261,17 +577,111 @@ async function fetchEventsPage(
   const rawEvents: unknown[] = Array.isArray(data.events_results)
     ? data.events_results
     : [];
+  const apiError = data.error ? String(data.error) : null;
+  const eventsState =
+    data.search_information?.events_results_state != null
+      ? String(data.search_information.events_results_state)
+      : null;
 
-  console.log("[localEvents] getLocalEvents page", {
-    provider: "SerpApi Google Events",
-    start,
+  if (!res.ok) {
+    return {
+      rawEvents: [],
+      httpStatus: res.status,
+      ok: false,
+      apiError,
+      eventsState,
+    };
+  }
+
+  // Google can attach an `error` string even when events exist — keep them.
+  if (rawEvents.length > 0) {
+    return {
+      rawEvents,
+      httpStatus: res.status,
+      ok: true,
+      apiError,
+      eventsState,
+    };
+  }
+
+  return {
+    rawEvents: [],
     httpStatus: res.status,
-    ok: res.ok,
-    rawEventCount: rawEvents.length,
-    apiError: data.error ? String(data.error) : null,
-  });
+    ok: true,
+    apiError,
+    eventsState,
+  };
+}
 
-  if (!res.ok || data.error) return [];
+function isRetriableEmptySerpResponse(
+  apiError: string | null,
+  eventsState: string | null
+): boolean {
+  if (eventsState === "Fully empty") return true;
+  if (!apiError) return false;
+  return /hasn't returned any results|fully empty|no results/i.test(apiError);
+}
+
+async function fetchEventsPageWithRecovery(
+  cityQuery: string,
+  apiKey: string,
+  start: number,
+  location: LocalEventLocation,
+  lockedStrategy?: EventsPageStrategy
+): Promise<{ rawEvents: unknown[]; strategy: EventsPageStrategy | null }> {
+  const strategies = lockedStrategy
+    ? [lockedStrategy]
+    : buildPageStrategies(cityQuery, location);
+
+  for (const strategy of strategies) {
+    for (let attempt = 1; attempt <= SERP_EMPTY_RETRIES; attempt++) {
+      const result = await fetchEventsPageOnce(strategy, apiKey, start);
+
+      console.log("[localEvents] getLocalEvents page", {
+        provider: "SerpApi Google Events",
+        cityQuery: strategy.cityQuery,
+        htichips: strategy.htichips,
+        start,
+        attempt,
+        httpStatus: result.httpStatus,
+        ok: result.ok,
+        rawEventCount: result.rawEvents.length,
+        apiError: result.apiError,
+        eventsState: result.eventsState,
+      });
+
+      if (result.rawEvents.length > 0) {
+        return { rawEvents: result.rawEvents, strategy };
+      }
+
+      if (
+        !isRetriableEmptySerpResponse(result.apiError, result.eventsState) ||
+        attempt >= SERP_EMPTY_RETRIES
+      ) {
+        break;
+      }
+
+      await sleep(SERP_RETRY_DELAY_MS);
+    }
+  }
+
+  return { rawEvents: [], strategy: null };
+}
+
+async function fetchEventsPage(
+  cityQuery: string,
+  apiKey: string,
+  start: number,
+  location: LocalEventLocation,
+  lockedStrategy?: EventsPageStrategy
+): Promise<unknown[]> {
+  const { rawEvents } = await fetchEventsPageWithRecovery(
+    cityQuery,
+    apiKey,
+    start,
+    location,
+    lockedStrategy
+  );
   return rawEvents;
 }
 
@@ -329,12 +739,38 @@ function parseCandidates(
   rawEvents: unknown[],
   cityQuery: string
 ): LocalEvent[] {
+  return parseCandidatesWithStats(rawEvents, cityQuery).candidates;
+}
+
+function parseCandidatesWithStats(
+  rawEvents: unknown[],
+  cityQuery: string
+): {
+  candidates: LocalEvent[];
+  rawTotal: number;
+  rejectedNoTitle: number;
+  rejectedNoSource: number;
+  rejectedForeignCity: number;
+  sampleRejections: LocalEventsPipelineProbe["parse"]["sampleRejections"];
+} {
   const candidates: LocalEvent[] = [];
 
   let rawTotal = 0;
   let rejectedNoSource = 0;
   let rejectedForeignCity = 0;
   let rejectedNoTitle = 0;
+  const sampleRejections: LocalEventsPipelineProbe["parse"]["sampleRejections"] =
+    [];
+
+  const noteRejection = (
+    reason: "no_title" | "no_source" | "foreign_city",
+    title: string | null,
+    venue: string | null,
+    resolvedCity: string | null
+  ) => {
+    if (sampleRejections.length >= 5) return;
+    sampleRejections.push({ reason, title, venue, resolvedCity });
+  };
 
   for (const raw of rawEvents) {
     if (!raw || typeof raw !== "object") continue;
@@ -359,6 +795,7 @@ function parseCandidates(
     const name = event.title?.trim();
     if (!name) {
       rejectedNoTitle += 1;
+      noteRejection("no_title", null, null, null);
       continue;
     }
     rawTotal += 1;
@@ -384,6 +821,7 @@ function parseCandidates(
     const sourceUrl = ticket?.link?.trim() || event.link?.trim() || "";
     if (!sourceUrl) {
       rejectedNoSource += 1;
+      noteRejection("no_source", name, venue, cityFromAddress || cityQuery);
       continue;
     }
 
@@ -392,6 +830,7 @@ function parseCandidates(
 
     if (!eventMatchesCity(resolvedCity, venue, name, cityQuery)) {
       rejectedForeignCity += 1;
+      noteRejection("foreign_city", name, venue, resolvedCity);
       console.log("[localEvents] getLocalEvents rejected foreign city", {
         expected: cityQuery,
         eventCity: resolvedCity,
@@ -459,7 +898,14 @@ function parseCandidates(
     candidateCount: candidates.length,
   });
 
-  return candidates;
+  return {
+    candidates,
+    rawTotal,
+    rejectedNoTitle,
+    rejectedNoSource,
+    rejectedForeignCity,
+    sampleRejections,
+  };
 }
 
 async function fetchLocalEventsFromSerpApi(
@@ -484,7 +930,14 @@ async function fetchLocalEventsFromSerpApi(
     ? BUSY_TARGET_EVENTS
     : BASE_TARGET_EVENTS;
 
-  let rawEvents = await fetchEventsPage(cityQuery, apiKey, 0);
+  const firstPage = await fetchEventsPageWithRecovery(
+    cityQuery,
+    apiKey,
+    0,
+    location
+  );
+  let rawEvents = firstPage.rawEvents;
+  const activeStrategy = firstPage.strategy;
   let candidates = dedupeEvents(parseCandidates(rawEvents, cityQuery));
 
   // A quiet town's first page can easily fall short of the target — only
@@ -493,12 +946,15 @@ async function fetchLocalEventsFromSerpApi(
   while (
     candidates.length < targetEvents &&
     rawEvents.length >= RESULTS_PER_PAGE &&
-    pagesFetched < MAX_PAGES
+    pagesFetched < MAX_PAGES &&
+    activeStrategy
   ) {
     const nextPage = await fetchEventsPage(
       cityQuery,
       apiKey,
-      pagesFetched * RESULTS_PER_PAGE
+      pagesFetched * RESULTS_PER_PAGE,
+      location,
+      activeStrategy
     );
     pagesFetched += 1;
     if (!nextPage.length) break;
@@ -521,8 +977,16 @@ async function fetchLocalEventsFromSerpApi(
     region: location.region ?? null,
     lat: location.lat,
     lon: location.lon,
-    dateRange: "htichips=date:week",
+    dateRange: activeStrategy?.htichips
+      ? `htichips=${activeStrategy.htichips}`
+      : "htichips=none",
     searchRadius: "city_query_inclusive",
+    serpCityQuery: activeStrategy?.cityQuery ?? cityQuery,
+    recoveryUsed: Boolean(
+      activeStrategy &&
+        (activeStrategy.cityQuery !== cityQuery ||
+          activeStrategy.htichips !== "date:week")
+    ),
     pagesFetched,
     targetEvents,
     candidateCount: candidates.length,
