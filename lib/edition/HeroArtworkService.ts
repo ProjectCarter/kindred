@@ -13,12 +13,15 @@ export type {
   HeroArtworkAsset,
   HeroArtworkContext,
   ScoredHeroArtwork,
+  MorningHeroExperience,
+  HeroArtworkCollectionId,
 } from "./heroArtwork/types";
 
 export {
-  INITIAL_HERO_ARTWORK_PLAN_COUNT,
-  type PlannedHeroArtwork,
-} from "./heroArtwork/initialLibraryPlan";
+  HERO_ARTWORK_COLLECTION_IDS,
+  primaryCollection,
+  type HeroArtworkCollection,
+} from "./heroArtwork/collections";
 
 export {
   getHeroArtworkCatalog,
@@ -40,12 +43,24 @@ export {
 } from "./heroArtwork/licensing";
 
 export {
+  validateAboutArtworkBody,
+  ABOUT_ARTWORK_WORD_MIN,
+  ABOUT_ARTWORK_WORD_MAX,
+} from "./heroArtwork/editorial";
+
+export { selectBanditMorningNote } from "./heroArtwork/banditNote";
+
+export { buildMorningHeroExperience } from "./heroArtwork/presentation";
+
+export {
   loadRecentHeroArtworkIds,
   rememberHeroArtworkShown,
 } from "./heroArtwork/rotation";
 
 export {
   getFrozenHeroArtworkId,
+  getFrozenMorningHeroExperience,
+  setFrozenMorningHeroExperience,
   setFrozenHeroArtworkId,
   clearFrozenHeroArtwork,
 } from "./heroArtwork/freeze";
@@ -67,9 +82,12 @@ import {
 } from "./heroArtwork/rotation";
 import {
   getFrozenHeroArtworkId,
+  getFrozenMorningHeroExperience,
+  setFrozenMorningHeroExperience,
   setFrozenHeroArtworkId,
   clearFrozenHeroArtwork,
 } from "./heroArtwork/freeze";
+import { buildMorningHeroExperience } from "./heroArtwork/presentation";
 
 export const HeroArtworkService = {
   getCatalog: getHeroArtworkCatalog,
@@ -79,9 +97,12 @@ export const HeroArtworkService = {
   scoreCatalog: scoreHeroArtworkCatalog,
   parseEditionDate,
   getSeason,
+  buildMorningExperience: buildMorningHeroExperience,
   loadRecentHeroArtworkIds,
   rememberHeroArtworkShown,
   getFrozenHeroArtworkId,
+  getFrozenMorningExperience: getFrozenMorningHeroExperience,
+  setFrozenMorningExperience: setFrozenMorningHeroExperience,
   setFrozenHeroArtworkId,
   clearFrozenHeroArtwork,
 };

@@ -5,6 +5,8 @@ import type {
   HeroArtworkSeason,
   ScoredHeroArtwork,
 } from "./types";
+import type { HeroArtworkCollectionId } from "./collections";
+import { primaryCollection } from "./collections";
 import { getHeroArtworkCatalog } from "./catalog";
 import { isHeroArtworkAssetSelectable } from "./licensing";
 
@@ -12,9 +14,9 @@ const SCORE = {
   FEATURED: 1200,
   SEASON: 600,
   HOLIDAY: 500,
+  COLLECTION_ROTATION_PENALTY: 400,
   EDITORIAL_PRIORITY: 4,
   RECENT_PENALTY: 300,
-  NEVER_USED_BONUS: 80,
 } as const;
 
 export function parseEditionDate(date?: Date | string | null): Date {
@@ -37,12 +39,24 @@ function daySeed(date: Date): number {
   return date.getFullYear() * 1000 + (date.getMonth() + 1) * 50 + date.getDate();
 }
 
+function collectionPenalty(
+  asset: HeroArtworkAsset,
+  recentCollectionIds: HeroArtworkCollectionId[]
+): number {
+  const primary = primaryCollection(asset.collections);
+  if (!primary) return 0;
+  const index = recentCollectionIds.indexOf(primary);
+  if (index === -1) return 0;
+  return SCORE.COLLECTION_ROTATION_PENALTY * (recentCollectionIds.length - index);
+}
+
 function scoreAsset(
   asset: HeroArtworkAsset,
   ctx: {
     season: HeroArtworkSeason;
     holiday: HeroArtworkHoliday | null;
     recentArtworkIds: string[];
+    recentCollectionIds: HeroArtworkCollectionId[];
   }
 ): ScoredHeroArtwork {
   const reasons: string[] = [];
@@ -61,13 +75,14 @@ function scoreAsset(
     reasons.push("holiday");
   }
   score += asset.editorialPriority * SCORE.EDITORIAL_PRIORITY;
-  reasons.push("editorial-priority");
 
   const recentIndex = ctx.recentArtworkIds.indexOf(asset.id);
   if (recentIndex !== -1) {
     score -= SCORE.RECENT_PENALTY * (ctx.recentArtworkIds.length - recentIndex);
     reasons.push("rotation-penalty");
   }
+
+  score -= collectionPenalty(asset, ctx.recentCollectionIds);
 
   return { asset, score, reasons };
 }
@@ -81,10 +96,13 @@ export function scoreHeroArtworkCatalog(
   const season = context.season ?? getSeason(month);
   const holiday = context.holiday ?? null;
   const recentArtworkIds = context.recentArtworkIds ?? [];
+  const recentCollectionIds = context.recentCollectionIds ?? [];
 
   return catalog
     .filter((asset) => isHeroArtworkAssetSelectable(asset))
-    .map((asset) => scoreAsset(asset, { season, holiday, recentArtworkIds }))
+    .map((asset) =>
+      scoreAsset(asset, { season, holiday, recentArtworkIds, recentCollectionIds })
+    )
     .sort(
       (a, b) =>
         b.score - a.score ||
@@ -105,7 +123,6 @@ function pickWithDailyRotation(
   return pool[index]?.asset ?? scored[0].asset;
 }
 
-/** Choose today's hero artwork — stable for the edition date once frozen. */
 export function selectHeroArtwork(
   context: HeroArtworkContext = {},
   catalog: HeroArtworkAsset[] = getHeroArtworkCatalog()

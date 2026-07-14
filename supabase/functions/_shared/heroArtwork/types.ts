@@ -5,6 +5,8 @@
  * photography for Events, Activities, Recommendations). Never import across desks.
  */
 
+import type { HeroArtworkCollectionId } from "./collections.ts";
+
 export type HeroArtworkOrientation = "portrait" | "landscape" | "square";
 
 export type HeroArtworkSeason = "spring" | "summer" | "autumn" | "winter";
@@ -26,10 +28,8 @@ export type HeroArtworkPublicDomainStatus = "pending" | "verified" | "rejected";
 
 export type HeroArtworkApprovalStatus = "pending" | "approved" | "rejected";
 
-/**
- * Museum and archive providers — register new adapters in providers.ts without
- * redesigning selection or storage.
- */
+export type HeroArtworkCuratorEditorialStatus = "pending" | "approved" | "rejected";
+
 export type HeroArtworkSourceProvider =
   | "met"
   | "national_gallery_art"
@@ -61,17 +61,26 @@ export type HeroArtworkRecord = {
   storagePath: string | null;
   orientation: HeroArtworkOrientation | null;
   dominantColors: string[];
+  collections: HeroArtworkCollectionId[];
+  moodTags: string[];
   tags: string[];
   seasons: HeroArtworkSeason[];
   holidays: HeroArtworkHoliday[];
   license: HeroArtworkLicense | string;
+  licenseUrl: string | null;
   publicDomainStatus: HeroArtworkPublicDomainStatus;
+  verificationSource: string | null;
+  commercialUseConfirmed: boolean;
   attributionText: string | null;
   attributionRequired: boolean;
   verifiedAt: string | null;
   verifiedBy: string | null;
   sourceProvider: HeroArtworkSourceProvider;
   sourceProviderArtworkId: string;
+  aboutArtworkBody: string | null;
+  aboutWordCount: number | null;
+  curatorEditorialStatus: HeroArtworkCuratorEditorialStatus;
+  banditMorningNote: string | null;
   featured: boolean;
   editorialPriority: number;
   lastUsedAt: string | null;
@@ -92,11 +101,16 @@ export type HeroArtworkRow = {
   storage_path: string | null;
   orientation: HeroArtworkOrientation | null;
   dominant_colors: string[];
+  collections: string[];
+  mood_tags: string[];
   tags: string[];
   seasons: string[];
   holidays: string[];
   license: string;
+  license_url: string | null;
   public_domain_status: HeroArtworkPublicDomainStatus;
+  verification_source: string | null;
+  commercial_use_confirmed: boolean;
   attribution_text: string | null;
   attribution_required: boolean;
   verified_at: string | null;
@@ -104,6 +118,10 @@ export type HeroArtworkRow = {
   verification_notes: string | null;
   source_provider: HeroArtworkSourceProvider;
   source_provider_artwork_id: string;
+  about_artwork_body: string | null;
+  about_word_count: number | null;
+  curator_editorial_status: HeroArtworkCuratorEditorialStatus;
+  bandit_morning_note: string | null;
   featured: boolean;
   editorial_priority: number;
   last_used_at: string | null;
@@ -117,6 +135,8 @@ export type HeroArtworkSelectionContext = {
   season?: HeroArtworkSeason | null;
   holiday?: HeroArtworkHoliday | null;
   recentArtworkIds?: string[];
+  recentCollectionIds?: HeroArtworkCollectionId[];
+  weatherHint?: "hot" | "cold" | "rain" | "clear" | null;
 };
 
 export type ScoredHeroArtwork = {
@@ -130,9 +150,10 @@ export type HeroArtworkEditionSelection = {
   artworkId: string;
   selectedAt: string;
   selectionContext: HeroArtworkSelectionContext;
+  banditMorningNote: string | null;
+  presentationSnapshot: Record<string, unknown> | null;
 };
 
 export const HERO_ARTWORK_BUCKET = "kindred-hero-artwork";
 
-/** Planned initial library size — architecture supports scaling to thousands. */
-export const INITIAL_HERO_ARTWORK_TARGET_COUNT = 50;
+export type { HeroArtworkCollectionId } from "./collections.ts";

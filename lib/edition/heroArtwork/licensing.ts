@@ -1,4 +1,5 @@
-import type { HeroArtworkAsset } from "./types.ts";
+import type { HeroArtworkAsset } from "./types";
+import { validateAboutArtworkBody } from "./editorial";
 
 type LicenseCheckInput = Pick<
   HeroArtworkAsset,
@@ -7,6 +8,11 @@ type LicenseCheckInput = Pick<
   | "approvalStatus"
   | "verifiedAt"
   | "attributionRequired"
+  | "licenseUrl"
+  | "verificationSource"
+  | "commercialUseConfirmed"
+  | "curatorEditorialStatus"
+  | "aboutArtworkBody"
 >;
 
 const APPROVED_LICENSES = new Set([
@@ -20,8 +26,19 @@ export function isHeroArtworkAssetSelectable(asset: LicenseCheckInput): boolean 
   if (asset.publicDomainStatus !== "verified") return false;
   if (asset.approvalStatus !== "approved") return false;
   if (!asset.verifiedAt) return false;
+  if (!asset.commercialUseConfirmed) return false;
+  if (asset.curatorEditorialStatus !== "approved") return false;
+
   const license = asset.license.trim().toLowerCase().replace(/\s+/g, "_");
-  return APPROVED_LICENSES.has(license);
+  if (!APPROVED_LICENSES.has(license)) return false;
+
+  const trusted =
+    Boolean(asset.licenseUrl?.trim()) ||
+    Boolean(asset.verificationSource?.trim());
+  if (!trusted) return false;
+
+  const about = validateAboutArtworkBody(asset.aboutArtworkBody);
+  return about.valid;
 }
 
 export function formatHeroArtworkCredit(asset: HeroArtworkAsset): string {

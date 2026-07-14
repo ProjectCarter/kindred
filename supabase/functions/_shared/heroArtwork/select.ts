@@ -6,6 +6,16 @@ import type {
   HeroArtworkSelectionContext,
   ScoredHeroArtwork,
 } from "./types.ts";
+import type { HeroArtworkCollectionId } from "./collections.ts";
+import {
+  collectionMatchesHoliday,
+  collectionMatchesSeason,
+  primaryCollection,
+} from "./collections.ts";
+import {
+  buildMorningHeroExperience,
+  type MorningHeroExperience,
+} from "./presentation.ts";
 import {
   freezeHeroArtworkSelection,
   getFrozenHeroArtworkSelection,
@@ -19,6 +29,9 @@ const SCORE = {
   FEATURED: 1200,
   SEASON: 600,
   HOLIDAY: 500,
+  COLLECTION_SEASON: 350,
+  COLLECTION_HOLIDAY: 300,
+  COLLECTION_ROTATION_PENALTY: 400,
   EDITORIAL_PRIORITY: 4,
   RECENT_PENALTY: 300,
   NEVER_USED_BONUS: 80,
@@ -44,12 +57,24 @@ function daySeed(date: Date): number {
   return date.getFullYear() * 1000 + (date.getMonth() + 1) * 50 + date.getDate();
 }
 
+function collectionRotationPenalty(
+  artwork: HeroArtworkRecord,
+  recentCollectionIds: HeroArtworkCollectionId[]
+): number {
+  const primary = primaryCollection(artwork.collections);
+  if (!primary) return 0;
+  const index = recentCollectionIds.indexOf(primary);
+  if (index === -1) return 0;
+  return SCORE.COLLECTION_ROTATION_PENALTY * (recentCollectionIds.length - index);
+}
+
 function scoreHeroArtwork(
   artwork: HeroArtworkRecord,
   ctx: {
     season: HeroArtworkSeason;
     holiday: HeroArtworkHoliday | null;
     recentArtworkIds: string[];
+    recentCollectionIds: HeroArtworkCollectionId[];
   }
 ): ScoredHeroArtwork {
   const reasons: string[] = [];
@@ -70,6 +95,24 @@ function scoreHeroArtwork(
     reasons.push("holiday");
   }
 
+  for (const collectionId of artwork.collections) {
+    if (collectionMatchesSeason(collectionId, ctx.season)) {
+      score += SCORE.COLLECTION_SEASON;
+      reasons.push(`collection-season:${collectionId}`);
+      break;
+    }
+  }
+
+  if (ctx.holiday) {
+    for (const collectionId of artwork.collections) {
+      if (collectionMatchesHoliday(collectionId, ctx.holiday)) {
+        score += SCORE.COLLECTION_HOLIDAY;
+        reasons.push(`collection-holiday:${collectionId}`);
+        break;
+      }
+    }
+  }
+
   score += artwork.editorialPriority * SCORE.EDITORIAL_PRIORITY;
   reasons.push("editorial-priority");
 
@@ -84,6 +127,15 @@ function scoreHeroArtwork(
     reasons.push("rotation-penalty");
   }
 
+  const collectionPenalty = collectionRotationPenalty(
+    artwork,
+    ctx.recentCollectionIds
+  );
+  if (collectionPenalty > 0) {
+    score -= collectionPenalty;
+    reasons.push("collection-rotation-penalty");
+  }
+
   return { artwork, score, reasons };
 }
 
@@ -96,12 +148,18 @@ export function scoreHeroArtworkCatalog(
   const season = context.season ?? getSeason(month);
   const holiday = context.holiday ?? null;
   const recentArtworkIds = context.recentArtworkIds ?? [];
+  const recentCollectionIds = context.recentCollectionIds ?? [];
 
   return catalog
     .filter((artwork) => isHeroArtworkRecordSelectable(artwork))
     .map((artwork) => {
       assertHeroArtworkSelectable(artwork);
-      return scoreHeroArtwork(artwork, { season, holiday, recentArtworkIds });
+      return scoreHeroArtwork(artwork, {
+        season,
+        holiday,
+        recentArtworkIds,
+        recentCollectionIds,
+      });
     })
     .sort(
       (a, b) =>
@@ -123,10 +181,6 @@ function pickWithDailyRotation(
   return pool[index]?.artwork ?? scored[0].artwork;
 }
 
-/**
- * Choose one hero artwork for the morning masthead.
- * Prefers seasonal/holiday matches, avoids recent picks, rotates within top band.
- */
 export function selectDailyHeroArtwork(
   catalog: HeroArtworkRecord[],
   context: HeroArtworkSelectionContext = {}
@@ -137,10 +191,6 @@ export function selectDailyHeroArtwork(
   return pickWithDailyRotation(scored, date);
 }
 
-/**
- * Server path: return frozen selection for edition date, or select + freeze once.
- * Scrolling or refreshing must never change today's hero artwork.
- */
 export async function resolveDailyHeroArtwork(
   admin: SupabaseClient,
   editionDate: string,
@@ -159,10 +209,37 @@ export async function resolveDailyHeroArtwork(
   });
   if (!selected) return null;
 
+  const presentation = buildMorningHeroExperience(selected, editionDate, {
+    season: context.season ?? getSeason(parseEditionDate(editionDate).getMonth() + 1),
+    weatherHint: context.weatherHint ?? null,
+  });
+
   await freezeHeroArtworkSelection(admin, editionDate, selected.id, {
-    ...context,
-    date: editionDate,
+    selectionContext: { ...context, date: editionDate },
+    presentation: presentation ?? undefined,
   });
   await markHeroArtworkUsed(admin, selected.id);
   return selected;
+}
+
+/**
+ * Full frozen morning experience — artwork, About Today's Artwork, Bandit's note.
+ */
+export async function resolveMorningHeroExperience(
+  admin: SupabaseClient,
+  editionDate: string,
+  context: HeroArtworkSelectionContext = {}
+): Promise<MorningHeroExperience | null> {
+  const frozen = await getFrozenHeroArtworkSelection(admin, editionDate);
+  if (frozen?.presentationSnapshot && "artworkId" in frozen.presentationSnapshot) {
+    return frozen.presentationSnapshot as unknown as MorningHeroExperience;
+  }
+
+  const artwork = await resolveDailyHeroArtwork(admin, editionDate, context);
+  if (!artwork) return null;
+
+  return buildMorningHeroExperience(artwork, editionDate, {
+    season: context.season ?? getSeason(parseEditionDate(editionDate).getMonth() + 1),
+    weatherHint: context.weatherHint ?? null,
+  });
 }

@@ -4,6 +4,7 @@ import type {
   HeroArtworkPublicDomainStatus,
   HeroArtworkRecord,
 } from "./types.ts";
+import { validateAboutArtworkBody } from "./editorial.ts";
 
 export type HeroArtworkLicenseInput = {
   license: HeroArtworkLicense | string;
@@ -12,6 +13,11 @@ export type HeroArtworkLicenseInput = {
   verifiedAt?: string | null;
   sourceInstitution?: string | null;
   attributionRequired?: boolean;
+  licenseUrl?: string | null;
+  verificationSource?: string | null;
+  commercialUseConfirmed?: boolean;
+  curatorEditorialStatus?: HeroArtworkRecord["curatorEditorialStatus"];
+  aboutArtworkBody?: string | null;
 };
 
 const APPROVED_LICENSES = new Set<HeroArtworkLicense>([
@@ -35,7 +41,7 @@ const TRUSTED_OPEN_ACCESS_SOURCES = [
 
 /**
  * Only verified, commercially safe artwork may enter the hero masthead.
- * If verification is incomplete, reject — never guess on licensing.
+ * Commercial safety outweighs library size — if uncertain, reject.
  */
 export function isHeroArtworkLicenseSafe(input: HeroArtworkLicenseInput): boolean {
   if (input.approvalStatus === "rejected") return false;
@@ -43,9 +49,26 @@ export function isHeroArtworkLicenseSafe(input: HeroArtworkLicenseInput): boolea
   if (input.publicDomainStatus !== "verified") return false;
   if (input.approvalStatus !== "approved") return false;
   if (!input.verifiedAt) return false;
+  if (!input.commercialUseConfirmed) return false;
 
   const license = normalizeLicense(input.license);
   if (!APPROVED_LICENSES.has(license)) return false;
+
+  const trusted =
+    isTrustedOpenAccessInstitution(input.sourceInstitution) ||
+    Boolean(input.verificationSource?.trim()) ||
+    Boolean(input.licenseUrl?.trim());
+
+  if (!trusted) return false;
+
+  if (input.curatorEditorialStatus && input.curatorEditorialStatus !== "approved") {
+    return false;
+  }
+
+  if (input.aboutArtworkBody !== undefined) {
+    const about = validateAboutArtworkBody(input.aboutArtworkBody);
+    if (!about.valid) return false;
+  }
 
   return true;
 }
@@ -101,5 +124,10 @@ export function isHeroArtworkRecordSelectable(artwork: HeroArtworkRecord): boole
     verifiedAt: artwork.verifiedAt,
     sourceInstitution: artwork.sourceInstitution,
     attributionRequired: artwork.attributionRequired,
+    licenseUrl: artwork.licenseUrl,
+    verificationSource: artwork.verificationSource,
+    commercialUseConfirmed: artwork.commercialUseConfirmed,
+    curatorEditorialStatus: artwork.curatorEditorialStatus,
+    aboutArtworkBody: artwork.aboutArtworkBody,
   });
 }

@@ -5,7 +5,12 @@ import type {
   HeroArtworkRow,
   HeroArtworkSelectionContext,
 } from "./types.ts";
+import type { HeroArtworkCollectionId } from "./collections.ts";
 import { isHeroArtworkLicenseSafe } from "./licensing.ts";
+import {
+  buildMorningHeroExperience,
+  type MorningHeroExperience,
+} from "./presentation.ts";
 
 export function rowToRecord(row: HeroArtworkRow): HeroArtworkRecord {
   return {
@@ -21,17 +26,26 @@ export function rowToRecord(row: HeroArtworkRow): HeroArtworkRecord {
     storagePath: row.storage_path,
     orientation: row.orientation,
     dominantColors: row.dominant_colors ?? [],
+    collections: (row.collections ?? []) as HeroArtworkCollectionId[],
+    moodTags: row.mood_tags ?? [],
     tags: row.tags ?? [],
     seasons: (row.seasons ?? []) as HeroArtworkRecord["seasons"],
     holidays: (row.holidays ?? []) as HeroArtworkRecord["holidays"],
     license: row.license,
+    licenseUrl: row.license_url,
     publicDomainStatus: row.public_domain_status,
+    verificationSource: row.verification_source,
+    commercialUseConfirmed: row.commercial_use_confirmed ?? false,
     attributionText: row.attribution_text,
     attributionRequired: row.attribution_required,
     verifiedAt: row.verified_at,
     verifiedBy: row.verified_by,
     sourceProvider: row.source_provider,
     sourceProviderArtworkId: row.source_provider_artwork_id,
+    aboutArtworkBody: row.about_artwork_body,
+    aboutWordCount: row.about_word_count,
+    curatorEditorialStatus: row.curator_editorial_status ?? "pending",
+    banditMorningNote: row.bandit_morning_note,
     featured: row.featured,
     editorialPriority: row.editorial_priority,
     lastUsedAt: row.last_used_at,
@@ -48,6 +62,11 @@ export function isSelectableHeroArtwork(row: HeroArtworkRow): boolean {
     verifiedAt: row.verified_at,
     sourceInstitution: row.source_institution,
     attributionRequired: row.attribution_required,
+    licenseUrl: row.license_url,
+    verificationSource: row.verification_source,
+    commercialUseConfirmed: row.commercial_use_confirmed,
+    curatorEditorialStatus: row.curator_editorial_status,
+    aboutArtworkBody: row.about_artwork_body,
   });
 }
 
@@ -59,6 +78,8 @@ export async function listApprovedHeroArtwork(
     .select("*")
     .eq("approval_status", "approved")
     .eq("public_domain_status", "verified")
+    .eq("curator_editorial_status", "approved")
+    .eq("commercial_use_confirmed", true)
     .order("editorial_priority", { ascending: false })
     .order("last_used_at", { ascending: true, nullsFirst: true });
 
@@ -115,6 +136,9 @@ export async function getFrozenHeroArtworkSelection(
     selectedAt: data.selected_at as string,
     selectionContext: (data.selection_context ??
       {}) as HeroArtworkSelectionContext,
+    banditMorningNote: (data.bandit_morning_note as string | null) ?? null,
+    presentationSnapshot:
+      (data.presentation_snapshot as Record<string, unknown> | null) ?? null,
   };
 }
 
@@ -122,23 +146,24 @@ export async function freezeHeroArtworkSelection(
   admin: SupabaseClient,
   editionDate: string,
   artworkId: string,
-  selectionContext: HeroArtworkSelectionContext = {}
+  options: {
+    selectionContext?: HeroArtworkSelectionContext;
+    presentation?: MorningHeroExperience;
+  } = {}
 ): Promise<void> {
   await admin.from("kindred_hero_artwork_edition_selections").upsert(
     {
       edition_date: editionDate,
       artwork_id: artworkId,
-      selection_context: selectionContext,
+      selection_context: options.selectionContext ?? {},
+      bandit_morning_note: options.presentation?.banditMorningNote ?? null,
+      presentation_snapshot: options.presentation ?? {},
       selected_at: new Date().toISOString(),
     },
     { onConflict: "edition_date" }
   );
 }
 
-/**
- * Insert or update a curated artwork record after manual license verification.
- * Binary ingestion is a separate future step — this stores metadata only.
- */
 export async function upsertVerifiedHeroArtwork(
   admin: SupabaseClient,
   draft: Omit<HeroArtworkRecord, "id" | "lastUsedAt" | "useCount"> & {
@@ -153,10 +178,15 @@ export async function upsertVerifiedHeroArtwork(
       verifiedAt: draft.verifiedAt,
       sourceInstitution: draft.sourceInstitution,
       attributionRequired: draft.attributionRequired,
+      licenseUrl: draft.licenseUrl,
+      verificationSource: draft.verificationSource,
+      commercialUseConfirmed: draft.commercialUseConfirmed,
+      curatorEditorialStatus: draft.curatorEditorialStatus,
+      aboutArtworkBody: draft.aboutArtworkBody,
     })
   ) {
     console.warn(
-      "[heroArtwork] rejected upsert — license not verified",
+      "[heroArtwork] rejected upsert — license or editorial not verified",
       draft.internalId
     );
     return null;
@@ -174,17 +204,26 @@ export async function upsertVerifiedHeroArtwork(
     storage_path: draft.storagePath,
     orientation: draft.orientation,
     dominant_colors: draft.dominantColors,
+    collections: draft.collections,
+    mood_tags: draft.moodTags,
     tags: draft.tags,
     seasons: draft.seasons,
     holidays: draft.holidays,
     license: draft.license,
+    license_url: draft.licenseUrl,
     public_domain_status: draft.publicDomainStatus,
+    verification_source: draft.verificationSource,
+    commercial_use_confirmed: draft.commercialUseConfirmed,
     attribution_text: draft.attributionText,
     attribution_required: draft.attributionRequired,
     verified_at: draft.verifiedAt,
     verified_by: draft.verifiedBy,
     source_provider: draft.sourceProvider,
     source_provider_artwork_id: draft.sourceProviderArtworkId,
+    about_artwork_body: draft.aboutArtworkBody,
+    about_word_count: draft.aboutWordCount,
+    curator_editorial_status: draft.curatorEditorialStatus,
+    bandit_morning_note: draft.banditMorningNote,
     featured: draft.featured,
     editorial_priority: draft.editorialPriority,
     approval_status: draft.approvalStatus,
@@ -203,3 +242,5 @@ export async function upsertVerifiedHeroArtwork(
 
   return rowToRecord(data as HeroArtworkRow);
 }
+
+export { buildMorningHeroExperience, type MorningHeroExperience };

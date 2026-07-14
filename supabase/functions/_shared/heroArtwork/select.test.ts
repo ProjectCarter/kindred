@@ -1,7 +1,15 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { listCollections, collectionMatchesSeason } from "./collections.ts";
 import { selectDailyHeroArtwork } from "./select.ts";
 import type { HeroArtworkRecord } from "./types.ts";
-import { INITIAL_HERO_ARTWORK_PLAN_COUNT } from "./initialLibraryPlan.ts";
+
+const SAMPLE_ABOUT =
+  "Claude Monet painted this scene during a prolific period of study along the Seine, " +
+  "when Impressionism was still a young and controversial movement in Paris. The work matters " +
+  "because it helped redefine how painters could capture light, atmosphere, and the passing " +
+  "moment rather than polished illusion. It became famous as audiences recognized a new way " +
+  "of seeing everyday beauty in modern life. Monet's brushwork here invites the viewer to " +
+  "linger in color and reflection rather than narrative detail, offering calm at daybreak.";
 
 function sampleArtwork(overrides: Partial<HeroArtworkRecord>): HeroArtworkRecord {
   return {
@@ -17,17 +25,26 @@ function sampleArtwork(overrides: Partial<HeroArtworkRecord>): HeroArtworkRecord
     storagePath: null,
     orientation: overrides.orientation ?? "landscape",
     dominantColors: overrides.dominantColors ?? ["blue"],
+    collections: overrides.collections ?? ["impressionism"],
+    moodTags: overrides.moodTags ?? ["calm"],
     tags: overrides.tags ?? ["sample"],
     seasons: overrides.seasons ?? ["summer"],
     holidays: overrides.holidays ?? [],
     license: overrides.license ?? "public_domain",
+    licenseUrl: overrides.licenseUrl ?? "https://example.com/license",
     publicDomainStatus: overrides.publicDomainStatus ?? "verified",
+    verificationSource: overrides.verificationSource ?? "Met Open Access",
+    commercialUseConfirmed: overrides.commercialUseConfirmed ?? true,
     attributionText: overrides.attributionText ?? null,
     attributionRequired: overrides.attributionRequired ?? true,
     verifiedAt: overrides.verifiedAt ?? "2026-07-14T00:00:00.000Z",
     verifiedBy: overrides.verifiedBy ?? "curator",
     sourceProvider: overrides.sourceProvider ?? "met",
     sourceProviderArtworkId: overrides.sourceProviderArtworkId ?? "1",
+    aboutArtworkBody: overrides.aboutArtworkBody ?? SAMPLE_ABOUT,
+    aboutWordCount: overrides.aboutWordCount ?? 82,
+    curatorEditorialStatus: overrides.curatorEditorialStatus ?? "approved",
+    banditMorningNote: overrides.banditMorningNote ?? null,
     featured: overrides.featured ?? false,
     editorialPriority: overrides.editorialPriority ?? 60,
     lastUsedAt: overrides.lastUsedAt ?? null,
@@ -36,9 +53,10 @@ function sampleArtwork(overrides: Partial<HeroArtworkRecord>): HeroArtworkRecord
   };
 }
 
-Deno.test("initial library plan targets ~50 artworks", () => {
-  assertEquals(INITIAL_HERO_ARTWORK_PLAN_COUNT >= 48, true);
-  assertEquals(INITIAL_HERO_ARTWORK_PLAN_COUNT <= 55, true);
+Deno.test("collections registry is expandable without fixed artwork counts", () => {
+  const collections = listCollections();
+  assertEquals(collections.length >= 20, true);
+  assertEquals(collectionMatchesSeason("impressionism", "summer"), true);
 });
 
 Deno.test("selectDailyHeroArtwork prefers seasonal match", () => {
@@ -97,4 +115,29 @@ Deno.test("recent artwork receives rotation penalty", () => {
   });
 
   assertEquals(picked?.id, "fresh");
+});
+
+Deno.test("recent collection receives collection rotation penalty", () => {
+  const impressionism = sampleArtwork({
+    id: "imp",
+    internalId: "imp",
+    collections: ["impressionism"],
+    seasons: ["winter"],
+    editorialPriority: 60,
+  });
+  const dutch = sampleArtwork({
+    id: "dutch",
+    internalId: "dutch",
+    collections: ["dutch_masters"],
+    seasons: ["summer"],
+    editorialPriority: 75,
+  });
+
+  const picked = selectDailyHeroArtwork([impressionism, dutch], {
+    date: "2026-07-14",
+    season: "summer",
+    recentCollectionIds: ["impressionism"],
+  });
+
+  assertEquals(picked?.id, "dutch");
 });
