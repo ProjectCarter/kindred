@@ -5,12 +5,16 @@ import type {
 } from "./types.ts";
 
 const SIGNAL_WEIGHTS: Record<string, number> = {
+  // The strongest positive signal — an explicit "show me more like this",
+  // never inferred from mere reading behavior.
+  like: 7,
   clip: 5,
   read_complete: 4,
   source_engage: 3,
   read_progress: 1.5,
   open: 1,
   skip: -3,
+  unlike: -4,
   unclip: -2,
 };
 
@@ -83,7 +87,8 @@ export function aggregateReadingSignals(
     if (
       row.signal_type === "open" ||
       row.signal_type === "read_complete" ||
-      row.signal_type === "source_engage"
+      row.signal_type === "source_engage" ||
+      row.signal_type === "like"
     ) {
       engaged.add(row.story_key);
     }
@@ -103,7 +108,9 @@ export function aggregateReadingSignals(
   const skippedTopics = toSortedAffinities(skips, 2, 6);
 
   const positiveCount = signals.filter((s) =>
-    ["clip", "read_complete", "source_engage", "open"].includes(s.signal_type)
+    ["clip", "read_complete", "source_engage", "open", "like"].includes(
+      s.signal_type
+    )
   ).length;
   const confidence = Math.min(1, positiveCount / 12);
 

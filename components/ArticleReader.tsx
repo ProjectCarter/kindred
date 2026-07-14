@@ -54,6 +54,7 @@ import {
   saveClipping,
   removeClipping,
 } from "../lib/edition/clippings";
+import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
 import {
   KindredStickyMasthead,
   MastheadLink,
@@ -109,6 +110,8 @@ export function ArticleReader({
   const [clipped, setClipped] = useState(false);
   const [clipPending, setClipPending] = useState(false);
   const [clipError, setClipError] = useState<string | null>(null);
+  const [liked, setLiked] = useState(false);
+  const [likePending, setLikePending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(initialScrollY);
   const restoredScroll = useRef(false);
@@ -251,6 +254,27 @@ export function ArticleReader({
       if (!user || cancelled) return;
       const isClipped = await checkClipped(user.id, clipTarget.clipKey);
       if (!cancelled) setClipped(isClipped);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clipTarget]);
+
+  // Liking shares the same eligibility (and key) as pinning — both live on
+  // the same four content types — but is tracked independently.
+  useEffect(() => {
+    if (!clipTarget) {
+      setLiked(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const isLiked = await checkLiked(user.id, clipTarget.clipKey);
+      if (!cancelled) setLiked(isLiked);
     })();
     return () => {
       cancelled = true;
@@ -431,6 +455,75 @@ export function ArticleReader({
     }
   }
 
+  // The Like heart is a private "show me more like this" signal — no
+  // counts, no confirmation, nothing shown outside this reader's own
+  // future editions. Optimistic and quiet: on failure it simply reverts,
+  // no error banner, since a missed like is low-stakes.
+  async function handleToggleLike() {
+    if (!clipTarget || likePending) return;
+    const nextLiked = !liked;
+    setLiked(nextLiked);
+    setLikePending(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLiked(!nextLiked);
+        return;
+      }
+
+      const storyKey = `${article.section}:${article.headline}`.slice(0, 240);
+      const topic =
+        article.contentType ?? inferTopicFromSection(article.section, article.headline);
+
+      if (nextLiked) {
+        const result = await saveLike(user.id, clipTarget, article);
+        if (!result.ok) {
+          setLiked(false);
+          return;
+        }
+        if (!result.duplicate) {
+          void trackReadingSignal({
+            signalType: "like",
+            storyKey,
+            sectionType: article.section,
+            editionId,
+            sectionId: clipTarget.sectionId,
+            source: article.source,
+            topic,
+            payload: { headline: article.headline.slice(0, 160) },
+          });
+        }
+      } else {
+        const result = await removeLike(user.id, clipTarget.clipKey);
+        if (!result.ok) {
+          setLiked(true);
+          return;
+        }
+        void trackReadingSignal({
+          signalType: "unlike",
+          storyKey,
+          sectionType: article.section,
+          editionId,
+          sectionId: clipTarget.sectionId,
+          source: article.source,
+          topic,
+        });
+      }
+    } catch (err) {
+      if (__DEV__) {
+        console.error(
+          "[ArticleReader] like threw",
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+      setLiked(!nextLiked);
+    } finally {
+      setLikePending(false);
+    }
+  }
+
   function openSource() {
     if (!article.sourceUrl) return;
     updateArticleSessionScroll(article.id, scrollYRef.current);
@@ -537,7 +630,7 @@ export function ArticleReader({
           />
 
           <View style={[styles.column, { width: readingWidth }]}>
-            {/* 1b. Pin (save to Clippings) + Share — first interaction under the hero */}
+            {/* 1b. Pin (save) + Like (private taste signal) + Share — first interaction under the hero */}
             <View style={styles.heroActionsRow}>
               {canClip ? (
                 <Pressable
@@ -567,6 +660,39 @@ export function ArticleReader({
                         name={clipped ? "pin" : "pin-outline"}
                         size={20}
                         color={clipped ? paper.terracotta : paper.inkMuted}
+                      />
+                    }
+                  />
+                </Pressable>
+              ) : null}
+              {canClip ? (
+                <Pressable
+                  onPress={() => void handleToggleLike()}
+                  disabled={likePending}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    liked
+                      ? "Liked. Tap to remove — this only shapes your own future editions."
+                      : "Like — show me more like this"
+                  }
+                  style={({ pressed }) => [
+                    styles.heroActionButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <SymbolView
+                    name={liked ? "heart.fill" : "heart"}
+                    size={20}
+                    weight="regular"
+                    tintColor={liked ? paper.terracotta : paper.inkMuted}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
+                    fallback={
+                      <Ionicons
+                        name={liked ? "heart" : "heart-outline"}
+                        size={20}
+                        color={liked ? paper.terracotta : paper.inkMuted}
                       />
                     }
                   />

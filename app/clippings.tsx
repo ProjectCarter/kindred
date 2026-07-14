@@ -26,6 +26,23 @@ import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type Filter = "all" | ClippingContentType;
 
+/**
+ * "Saved from • Monday, July 13" — the day the reader originally pinned
+ * this item, not today's date and never the word "Edition". Comes straight
+ * from the clipping row's own `created_at`, which is set once at insert
+ * time and never touched again — even if the same item is later re-pinned
+ * after being removed, that simply creates a new row with a fresh date.
+ */
+function formatSavedDate(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "article", label: "Articles" },
@@ -273,6 +290,7 @@ function ClippingCard({
   ]
     .filter(Boolean)
     .join("  ·  ");
+  const savedDate = formatSavedDate(clip.createdAt);
 
   return (
     <View style={styles.card}>
@@ -330,6 +348,11 @@ function ClippingCard({
           {metaLine ? (
             <Text style={styles.metaLine} numberOfLines={1}>
               {metaLine}
+            </Text>
+          ) : null}
+          {savedDate ? (
+            <Text style={styles.savedLine} numberOfLines={1}>
+              Saved from • {savedDate}
             </Text>
           ) : null}
         </View>
@@ -531,6 +554,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: paper.inkFaint,
     fontStyle: "italic",
+  },
+  savedLine: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: paper.inkFaint,
+    fontStyle: "italic",
+    marginTop: 2,
   },
   pressed: {
     opacity: press.opacity,

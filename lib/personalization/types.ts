@@ -9,6 +9,8 @@ export type ReadingSignalType =
   | "read_complete"
   | "clip"
   | "unclip"
+  | "like"
+  | "unlike"
   | "skip"
   | "source_engage";
 
