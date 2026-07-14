@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Text,
   View,
@@ -9,7 +9,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
@@ -40,9 +40,18 @@ export default function ClippingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [clippings, setClippings] = useState<ClippingListRow[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
-  const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadGen = useRef(0);
+
+  // Tapping the filled pin here doesn't delete right away — it only marks
+  // the clipping for removal. The row stays visible (pin flips to outline)
+  // so a second tap can undo it. The mark is only made permanent once the
+  // reader actually leaves this screen (see the focus-effect cleanup below).
+  const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(
+    new Set()
+  );
+  const pendingRemovalRef = useRef<Set<string>>(new Set());
+  pendingRemovalRef.current = pendingRemovalIds;
 
   const loadClippings = useCallback(async (isRefresh = false) => {
     const gen = ++loadGen.current;
@@ -64,6 +73,7 @@ export default function ClippingsScreen() {
       const rows = await listClippings(user.id);
       if (gen !== loadGen.current) return;
       setClippings(rows);
+      setPendingRemovalIds(new Set());
     } catch {
       if (gen === loadGen.current) {
         setError("Your clippings couldn’t load. Try again in a moment.");
@@ -77,25 +87,40 @@ export default function ClippingsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadClippings();
-  }, [loadClippings]);
-
-  async function handleRemove(clip: ClippingListRow) {
-    if (removingId) return;
-    setRemovingId(clip.id);
+  const commitPendingRemovals = useCallback(async () => {
+    const ids = Array.from(pendingRemovalRef.current);
+    if (ids.length === 0) return;
+    pendingRemovalRef.current = new Set();
+    setPendingRemovalIds(new Set());
     try {
-      const { error: deleteError } = await supabase
-        .from("clippings")
-        .delete()
-        .eq("id", clip.id);
-
-      if (!deleteError) {
-        setClippings((prev) => prev.filter((c) => c.id !== clip.id));
-      }
-    } finally {
-      setRemovingId(null);
+      await supabase.from("clippings").delete().in("id", ids);
+    } catch {
+      /* Best effort — the item simply reappears next time the list loads. */
     }
+  }, []);
+
+  // Refresh whenever Clippings gains focus; commit any pending removals
+  // the moment the reader navigates away (this is the only place a pin
+  // tap here actually becomes permanent).
+  useFocusEffect(
+    useCallback(() => {
+      void loadClippings();
+      return () => {
+        void commitPendingRemovals();
+      };
+    }, [loadClippings, commitPendingRemovals])
+  );
+
+  function handleTogglePin(clip: ClippingListRow) {
+    setPendingRemovalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(clip.id)) {
+        next.delete(clip.id);
+      } else {
+        next.add(clip.id);
+      }
+      return next;
+    });
   }
 
   function openClip(clip: ClippingListRow) {
@@ -219,9 +244,9 @@ export default function ClippingsScreen() {
             <ClippingCard
               key={clip.id}
               clip={clip}
+              pinned={!pendingRemovalIds.has(clip.id)}
               onOpen={() => openClip(clip)}
-              onRemove={() => handleRemove(clip)}
-              removing={removingId === clip.id}
+              onTogglePin={() => handleTogglePin(clip)}
             />
           ))
         )}
@@ -232,14 +257,14 @@ export default function ClippingsScreen() {
 
 function ClippingCard({
   clip,
+  pinned,
   onOpen,
-  onRemove,
-  removing,
+  onTogglePin,
 }: {
   clip: ClippingListRow;
+  pinned: boolean;
   onOpen: () => void;
-  onRemove: () => void;
-  removing: boolean;
+  onTogglePin: () => void;
 }) {
   const metaLine = [
     clip.eventTime,
@@ -310,30 +335,31 @@ function ClippingCard({
         </View>
       </Pressable>
 
-      <View style={styles.actions}>
-        <Pressable
-          onPress={onOpen}
-          disabled={!clip.article}
-          hitSlop={10}
-          style={({ pressed }) => pressed && styles.pressed}
-          accessibilityRole="button"
-          accessibilityLabel="Open"
-        >
-          <Text style={styles.actionText}>Open</Text>
-        </Pressable>
-        <Pressable
-          onPress={onRemove}
-          disabled={removing}
-          hitSlop={10}
-          style={({ pressed }) => pressed && styles.pressed}
-          accessibilityRole="button"
-          accessibilityLabel={removing ? "Removing clipping" : "Remove clipping"}
-        >
-          <Text style={styles.actionTextMuted}>
-            {removing ? "Removing…" : "Remove"}
-          </Text>
-        </Pressable>
-      </View>
+      <Pressable
+        onPress={onTogglePin}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={
+          pinned ? "Saved. Tap to remove from Clippings." : "Removed — tap to keep in Clippings."
+        }
+        style={({ pressed }) => [styles.pinButton, pressed && styles.pressed]}
+      >
+        <SymbolView
+          name={pinned ? "pin.fill" : "pin"}
+          size={18}
+          weight="regular"
+          tintColor={pinned ? paper.terracotta : paper.inkFaint}
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          fallback={
+            <Ionicons
+              name={pinned ? "pin" : "pin-outline"}
+              size={18}
+              color={pinned ? paper.terracotta : paper.inkFaint}
+            />
+          }
+        />
+      </Pressable>
     </View>
   );
 }
@@ -439,10 +465,21 @@ const styles = StyleSheet.create({
     paddingBottom: 22,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
+    position: "relative",
   },
   cardBody: {
     flexDirection: "row",
     gap: 16,
+    paddingRight: 36,
+  },
+  pinButton: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    minWidth: 40,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   thumbFrame: {
     width: 84,
@@ -493,24 +530,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: paper.inkFaint,
-    fontStyle: "italic",
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 22,
-    marginTop: 14,
-    paddingLeft: 100,
-  },
-  actionText: {
-    fontFamily: "Georgia",
-    fontSize: 13,
-    color: paper.terracotta,
-    fontStyle: "italic",
-  },
-  actionTextMuted: {
-    fontFamily: "Georgia",
-    fontSize: 13,
-    color: paper.inkMuted,
     fontStyle: "italic",
   },
   pressed: {

@@ -18,6 +18,8 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import type { KindredArticle, ArticleFigure } from "../lib/edition/article";
 import {
   formatArticlePublishedAt,
@@ -535,6 +537,74 @@ export function ArticleReader({
           />
 
           <View style={[styles.column, { width: readingWidth }]}>
+            {/* 1b. Pin (save to Clippings) + Share — first interaction under the hero */}
+            <View style={styles.heroActionsRow}>
+              {canClip ? (
+                <Pressable
+                  onPress={() => void handleToggleClip()}
+                  disabled={clipPending}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    clipped
+                      ? "Saved to Clippings. Tap to remove."
+                      : "Save to Clippings"
+                  }
+                  style={({ pressed }) => [
+                    styles.heroActionButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <SymbolView
+                    name={clipped ? "pin.fill" : "pin"}
+                    size={20}
+                    weight="regular"
+                    tintColor={clipped ? paper.terracotta : paper.inkMuted}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no"
+                    fallback={
+                      <Ionicons
+                        name={clipped ? "pin" : "pin-outline"}
+                        size={20}
+                        color={clipped ? paper.terracotta : paper.inkMuted}
+                      />
+                    }
+                  />
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => void handleShare()}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Share"
+                style={({ pressed }) => [
+                  styles.heroActionButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <SymbolView
+                  name="square.and.arrow.up"
+                  size={19}
+                  weight="regular"
+                  tintColor={paper.inkMuted}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  fallback={
+                    <Ionicons
+                      name="share-outline"
+                      size={19}
+                      color={paper.inkMuted}
+                    />
+                  }
+                />
+              </Pressable>
+            </View>
+            {clipError ? (
+              <Text style={styles.clipError} accessibilityRole="alert">
+                {clipError}
+              </Text>
+            ) : null}
+
             {/* 2. Category — desk label from Universal Content System when known */}
             <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
               {briefing
@@ -706,27 +776,7 @@ export function ArticleReader({
 
             <View style={styles.actionsBlock}>
               <Text style={styles.actionsKicker}>This page</Text>
-              {clipError ? (
-                <Text style={styles.clipError} accessibilityRole="alert">
-                  {clipError}
-                </Text>
-              ) : null}
               <View style={styles.actionsList}>
-                {canClip ? (
-                  <ActionLink
-                    label={
-                      clipPending
-                        ? "Saving…"
-                        : clipped
-                          ? "Saved"
-                          : "Save for later"
-                    }
-                    onPress={() => void handleToggleClip()}
-                    muted={clipped}
-                    disabled={clipPending}
-                  />
-                ) : null}
-                <ActionLink label="Share" onPress={() => void handleShare()} />
                 {article.sourceUrl ? (
                   <ActionLink label="Original source" onPress={openSource} />
                 ) : null}
@@ -1084,6 +1134,19 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     alignSelf: "center",
     width: "100%",
+  },
+  heroActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 22,
+    marginBottom: 22,
+  },
+  heroActionButton: {
+    minWidth: 44,
+    minHeight: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -8,
   },
   kicker: {
     ...type.kicker,
