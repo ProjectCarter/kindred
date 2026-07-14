@@ -38,7 +38,6 @@ import {
 import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
-import { isClippableSectionId } from "./article";
 import { getGoldStandardCompanion } from "./goldStandard/algalBloomArticle";
 import {
   hasSubstance,
@@ -335,16 +334,4 @@ export function companionForArticle(
     article.headline,
     article.id
   );
-}
-
-/** Section UUID when the article can be saved to Clippings. */
-export function clipSectionIdForArticle(article: KindredArticle): string | null {
-  if (
-    article.section === "lead" ||
-    article.section === "discovery" ||
-    article.section === "knowledge"
-  ) {
-    return null;
-  }
-  return isClippableSectionId(article.id) ? article.id : null;
 }

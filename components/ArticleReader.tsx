@@ -47,6 +47,12 @@ import {
 import { supabase } from "../lib/supabase";
 import { resolveArticleHero, supportingFiguresForArticle } from "../lib/edition/articleHero";
 import {
+  resolveClipTarget,
+  checkClipped,
+  saveClipping,
+  removeClipping,
+} from "../lib/edition/clippings";
+import {
   KindredStickyMasthead,
   MastheadLink,
 } from "./KindredMasthead";
@@ -61,7 +67,6 @@ type Props = {
   editionId?: string | null;
   companion?: ArticleCompanion | null;
   backLabel?: string;
-  clipSectionId?: string | null;
   initialScrollY?: number;
   onOpenContinue?: (item: ContinueReadingItem) => void;
 };
@@ -76,7 +81,6 @@ export function ArticleReader({
   editionId,
   companion: companionProp,
   backLabel = "← Today’s paper",
-  clipSectionId = null,
   initialScrollY = 0,
   onOpenContinue,
 }: Props) {
@@ -114,7 +118,8 @@ export function ArticleReader({
   const heroOpacity = useRef(new Animated.Value(0)).current;
 
   const briefing = isKindredBriefing(article);
-  const canClip = Boolean(clipSectionId);
+  const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
+  const canClip = Boolean(clipTarget);
   const continueItems = companion?.continueReading ?? [];
 
   useEffect(() => {
@@ -209,11 +214,10 @@ export function ArticleReader({
       companion,
       editionId: editionId ?? null,
       backLabel,
-      clipSectionId,
       scrollY: scrollYRef.current,
       updatedAt: Date.now(),
     });
-  }, [article, companion, editionId, backLabel, clipSectionId]);
+  }, [article, companion, editionId, backLabel]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
@@ -224,35 +228,32 @@ export function ArticleReader({
           companion,
           editionId: editionId ?? null,
           backLabel,
-          clipSectionId,
           scrollY: scrollYRef.current,
           updatedAt: Date.now(),
         });
       }
     });
     return () => sub.remove();
-  }, [article, companion, editionId, backLabel, clipSectionId]);
+  }, [article, companion, editionId, backLabel]);
 
   useEffect(() => {
-    if (!clipSectionId) return;
+    if (!clipTarget) {
+      setClipped(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user || cancelled) return;
-      const { data } = await supabase
-        .from("clippings")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("section_id", clipSectionId)
-        .maybeSingle();
-      if (!cancelled) setClipped(Boolean(data));
+      const isClipped = await checkClipped(user.id, clipTarget.clipKey);
+      if (!cancelled) setClipped(isClipped);
     })();
     return () => {
       cancelled = true;
     };
-  }, [clipSectionId]);
+  }, [clipTarget]);
 
   const published = formatArticlePublishedAt(article.publishedAt);
   const readLabel = formatReadTime(article.estimatedReadMinutes);
@@ -358,7 +359,7 @@ export function ArticleReader({
   });
 
   async function handleToggleClip() {
-    if (!clipSectionId || clipPending) return;
+    if (!clipTarget || clipPending) return;
     setClipPending(true);
     setClipError(null);
     try {
@@ -374,62 +375,35 @@ export function ArticleReader({
       const topic = inferTopicFromSection(article.section, article.headline);
 
       if (clipped) {
-        const { error } = await supabase
-          .from("clippings")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("section_id", clipSectionId);
-        if (!error) {
+        const result = await removeClipping(user.id, clipTarget.clipKey);
+        if (result.ok) {
           setClipped(false);
           void trackReadingSignal({
             signalType: "unclip",
             storyKey,
             sectionType: article.section,
             editionId,
-            sectionId: clipSectionId,
+            sectionId: clipTarget.sectionId,
             source: article.source,
             topic,
           });
         } else {
           if (__DEV__) {
-            console.error("[ArticleReader] unclip failed", error.message);
+            console.error("[ArticleReader] unclip failed", result.error);
           }
           setClipError("Couldn’t remove that clipping. Please try again.");
         }
       } else {
-        let insertError = (
-          await supabase.from("clippings").insert({
-            user_id: user.id,
-            section_id: clipSectionId,
-            section_type: article.section,
-            story_key: storyKey,
-            source: article.source,
-            headline: article.headline.slice(0, 240),
-          })
-        ).error;
-
-        if (insertError && insertError.code !== "23505") {
-          insertError = (
-            await supabase.from("clippings").insert({
-              user_id: user.id,
-              section_id: clipSectionId,
-            })
-          ).error;
-        }
-
-        const duplicate =
-          insertError?.code === "23505" ||
-          /duplicate|unique/i.test(insertError?.message ?? "");
-
-        if (!insertError || duplicate) {
+        const result = await saveClipping(user.id, clipTarget, article);
+        if (result.ok) {
           setClipped(true);
-          if (!duplicate) {
+          if (!result.duplicate) {
             void trackReadingSignal({
               signalType: "clip",
               storyKey,
               sectionType: article.section,
               editionId,
-              sectionId: clipSectionId,
+              sectionId: clipTarget.sectionId,
               source: article.source,
               topic,
               payload: { headline: article.headline.slice(0, 160) },
@@ -437,7 +411,7 @@ export function ArticleReader({
           }
         } else {
           if (__DEV__) {
-            console.error("[ArticleReader] clip failed", insertError.message);
+            console.error("[ArticleReader] clip failed", result.error);
           }
           setClipError("Couldn’t save that for later. Please try again.");
         }
@@ -463,7 +437,6 @@ export function ArticleReader({
       companion,
       editionId: editionId ?? null,
       backLabel,
-      clipSectionId,
       scrollY: scrollYRef.current,
       updatedAt: Date.now(),
     });

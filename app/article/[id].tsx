@@ -33,11 +33,10 @@ import { paper } from "../../lib/edition/newspaperTheme";
  * Open via openKindredArticle — session persists across background / external browser.
  */
 export default function ArticleScreen() {
-  const { id, editionId, backLabel, clipSectionId } = useLocalSearchParams<{
+  const { id, editionId, backLabel } = useLocalSearchParams<{
     id: string;
     editionId?: string;
     backLabel?: string;
-    clipSectionId?: string;
   }>();
   const router = useRouter();
   const [session, setSession] = useState<ArticleSession | null>(null);
@@ -79,10 +78,6 @@ export default function ArticleScreen() {
             typeof backLabel === "string" && backLabel.trim()
               ? backLabel
               : "← Today’s paper",
-          clipSectionId:
-            typeof clipSectionId === "string" && clipSectionId
-              ? clipSectionId
-              : null,
           scrollY: 0,
           updatedAt: Date.now(),
         };
@@ -104,7 +99,6 @@ export default function ArticleScreen() {
             typeof backLabel === "string" && backLabel.trim()
               ? backLabel
               : "← Today’s paper",
-          clipSectionId: null,
           scrollY: 0,
           updatedAt: Date.now(),
         };
@@ -133,7 +127,6 @@ export default function ArticleScreen() {
             typeof backLabel === "string" && backLabel.trim()
               ? backLabel
               : "← Previous story",
-          clipSectionId: null,
           scrollY: 0,
           updatedAt: Date.now(),
         };
@@ -155,7 +148,7 @@ export default function ArticleScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, editionId, backLabel, clipSectionId]);
+  }, [id, editionId, backLabel]);
 
   function goBack() {
     if (router.canGoBack()) {
@@ -207,12 +200,6 @@ export default function ArticleScreen() {
     (typeof backLabel === "string" && backLabel.trim()) ||
     session.backLabel ||
     "← Today’s paper";
-  const resolvedClip =
-    (typeof clipSectionId === "string" && clipSectionId
-      ? clipSectionId
-      : null) ||
-    session.clipSectionId ||
-    null;
   const resolvedEdition =
     (typeof editionId === "string" && editionId ? editionId : null) ||
     session.editionId ||
@@ -312,7 +299,6 @@ export default function ArticleScreen() {
         editionId={resolvedEdition}
         companion={session.companion ?? getArticleCompanion(article.id)}
         backLabel={resolvedBack}
-        clipSectionId={resolvedClip}
         initialScrollY={session.scrollY ?? 0}
         onOpenContinue={openContinue}
       />

@@ -17,8 +17,6 @@ export type OpenArticleOptions = {
   companion?: ArticleCompanion | null;
   /** e.g. "← Today's paper" */
   backLabel?: string;
-  /** edition_sections.id when Keep is available */
-  clipSectionId?: string | null;
 };
 
 /**
@@ -43,14 +41,12 @@ export function openKindredArticle(
   }
 
   const backLabel = options.backLabel?.trim() || "← Today’s paper";
-  const clipSectionId = options.clipSectionId ?? null;
 
   stashArticleSession({
     article: withHero,
     companion,
     editionId: options.editionId ?? null,
     backLabel,
-    clipSectionId,
     scrollY: 0,
     updatedAt: Date.now(),
   });
@@ -76,7 +72,6 @@ export function openKindredArticle(
         id,
         editionId: options.editionId,
         backLabel,
-        clipSectionId: clipSectionId ?? "",
       },
     });
   } else {
@@ -85,7 +80,6 @@ export function openKindredArticle(
       params: {
         id,
         backLabel,
-        clipSectionId: clipSectionId ?? "",
       },
     });
   }

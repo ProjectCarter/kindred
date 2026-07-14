@@ -55,9 +55,11 @@ export default function ActivitiesScreen() {
           onOpenCard={(card) => {
             const item = items.find((i) => i.item.id === card.id);
             if (!item) return;
-            openKindredArticle(router, articleFromDiscoveryItem(item), {
-              backLabel: "← Activities",
-            });
+            openKindredArticle(
+              router,
+              { ...articleFromDiscoveryItem(item), savedContentType: "activity" },
+              { backLabel: "← Activities" }
+            );
           }}
         />
       </ScrollView>

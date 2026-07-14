@@ -16,6 +16,8 @@ import {
 import { parseLeadStory, type LeadStory } from "../../lib/edition/LeadStory";
 import { openKindredArticle } from "../../lib/edition/openArticle";
 import { openKindredEvent } from "../../lib/edition/openEvent";
+import { articleFromEditionSection } from "../../lib/edition/article";
+import { saveClipping, removeClipping } from "../../lib/edition/clippings";
 import {
   banditMorningLine,
   banditsPick,
@@ -24,7 +26,6 @@ import {
 } from "../../lib/edition/bandit";
 import {
   companionForArticle,
-  clipSectionIdForArticle,
   parseEditionIntelligence,
   type EditionIntelligence,
 } from "../../lib/edition/surfaceIntelligence";
@@ -199,16 +200,12 @@ export default function EditionScreen() {
     const topic = inferTopicFromSection(section.section_type, section.headline);
     const storyKey = `${section.section_type}:${section.headline}`.slice(0, 240);
     const editionId = typeof id === "string" ? id : null;
+    const clipKey = `article:${section.id}`;
 
     try {
       if (alreadyClipped) {
-        const { error: deleteError } = await supabase
-          .from("clippings")
-          .delete()
-          .eq("user_id", user.id)
-          .eq("section_id", section.id);
-
-        if (!deleteError) {
+        const result = await removeClipping(user.id, clipKey);
+        if (result.ok) {
           setClippedIds((prev) => {
             const next = new Set(prev);
             next.delete(section.id);
@@ -225,34 +222,15 @@ export default function EditionScreen() {
           });
         }
       } else {
-        let insertError = (
-          await supabase.from("clippings").insert({
-            user_id: user.id,
-            section_id: section.id,
-            section_type: section.section_type,
-            story_key: storyKey,
-            source: section.source_note,
-            headline: section.headline.slice(0, 240),
-          })
-        ).error;
+        const result = await saveClipping(
+          user.id,
+          { contentType: "article", clipKey, sectionId: section.id },
+          articleFromEditionSection(section)
+        );
 
-        // Pre-migration fallback — base columns only.
-        if (insertError && insertError.code !== "23505") {
-          insertError = (
-            await supabase.from("clippings").insert({
-              user_id: user.id,
-              section_id: section.id,
-            })
-          ).error;
-        }
-
-        const duplicate =
-          insertError?.code === "23505" ||
-          /duplicate|unique/i.test(insertError?.message ?? "");
-
-        if (!insertError || duplicate) {
+        if (result.ok) {
           setClippedIds((prev) => new Set(prev).add(section.id));
-          if (!duplicate) {
+          if (!result.duplicate) {
             void trackReadingSignal({
               signalType: "clip",
               storyKey,
@@ -349,7 +327,6 @@ export default function EditionScreen() {
                   editionId: typeof id === "string" ? id : null,
                   companion,
                   backLabel: "← The paper",
-                  clipSectionId: clipSectionIdForArticle(article),
                 });
               }}
               onOpenEvent={(event) => {

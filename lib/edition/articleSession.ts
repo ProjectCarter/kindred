@@ -17,8 +17,6 @@ export type ArticleSession = {
   editionId: string | null;
   /** Native back label — e.g. "← Today's paper" */
   backLabel: string;
-  /** Edition section UUID when Keep/clip is allowed. */
-  clipSectionId: string | null;
   scrollY: number;
   updatedAt: number;
 };

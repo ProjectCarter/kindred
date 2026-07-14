@@ -470,7 +470,11 @@ export function EditionReader({
           locationCity={locationCity}
           onOpenItem={
             onOpenArticle
-              ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
+              ? (item) =>
+                  onOpenArticle({
+                    ...articleFromDiscoveryItem(item),
+                    savedContentType: "activity",
+                  })
               : undefined
           }
           onSeeAll={
@@ -487,7 +491,11 @@ export function EditionReader({
           locationCity={locationCity}
           onOpenItem={
             onOpenArticle
-              ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
+              ? (item) =>
+                  onOpenArticle({
+                    ...articleFromDiscoveryItem(item),
+                    savedContentType: "recommendation",
+                  })
               : undefined
           }
           onSeeAll={

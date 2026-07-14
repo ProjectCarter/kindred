@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Text,
   View,
+  Image,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -9,37 +10,36 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
-import { SECTION_LABELS } from "../lib/edition/types";
-import {
-  articleFromEditionSection,
-  sectionOpensArticleReader,
-} from "../lib/edition/article";
 import { openKindredArticle } from "../lib/edition/openArticle";
-import { clipSectionIdForArticle } from "../lib/edition/surfaceIntelligence";
-import { LocalEventsSection } from "../components/LocalEventsSection";
+import {
+  listClippings,
+  clippingTypeLabel,
+  type ClippingListRow,
+} from "../lib/edition/clippings";
+import type { ClippingContentType } from "../lib/edition/clippingTypes";
 import { PaperLoading } from "../components/PaperLoading";
 import { BanditCharacter } from "../components/BanditCharacter";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 
-type ClippingRow = {
-  id: string;
-  created_at: string;
-  section: {
-    id: string;
-    section_type: string;
-    headline: string;
-    body: string;
-    source_note: string | null;
-    edition_id: string;
-  } | null;
-};
+type Filter = "all" | ClippingContentType;
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "article", label: "Articles" },
+  { id: "event", label: "Events" },
+  { id: "activity", label: "Activities" },
+  { id: "recommendation", label: "Recommendations" },
+];
 
 export default function ClippingsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [clippings, setClippings] = useState<ClippingRow[]>([]);
+  const [clippings, setClippings] = useState<ClippingListRow[]>([]);
+  const [filter, setFilter] = useState<Filter>("all");
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadGen = useRef(0);
@@ -61,28 +61,9 @@ export default function ClippingsScreen() {
         return;
       }
 
-      const { data, error: queryError } = await supabase
-        .from("clippings")
-        .select(
-          "id, created_at, section:edition_sections(id, section_type, headline, body, source_note, edition_id)"
-        )
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
+      const rows = await listClippings(user.id);
       if (gen !== loadGen.current) return;
-
-      if (queryError) {
-        setError("Your clippings couldn’t load. Try again in a moment.");
-        setClippings([]);
-      } else {
-        const normalized = (data ?? []).map((row) => {
-          const section = Array.isArray(row.section)
-            ? row.section[0] ?? null
-            : row.section;
-          return { ...row, section } as ClippingRow;
-        });
-        setClippings(normalized);
-      }
+      setClippings(rows);
     } catch {
       if (gen === loadGen.current) {
         setError("Your clippings couldn’t load. Try again in a moment.");
@@ -100,22 +81,44 @@ export default function ClippingsScreen() {
     loadClippings();
   }, [loadClippings]);
 
-  async function handleRemove(clippingId: string) {
+  async function handleRemove(clip: ClippingListRow) {
     if (removingId) return;
-    setRemovingId(clippingId);
+    setRemovingId(clip.id);
     try {
       const { error: deleteError } = await supabase
         .from("clippings")
         .delete()
-        .eq("id", clippingId);
+        .eq("id", clip.id);
 
       if (!deleteError) {
-        setClippings((prev) => prev.filter((c) => c.id !== clippingId));
+        setClippings((prev) => prev.filter((c) => c.id !== clip.id));
       }
     } finally {
       setRemovingId(null);
     }
   }
+
+  function openClip(clip: ClippingListRow) {
+    if (!clip.article) return;
+    openKindredArticle(router, clip.article, { backLabel: "← Clippings" });
+  }
+
+  const counts = useMemo(() => {
+    const byType: Record<Filter, number> = {
+      all: clippings.length,
+      article: 0,
+      event: 0,
+      activity: 0,
+      recommendation: 0,
+    };
+    for (const clip of clippings) byType[clip.contentType] += 1;
+    return byType;
+  }, [clippings]);
+
+  const visible = useMemo(() => {
+    if (filter === "all") return clippings;
+    return clippings.filter((c) => c.contentType === filter);
+  }, [clippings, filter]);
 
   if (loading) {
     return (
@@ -151,134 +154,187 @@ export default function ClippingsScreen() {
         <Text style={styles.kicker}>Saved for later</Text>
         <Text style={styles.title}>Clippings</Text>
         <Text style={styles.subtitle}>
-          Passages you set aside from the paper. Tap “Save for later” on any
-          section to keep one.
+          Stories, events, activities, and recommendations you set aside —
+          your own personal collection from Kindred.
         </Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {clippings.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
+          >
+            {FILTERS.filter((f) => f.id === "all" || counts[f.id] > 0).map(
+              (f) => {
+                const active = filter === f.id;
+                return (
+                  <Pressable
+                    key={f.id}
+                    onPress={() => setFilter(f.id)}
+                    style={({ pressed }) => [
+                      styles.filterPill,
+                      active && styles.filterPillActive,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter: ${f.label}`}
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text
+                      style={[
+                        styles.filterText,
+                        active && styles.filterTextActive,
+                      ]}
+                    >
+                      {f.label}
+                    </Text>
+                  </Pressable>
+                );
+              }
+            )}
+          </ScrollView>
+        ) : null}
 
         {clippings.length === 0 ? (
           <View
             style={styles.emptyState}
             accessible
-            accessibilityLabel="Bandit says: Nothing clipped yet. When a passage is worth keeping, tap Save for later in today's paper — it will wait here for you."
+            accessibilityLabel="Bandit says: Nothing clipped yet. Save stories, events, activities, and recommendations to find them here later."
           >
             <BanditCharacter pose="sitting" size={120} decorative />
             <Text style={styles.empty}>
-              Nothing clipped yet. When a story, event, recommendation, or
-              activity is worth keeping, tap “Save for later” — it will wait
-              here for you.
+              Nothing clipped yet. Save stories, events, activities, and
+              recommendations to find them here later.
             </Text>
           </View>
+        ) : visible.length === 0 ? (
+          <Text style={styles.emptyFilter}>
+            Nothing saved in this category yet.
+          </Text>
         ) : (
-          clippings.map((clip) => {
-            if (!clip.section) return null;
-            const section = clip.section;
-            const article = articleFromEditionSection(section);
-            function openClipArticle() {
-              openKindredArticle(router, article, {
-                editionId: section.edition_id,
-                backLabel: "← Clippings",
-                clipSectionId: clipSectionIdForArticle(article),
-              });
-            }
-            return (
-              <View key={clip.id} style={styles.card}>
-                <View style={styles.labelRow}>
-                  <Text style={styles.label}>
-                    {SECTION_LABELS[section.section_type] ??
-                      section.section_type}
-                  </Text>
-                  <View style={styles.labelRule} />
-                </View>
-                {section.section_type === "local_events" ? (
-                  <LocalEventsSection
-                    headline={section.headline}
-                    body={section.body}
-                    sourceNote={section.source_note}
-                  />
-                ) : sectionOpensArticleReader(section.section_type) ? (
-                  <>
-                    <Pressable
-                      onPress={openClipArticle}
-                      accessibilityRole="link"
-                      accessibilityLabel={`Read: ${section.headline}`}
-                      hitSlop={6}
-                      style={({ pressed }) => pressed && styles.pressed}
-                    >
-                      <Text style={styles.headline}>{section.headline}</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={openClipArticle}
-                      accessibilityRole="link"
-                      accessibilityLabel="Read the story"
-                      hitSlop={4}
-                      style={({ pressed }) => pressed && styles.pressed}
-                    >
-                      <Text style={styles.body}>{section.body}</Text>
-                    </Pressable>
-                    {section.source_note ? (
-                      <Text style={styles.sourceNote}>
-                        {section.source_note}
-                      </Text>
-                    ) : null}
-                    <Pressable
-                      onPress={openClipArticle}
-                      hitSlop={12}
-                      accessibilityRole="button"
-                      accessibilityLabel="Read the story"
-                      style={({ pressed }) => [
-                        styles.readLink,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={styles.readLinkText}>Read the story</Text>
-                    </Pressable>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.headline}>{section.headline}</Text>
-                    <Text style={styles.body}>{section.body}</Text>
-                    {section.source_note ? (
-                      <Text style={styles.sourceNote}>
-                        {section.source_note}
-                      </Text>
-                    ) : null}
-                  </>
-                )}
-                <View style={styles.actions}>
-                  <Pressable
-                    onPress={() =>
-                      router.push(`/edition/${section.edition_id}`)
-                    }
-                    style={({ pressed }) => pressed && styles.pressed}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open edition"
-                  >
-                    <Text style={styles.actionText}>Open edition</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => handleRemove(clip.id)}
-                    disabled={removingId === clip.id}
-                    style={({ pressed }) => pressed && styles.pressed}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      removingId === clip.id
-                        ? "Removing clipping"
-                        : "Remove clipping"
-                    }
-                  >
-                    <Text style={styles.actionTextMuted}>
-                      {removingId === clip.id ? "Removing…" : "Remove"}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })
+          visible.map((clip) => (
+            <ClippingCard
+              key={clip.id}
+              clip={clip}
+              onOpen={() => openClip(clip)}
+              onRemove={() => handleRemove(clip)}
+              removing={removingId === clip.id}
+            />
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function ClippingCard({
+  clip,
+  onOpen,
+  onRemove,
+  removing,
+}: {
+  clip: ClippingListRow;
+  onOpen: () => void;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const metaLine = [
+    clip.eventTime,
+    clip.location,
+    clip.contentType !== "event" ? clip.source : null,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+
+  return (
+    <View style={styles.card}>
+      <Pressable
+        onPress={onOpen}
+        disabled={!clip.article}
+        accessibilityRole="button"
+        accessibilityLabel={`Open: ${clip.headline}`}
+        style={({ pressed }) => [
+          styles.cardBody,
+          pressed && clip.article && styles.pressed,
+        ]}
+      >
+        <View style={styles.thumbFrame}>
+          {clip.imageUrl || clip.imageSource ? (
+            <Image
+              source={clip.imageUrl ? { uri: clip.imageUrl } : clip.imageSource!}
+              style={styles.thumb}
+              resizeMode="cover"
+              accessibilityLabel={clip.headline}
+            />
+          ) : (
+            <View style={styles.thumbFallback}>
+              <SymbolView
+                name="newspaper"
+                size={18}
+                weight="light"
+                tintColor={paper.inkFaint}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                fallback={
+                  <Ionicons
+                    name="newspaper-outline"
+                    size={18}
+                    color={paper.inkFaint}
+                  />
+                }
+              />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.cardCopy}>
+          <Text style={styles.typeLabel}>
+            {clippingTypeLabel(clip.contentType)}
+          </Text>
+          <Text style={styles.headline} numberOfLines={2}>
+            {clip.headline}
+          </Text>
+          {clip.summary ? (
+            <Text style={styles.summary} numberOfLines={2}>
+              {clip.summary}
+            </Text>
+          ) : null}
+          {metaLine ? (
+            <Text style={styles.metaLine} numberOfLines={1}>
+              {metaLine}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+
+      <View style={styles.actions}>
+        <Pressable
+          onPress={onOpen}
+          disabled={!clip.article}
+          hitSlop={10}
+          style={({ pressed }) => pressed && styles.pressed}
+          accessibilityRole="button"
+          accessibilityLabel="Open"
+        >
+          <Text style={styles.actionText}>Open</Text>
+        </Pressable>
+        <Pressable
+          onPress={onRemove}
+          disabled={removing}
+          hitSlop={10}
+          style={({ pressed }) => pressed && styles.pressed}
+          accessibilityRole="button"
+          accessibilityLabel={removing ? "Removing clipping" : "Remove clipping"}
+        >
+          <Text style={styles.actionTextMuted}>
+            {removing ? "Removing…" : "Remove"}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -286,19 +342,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: paper.sky,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  loadingHint: {
-    marginTop: 16,
-    fontFamily: "Georgia",
-    fontSize: 14,
-    fontStyle: "italic",
-    color: paper.inkMuted,
   },
   content: {
     paddingHorizontal: 24,
@@ -333,13 +376,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 25,
     color: paper.inkBody,
-    marginBottom: 32,
+    marginBottom: 28,
     maxWidth: 400,
   },
   error: {
     fontFamily: "Georgia",
     color: paper.terracotta,
     marginBottom: 16,
+    fontStyle: "italic",
+  },
+  filterScroll: {
+    marginBottom: 28,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 22,
+    paddingRight: 8,
+  },
+  filterPill: {
+    paddingVertical: 6,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  filterPillActive: {
+    borderBottomColor: paper.terracotta,
+  },
+  filterText: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    letterSpacing: 0.2,
+    color: paper.inkMuted,
+  },
+  filterTextActive: {
+    color: paper.terracotta,
     fontStyle: "italic",
   },
   emptyState: {
@@ -357,69 +426,90 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 340,
   },
+  emptyFilter: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 24,
+    color: paper.inkMuted,
+    fontStyle: "italic",
+    paddingVertical: 24,
+  },
   card: {
-    marginBottom: 32,
-    paddingBottom: 28,
+    marginBottom: 28,
+    paddingBottom: 22,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
-  labelRow: {
+  cardBody: {
     flexDirection: "row",
+    gap: 16,
+  },
+  thumbFrame: {
+    width: 84,
+    height: 84,
+    borderRadius: 2,
+    overflow: "hidden",
+    backgroundColor: paper.creamDeep,
+  },
+  thumb: {
+    width: "100%",
+    height: "100%",
+  },
+  thumbFallback: {
+    width: "100%",
+    height: "100%",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 10,
+    justifyContent: "center",
   },
-  label: {
-    ...type.kicker,
-    color: paper.terracotta,
-  },
-  labelRule: {
+  cardCopy: {
     flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkRule,
+    minWidth: 0,
+  },
+  typeLabel: {
+    fontSize: 10,
+    letterSpacing: 1.6,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    color: paper.terracotta,
+    marginBottom: 6,
   },
   headline: {
-    ...type.sectionHeadline,
+    fontFamily: "Georgia",
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: "600",
+    letterSpacing: -0.2,
     color: paper.ink,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  body: {
-    ...type.body,
+  summary: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    lineHeight: 19,
     color: paper.inkBody,
+    marginBottom: 4,
   },
-  sourceNote: {
-    fontFamily: "Georgia",
+  metaLine: {
     fontSize: 12,
+    lineHeight: 17,
     color: paper.inkFaint,
-    marginTop: 10,
     fontStyle: "italic",
-  },
-  readLink: {
-    alignSelf: "flex-start",
-    marginTop: 14,
-    paddingVertical: 4,
-  },
-  readLinkText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    color: paper.terracotta,
-    fontStyle: "italic",
-    letterSpacing: 0.2,
   },
   actions: {
     flexDirection: "row",
     gap: 22,
-    marginTop: 16,
+    marginTop: 14,
+    paddingLeft: 100,
   },
   actionText: {
     fontFamily: "Georgia",
-    fontSize: 14,
+    fontSize: 13,
     color: paper.terracotta,
     fontStyle: "italic",
   },
   actionTextMuted: {
     fontFamily: "Georgia",
-    fontSize: 14,
+    fontSize: 13,
     color: paper.inkMuted,
     fontStyle: "italic",
   },

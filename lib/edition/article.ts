@@ -13,6 +13,7 @@ import {
   type EditorialModule,
 } from "./contentSystem";
 import type { LocalEventCard } from "./localEvents";
+import type { ClippingContentType } from "./clippingTypes";
 import {
   composeCategorySeedArticle,
   composeFallbackDiscoveryBody,
@@ -91,6 +92,17 @@ export type KindredArticle = {
    * Story first in `body`; these answer natural reader questions in prose.
    */
   modules?: EditorialModule[] | null;
+  /**
+   * Which Clippings bucket this belongs to, when the adapter that built
+   * this article already knows (e.g. Activities vs Recommendations both
+   * flow through `articleFromDiscoveryItem` and are otherwise identical).
+   * Falls back to `inferClipContentType` (clippings.ts) when omitted.
+   */
+  savedContentType?: ClippingContentType | null;
+  /** Human-readable venue/place line, for the Clippings card. */
+  savedLocation?: string | null;
+  /** Human-readable date/time line, for the Clippings card (events). */
+  savedEventTime?: string | null;
 };
 
 /** Inline magazine photograph within the long-form body. */
@@ -383,23 +395,28 @@ export function articleFromDiscoveryItem(
 ): KindredArticle {
   const item = ranked.item;
   const why = formatDiscoveryWhy(ranked);
+  const savedLocation = item.place?.city ?? item.address ?? null;
+
   const curated = getCuratedDiscoveryArticle(item.id);
 
   if (curated) {
-    return articleFromSectionItem({
-      id: item.id,
-      section: "discovery",
-      headline: item.title,
-      body: curated.body.join("\n\n"),
-      dek: curated.dek,
-      pullQuote: curated.pullQuote ?? null,
-      source: item.source?.name ?? "Kindred",
-      sourceUrl: item.url ?? item.source?.url ?? null,
-      discoveryCategory: item.category,
-      contentType: curated.contentType,
-      tags: [item.category],
-      fieldAnswers: curated.fieldAnswers,
-    });
+    return {
+      ...articleFromSectionItem({
+        id: item.id,
+        section: "discovery",
+        headline: item.title,
+        body: curated.body.join("\n\n"),
+        dek: curated.dek,
+        pullQuote: curated.pullQuote ?? null,
+        source: item.source?.name ?? "Kindred",
+        sourceUrl: item.url ?? item.source?.url ?? null,
+        discoveryCategory: item.category,
+        contentType: curated.contentType,
+        tags: [item.category],
+        fieldAnswers: curated.fieldAnswers,
+      }),
+      savedLocation,
+    };
   }
 
   // Verified place (Foursquare) — a real, specific venue, but Kindred only
@@ -417,18 +434,21 @@ export function articleFromDiscoveryItem(
       category: item.category,
       seedKey: item.id,
     });
-    return articleFromSectionItem({
-      id: item.id,
-      section: "discovery",
-      headline: item.title,
-      body: composed.body.join("\n\n"),
-      dek: composed.dek,
-      source: item.source?.name ?? "Kindred",
-      sourceUrl: item.url ?? item.source?.url ?? null,
-      discoveryCategory: item.category,
-      tags: [item.category],
-      fieldAnswers: composed.fieldAnswers,
-    });
+    return {
+      ...articleFromSectionItem({
+        id: item.id,
+        section: "discovery",
+        headline: item.title,
+        body: composed.body.join("\n\n"),
+        dek: composed.dek,
+        source: item.source?.name ?? "Kindred",
+        sourceUrl: item.url ?? item.source?.url ?? null,
+        discoveryCategory: item.category,
+        tags: [item.category],
+        fieldAnswers: composed.fieldAnswers,
+      }),
+      savedLocation,
+    };
   }
 
   // Most of the seed catalog (and every local-event card reshaped into a
@@ -441,18 +461,21 @@ export function articleFromDiscoveryItem(
     seedKey: item.id,
   });
   if (categoryArticle) {
-    return articleFromSectionItem({
-      id: item.id,
-      section: "discovery",
-      headline: item.title,
-      body: categoryArticle.body.join("\n\n"),
-      dek: categoryArticle.dek,
-      source: item.source?.name ?? "Kindred",
-      sourceUrl: item.url ?? item.source?.url ?? null,
-      discoveryCategory: item.category,
-      tags: [item.category],
-      fieldAnswers: categoryArticle.fieldAnswers,
-    });
+    return {
+      ...articleFromSectionItem({
+        id: item.id,
+        section: "discovery",
+        headline: item.title,
+        body: categoryArticle.body.join("\n\n"),
+        dek: categoryArticle.dek,
+        source: item.source?.name ?? "Kindred",
+        sourceUrl: item.url ?? item.source?.url ?? null,
+        discoveryCategory: item.category,
+        tags: [item.category],
+        fieldAnswers: categoryArticle.fieldAnswers,
+      }),
+      savedLocation,
+    };
   }
 
   // Defensive last resort — only reached if a category has no essay yet.
@@ -463,21 +486,24 @@ export function articleFromDiscoveryItem(
     city: item.place?.city ?? null,
   });
 
-  return articleFromSectionItem({
-    id: item.id,
-    section: "discovery",
-    headline: item.title,
-    body: body.join("\n\n"),
-    dek: item.dek,
-    source: item.source?.name ?? "Kindred",
-    sourceUrl: item.url ?? item.source?.url ?? null,
-    discoveryCategory: item.category,
-    tags: [item.category],
-    // Explicitly empty — the fallback body already answers the practical
-    // question; auto-seeding a module from the dek here would repeat it
-    // a third time under a labeled section.
-    fieldAnswers: {},
-  });
+  return {
+    ...articleFromSectionItem({
+      id: item.id,
+      section: "discovery",
+      headline: item.title,
+      body: body.join("\n\n"),
+      dek: item.dek,
+      source: item.source?.name ?? "Kindred",
+      sourceUrl: item.url ?? item.source?.url ?? null,
+      discoveryCategory: item.category,
+      tags: [item.category],
+      // Explicitly empty — the fallback body already answers the practical
+      // question; auto-seeding a module from the dek here would repeat it
+      // a third time under a labeled section.
+      fieldAnswers: {},
+    }),
+    savedLocation,
+  };
 }
 
 /**
@@ -654,30 +680,35 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
   ]);
   const story = [hook, context, closing];
 
-  return articleFromSectionItem({
-    id: `event:${event.name}:${event.date}`.slice(0, 120),
-    section: "local_events",
-    headline: event.name.trim(),
-    body: story.join("\n\n"),
-    dek: place || null,
-    source: event.sourceName?.trim() || "Local listing",
-    sourceUrl: event.sourceUrl || null,
-    imageUrl: event.imageUrl ?? null,
-    imageCaption: event.name,
-    banditNote,
-    contentType: isFestival ? "festival" : "local_event",
-    tags: [isFestival ? "festival" : "local_event", event.name],
-    fieldAnswers: {
-      when: whenLine,
-      where: place || null,
-      what_to_expect: isFestival
-        ? "Expect crowds, food and craft stalls, and a full program of activity — arrive early for the calmer version of it."
-        : "A single scheduled happening — arrive a little before start time to find parking and a good spot.",
-      tips: event.sourceUrl
-        ? "Confirm hours and tickets on the listing before you go — schedules shift close to the date."
-        : "Details can shift close to the date — worth a quick check before you leave.",
-    },
-  });
+  return {
+    ...articleFromSectionItem({
+      id: `event:${event.name}:${event.date}`.slice(0, 120),
+      section: "local_events",
+      headline: event.name.trim(),
+      body: story.join("\n\n"),
+      dek: place || null,
+      source: event.sourceName?.trim() || "Local listing",
+      sourceUrl: event.sourceUrl || null,
+      imageUrl: event.imageUrl ?? null,
+      imageCaption: event.name,
+      banditNote,
+      contentType: isFestival ? "festival" : "local_event",
+      tags: [isFestival ? "festival" : "local_event", event.name],
+      fieldAnswers: {
+        when: whenLine,
+        where: place || null,
+        what_to_expect: isFestival
+          ? "Expect crowds, food and craft stalls, and a full program of activity — arrive early for the calmer version of it."
+          : "A single scheduled happening — arrive a little before start time to find parking and a good spot.",
+        tips: event.sourceUrl
+          ? "Confirm hours and tickets on the listing before you go — schedules shift close to the date."
+          : "Details can shift close to the date — worth a quick check before you leave.",
+      },
+    }),
+    savedContentType: "event",
+    savedLocation: place || null,
+    savedEventTime: whenLine || null,
+  };
 }
 
 /** Knowledge / explainer facet → KindredArticle. */

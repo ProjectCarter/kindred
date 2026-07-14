@@ -55,9 +55,14 @@ export default function RecommendationsScreen() {
           onOpenCard={(card) => {
             const item = items.find((i) => i.item.id === card.id);
             if (!item) return;
-            openKindredArticle(router, articleFromDiscoveryItem(item), {
-              backLabel: "← Recommendations",
-            });
+            openKindredArticle(
+              router,
+              {
+                ...articleFromDiscoveryItem(item),
+                savedContentType: "recommendation",
+              },
+              { backLabel: "← Recommendations" }
+            );
           }}
         />
       </ScrollView>
