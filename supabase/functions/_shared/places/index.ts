@@ -15,8 +15,8 @@ import type {
 
 export type { NormalizedPlace, PlacesCategory, PlacesLocation } from "./types.ts";
 
-/** Every desk Recommendations currently covers with verified place data. */
-export const ALL_PLACES_CATEGORIES: PlacesCategory[] = [
+/** Every desk Recommendations covers with verified place data ("where should I go?"). */
+export const RECOMMENDATION_PLACES_CATEGORIES: PlacesCategory[] = [
   "coffee",
   "restaurants",
   "parks",
@@ -24,6 +24,27 @@ export const ALL_PLACES_CATEGORIES: PlacesCategory[] = [
   "bookstores",
   "scenic_drives",
   "attractions",
+  "bakeries",
+  "gardens",
+  "beaches",
+];
+
+/** Every desk Activities covers with verified place data ("what should I go do?"). */
+export const ACTIVITY_PLACES_CATEGORIES: PlacesCategory[] = [
+  "water_recreation",
+  "escape_rooms",
+  "bowling",
+  "mini_golf",
+  "rock_climbing",
+  "axe_throwing",
+  "go_karts",
+  "pickleball",
+];
+
+/** Full roster fetched per metro — Recommendations + Activities combined. */
+export const ALL_PLACES_CATEGORIES: PlacesCategory[] = [
+  ...RECOMMENDATION_PLACES_CATEGORIES,
+  ...ACTIVITY_PLACES_CATEGORIES,
 ];
 
 /**

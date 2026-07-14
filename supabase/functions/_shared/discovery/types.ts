@@ -21,7 +21,10 @@ export type DiscoverySurface =
   | "books"
   | "movies"
   | "podcasts"
-  | "recipes";
+  | "recipes"
+  | "activities"
+  | "bakeries"
+  | "gardens";
 
 export type DiscoveryCategory =
   | "coffee"
@@ -36,7 +39,15 @@ export type DiscoveryCategory =
   | "movies"
   | "podcasts"
   | "experiences"
-  | "travel";
+  | "travel"
+  // "What should I go do?" — real, bookable venues for active participation
+  // (kayaking, escape rooms, bowling, mini golf, rock climbing, axe
+  // throwing, go-karts, pickleball). Collapsed into one category here —
+  // the specific kind of venue still comes through on each item's
+  // `venueCategories` (Foursquare's own label, e.g. "Bowling Alley").
+  | "activities"
+  | "bakeries"
+  | "gardens";
 
 export type DiscoveryFamily =
   | "food_drink"
@@ -168,7 +179,18 @@ export type DiscoveryRankingContext = {
       | "museums"
       | "bookstores"
       | "scenic_drives"
-      | "attractions";
+      | "attractions"
+      | "bakeries"
+      | "gardens"
+      | "beaches"
+      | "water_recreation"
+      | "escape_rooms"
+      | "bowling"
+      | "mini_golf"
+      | "rock_climbing"
+      | "axe_throwing"
+      | "go_karts"
+      | "pickleball";
     address: string | null;
     city: string | null;
     url: string | null;

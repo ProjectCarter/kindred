@@ -18,6 +18,17 @@ const CATEGORY_LABEL: Record<PlacesCategory, string> = {
   bookstores: "bookstore",
   scenic_drives: "scenic drive or lookout",
   attractions: "attraction",
+  bakeries: "bakery",
+  gardens: "botanical garden",
+  beaches: "beach",
+  water_recreation: "kayak or paddleboard rental",
+  escape_rooms: "escape room",
+  bowling: "bowling alley",
+  mini_golf: "mini golf course",
+  rock_climbing: "rock climbing gym",
+  axe_throwing: "axe throwing venue",
+  go_karts: "go-kart track",
+  pickleball: "pickleball court",
 };
 
 export async function writeEditorialNotesForPlaces(

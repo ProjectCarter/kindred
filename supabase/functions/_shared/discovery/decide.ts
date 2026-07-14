@@ -45,7 +45,10 @@ function defaultSurfaces(ctx: DiscoveryRankingContext): DiscoverySurface[] {
     "books",
     "movies",
     "podcasts",
-    "recipes"
+    "recipes",
+    "activities",
+    "bakeries",
+    "gardens"
   );
   return Array.from(new Set(out));
 }

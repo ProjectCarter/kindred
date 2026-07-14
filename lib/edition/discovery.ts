@@ -18,7 +18,10 @@ export type DiscoverySurface =
   | "books"
   | "movies"
   | "podcasts"
-  | "recipes";
+  | "recipes"
+  | "activities"
+  | "bakeries"
+  | "gardens";
 
 export type DiscoveryCategory =
   | "coffee"
@@ -33,7 +36,10 @@ export type DiscoveryCategory =
   | "movies"
   | "podcasts"
   | "experiences"
-  | "travel";
+  | "travel"
+  | "activities"
+  | "bakeries"
+  | "gardens";
 
 export type DiscoveryReason = {
   code: string;

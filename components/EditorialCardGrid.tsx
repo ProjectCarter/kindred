@@ -5,42 +5,59 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type ImageSourcePropType,
 } from "react-native";
-import { SymbolView } from "expo-symbols";
+import { SymbolView, type SFSymbol } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  orderEventsForGrid,
-  LOCAL_EVENTS_GRID_LIMIT,
-  type LocalEventCard,
-} from "../lib/edition/localEvents";
-import {
-  deriveEventBadge,
-  eventPlaceLine,
-} from "../lib/edition/eventStore";
-import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
-import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
+export type EditorialGridCard = {
+  id: string;
+  /** Bundled category photography — Activities/Recommendations never carry a provider photo. */
+  image?: ImageSourcePropType | null;
+  /** Small caps meta line above the title (category, distance, price tier…). */
+  overline?: string | null;
+  title: string;
+  /** Venue-equivalent line (neighborhood, address). */
+  subtitle?: string | null;
+  /** Kindred's own one-line editorial voice for this card. */
+  note?: string | null;
+};
+
 type Props = {
-  events: LocalEventCard[];
-  onOpenEvent?: (event: LocalEventCard) => void;
-  /** Front page caps at LOCAL_EVENTS_GRID_LIMIT; the full Events list passes a larger value. */
+  kicker: string;
+  cards: EditorialGridCard[];
+  onOpenCard?: (card: EditorialGridCard) => void;
+  /** Front page caps at `limit`; the full list screen passes a larger value. */
   limit?: number;
-  /** Present only on the front page — shown below the grid once there are more events than fit. */
+  /** Present only on the front page — shown below the grid once there are more items than fit. */
   onSeeAll?: () => void;
+  /** e.g. (n) => `See all ${n} activities` */
+  seeAllLabel?: (total: number) => string;
+  emptyCopy?: string;
+  fallbackIcon?: SFSymbol;
+  fallbackIconIonicon?: keyof typeof Ionicons.glyphMap;
 };
 
 /**
- * Local Events — Monocle-inspired editorial grid.
- * Equal two-column modules, photography-led, thin rules, magazine air.
- * Sharp corners only — no shadows, pills, or button chrome.
+ * Shared editorial grid — the same equal two-column, photography-led
+ * module as Local Events, generalized so Activities and Recommendations
+ * share its exact layout, spacing, and "See More" rhythm. Local Events
+ * itself keeps its own component (event-specific badges/venue parsing);
+ * this is the pattern the other two desks reuse, kept visually identical
+ * on purpose so the front page reads as one paper, not three feeds.
  */
-export function LocalEventsGrid({
-  events,
-  onOpenEvent,
-  limit = LOCAL_EVENTS_GRID_LIMIT,
+export function EditorialCardGrid({
+  kicker,
+  cards,
+  onOpenCard,
+  limit,
   onSeeAll,
+  seeAllLabel,
+  emptyCopy = "Nothing new to surface here today — check back tomorrow.",
+  fallbackIcon = "square.grid.2x2",
+  fallbackIconIonicon = "grid-outline",
 }: Props) {
   const { width } = useWindowDimensions();
   /** Page column inside home’s 28px folio padding. */
@@ -48,27 +65,25 @@ export function LocalEventsGrid({
   const halfGap = 12;
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
-  const visible = orderEventsForGrid(events, limit);
-  const remainingCount = events.length - visible.length;
+  const visible = typeof limit === "number" ? cards.slice(0, limit) : cards;
+  const remainingCount = cards.length - visible.length;
   // The "See all" destination page caps at SEE_ALL_MAX (kindred-mission.mdc)
   // — never promise a bigger number here than what that page will show.
-  const seeAllTotal = Math.min(events.length, SEE_ALL_MAX);
+  const seeAllTotal = Math.min(cards.length, SEE_ALL_MAX);
 
   if (visible.length === 0) {
     return (
       <View style={styles.section}>
         <View style={styles.labelRow}>
-          <Text style={styles.kicker}>Local Events</Text>
+          <Text style={styles.kicker}>{kicker}</Text>
           <View style={styles.labelRule} />
         </View>
-        <Text style={styles.empty}>
-          A quiet day nearby — the perfect excuse for a slow walk.
-        </Text>
+        <Text style={styles.empty}>{emptyCopy}</Text>
       </View>
     );
   }
 
-  const rows: LocalEventCard[][] = [];
+  const rows: EditorialGridCard[][] = [];
   for (let i = 0; i < visible.length; i += 2) {
     rows.push(visible.slice(i, i + 2));
   }
@@ -76,7 +91,7 @@ export function LocalEventsGrid({
   return (
     <View style={styles.section} accessibilityRole="summary">
       <View style={styles.labelRow}>
-        <Text style={styles.kicker}>Local Events</Text>
+        <Text style={styles.kicker}>{kicker}</Text>
         <View style={styles.labelRule} />
       </View>
 
@@ -88,37 +103,21 @@ export function LocalEventsGrid({
             rowIndex < rows.length - 1 && styles.rowRule,
           ]}
         >
-          {row.map((event, colIndex) => {
-            const index = rowIndex * 2 + colIndex;
-            const badge = deriveEventBadge(event);
-            const infoBadges = eventInfoBadgesFor(event);
-            const venue = event.venue?.trim() || eventPlaceLine(event);
-            const timeLine =
-              event.time && event.time !== "Time TBA"
-                ? event.time
-                : event.date !== "Date TBA"
-                  ? event.date
-                  : null;
-            const overline = [badge, timeLine].filter(Boolean).join("  ·  ");
-            const note = event.banditNote?.trim() || null;
-            const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
+          {row.map((card, colIndex) => {
+            const open = onOpenCard ? () => onOpenCard(card) : undefined;
             const isLeft = colIndex === 0;
 
             return (
               <Pressable
-                key={`${event.name}-${event.date}-${index}`}
+                key={card.id}
                 onPress={open}
                 disabled={!open}
                 accessibilityRole={open ? "button" : "text"}
                 accessibilityLabel={[
-                  event.name,
-                  timeLine,
-                  venue,
-                  note,
-                  badge,
-                  infoBadges.length
-                    ? eventInfoBadgeAccessibilitySummary(infoBadges)
-                    : null,
+                  card.overline,
+                  card.title,
+                  card.subtitle,
+                  card.note,
                 ]
                   .filter(Boolean)
                   .join(". ")}
@@ -129,19 +128,17 @@ export function LocalEventsGrid({
                 ]}
               >
                 <View style={styles.photoFrame}>
-                  {event.imageUrl ? (
+                  {card.image ? (
                     <Image
-                      source={{ uri: event.imageUrl }}
+                      source={card.image}
                       style={{ width: "100%", height: photoH }}
                       resizeMode="cover"
-                      accessibilityLabel={event.name}
+                      accessibilityLabel={card.title}
                     />
                   ) : (
-                    <View
-                      style={[styles.photoFallback, { height: photoH }]}
-                    >
+                    <View style={[styles.photoFallback, { height: photoH }]}>
                       <SymbolView
-                        name="calendar"
+                        name={fallbackIcon}
                         size={20}
                         weight="light"
                         tintColor={paper.inkFaint}
@@ -149,7 +146,7 @@ export function LocalEventsGrid({
                         importantForAccessibility="no"
                         fallback={
                           <Ionicons
-                            name="calendar-outline"
+                            name={fallbackIconIonicon}
                             size={20}
                             color={paper.inkFaint}
                           />
@@ -160,9 +157,9 @@ export function LocalEventsGrid({
                 </View>
 
                 <View style={styles.copy}>
-                  {overline ? (
+                  {card.overline ? (
                     <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
-                      {overline}
+                      {card.overline}
                     </Text>
                   ) : null}
 
@@ -171,31 +168,26 @@ export function LocalEventsGrid({
                     numberOfLines={3}
                     maxFontSizeMultiplier={1.15}
                   >
-                    {event.name}
+                    {card.title}
                   </Text>
 
-                  <EventInfoBadgeRow
-                    badges={infoBadges}
-                    style={styles.badgeRow}
-                  />
-
-                  {venue ? (
+                  {card.subtitle ? (
                     <Text
                       style={styles.venue}
                       numberOfLines={1}
                       maxFontSizeMultiplier={1.1}
                     >
-                      {venue}
+                      {card.subtitle}
                     </Text>
                   ) : null}
 
-                  {note ? (
+                  {card.note ? (
                     <Text
                       style={styles.bandit}
                       numberOfLines={2}
                       maxFontSizeMultiplier={1.15}
                     >
-                      {note}
+                      {card.note}
                     </Text>
                   ) : null}
                 </View>
@@ -214,10 +206,13 @@ export function LocalEventsGrid({
             pressed && { opacity: press.opacity },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={`See all ${seeAllTotal} events`}
+          accessibilityLabel={
+            seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`
+          }
         >
           <Text style={styles.seeAllText} maxFontSizeMultiplier={1.2}>
-            See all {seeAllTotal} events{"  "}
+            {seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`}
+            {"  "}
             <Text style={styles.seeAllArrow}>→</Text>
           </Text>
         </Pressable>
@@ -311,9 +306,6 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     color: paper.ink,
     marginBottom: 8,
-  },
-  badgeRow: {
-    marginBottom: 10,
   },
   venue: {
     fontSize: 12,

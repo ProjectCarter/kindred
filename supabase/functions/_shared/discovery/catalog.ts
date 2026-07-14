@@ -611,7 +611,10 @@ export function localEventsAsDiscoveryItems(
 /** Foursquare category → Discovery Engine category. No schema changes:
  *  bookstores read naturally as a Notebook "books" find; attractions read
  *  as a Notebook "experiences" find. Coffee/restaurants/parks/museums/
- *  scenic_drives already have a matching category 1:1. */
+ *  scenic_drives already have a matching category 1:1. The eight
+ *  Activities Foursquare categories all collapse into one "activities"
+ *  Discovery category — the specific venue type still survives on
+ *  `venueCategories` (Foursquare's own label), see localPlacesAsDiscoveryItems. */
 const PLACE_CATEGORY_MAP: Record<string, DiscoveryItem["category"]> = {
   coffee: "coffee",
   restaurants: "restaurants",
@@ -620,6 +623,17 @@ const PLACE_CATEGORY_MAP: Record<string, DiscoveryItem["category"]> = {
   scenic_drives: "scenic_drives",
   bookstores: "books",
   attractions: "experiences",
+  bakeries: "bakeries",
+  gardens: "gardens",
+  beaches: "beaches",
+  water_recreation: "activities",
+  escape_rooms: "activities",
+  bowling: "activities",
+  mini_golf: "activities",
+  rock_climbing: "activities",
+  axe_throwing: "activities",
+  go_karts: "activities",
+  pickleball: "activities",
 };
 
 /**

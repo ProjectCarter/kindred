@@ -27,6 +27,9 @@ import { resolveArticleForStoryKey } from "../lib/edition/relatedArticle";
 import { stashArticle } from "../lib/edition/articleStore";
 import { parseLocalEventsBody } from "../lib/edition/localEvents";
 import { stashTodaysEvents } from "../lib/edition/eventsListStore";
+import { stashTodaysActivities } from "../lib/edition/activitiesListStore";
+import { stashTodaysRecommendations } from "../lib/edition/recommendationsListStore";
+import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import {
   banditMorningLine,
   banditsPick,
@@ -1393,6 +1396,26 @@ export default function HomeScreen() {
                 persistHomeScrollNow();
                 stashTodaysEvents(allEvents);
                 router.push("/events");
+              }}
+              onSeeAllActivities={() => {
+                const full = allocateDiscoverySections(
+                  intelligence?.discovery,
+                  intelligence?.discoveryItems,
+                  { max: Infinity }
+                );
+                persistHomeScrollNow();
+                stashTodaysActivities(full.activities);
+                router.push("/activities");
+              }}
+              onSeeAllRecommendations={() => {
+                const full = allocateDiscoverySections(
+                  intelligence?.discovery,
+                  intelligence?.discoveryItems,
+                  { max: Infinity }
+                );
+                persistHomeScrollNow();
+                stashTodaysRecommendations(full.recommendations);
+                router.push("/recommendations");
               }}
               knowledge={intelligence?.knowledge}
               clippedSectionIds={clippedIds}

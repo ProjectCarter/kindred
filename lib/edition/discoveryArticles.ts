@@ -335,6 +335,81 @@ const CURATED_DISCOVERY_ARTICLES: Record<string, CuratedDiscoveryArticle> = {
     },
   },
 
+  disc_activity_try_something: {
+    dek: "Chosen for the doing, not the destination — you don't have to be good at it.",
+    contentType: "recommendation",
+    body: [
+      "Most weekends default to watching something rather than doing something, mostly because doing something takes a little more planning than pressing play. This category exists for the other option: an hour or two spent actually using your hands, your balance, or your nerve.",
+      "The appeal isn't skill. Nobody expects to be good at axe throwing or mini golf or a first afternoon on a paddleboard — the appeal is the small, specific focus of trying, which a screen can't really give you.",
+      "Go with someone, if you can. These are almost always better shared than solo, and a little friendly competition tends to make the awkward first attempt at anything less self-conscious.",
+      "Book ahead where you can — the good ones (an escape room, a lane at the bowling alley on a Saturday night) fill up faster than you'd expect for a Tuesday-brain decision made on a Thursday.",
+      "You won't remember the score. You'll remember that you went and did the thing instead of talking about doing it.",
+    ],
+    fieldAnswers: {
+      skill_level:
+        "Built for first-timers as much as regulars — nobody's grading you on this one.",
+      what_to_bring:
+        "Closed-toe shoes and a willingness to be mediocre at something for an hour.",
+      best_for: "A group looking for something to do together, not just somewhere to sit together.",
+      booking:
+        "Worth calling or booking ahead on weekends — the good spots fill up faster than a weekday errand suggests.",
+    },
+  },
+
+  disc_activity_water: {
+    dek: "Rent, don't buy — the point is the water, not the gear.",
+    contentType: "recommendation",
+    body: [
+      "A first afternoon on a kayak or a paddleboard is almost always better than expected and shorter than planned — the learning curve is real but small, and most people are upright and moving within the first ten minutes.",
+      "Rental is the right call before ownership. Renting means someone else worries about storage, transport, and whether you'll actually use it again next month — you just show up and get in the water.",
+      "Go earlier than feels necessary. Calmer water, softer light, and a rental counter that isn't three groups deep — the same stretch of water at noon is a different, busier place.",
+      "Life jackets aren't optional gear here, they're the whole reason this is a relaxing afternoon and not a nervous one. A good outfitter hands you one before you ask.",
+      "The wobble on your first minute in is normal. By the last twenty, you'll have forgotten you were ever unsteady.",
+    ],
+    fieldAnswers: {
+      skill_level: "No experience needed — most rental spots include a five-minute rundown before you're on the water.",
+      best_time: "Morning, before wind picks up and the water gets choppy.",
+      what_to_bring: "Sunscreen, a change of clothes, and nothing you're not prepared to get wet.",
+      booking: "Weekend mornings book up — a call ahead beats showing up and hoping.",
+    },
+  },
+
+  disc_bakery_morning: {
+    dek: "Go for what just came out of the oven, not what's still in the case at noon.",
+    contentType: "recommendation",
+    body: [
+      "A bakery has a clock most people never learn to read: whatever's freshest is usually gone by mid-morning, and what's left by afternoon is fine, not great. The good regulars know which hour is actually theirs.",
+      "Croissants in particular don't forgive waiting — the first hour after they come out of the oven is the whole show, and no amount of case-lighting makes a five-hour-old pastry taste like a fresh one.",
+      "Ask what came out most recently rather than pointing at whatever looks best under glass. The person behind the counter always knows, and they'll usually tell you straight.",
+      "A real bakery smells like one from the doorway. If it doesn't, you're probably looking at a case restocked from somewhere else, not an oven in the back.",
+      "Buy one thing you already know you like and one thing you don't recognize. That second one is usually how you find a new favorite.",
+    ],
+    fieldAnswers: {
+      best_time: "Early — most of the best-known items sell out or go stale well before lunch.",
+      what_to_get: "Whatever the counter says came out most recently, over whatever simply looks best in the case.",
+      seating: "Some are counter-and-go, some have a table or two — worth checking before you plan on sitting.",
+      nearby: "A coffee shop nearby turns a bakery stop into a proper morning instead of a five-minute errand.",
+    },
+  },
+
+  disc_garden_slow_walk: {
+    dek: "Twenty minutes among growing things — no destination, just a path and no hurry.",
+    contentType: "recommendation",
+    body: [
+      "A garden asks less of you than almost anywhere else on a recommendations list. No reservation, no itinerary, no correct way to see it — just a path, and permission to walk it slowly.",
+      "The best time depends entirely on what's in bloom, which changes the visit more than the season name suggests. A quick check before you go is worth more than assuming spring means flowers and winter means nothing worth seeing.",
+      "Go on a weekday morning if the schedule allows it. Gardens absorb a weekend crowd fine, but they're built for the kind of quiet that a Tuesday morning still has.",
+      "Bring a reason to sit, not just to walk through — a bench, a book, ten minutes with nowhere else to be. Most people move through a garden like a hallway; the ones who sit down get the better version of it.",
+      "You don't need to know the names of anything growing there. Looking is enough.",
+    ],
+    fieldAnswers: {
+      best_time: "Whatever's blooming dictates more than the calendar does — worth a quick check before you go.",
+      best_for: "A slow twenty minutes, alone or with someone who doesn't need to be entertained.",
+      accessibility: "Most garden paths are paved and gently graded, though it's worth confirming for a specific visit.",
+      nearby: "A bench with actual shade is usually worth seeking out over the first one you see.",
+    },
+  },
+
   disc_wirecutter_gear_quiet: {
     dek: "Useful, tested, and chosen to last — never a haul.",
     contentType: "recommendation",
@@ -387,6 +462,9 @@ const CATEGORY_ESSAY_IDS: Partial<Record<DiscoveryCategory, string[]>> = {
   podcasts: ["disc_podcast_walk"],
   experiences: ["disc_hidden_side_street", "disc_wirecutter_gear_quiet"],
   travel: ["disc_travel_day_trip"],
+  activities: ["disc_activity_try_something", "disc_activity_water"],
+  bakeries: ["disc_bakery_morning"],
+  gardens: ["disc_garden_slow_walk"],
 };
 
 function hashKey(key: string): number {
@@ -498,6 +576,9 @@ const PLACE_TYPE_LABEL: Partial<Record<DiscoveryCategory, string>> = {
   beaches: "beach",
   hiking: "trailhead",
   travel: "destination",
+  activities: "local activity spot",
+  bakeries: "bakery",
+  gardens: "botanical garden",
 };
 
 function withIndefiniteArticle(noun: string): string {

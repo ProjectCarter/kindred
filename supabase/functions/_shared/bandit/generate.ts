@@ -35,6 +35,11 @@ function parseBanditLine(text: string): string | null {
 
 /**
  * Ask Claude for Bandit's morning line; fall back to composed templates.
+ *
+ * @deprecated No longer called from `generateBanditPayload`. The AI polish
+ * pass kept drifting into literary/poetic phrasing ("...let the world come
+ * to you.") that didn't match Bandit's "thoughtful friend" voice. Kept here
+ * only in case a future, more tightly-scoped use needs it.
  */
 export async function polishBanditMorningLine(
   input: BanditComposeInput,
@@ -88,11 +93,12 @@ export async function polishBanditMorningLine(
  */
 export async function generateBanditPayload(
   input: BanditComposeInput,
-  apiKey?: string | null
+  _apiKey?: string | null
 ): Promise<BanditPayload> {
-  const morningLine = apiKey
-    ? await polishBanditMorningLine(input, apiKey)
-    : composeMorningLine(input);
+  // Deliberately deterministic, no AI call — see polishBanditMorningLine's
+  // @deprecated note above. Keeps Bandit's voice consistent and removes
+  // an Anthropic round trip from the generation pipeline.
+  const morningLine = composeMorningLine(input);
 
   const payload = composeBanditPayload(input, morningLine);
 

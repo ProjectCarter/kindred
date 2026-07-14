@@ -16,7 +16,21 @@ export type PlacesCategory =
   | "museums"
   | "bookstores"
   | "scenic_drives"
-  | "attractions";
+  | "attractions"
+  | "bakeries"
+  | "gardens"
+  | "beaches"
+  // — Activities desk ("what should I go do?") — real, bookable venues for
+  // active participation, not just places to look at. See foursquareProvider.ts
+  // for why each of these is query-only (no memorized category id).
+  | "water_recreation"
+  | "escape_rooms"
+  | "bowling"
+  | "mini_golf"
+  | "rock_climbing"
+  | "axe_throwing"
+  | "go_karts"
+  | "pickleball";
 
 export type PlacesLocation = {
   lat: number;

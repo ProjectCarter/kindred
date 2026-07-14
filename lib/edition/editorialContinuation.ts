@@ -106,6 +106,11 @@ function facetItem(
     title,
     summary: clip(facet.summary),
     editorWhy: EDITOR_WHY[kind],
+    // When the desk actually knows which real piece this points at
+    // (another section, top story, or discovery item in today's
+    // edition), carry that id so the card opens the real destination
+    // article instead of a synthetic restatement of this summary.
+    targetArticleId: facet.data?.storyKey || undefined,
   };
 }
 
@@ -153,12 +158,14 @@ function followingItem(
       ) {
         return null;
       }
+      const otherStoryKey = thread.storyKeys?.find((k) => k && k !== storyId);
       return {
         kind: "following",
         label: DISPLAY.following,
         title,
         summary: clip(thread.summary),
         editorWhy: EDITOR_WHY.following,
+        targetArticleId: otherStoryKey || undefined,
       };
     }
   }

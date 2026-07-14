@@ -24,12 +24,13 @@ import {
 import type { MemoryPayload, MemoryStoryInput } from "./memory/types.ts";
 import { runMorningEditionDecisions } from "./morningEdition/index.ts";
 import type { MorningEditionPayload } from "./morningEdition/types.ts";
+import { composeHeroOpening } from "./morningEdition/heroOpening.ts";
+import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
 import {
   formatTempC,
   formatWeatherSummary,
   resolveTemperatureUnit,
   unitInstruction,
-  weatherConditionPhrase,
   type TemperatureUnit,
   type TemperatureUnitPreference,
 } from "./weather/units.ts";
@@ -1005,25 +1006,22 @@ export async function buildEditionForUser(
       "Write a short welcoming message for the morning edition (one or two calm sentences). Do not start with Good morning. Do not restate the full calendar date. No exclamation points.",
   });
 
-  if (weather?.current) {
-    const current = formatTempC(weather.current.temperature_2m, tempUnit);
-    const high = formatTempC(weather.daily?.temperature_2m_max?.[0], tempUnit);
-    const low = formatTempC(weather.daily?.temperature_2m_min?.[0], tempUnit);
-    const condition = weatherConditionPhrase(weatherConditionCode);
-    sections.push({
-      section_type: "weather",
-      position: 1,
-      groundingData:
-        `Current temperature: ${current} in ${location.city}. Today's high/low: ${high}/${low}. ` +
-        `Sky condition: ${condition ?? "not available — do not guess it"}. Temperature unit: ${tempUnit}.`,
-      instruction:
-        "Write one brief, natural weather sentence for the front page — the way a newspaper editor " +
-        "would say it aloud, never a data readout. For example: “Expect a warm day across " +
-        `${location.city ?? "town"}, with a high near ${high ?? "the day's high"}${condition ? ` and ${condition}` : ""}.” ` +
-        `Use only the real numbers and sky condition given, exactly as formatted. ${unitInstruction(tempUnit)} ` +
-        "Never invent a sky condition (sunshine, rain, clouds) that isn't given. Do not mix temperature units.",
-    });
-  }
+  // Deliberately NOT an AI section — see heroWeatherTag.ts. The AI weather
+  // sentence kept naming the city inside its own sentence even though the
+  // client already prefixes the city label, producing double-city lines
+  // like "Gilbert · Gilbert sits at 103°F...". A short deterministic tag
+  // (5-8 words, never mentions the city) is appended directly to `rows`
+  // below, the same way `local_events` skips the AI pass entirely.
+  const heroWeatherTag = weather?.current
+    ? composeHeroWeatherTag({
+        editionDate,
+        userId,
+        highC: weather.daily?.temperature_2m_max?.[0] ?? null,
+        currentC: weather.current.temperature_2m ?? null,
+        conditionCode: weatherConditionCode,
+        unit: tempUnit,
+      })
+    : null;
 
   if (topStories.length > 0) {
     sections.push({
@@ -1224,14 +1222,16 @@ export async function buildEditionForUser(
     timer.timed("AI Summaries - Section Writing", () =>
       Promise.all(sections.map((section) => writeSection(section, anthropicApiKey)))
     ),
-    timer.timed("AI Summaries - Bandit Payload", () =>
+    timer.timed("Bandit Payload", () =>
       generateBanditPayload(
         {
           editionDate,
           now: new Date(),
+          userId,
           reader: banditReader,
           location: { city, region, state },
           weatherSummary,
+          weather: { currentTempC: weather?.current?.temperature_2m ?? null },
           signals: {
             hasBreakingNews: editorialContext.signals.hasBreakingNews,
             hasLocalEvents: editorialContext.signals.hasLocalEvents,
@@ -1351,6 +1351,30 @@ export async function buildEditionForUser(
       },
       anthropicApiKey
       )
+  );
+
+  // The front-page hero line beneath the masthead reads `opening_20s`. An
+  // AI-polished opener — however carefully prompted — kept drifting toward
+  // "Inside this morning's edition..." summary phrasing that competes with
+  // the front page instead of stepping aside for it. Swap in a handcrafted,
+  // deterministically-rotated line instead: never AI, never a story
+  // summary, stable per reader per day. briefing_60s / overview_3m (not
+  // shown on the front page today) are untouched.
+  morningEdition.briefings.opening_20s = composeHeroOpening({
+    editionDate,
+    userId,
+    location: { city, region, state },
+    weather:
+      weatherConditionCode != null || weather?.current?.temperature_2m != null
+        ? {
+            currentTempC: weather?.current?.temperature_2m ?? null,
+            conditionCode: weatherConditionCode,
+          }
+        : null,
+    readerFirstName: banditReader.firstName,
+  });
+  morningEdition.selectionMeta.editorNotes.push(
+    "opening_20s replaced with a handcrafted, non-AI hero line (see heroOpening.ts)"
   );
 
   console.log("[buildEdition] morning edition", {
@@ -1552,6 +1576,20 @@ export async function buildEditionForUser(
       body: buildLocalEventsBody(localEvents),
       source_note: "Sourced from Google Events",
     });
+  }
+
+  if (heroWeatherTag) {
+    rows.push({
+      edition_id: edition.id,
+      section_type: "weather",
+      position: 1,
+      headline: heroWeatherTag,
+      body: heroWeatherTag,
+      source_note: "Sourced from Open-Meteo",
+    });
+  }
+
+  if (rows.some((r) => r.section_type === "local_events" || r.section_type === "weather")) {
     rows.sort((a, b) => a.position - b.position);
   }
 
@@ -1646,8 +1684,8 @@ function logTimingSummary(timer: ReturnType<typeof createTimer>) {
     // Editorial Opening line below isn't double-counted into this bucket too.
     { label: "AI Summaries", prefixes: [
       "AI Summaries - Story Editor", "AI Summaries - Section Writing",
-      "AI Summaries - Bandit Payload",
     ] },
+    { label: "Bandit Payload (deterministic)", prefixes: ["Bandit Payload"] },
     { label: "Editorial Opening (AI)", prefixes: ["AI Summaries - Morning Edition Polish"] },
     { label: "Database Writes", prefixes: ["Database Write"] },
   ];

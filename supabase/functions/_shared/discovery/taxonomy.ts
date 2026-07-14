@@ -8,16 +8,19 @@ export const CATEGORY_FAMILY: Record<DiscoveryCategory, DiscoveryFamily> = {
   coffee: "food_drink",
   restaurants: "food_drink",
   recipes: "food_drink",
+  bakeries: "food_drink",
   beaches: "outdoors",
   hiking: "outdoors",
   parks: "outdoors",
   scenic_drives: "outdoors",
+  gardens: "outdoors",
   museums: "culture_leisure",
   books: "culture_leisure",
   movies: "culture_leisure",
   podcasts: "culture_leisure",
   experiences: "travel",
   travel: "travel",
+  activities: "outdoors",
 };
 
 export const SURFACE_CATEGORIES: Record<DiscoverySurface, DiscoveryCategory[]> = {
@@ -60,6 +63,9 @@ export const SURFACE_CATEGORIES: Record<DiscoverySurface, DiscoveryCategory[]> =
   movies: ["movies"],
   podcasts: ["podcasts"],
   recipes: ["recipes"],
+  activities: ["activities"],
+  bakeries: ["bakeries"],
+  gardens: ["gardens"],
 };
 
 export const SURFACE_HEADLINES: Record<DiscoverySurface, string> = {
@@ -77,6 +83,9 @@ export const SURFACE_HEADLINES: Record<DiscoverySurface, string> = {
   movies: "Movies",
   podcasts: "Podcasts",
   recipes: "Recipes",
+  activities: "Activities",
+  bakeries: "Bakeries",
+  gardens: "Gardens",
 };
 
 export const SURFACE_EDITOR_NOTES: Record<DiscoverySurface, string> = {
@@ -97,6 +106,9 @@ export const SURFACE_EDITOR_NOTES: Record<DiscoverySurface, string> = {
   movies: "Films worth the time — not a streaming dump.",
   podcasts: "Listening with editorial care.",
   recipes: "Cooking for a calm kitchen — trustworthy sources only.",
+  activities: "Real, bookable things to go do — not a category guess.",
+  bakeries: "Worth the extra stop — bread and pastry, not a chain rack.",
+  gardens: "A slower green space — bloom-aware when possible.",
 };
 
 /** Map onboarding / news interests → discovery affinities. */

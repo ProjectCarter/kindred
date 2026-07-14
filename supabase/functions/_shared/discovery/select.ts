@@ -23,6 +23,9 @@ const PLACE_CATEGORIES = new Set([
   "museums",
   "scenic_drives",
   "experiences",
+  "activities",
+  "bakeries",
+  "gardens",
 ]);
 
 function normalizeKey(value: string): string {

@@ -43,7 +43,7 @@ import { MorningArrival } from "./MorningArrival";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
 import { DiscoveryDesk } from "./DiscoveryDesk";
-import { ExperiencesSection } from "./ExperiencesSection";
+import { ActivitiesSection } from "./ActivitiesSection";
 import { RecommendationsSection } from "./RecommendationsSection";
 import { BanditsNotebook } from "./BanditsNotebook";
 import { FolioReveal } from "./FolioReveal";
@@ -59,6 +59,10 @@ type Props = {
   onOpenEvent?: (event: LocalEventCard) => void;
   /** Front-page "See all N events →" — opens the full Events list. */
   onSeeAllEvents?: () => void;
+  /** Front-page "See all N activities →" — opens the full Activities list. */
+  onSeeAllActivities?: () => void;
+  /** Front-page "See all N recommendations →" — opens the full Recommendations list. */
+  onSeeAllRecommendations?: () => void;
   /** Stored knowledge payload — used when tapping explainer notes. */
   knowledge?: KnowledgePayload | null;
   heroImageUri?: string | null;
@@ -172,6 +176,8 @@ export function EditionReader({
   onOpenArticle,
   onOpenEvent,
   onSeeAllEvents,
+  onSeeAllActivities,
+  onSeeAllRecommendations,
   knowledge,
   heroImageUri,
   banditGreeting,
@@ -239,6 +245,18 @@ export function EditionReader({
   // directly and never touches this pool.
   const sectionAllocation = useMemo(
     () => allocateDiscoverySections(discovery, discoveryItems),
+    [discovery, discoveryItems]
+  );
+
+  // Activities/Recommendations need the true full claimed list on the
+  // front page too, not just the first 8 — EditorialCardGrid already
+  // decides how many cards to actually show (its own `limit`, default
+  // 8) and only reveals "See more" once the real total exceeds that,
+  // exactly like Local Events. Capping the pool itself to 8 here would
+  // make "See more" never appear. Notebook/localBiz below intentionally
+  // keep using the capped `sectionAllocation` — unrelated to this fix.
+  const fullSectionAllocation = useMemo(
+    () => allocateDiscoverySections(discovery, discoveryItems, { max: Infinity }),
     [discovery, discoveryItems]
   );
 
@@ -382,13 +400,17 @@ export function EditionReader({
       </FolioReveal>
 
       <FolioReveal index={folioCursor++}>
-        <ExperiencesSection
-          items={sectionAllocation.weekendEscapes}
-          discovery={null}
+        <ActivitiesSection
+          items={fullSectionAllocation.activities}
           locationCity={locationCity}
           onOpenItem={
             onOpenArticle
               ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
+              : undefined
+          }
+          onSeeAll={
+            fullSectionAllocation.activities.length > 0
+              ? onSeeAllActivities
               : undefined
           }
         />
@@ -439,10 +461,16 @@ export function EditionReader({
 
       <FolioReveal index={folioCursor++}>
         <RecommendationsSection
-          items={sectionAllocation.recommendations}
+          items={fullSectionAllocation.recommendations}
+          locationCity={locationCity}
           onOpenItem={
             onOpenArticle
               ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
+              : undefined
+          }
+          onSeeAll={
+            fullSectionAllocation.recommendations.length > 0
+              ? onSeeAllRecommendations
               : undefined
           }
         />

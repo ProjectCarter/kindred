@@ -1,4 +1,6 @@
 import { detectBanditOccasions } from "./occasions.ts";
+import { composeBanditWeatherLine } from "./morningLineTemplates.ts";
+import { moodFromTempC } from "../editorialTemplates.ts";
 import type {
   BanditComposeInput,
   BanditMoment,
@@ -13,24 +15,25 @@ function namePrefix(firstName?: string | null): string {
   return first ? `${first}, ` : "";
 }
 
-function weatherHint(summary?: string | null): string | null {
-  if (!summary) return null;
-  const s = summary.toLowerCase();
-  if (/rain|shower|storm|drizzle/.test(s)) {
-    return "Rain outside — a good day to linger with the paper.";
-  }
-  if (/snow|cold|freezing/.test(s)) {
-    return "Cold air today. The paper will keep you company.";
-  }
-  if (/sun|clear|warm|beautiful|mild/.test(s)) {
-    return "Looks like a gentle day outside.";
-  }
-  return null;
+/**
+ * One short, deterministic weather-mood line — never a raw temperature,
+ * never two sentences. See morningLineTemplates.ts for why this replaced
+ * an AI polish pass that kept drifting into overly literary territory.
+ */
+function weatherHint(input: BanditComposeInput): string {
+  const tempC = input.weather?.currentTempC ?? null;
+  const mood = tempC != null ? moodFromTempC(tempC) : null;
+  return composeBanditWeatherLine({
+    editionDate: input.editionDate,
+    userId: input.userId ?? "anonymous",
+    mood,
+    hasLocalEvents: input.signals?.hasLocalEvents,
+  });
 }
 
 /**
- * Deterministic Bandit lines — always calm, always available as fallback.
- * Claude may polish these; templates guarantee voice consistency.
+ * Deterministic Bandit lines — the only path now (no AI polish; see
+ * generate.ts for why).
  */
 export function composeMorningLine(
   input: BanditComposeInput,
@@ -38,8 +41,6 @@ export function composeMorningLine(
 ): string {
   const name = namePrefix(input.reader.firstName);
   const city = input.location.city;
-  const weather = weatherHint(input.weatherSummary);
-  const events = input.signals?.hasLocalEvents;
 
   if (occasions.isBirthday) {
     if (name) {
@@ -87,37 +88,10 @@ export function composeMorningLine(
     );
   }
 
-  if (events && weather) {
-    return `${name}${weather} A few local notes caught my eye.`.replace(
-      /^,\s*/,
-      ""
-    );
-  }
-
-  if (events) {
-    return `${name}I noticed a few things nearby you might like.`.replace(
-      /^,\s*/,
-      ""
-    );
-  }
-
-  if (weather) {
-    return `${name}${weather}`.replace(/^,\s*/, "");
-  }
-
-  if (input.signals?.weatherChange) {
-    return `${name}the weather is shifting — Looking Ahead has a quiet note.`.replace(
-      /^,\s*/,
-      ""
-    );
-  }
-
-  if (name) {
-    const first = input.reader.firstName?.trim().split(/\s+/)[0];
-    return `I left the paper open for you, ${first}.`;
-  }
-
-  return "I left the paper open for you.";
+  // One short sentence, deterministically rotated — weather-mood aware when
+  // real data exists, a friendly generic line otherwise. Bandit never
+  // stacks a weather clause and an events clause into two sentences.
+  return `${name}${weatherHint(input)}`.replace(/^,\s*/, "");
 }
 
 export function composeWeeklyMoment(

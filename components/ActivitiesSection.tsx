@@ -1,30 +1,29 @@
 import { useMemo } from "react";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
-import { selectRecommendationCards } from "../lib/edition/recommendations";
+import { selectActivityCards } from "../lib/edition/activities";
 import { EditorialCardGrid } from "./EditorialCardGrid";
-import { RECOMMENDATIONS_GRID_LIMIT } from "../lib/edition/recommendationsListStore";
+import { ACTIVITIES_GRID_LIMIT } from "../lib/edition/activitiesListStore";
 
 type Props = {
   items: RankedDiscoveryItem[];
   locationCity?: string | null;
   onOpenItem?: (item: RankedDiscoveryItem) => void;
-  /** Front page caps at RECOMMENDATIONS_GRID_LIMIT; the full list screen passes a larger value. */
+  /** Front page caps at ACTIVITIES_GRID_LIMIT; the full list screen passes a larger value. */
   limit?: number;
   /** Present only on the front page — shown below the grid once there are more items than fit. */
   onSeeAll?: () => void;
 };
 
 /**
- * Recommendations — "Where should I go?" Places worth discovering: coffee,
- * restaurants, bakeries, beaches, parks, museums, scenic drives, gardens.
- * Same grid, spacing, and "See More" rhythm as Local Events on purpose —
- * one paper, three desks, not three separate feeds.
+ * Activities — "What should I go do?" Real, bookable venues for active
+ * participation. Same grid, spacing, and "See More" rhythm as Local
+ * Events on purpose — one paper, three desks, not three separate feeds.
  */
-export function RecommendationsSection({
+export function ActivitiesSection({
   items,
   locationCity,
   onOpenItem,
-  limit = RECOMMENDATIONS_GRID_LIMIT,
+  limit = ACTIVITIES_GRID_LIMIT,
   onSeeAll,
 }: Props) {
   const byId = useMemo(() => {
@@ -34,7 +33,7 @@ export function RecommendationsSection({
   }, [items]);
 
   const cards = useMemo(
-    () => selectRecommendationCards(items, { city: locationCity }),
+    () => selectActivityCards(items, { city: locationCity }),
     [items, locationCity]
   );
 
@@ -42,14 +41,14 @@ export function RecommendationsSection({
 
   return (
     <EditorialCardGrid
-      kicker="Recommendations"
+      kicker="Activities"
       cards={cards}
       limit={limit}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
-      seeAllLabel={(n) => `See all ${n} recommendations`}
-      emptyCopy="Nothing new to recommend nearby today — check back tomorrow."
-      fallbackIcon="mappin.and.ellipse"
-      fallbackIconIonicon="location-outline"
+      seeAllLabel={(n) => `See all ${n} activities`}
+      emptyCopy="Nothing new to try nearby today — check back tomorrow."
+      fallbackIcon="figure.run"
+      fallbackIconIonicon="walk-outline"
       onOpenCard={
         onOpenItem
           ? (card) => {

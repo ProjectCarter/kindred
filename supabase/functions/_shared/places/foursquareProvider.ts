@@ -53,6 +53,14 @@ const RESULT_LIMIT = 50; // API max — one call, as many candidates as possible
  * `query` still matters even with a category id filter — it's how a
  * general "Restaurant" category id search still ranks by relevance
  * instead of returning an arbitrary alphabetical slice.
+ *
+ * The Activities desk categories below (water_recreation..pickleball) and
+ * bakeries/gardens/beaches are deliberately `categoryIds: []` — the same
+ * choice already made for scenic_drives/attractions. Nobody has verified a
+ * hex id for "axe throwing venue" or "pickleball court" against the live
+ * API, and per the file header, an unverified id risks a 400 on the WHOLE
+ * request. Plain-language `query` text alone is safe and, per Foursquare's
+ * own relevance ranking, works well for categories this specific.
  */
 const CATEGORY_QUERY: Record<
   PlacesCategory,
@@ -87,6 +95,50 @@ const CATEGORY_QUERY: Record<
   attractions: {
     query: "landmark monument historic site",
     categoryIds: ["4bf58dd8d48988d12d941735", "4deefb944765f83613cdba6e"],
+  },
+  bakeries: {
+    query: "bakery",
+    categoryIds: [],
+  },
+  gardens: {
+    query: "botanical garden",
+    categoryIds: [],
+  },
+  beaches: {
+    query: "beach",
+    categoryIds: [],
+  },
+  water_recreation: {
+    query: "kayak rental paddleboard rental",
+    categoryIds: [],
+  },
+  escape_rooms: {
+    query: "escape room",
+    categoryIds: [],
+  },
+  bowling: {
+    query: "bowling alley",
+    categoryIds: [],
+  },
+  mini_golf: {
+    query: "mini golf",
+    categoryIds: [],
+  },
+  rock_climbing: {
+    query: "rock climbing gym",
+    categoryIds: [],
+  },
+  axe_throwing: {
+    query: "axe throwing",
+    categoryIds: [],
+  },
+  go_karts: {
+    query: "go kart racing",
+    categoryIds: [],
+  },
+  pickleball: {
+    query: "pickleball courts",
+    categoryIds: [],
   },
 };
 
@@ -164,7 +216,13 @@ export function createFoursquareProvider(): PlacesProvider {
         fields: PRO_FIELDS,
         sort: "RELEVANCE",
       });
-      params.set("fsq_category_ids", spec.categoryIds.join(","));
+      // Query-only categories (see CATEGORY_QUERY comment) omit this param
+      // entirely rather than sending an empty string — Foursquare treats a
+      // present-but-empty fsq_category_ids as a 400, the same failure mode
+      // an invalid id would cause.
+      if (spec.categoryIds.length > 0) {
+        params.set("fsq_category_ids", spec.categoryIds.join(","));
+      }
 
       try {
         const res = await fetch(`${FOURSQUARE_SEARCH_URL}?${params}`, {

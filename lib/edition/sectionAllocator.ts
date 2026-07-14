@@ -9,24 +9,33 @@
  *
  * This module builds ONE full candidate pool (every surface, deduped)
  * and partitions it ONCE so every section gets a disjoint slice with its
- * own editorial purpose:
+ * own editorial purpose — not by venue type, but by what question the
+ * reader is actually asking:
  *
- *   Local Events      — real events only. Not part of this allocator:
- *                        it reads edition_sections.local_events directly.
- *                        Every bucket below excludes real events so they
- *                        never duplicate here.
- *   Weekend Escapes    — (the "Experiences" section) curated day trips
- *                        and itineraries: hiking, beaches, parks, scenic
- *                        drives, museums, travel. Claims first — this is
- *                        the section's clearest, most literal territory.
+ *   Local Events      — "What's happening today?" Real, scheduled events
+ *                        only. Not part of this allocator: it reads
+ *                        edition_sections.local_events directly. Every
+ *                        bucket below excludes real events so they never
+ *                        duplicate here.
+ *   Activities         — "What should I go do?" Real, bookable venues for
+ *                        active participation: hiking, plus the
+ *                        Activities desk (kayaking, escape rooms,
+ *                        bowling, mini golf, rock climbing, axe
+ *                        throwing, go-karts, pickleball). Claims first —
+ *                        this is the section's clearest, most literal
+ *                        territory.
  *   Bandit's Notebook   — discovery and hidden gems: the "experiences"
  *                        category outright, plus quiet media (books,
  *                        movies, podcasts) that reads as a personal find
  *                        rather than a place. Claims second, so this
  *                        locked section always has enough for a full
  *                        carousel.
- *   Recommendations    — timeless, non-event picks: recipes, restaurants,
- *                        coffee. Claims last, from what's left.
+ *   Recommendations    — "Where should I go?" Places worth discovering:
+ *                        coffee, restaurants, bakeries, beaches, parks,
+ *                        museums, scenic drives, gardens. Claims last,
+ *                        from what's left — so a place already claimed
+ *                        by Activities (e.g. a beach shown for
+ *                        paddleboarding) never also shows up here.
  *
  * Front Page (Lead + Top Stories) is untouched: it is a completely
  * separate pipeline (news wires + Story Editor) that never reads from
@@ -56,28 +65,38 @@ const ALL_SURFACES: DiscoverySurface[] = [
   "movies",
   "podcasts",
   "recipes",
+  "activities",
+  "bakeries",
+  "gardens",
 ];
 
-const WEEKEND_ESCAPE_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
+/** "What should I go do?" — active participation, not just a place to look at. */
+const ACTIVITIES_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "hiking",
-  "beaches",
-  "parks",
-  "scenic_drives",
-  "museums",
-  "travel",
+  "activities",
 ]);
 
+// Recipes read as "a personal find, not a place" — same territory as
+// books/movies/podcasts — so they stay in the Notebook now that
+// Recommendations is strictly "where should I go?" (venues only).
 const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "experiences",
   "books",
   "movies",
   "podcasts",
+  "recipes",
 ]);
 
+/** "Where should I go?" — places worth discovering, not activities to do. */
 const RECOMMENDATION_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
-  "recipes",
   "restaurants",
   "coffee",
+  "bakeries",
+  "beaches",
+  "parks",
+  "museums",
+  "scenic_drives",
+  "gardens",
 ]);
 
 /** Real, scheduled local events — these belong to Local Events only. */
@@ -116,23 +135,39 @@ export type SectionAllocation = {
    * that want a look at what's left without duplicating a named section.
    */
   nonEventItems: RankedDiscoveryItem[];
-  weekendEscapes: RankedDiscoveryItem[];
+  activities: RankedDiscoveryItem[];
   notebook: RankedDiscoveryItem[];
   recommendations: RankedDiscoveryItem[];
 };
 
+/** Per-section cap — matches Local Events' "up to 8, then See More" rhythm. */
+const SECTION_MAX = 8;
+
 /**
  * Partition the shared discovery pool once per edition render.
- * Priority order (Weekend Escapes → Notebook → Recommendations) decides
- * who wins a contested item; everyone downstream only ever sees what's
- * left, so no item can appear in more than one of these three sections.
- * Notebook claims before Recommendations specifically so this locked
- * carousel always has enough depth, even on a thin catalog day.
+ * Priority order (Activities → Notebook → Recommendations) decides who
+ * wins a contested item; everyone downstream only ever sees what's left,
+ * so no item can appear in more than one of these three sections — a
+ * beach claimed by Activities (shown for paddleboarding) can never also
+ * turn up in Recommendations (shown for its view). Notebook claims before
+ * Recommendations specifically so this locked carousel always has enough
+ * depth, even on a thin catalog day.
  */
 export function allocateDiscoverySections(
   discovery: DiscoveryPayload | null | undefined,
-  extraItems?: RankedDiscoveryItem[] | null
+  extraItems?: RankedDiscoveryItem[] | null,
+  options?: {
+    /**
+     * Override the per-section cap. The front page always uses
+     * SECTION_MAX (8); a "See all" destination screen passes Infinity
+     * here to get every claimed item under the same editorial priority
+     * (Activities → Notebook → Recommendations), not just the front
+     * page's first 8.
+     */
+    max?: number;
+  }
 ): SectionAllocation {
+  const max = options?.max ?? SECTION_MAX;
   const pool = dedupeById([
     ...fullCandidatePool(discovery),
     ...(extraItems ?? []),
@@ -141,11 +176,11 @@ export function allocateDiscoverySections(
 
   function claim(
     predicate: (item: RankedDiscoveryItem) => boolean,
-    max: number
+    cap: number
   ): RankedDiscoveryItem[] {
     const picked: RankedDiscoveryItem[] = [];
     for (const item of pool) {
-      if (picked.length >= max) break;
+      if (picked.length >= cap) break;
       if (claimed.has(item.item.id)) continue;
       if (!predicate(item)) continue;
       picked.push(item);
@@ -154,24 +189,24 @@ export function allocateDiscoverySections(
     return picked;
   }
 
-  const weekendEscapes = claim(
-    (item) => WEEKEND_ESCAPE_CATEGORIES.has(item.item.category),
-    8
+  const activities = claim(
+    (item) => ACTIVITIES_CATEGORIES.has(item.item.category),
+    max
   );
 
   const notebook = claim(
     (item) => NOTEBOOK_CATEGORIES.has(item.item.category),
-    8
+    max
   );
 
   const recommendations = claim(
     (item) => RECOMMENDATION_CATEGORIES.has(item.item.category),
-    8
+    max
   );
 
   return {
     nonEventItems: pool.filter((item) => !claimed.has(item.item.id)),
-    weekendEscapes,
+    activities,
     notebook,
     recommendations,
   };

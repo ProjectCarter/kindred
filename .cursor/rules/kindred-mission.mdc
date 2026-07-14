@@ -1,0 +1,90 @@
+---
+description: Kindred's permanent mission and editorial philosophy — the test every feature, UI, and editorial decision must pass
+alwaysApply: true
+---
+
+# The Kindred Mission
+
+Kindred is not trying to become another news app.
+
+Kindred exists to solve one simple problem: **"What can I do that's fun today?"**
+
+If someone opens Kindred, discovers an amazing local event, finds a beautiful
+hike, books an escape room with friends, discovers a hidden coffee shop, or
+visits a restaurant they've never heard of — and never reads a single news
+article — **we have still completely succeeded.**
+
+That is **the Kindred Effect**.
+
+Our mission is simple: **help people have a better day.**
+The newspaper is simply the format. The inspiration to get out and enjoy
+life is the product.
+
+## Every section has a different job
+
+- **Events** answer: "What's happening today?"
+- **Activities** answer: "What should I do today?"
+- **Recommendations** answer: "Where should I go today?"
+
+These sections should never compete with one another. Each has its own
+personality and purpose, sharing one visual language (see
+`kindred-editorial-design.mdc`).
+
+## No duplicates — permanent editorial rule
+
+The same event, venue, activity, recommendation, or destination must never
+appear in more than one section of the same day's edition. If a coffee shop
+is in Recommendations, don't surface it again elsewhere that day. If a hike
+is in Activities, don't recommend it again in Recommendations. Every section
+should introduce the reader to something new — variety creates delight. If
+overlap is unavoidable on a thin catalog day, pick the strongest section for
+that item and suppress the duplicate elsewhere.
+
+## Images are part of the recommendation, not decoration
+
+People don't imagine experiences through text — they imagine them through
+images. Every Event, Activity, and Recommendation should include a
+beautiful, relevant image whenever reasonably possible: paddleboarding shows
+paddleboarding, a bowling alley shows a bowling alley, a hiking trail shows
+that trail, a coffee shop shows that coffee shop.
+
+Editorial priority for choosing an image:
+
+1. A real photo of the exact venue, event, or location (preferred).
+2. A real photo that accurately represents the activity or experience.
+3. A beautiful editorial-quality image generated specifically for that
+   recommendation if no real photo exists.
+
+A recommendation without an image should be considered incomplete whenever
+reasonably possible. Kindred should feel like a premium magazine, not a
+list of places.
+
+## Homepage philosophy
+
+The homepage is the front page of the newspaper — it should always feel
+highly curated. Do not overwhelm the reader; show only the editor's best
+selections.
+
+- Local Events: up to 8 cards
+- Activities: up to 8 cards
+- Recommendations: up to 8 cards
+- Every section includes a "See All" button once there's more to show.
+
+## "See All" philosophy
+
+"See All" pages exist for exploration, not for becoming an endless
+directory.
+
+- Show up to **20** curated results per section.
+- If fewer than 20 exist, show all available results.
+- If more than 20 exist, Version 1 stops at 20 (pagination / infinite
+  scroll can come in a future version).
+
+## The editorial standard
+
+Whenever there is uncertainty about a feature, ask:
+
+**"Does this help someone discover something that could genuinely make
+today better?"**
+
+If yes, we're moving in the right direction. That is the Kindred Effect.

@@ -233,7 +233,22 @@ export default function ArticleScreen() {
       continueReading: terminalEditorialContinuation(),
     };
 
-    if (item.targetArticleId) {
+    if (item.targetArticleId && item.targetArticleId !== article.id) {
+      // Real destination article, pre-stashed from the homepage when this
+      // reader opened — the actual piece the card names, not a stand-in.
+      const stashed = getStashedArticle(item.targetArticleId);
+      if (stashed) {
+        openKindredArticle(router, stashed, {
+          editionId: resolvedEdition,
+          backLabel: "← Previous story",
+          companion: {
+            ...terminalCompanion,
+            banditNote: stashed.banditNote ?? null,
+          },
+        });
+        return;
+      }
+
       const goldRelated = getGoldRelatedArticle(item.targetArticleId);
       if (goldRelated) {
         openKindredArticle(router, goldRelated, {

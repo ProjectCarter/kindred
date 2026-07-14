@@ -1,24 +1,27 @@
 import { useMemo } from "react";
-import { Text, View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { LocalEventsGrid } from "../components/LocalEventsGrid";
-import { getTodaysEvents } from "../lib/edition/eventsListStore";
-import { openKindredEvent } from "../lib/edition/openEvent";
+import { EditorialCardGrid } from "../components/EditorialCardGrid";
+import { selectActivityCards } from "../lib/edition/activities";
+import { getTodaysActivities } from "../lib/edition/activitiesListStore";
+import { articleFromDiscoveryItem } from "../lib/edition/article";
+import { openKindredArticle } from "../lib/edition/openArticle";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
 /**
- * The full Local Events list — reached from the front page's
- * "See all N events →" call-to-action. Same two-column grid, capped at
+ * The full Activities list — reached from the front page's
+ * "See all N activities →" call-to-action. Same grid, capped at
  * SEE_ALL_MAX (exploration, not an endless directory — kindred-mission.mdc).
  */
-export default function EventsScreen() {
+export default function ActivitiesScreen() {
   const router = useRouter();
-  const events = useMemo(
-    () => getTodaysEvents().slice(0, SEE_ALL_MAX),
+  const items = useMemo(
+    () => getTodaysActivities().slice(0, SEE_ALL_MAX),
     []
   );
+  const cards = useMemo(() => selectActivityCards(items), [items]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -35,18 +38,26 @@ export default function EventsScreen() {
           <Text style={styles.backText}>← Today’s paper</Text>
         </Pressable>
 
-        <Text style={styles.kicker}>Around town today</Text>
-        <Text style={styles.title}>Local Events</Text>
+        <Text style={styles.kicker}>What should I go do?</Text>
+        <Text style={styles.title}>Activities</Text>
         <Text style={styles.subtitle}>
-          Everything happening nearby, gathered in one place.
+          Real, bookable things to go do nearby — gathered in one place.
         </Text>
 
-        <LocalEventsGrid
-          events={events}
-          limit={Math.max(events.length, 1)}
-          onOpenEvent={(event) =>
-            openKindredEvent(router, event, { backLabel: "← Local Events" })
-          }
+        <EditorialCardGrid
+          kicker="Activities"
+          cards={cards}
+          limit={Math.max(cards.length, 1)}
+          fallbackIcon="figure.run"
+          fallbackIconIonicon="walk-outline"
+          emptyCopy="Nothing new to try nearby today — check back tomorrow."
+          onOpenCard={(card) => {
+            const item = items.find((i) => i.item.id === card.id);
+            if (!item) return;
+            openKindredArticle(router, articleFromDiscoveryItem(item), {
+              backLabel: "← Activities",
+            });
+          }}
         />
       </ScrollView>
     </SafeAreaView>

@@ -83,6 +83,8 @@ export type BanditReaderProfile = {
 export type BanditComposeInput = {
   editionDate: string;
   now?: Date;
+  /** Seeds the deterministic weather-line rotation — stable per reader per day. */
+  userId?: string;
   reader: BanditReaderProfile;
   location: {
     city: string | null;
@@ -90,6 +92,8 @@ export type BanditComposeInput = {
     state?: string | null;
   };
   weatherSummary?: string | null;
+  /** Raw fact only, never AI prose — feeds the deterministic weather-mood line. */
+  weather?: { currentTempC: number | null } | null;
   signals?: {
     hasBreakingNews?: boolean;
     hasLocalEvents?: boolean;
