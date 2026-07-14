@@ -477,6 +477,7 @@ export function articleFromDiscoveryItem(
       sourceName: item.source?.name ?? null,
       category: item.category,
       seedKey: item.id,
+      knowledgeGrounding: item.knowledgeGrounding ?? null,
     });
     return withDiscoveryEditorialHero(
       {
@@ -609,6 +610,7 @@ export function articleFromNotebookItem(
       sourceName: item.source?.name ?? null,
       category: item.category,
       seedKey: item.id,
+      knowledgeGrounding: item.knowledgeGrounding ?? null,
     });
     return articleFromSectionItem({
       id: item.id,

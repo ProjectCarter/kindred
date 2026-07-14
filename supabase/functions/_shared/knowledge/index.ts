@@ -25,3 +25,21 @@ export { buildKnowledgeCandidates } from "./catalog.ts";
 export { scoreKnowledgeCandidate } from "./score.ts";
 export { selectKnowledgePacket, whyFacet } from "./select.ts";
 export { runKnowledgeDecisions } from "./decide.ts";
+
+export type {
+  KnowledgeLookupResult,
+  KnowledgeProviderId,
+  EditionKnowledgeGrounding,
+} from "./providers/types.ts";
+
+export {
+  getKnowledgeProviders,
+  isWikipediaKnowledgeEnabled,
+  lookupWikipedia,
+  lookupOnThisDaySubject,
+  lookupHeroArtworkSubject,
+  enrichEditionKnowledge,
+  enrichDiscoveryKnowledge,
+  buildTodayInHistoryGrounding,
+  isWikipediaEligible,
+} from "./providers/index.ts";

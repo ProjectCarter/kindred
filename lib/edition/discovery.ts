@@ -79,6 +79,7 @@ export type DiscoveryItem = {
     sourcePageUrl?: string | null;
     attributionText?: string | null;
   } | null;
+  knowledgeGrounding?: import("./knowledgeGrounding").KnowledgeLookupResult | null;
 };
 
 export type RankedDiscoveryItem = {

@@ -4,6 +4,10 @@
  * Every future article / section should request context through this layer.
  */
 
+import type { EditionKnowledgeGrounding } from "./knowledgeGrounding";
+
+export type { KnowledgeLookupResult, EditionKnowledgeGrounding } from "./knowledgeGrounding";
+
 export type KnowledgeFacetType =
   | "related_story"
   | "historical_background"
@@ -47,6 +51,11 @@ export type KnowledgeFacet = {
     section?: string;
     term?: string;
     wikipediaTitle?: string;
+    wikipediaUrl?: string;
+    wikipediaPageId?: number;
+    extract?: string;
+    groundingSource?: "wikipedia";
+    groundingConfidence?: number;
     entityKind?:
       | "person"
       | "company"
@@ -93,6 +102,7 @@ export type KnowledgePayload = {
     why: string;
   }>;
   editorBrief: string;
+  providerGrounding?: EditionKnowledgeGrounding;
   selectionMeta: {
     storyCount: number;
     facetCount: number;

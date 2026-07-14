@@ -108,6 +108,8 @@ export type DiscoveryItem = {
     sourcePageUrl?: string | null;
     attributionText?: string | null;
   } | null;
+  /** Wikipedia grounding for museum/landmark briefings — not attached to local businesses. */
+  knowledgeGrounding?: import("../knowledge/providers/types.ts").KnowledgeLookupResult | null;
 };
 
 export type RankedDiscoveryItem = {

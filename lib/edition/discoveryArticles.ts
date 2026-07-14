@@ -23,6 +23,10 @@ import {
   sanitizeEditorialParagraphs,
   validateEditorialArticle,
 } from "./editorialCategory";
+import {
+  discoveryBackgroundFromGrounding,
+  type KnowledgeLookupResult,
+} from "./knowledgeGrounding";
 
 export type CuratedDiscoveryArticle = {
   /** Editorial subheading for the reader — distinct from the homepage card dek. */
@@ -766,6 +770,7 @@ export function composePlaceDiscoveryArticle(input: {
   sourceName?: string | null;
   category?: DiscoveryCategory | string | null;
   seedKey: string;
+  knowledgeGrounding?: KnowledgeLookupResult | null;
 }): {
   dek: string;
   body: string[];
@@ -805,6 +810,11 @@ export function composePlaceDiscoveryArticle(input: {
     venueCategories: input.venueCategories,
   });
 
+  const wikipediaBackground = discoveryBackgroundFromGrounding(
+    input.knowledgeGrounding,
+    title
+  );
+
   let practicalTips =
     typeof essay?.fieldAnswers?.tips === "string" && essay.fieldAnswers.tips.trim()
       ? essay.fieldAnswers.tips
@@ -828,6 +838,7 @@ export function composePlaceDiscoveryArticle(input: {
     factSentence,
     whyVisit,
     uniqueness,
+    ...(wikipediaBackground ? [wikipediaBackground] : []),
     brief.who,
     brief.howLong,
     practicalTips,
@@ -843,6 +854,9 @@ export function composePlaceDiscoveryArticle(input: {
     how_long: brief.howLong,
     tips: practicalTips,
   };
+  if (wikipediaBackground) {
+    safeFieldAnswers.background = wikipediaBackground;
+  }
   if (essay?.fieldAnswers) {
     for (const [key, value] of Object.entries(essay.fieldAnswers)) {
       if (typeof value === "string" && editorialCopyConflicts(verified.categoryId, value)) {

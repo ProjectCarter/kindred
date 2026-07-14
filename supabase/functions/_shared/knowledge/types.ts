@@ -50,6 +50,11 @@ export type KnowledgeFacet = {
     section?: string;
     term?: string;
     wikipediaTitle?: string;
+    wikipediaUrl?: string;
+    wikipediaPageId?: number;
+    extract?: string;
+    groundingSource?: "wikipedia";
+    groundingConfidence?: number;
     /** Knowledge Card entity role when type is definition. */
     entityKind?:
       | "person"
@@ -80,6 +85,17 @@ export type KnowledgePacket = {
   };
 };
 
+export type EditionKnowledgeGrounding = {
+  onThisDay?: import("./providers/types.ts").KnowledgeLookupResult | null;
+  heroArtwork?: import("./providers/types.ts").KnowledgeLookupResult | null;
+  discoveryByItemId?: Record<
+    string,
+    import("./providers/types.ts").KnowledgeLookupResult
+  >;
+  enrichedAt?: string;
+  providersUsed?: Array<"wikipedia">;
+};
+
 export type KnowledgePayload = {
   version: 1;
   generatedAt: string;
@@ -97,6 +113,8 @@ export type KnowledgePayload = {
     why: string;
   }>;
   editorBrief: string;
+  /** Wikipedia and future provider grounding metadata for this edition. */
+  providerGrounding?: EditionKnowledgeGrounding;
   selectionMeta: {
     storyCount: number;
     facetCount: number;

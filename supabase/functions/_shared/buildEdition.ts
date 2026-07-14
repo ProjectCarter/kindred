@@ -18,6 +18,11 @@ import type { DiscoveryPayload, DiscoveryRankingContext } from "./discovery/type
 import { runKnowledgeDecisions } from "./knowledge/index.ts";
 import type { KnowledgePayload, KnowledgeStoryInput } from "./knowledge/types.ts";
 import {
+  enrichDiscoveryKnowledge,
+  enrichEditionKnowledge,
+  buildTodayInHistoryGrounding,
+} from "./knowledge/providers/index.ts";
+import {
   loadMemoryArchive,
   runMemoryDecisions,
 } from "./memory/index.ts";
@@ -288,7 +293,12 @@ async function getOnThisDay() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   const res = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/${month}/${day}`
+    `https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/${month}/${day}`,
+    {
+      headers: {
+        "User-Agent": "Kindred/1.0 (https://kindred.app; editorial-knowledge-engine)",
+      },
+    }
   );
   const data = await res.json();
   const events = data.events ?? [];
@@ -942,6 +952,17 @@ export async function buildEditionForUser(
     console.warn("[buildEdition] discovery image enrichment failed", imageErr);
   }
 
+  try {
+    discoveryWithImages = await enrichDiscoveryKnowledge(supabaseAdmin, discoveryWithImages, {
+      city,
+      region,
+      state,
+    });
+    console.log("[buildEdition] discovery knowledge grounding enriched");
+  } catch (knowledgeErr) {
+    console.warn("[buildEdition] discovery knowledge enrichment failed", knowledgeErr);
+  }
+
   const knowledgeStories: KnowledgeStoryInput[] = [];
   if (leadStory) {
     knowledgeStories.push({
@@ -1003,6 +1024,20 @@ export async function buildEditionForUser(
     maxFacetsPerStory: 6,
   });
 
+  let knowledgeWithGrounding: KnowledgePayload = knowledge;
+  try {
+    knowledgeWithGrounding = await enrichEditionKnowledge(supabaseAdmin, {
+      knowledge,
+      onThisDay,
+      location: { city, region, state },
+    });
+    console.log("[buildEdition] knowledge provider grounding enriched", {
+      onThisDay: Boolean(knowledgeWithGrounding.providerGrounding?.onThisDay),
+    });
+  } catch (knowledgeErr) {
+    console.warn("[buildEdition] knowledge provider enrichment failed", knowledgeErr);
+  }
+
   const memoryStories: MemoryStoryInput[] = knowledgeStories.map((s) => ({
     storyKey: s.storyKey,
     section: s.section,
@@ -1056,8 +1091,8 @@ export async function buildEditionForUser(
     hasHeroImage: Boolean(leadStory?.heroImage.uri),
     editionMode: editorial.policy.mode,
     discoverySurfaces: Object.keys(discovery.surfaces),
-    knowledgeStories: knowledge.selectionMeta.storyCount,
-    knowledgeFacets: knowledge.selectionMeta.facetCount,
+    knowledgeStories: knowledgeWithGrounding.selectionMeta.storyCount,
+    knowledgeFacets: knowledgeWithGrounding.selectionMeta.facetCount,
     memoryThreads: memory.selectionMeta.threadCount,
     continuityDays: memory.reader.continuityDays,
   });
@@ -1124,9 +1159,12 @@ export async function buildEditionForUser(
     sections.push({
       section_type: "today_in_history",
       position: 4,
-      groundingData: `In ${onThisDay.year}: ${onThisDay.text}`,
+      groundingData: buildTodayInHistoryGrounding(
+        onThisDay,
+        knowledgeWithGrounding.providerGrounding?.onThisDay
+      ),
       instruction:
-        "Write a brief 'Today in History' note based only on this fact.",
+        "Write a brief 'Today in History' note based only on this fact and any verified background context provided. Synthesize original prose; do not quote long passages.",
     });
   }
 
@@ -1219,10 +1257,10 @@ export async function buildEditionForUser(
       editorNotes: discovery.selectionMeta.editorNotes,
     },
     knowledge: {
-      storyCount: knowledge.selectionMeta.storyCount,
-      facetCount: knowledge.selectionMeta.facetCount,
-      highlights: knowledge.highlights,
-      editorNotes: knowledge.selectionMeta.editorNotes,
+      storyCount: knowledgeWithGrounding.selectionMeta.storyCount,
+      facetCount: knowledgeWithGrounding.selectionMeta.facetCount,
+      highlights: knowledgeWithGrounding.highlights,
+      editorNotes: knowledgeWithGrounding.selectionMeta.editorNotes,
     },
     memory: {
       threadCount: memory.selectionMeta.threadCount,
@@ -1401,8 +1439,8 @@ export async function buildEditionForUser(
           category: p.category,
           why: p.why,
         })),
-        knowledgeBrief: knowledge.editorBrief,
-        knowledgeHighlights: knowledge.highlights.map((h) => ({
+        knowledgeBrief: knowledgeWithGrounding.editorBrief,
+        knowledgeHighlights: knowledgeWithGrounding.highlights.map((h) => ({
           headline: h.headline,
           facetType: h.facetType,
           why: h.why,
@@ -1495,10 +1533,10 @@ export async function buildEditionForUser(
       editorNotes: discovery.selectionMeta.editorNotes,
     },
     knowledge: {
-      storyCount: knowledge.selectionMeta.storyCount,
-      facetCount: knowledge.selectionMeta.facetCount,
-      highlights: knowledge.highlights,
-      editorNotes: knowledge.selectionMeta.editorNotes,
+      storyCount: knowledgeWithGrounding.selectionMeta.storyCount,
+      facetCount: knowledgeWithGrounding.selectionMeta.facetCount,
+      highlights: knowledgeWithGrounding.highlights,
+      editorNotes: knowledgeWithGrounding.selectionMeta.editorNotes,
     },
     memory: {
       threadCount: memory.selectionMeta.threadCount,
@@ -1537,7 +1575,7 @@ export async function buildEditionForUser(
         lead_story: leadStory,
         bandit,
         discovery: discoveryWithImages,
-        knowledge,
+        knowledge: knowledgeWithGrounding,
         memory,
         morning_edition: morningEdition,
       },
@@ -1569,7 +1607,7 @@ export async function buildEditionForUser(
           lead_story: leadStory,
           bandit,
           discovery: discoveryWithImages,
-          knowledge,
+          knowledge: knowledgeWithGrounding,
           memory,
         },
         { onConflict: "user_id,edition_date" }
