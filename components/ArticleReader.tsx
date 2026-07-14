@@ -538,6 +538,19 @@ export function ArticleReader({
     void Linking.openURL(article.sourceUrl).catch(() => {});
   }
 
+  function handleBack() {
+    updateArticleSessionScroll(article.id, scrollYRef.current);
+    stashArticleSession({
+      article,
+      companion,
+      editionId: editionId ?? null,
+      backLabel,
+      scrollY: scrollYRef.current,
+      updatedAt: Date.now(),
+    });
+    onBack();
+  }
+
   async function handleShare() {
     const parts = [article.headline];
     if (article.dek) parts.push(article.dek);
@@ -567,6 +580,14 @@ export function ArticleReader({
         <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
       </View>
 
+      <View style={styles.detailBackBar}>
+        <MastheadLink
+          label={backLabel}
+          onPress={handleBack}
+          accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
+        />
+      </View>
+
       <KindredStickyMasthead
         scrollY={mastheadScrollY}
         style={styles.stickyMasthead}
@@ -580,7 +601,7 @@ export function ArticleReader({
         leading={
           <MastheadLink
             label={backLabel}
-            onPress={onBack}
+            onPress={handleBack}
             accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
           />
         }
@@ -838,7 +859,7 @@ export function ArticleReader({
                     isLast={index === relatedItems.length - 1}
                     onPress={() => {
                       if (item.action === "return_to_edition") {
-                        onBack();
+                        handleBack();
                         return;
                       }
                       onOpenContinue?.(item);
@@ -874,7 +895,7 @@ export function ArticleReader({
                   }
                   onPress={() => {
                     if (item.action === "return_to_edition") {
-                      onBack();
+                      handleBack();
                       return;
                     }
                     onOpenContinue?.(item);
@@ -908,7 +929,7 @@ export function ArticleReader({
                 ) : null}
                 <ActionLink
                   label={backLabel.replace(/^←\s*/, "") || "Today’s paper"}
-                  onPress={onBack}
+                  onPress={handleBack}
                   prefix="← "
                 />
               </View>
@@ -1243,6 +1264,13 @@ const styles = StyleSheet.create({
     height: 1.5,
     backgroundColor: paper.terracotta,
     opacity: 0.4,
+  },
+  detailBackBar: {
+    paddingHorizontal: reader.gutter,
+    paddingTop: 10,
+    paddingBottom: 6,
+    alignSelf: "stretch",
+    zIndex: 10,
   },
   stickyMasthead: {
     top: 1.5,

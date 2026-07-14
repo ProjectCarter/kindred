@@ -1,13 +1,17 @@
 import { useMemo } from "react";
-import { Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import { Text, StyleSheet, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { EditorialCardGrid } from "../components/EditorialCardGrid";
+import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { selectRecommendationCards } from "../lib/edition/recommendations";
 import { getTodaysRecommendations } from "../lib/edition/recommendationsListStore";
 import { articleFromDiscoveryItem } from "../lib/edition/article";
+import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredArticle } from "../lib/edition/openArticle";
-import { paper, press, type } from "../lib/edition/newspaperTheme";
+import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
+import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
+import { paper, type } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
 /**
@@ -17,6 +21,9 @@ import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
  */
 export default function RecommendationsScreen() {
   const router = useRouter();
+  const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
+    LIST_SCROLL_KEYS.recommendations
+  );
   const items = useMemo(
     () => getTodaysRecommendations().slice(0, SEE_ALL_MAX),
     []
@@ -26,17 +33,22 @@ export default function RecommendationsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          onScrollOffset(event.nativeEvent.contentOffset.y);
+        }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Back to today's paper"
-        >
-          <Text style={styles.backText}>← Today’s paper</Text>
-        </Pressable>
+        <View style={styles.backRow}>
+          <KindredDetailBackButton
+            onPress={() => {
+              persistNow();
+              router.back();
+            }}
+          />
+        </View>
 
         <Text style={styles.kicker}>Where should I go?</Text>
         <Text style={styles.title}>Recommendations</Text>
@@ -55,13 +67,17 @@ export default function RecommendationsScreen() {
           onOpenCard={(card) => {
             const item = items.find((i) => i.item.id === card.id);
             if (!item) return;
+            persistNow();
             openKindredArticle(
               router,
               {
                 ...articleFromDiscoveryItem(item),
                 savedContentType: "recommendation",
               },
-              { backLabel: "← Recommendations" }
+              {
+                editionId: getActiveEditionId(),
+                backLabel: "← Recommendations",
+              }
             );
           }}
         />
@@ -80,16 +96,9 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 72,
   },
-  backLink: {
+  backRow: {
     marginBottom: 24,
     alignSelf: "flex-start",
-    paddingVertical: 4,
-  },
-  backText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    color: paper.terracotta,
-    fontStyle: "italic",
   },
   kicker: {
     ...type.kicker,
@@ -110,8 +119,5 @@ const styles = StyleSheet.create({
     color: paper.inkBody,
     marginBottom: 32,
     maxWidth: 400,
-  },
-  pressed: {
-    opacity: press.opacity,
   },
 });

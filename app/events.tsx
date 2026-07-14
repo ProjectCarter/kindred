@@ -1,11 +1,15 @@
 import { useMemo } from "react";
-import { Text, View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { Text, StyleSheet, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { LocalEventsGrid } from "../components/LocalEventsGrid";
+import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { getTodaysEvents } from "../lib/edition/eventsListStore";
+import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredEvent } from "../lib/edition/openEvent";
-import { paper, press, type } from "../lib/edition/newspaperTheme";
+import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
+import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
+import { paper, type } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
 /**
@@ -15,6 +19,9 @@ import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
  */
 export default function EventsScreen() {
   const router = useRouter();
+  const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
+    LIST_SCROLL_KEYS.events
+  );
   const events = useMemo(
     () => getTodaysEvents().slice(0, SEE_ALL_MAX),
     []
@@ -23,17 +30,22 @@ export default function EventsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          onScrollOffset(event.nativeEvent.contentOffset.y);
+        }}
       >
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Back to today's paper"
-        >
-          <Text style={styles.backText}>← Today’s paper</Text>
-        </Pressable>
+        <View style={styles.backRow}>
+          <KindredDetailBackButton
+            onPress={() => {
+              persistNow();
+              router.back();
+            }}
+          />
+        </View>
 
         <Text style={styles.kicker}>Around town today</Text>
         <Text style={styles.title}>Local Events</Text>
@@ -45,9 +57,13 @@ export default function EventsScreen() {
           events={events}
           limit={Math.max(events.length, 1)}
           showBanditWhenEmpty
-          onOpenEvent={(event) =>
-            openKindredEvent(router, event, { backLabel: "← Local Events" })
-          }
+          onOpenEvent={(event) => {
+            persistNow();
+            openKindredEvent(router, event, {
+              editionId: getActiveEditionId(),
+              backLabel: "← Local Events",
+            });
+          }}
         />
       </ScrollView>
     </SafeAreaView>
@@ -64,16 +80,9 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 72,
   },
-  backLink: {
+  backRow: {
     marginBottom: 24,
     alignSelf: "flex-start",
-    paddingVertical: 4,
-  },
-  backText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    color: paper.terracotta,
-    fontStyle: "italic",
   },
   kicker: {
     ...type.kicker,
@@ -94,8 +103,5 @@ const styles = StyleSheet.create({
     color: paper.inkBody,
     marginBottom: 32,
     maxWidth: 400,
-  },
-  pressed: {
-    opacity: press.opacity,
   },
 });

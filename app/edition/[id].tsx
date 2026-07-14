@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import {
   Text,
   View,
   StyleSheet,
   Animated,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -45,10 +47,27 @@ import {
 } from "../../components/KindredMasthead";
 import { PaperLoading } from "../../components/PaperLoading";
 import { paper } from "../../lib/edition/newspaperTheme";
+import { setActiveEditionId } from "../../lib/edition/editionContext";
+import { LIST_SCROLL_KEYS } from "../../lib/edition/listScrollSession";
+import { useListScrollRestoration } from "../../lib/edition/useListScrollRestoration";
 
 export default function EditionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const editionKey = useMemo(
+    () =>
+      typeof id === "string"
+        ? LIST_SCROLL_KEYS.edition(id)
+        : "edition:unknown",
+    [id]
+  );
+  const mastheadScrollY = useRef(new Animated.Value(0)).current;
+  const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
+    editionKey,
+    {
+      onRestore: (y) => mastheadScrollY.setValue(y),
+    }
+  );
   const [loading, setLoading] = useState(true);
   const [editionDate, setEditionDate] = useState<string | null>(null);
   const [sections, setSections] = useState<EditionSection[]>([]);
@@ -62,7 +81,6 @@ export default function EditionScreen() {
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [newer, setNewer] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const mastheadScrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +137,7 @@ export default function EditionScreen() {
         }
 
         setEditionDate(edition.edition_date);
+        setActiveEditionId(edition.id);
         const lead = parseLeadStory(
           (edition as { lead_story?: unknown }).lead_story
         );
@@ -274,6 +293,7 @@ export default function EditionScreen() {
         }
       />
       <Animated.ScrollView
+        ref={scrollRef}
         key={id}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -281,7 +301,12 @@ export default function EditionScreen() {
         scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: mastheadScrollY } } }],
-          { useNativeDriver: true }
+          {
+            useNativeDriver: true,
+            listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+              onScrollOffset(event.nativeEvent.contentOffset.y);
+            },
+          }
         )}
       >
         {error ? (
@@ -318,6 +343,7 @@ export default function EditionScreen() {
               locationRegion={intelligence?.discovery?.location?.region ?? null}
               locationState={intelligence?.discovery?.location?.state ?? null}
               onOpenArticle={(article) => {
+                persistNow();
                 const companion = companionForArticle(
                   intelligence,
                   article,
@@ -330,7 +356,9 @@ export default function EditionScreen() {
                 });
               }}
               onOpenEvent={(event) => {
+                persistNow();
                 openKindredEvent(router, event, {
+                  editionId: typeof id === "string" ? id : null,
                   backLabel: "← The paper",
                 });
               }}

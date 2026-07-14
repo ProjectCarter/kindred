@@ -475,6 +475,25 @@ function hashKey(key: string): number {
   return Math.abs(hash);
 }
 
+function isWaterActivityVenue(
+  venueCategories: string[] | null | undefined
+): boolean {
+  const blob = (venueCategories ?? []).join(" ").toLowerCase();
+  return /\b(kayak|paddle|paddleboard|canoe|boat|marina|sailing|surf|swim|water)\b/.test(
+    blob
+  );
+}
+
+/** Activity essays matched to venue type — never kayak copy on a bowling alley. */
+function activityEssayIds(
+  venueCategories: string[] | null | undefined
+): string[] {
+  if (isWaterActivityVenue(venueCategories)) {
+    return ["disc_activity_water", "disc_activity_try_something"];
+  }
+  return ["disc_activity_try_something"];
+}
+
 /**
  * A category-appropriate curated essay for any discovery item that
  * doesn't have its own hand-written piece. Every real category has at
@@ -483,10 +502,14 @@ function hashKey(key: string): number {
  */
 export function getCategoryDiscoveryArticle(
   category: DiscoveryCategory | string | null | undefined,
-  seedKey: string
+  seedKey: string,
+  options?: { venueCategories?: string[] | null }
 ): CuratedDiscoveryArticle | null {
-  const ids = CATEGORY_ESSAY_IDS[category as DiscoveryCategory];
+  let ids = CATEGORY_ESSAY_IDS[category as DiscoveryCategory];
   if (!ids?.length) return null;
+  if (category === "activities") {
+    ids = activityEssayIds(options?.venueCategories);
+  }
   const id = ids[hashKey(seedKey) % ids.length];
   return CURATED_DISCOVERY_ARTICLES[id] ?? null;
 }
@@ -652,7 +675,9 @@ export function composePlaceDiscoveryArticle(input: {
       ? `${factSentence} ${note}`
       : factSentence;
 
-  const essay = getCategoryDiscoveryArticle(input.category, input.seedKey);
+  const essay = getCategoryDiscoveryArticle(input.category, input.seedKey, {
+    venueCategories: input.venueCategories,
+  });
   if (essay) {
     const bridge = `Kindred hasn't reviewed every detail of ${title} directly — but here's what tends to separate ${typeLabelWithArticle} worth going back to from one that isn't, worth checking for when you visit.`;
     const attribution = input.sourceName

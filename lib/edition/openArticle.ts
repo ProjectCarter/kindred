@@ -6,7 +6,10 @@ import {
   stashArticleCompanion,
   type ArticleCompanion,
 } from "./articleCompanion";
-import { stashArticleSession } from "./articleSession";
+import {
+  getArticleSessionSync,
+  stashArticleSession,
+} from "./articleSession";
 import {
   inferTopicFromSection,
   trackReadingSignal,
@@ -41,13 +44,14 @@ export function openKindredArticle(
   }
 
   const backLabel = options.backLabel?.trim() || "← Today’s paper";
+  const priorSession = getArticleSessionSync(withHero.id);
 
   stashArticleSession({
     article: withHero,
     companion,
-    editionId: options.editionId ?? null,
+    editionId: options.editionId ?? priorSession?.editionId ?? null,
     backLabel,
-    scrollY: 0,
+    scrollY: priorSession?.scrollY ?? 0,
     updatedAt: Date.now(),
   });
 

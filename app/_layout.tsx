@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Slot, useRouter, useSegments } from "expo-router";
+import { Stack, useRouter, useSegments } from "expo-router";
 import type { Session } from "@supabase/supabase-js";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
@@ -8,6 +8,7 @@ import { profileHasInterests } from "../lib/auth/hasInterests";
 import { setAuthLinkError } from "../lib/auth/authLinkError";
 import { PaperLoading } from "../components/PaperLoading";
 import { AppErrorBoundary } from "../components/AppErrorBoundary";
+import { paper } from "../lib/edition/newspaperTheme";
 
 function getAuthCodeFromUrl(url: string): string | null {
   try {
@@ -211,7 +212,14 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AppErrorBoundary>
-        <Slot />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            contentStyle: { backgroundColor: paper.sky },
+          }}
+        />
       </AppErrorBoundary>
     </SafeAreaProvider>
   );

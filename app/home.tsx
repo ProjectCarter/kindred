@@ -23,6 +23,7 @@ import {
 import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { openKindredEvent } from "../lib/edition/openEvent";
+import { setActiveEditionId } from "../lib/edition/editionContext";
 import { articleFromEditionSection } from "../lib/edition/article";
 import { saveClipping, removeClipping } from "../lib/edition/clippings";
 import { resolveArticleForStoryKey } from "../lib/edition/relatedArticle";
@@ -177,6 +178,10 @@ export default function HomeScreen() {
 
   editionIdRef.current = editionId;
   activeLocationRef.current = activeLocation;
+
+  useEffect(() => {
+    setActiveEditionId(editionId);
+  }, [editionId]);
 
   function currentHomeScrollKey(): string | null {
     const id = editionIdRef.current;
@@ -1697,6 +1702,7 @@ export default function HomeScreen() {
               onOpenEvent={(event) => {
                 persistHomeScrollNow();
                 openKindredEvent(router, event, {
+                  editionId,
                   backLabel: "← Today’s paper",
                 });
               }}
