@@ -12,13 +12,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import {
   deriveEventBadge,
   eventPlaceLine,
   getStashedEvent,
 } from "../../lib/edition/eventStore";
+import { eventFallbackImage } from "../../lib/edition/localEvents";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { paper, press } from "../../lib/edition/newspaperTheme";
@@ -75,32 +74,16 @@ export default function EventDetailScreen() {
           <Text style={styles.back}>{back}</Text>
         </Pressable>
 
-        {event.imageUrl ? (
-          <Image
-            source={{ uri: event.imageUrl }}
-            style={{ width, height: photoH, marginLeft: -24 }}
-            resizeMode="cover"
-            accessibilityLabel={event.name}
-          />
-        ) : (
-          <View style={[styles.noPhoto, { height: Math.round(photoH * 0.35) }]}>
-            <SymbolView
-              name="calendar"
-              size={22}
-              weight="light"
-              tintColor={paper.inkFaint}
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-              fallback={
-                <Ionicons
-                  name="calendar-outline"
-                  size={22}
-                  color={paper.inkFaint}
-                />
-              }
-            />
-          </View>
-        )}
+        <Image
+          source={
+            event.imageUrl
+              ? { uri: event.imageUrl }
+              : eventFallbackImage(event.category)
+          }
+          style={{ width, height: photoH, marginLeft: -24 }}
+          resizeMode="cover"
+          accessibilityLabel={event.name}
+        />
 
         <View style={styles.body}>
           {badge ? (
@@ -179,12 +162,6 @@ const styles = StyleSheet.create({
     color: paper.inkMuted,
     paddingHorizontal: 24,
     marginTop: 24,
-  },
-  noPhoto: {
-    backgroundColor: paper.creamDeep,
-    marginBottom: 8,
-    alignItems: "center",
-    justifyContent: "center",
   },
   body: {
     paddingHorizontal: 24,

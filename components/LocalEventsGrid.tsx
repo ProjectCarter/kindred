@@ -6,10 +6,9 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import {
   orderEventsForGrid,
+  eventFallbackImage,
   LOCAL_EVENTS_GRID_LIMIT,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
@@ -129,34 +128,16 @@ export function LocalEventsGrid({
                 ]}
               >
                 <View style={styles.photoFrame}>
-                  {event.imageUrl ? (
-                    <Image
-                      source={{ uri: event.imageUrl }}
-                      style={{ width: "100%", height: photoH }}
-                      resizeMode="cover"
-                      accessibilityLabel={event.name}
-                    />
-                  ) : (
-                    <View
-                      style={[styles.photoFallback, { height: photoH }]}
-                    >
-                      <SymbolView
-                        name="calendar"
-                        size={20}
-                        weight="light"
-                        tintColor={paper.inkFaint}
-                        accessibilityElementsHidden
-                        importantForAccessibility="no"
-                        fallback={
-                          <Ionicons
-                            name="calendar-outline"
-                            size={20}
-                            color={paper.inkFaint}
-                          />
-                        }
-                      />
-                    </View>
-                  )}
+                  <Image
+                    source={
+                      event.imageUrl
+                        ? { uri: event.imageUrl }
+                        : eventFallbackImage(event.category)
+                    }
+                    style={{ width: "100%", height: photoH }}
+                    resizeMode="cover"
+                    accessibilityLabel={event.name}
+                  />
                 </View>
 
                 <View style={styles.copy}>
@@ -285,12 +266,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
     width: "100%",
-  },
-  photoFallback: {
-    width: "100%",
-    backgroundColor: paper.creamDeep,
-    alignItems: "center",
-    justifyContent: "center",
   },
   copy: {
     paddingTop: 16,

@@ -1,3 +1,4 @@
+import type { ImageSourcePropType } from "react-native";
 import type { EventInfoBadgeId } from "./eventBadges";
 import { inferEventInfoBadges } from "./eventBadges";
 
@@ -28,6 +29,31 @@ const EVENT_CATEGORY_LABEL: Record<LocalEventCategory, string> = {
 export function eventCategoryLabel(category?: LocalEventCategory | null): string | null {
   if (!category) return null;
   return EVENT_CATEGORY_LABEL[category] ?? null;
+}
+
+/**
+ * "A recommendation without an image should be considered incomplete"
+ * (kindred-mission.mdc). SerpAPI doesn't always return a listing photo —
+ * when it doesn't, fall back to a bundled, editorial-quality photograph
+ * for that event's genre rather than a bare icon. Still ranked behind a
+ * real photo everywhere this is used (see `orderEventsForGrid`).
+ */
+const EVENT_FALLBACK_IMAGE: Record<LocalEventCategory, ImageSourcePropType> = {
+  music: require("../../assets/discovery/event-music.jpg"),
+  comedy: require("../../assets/discovery/event-comedy.jpg"),
+  arts: require("../../assets/discovery/event-arts.jpg"),
+  family: require("../../assets/discovery/event-family.jpg"),
+  sports: require("../../assets/discovery/event-sports.jpg"),
+  food: require("../../assets/discovery/event-food.jpg"),
+  market: require("../../assets/discovery/event-market.jpg"),
+  nightlife: require("../../assets/discovery/event-nightlife.jpg"),
+  community: require("../../assets/discovery/event-community.jpg"),
+};
+
+export function eventFallbackImage(
+  category?: LocalEventCategory | null
+): ImageSourcePropType {
+  return EVENT_FALLBACK_IMAGE[category ?? "community"] ?? EVENT_FALLBACK_IMAGE.community;
 }
 
 export type LocalEventCard = {

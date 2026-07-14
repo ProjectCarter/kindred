@@ -42,7 +42,6 @@ import { experienceImageFor } from "../lib/edition/experiences";
 import { MorningArrival } from "./MorningArrival";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
-import { DiscoveryDesk } from "./DiscoveryDesk";
 import { ActivitiesSection } from "./ActivitiesSection";
 import { RecommendationsSection } from "./RecommendationsSection";
 import { BanditsNotebook } from "./BanditsNotebook";
@@ -416,6 +415,23 @@ export function EditionReader({
         />
       </FolioReveal>
 
+      <FolioReveal index={folioCursor++}>
+        <RecommendationsSection
+          items={fullSectionAllocation.recommendations}
+          locationCity={locationCity}
+          onOpenItem={
+            onOpenArticle
+              ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
+              : undefined
+          }
+          onSeeAll={
+            fullSectionAllocation.recommendations.length > 0
+              ? onSeeAllRecommendations
+              : undefined
+          }
+        />
+      </FolioReveal>
+
       {banditsPick ? (
         <FolioReveal index={folioCursor++}>
           <TimeStylePackage
@@ -453,39 +469,6 @@ export function EditionReader({
                     const hit = localBiz.find((d) => d.item.id === id);
                     if (hit) onOpenArticle(articleFromDiscoveryItem(hit));
                   }
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
-
-      <FolioReveal index={folioCursor++}>
-        <RecommendationsSection
-          items={fullSectionAllocation.recommendations}
-          locationCity={locationCity}
-          onOpenItem={
-            onOpenArticle
-              ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
-              : undefined
-          }
-          onSeeAll={
-            fullSectionAllocation.recommendations.length > 0
-              ? onSeeAllRecommendations
-              : undefined
-          }
-        />
-      </FolioReveal>
-
-      {localBiz.length > 0 ? (
-        <FolioReveal index={folioCursor++}>
-          <DiscoveryDesk
-            headline="Local Businesses"
-            kicker="Nearby"
-            editorNote="Places nearby worth your time and money."
-            items={localBiz.slice(0, 5)}
-            onOpenItem={
-              onOpenArticle
-                ? (item) => onOpenArticle(articleFromDiscoveryItem(item))
                 : undefined
             }
           />
