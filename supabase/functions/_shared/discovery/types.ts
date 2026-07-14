@@ -167,6 +167,8 @@ export type DiscoveryRankingContext = {
   season?: "spring" | "summer" | "autumn" | "winter";
   /** Recent discovery titles / ids for anti-repetition. */
   recentKeys?: string[];
+  /** Structured weather signals from WeatherProvider — optional enrichment. */
+  weatherIntel?: import("../weather/providers/types.ts").WeatherIntelligence | null;
   /** Local events from the edition — become discovery candidates. */
   localEvents?: Array<{
     name: string;

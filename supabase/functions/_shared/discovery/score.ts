@@ -4,6 +4,10 @@ import {
   seasonForDate,
   weatherBucket,
 } from "./taxonomy.ts";
+import {
+  sumWeatherIntelligenceScore,
+  weatherIntelligenceAdjustments,
+} from "../weather/scoring.ts";
 import type {
   DiscoveryItem,
   DiscoveryRankingContext,
@@ -53,7 +57,7 @@ export function scoreDiscoveryItem(
   const now = ctx.now ?? new Date();
   const date = parseEditionDate(ctx.editionDate, now);
   const season = ctx.season ?? seasonForDate(date);
-  const weather = weatherBucket(ctx.weatherSummary);
+  const weather = ctx.weatherIntel?.bucket ?? weatherBucket(ctx.weatherSummary);
   const reasons: DiscoveryReason[] = [];
   let score = 0;
 
@@ -168,6 +172,12 @@ export function scoreDiscoveryItem(
       label: "Outdoor pick held back for wet weather",
       weight: -10,
     });
+  }
+
+  const intelReasons = weatherIntelligenceAdjustments(item, ctx.weatherIntel);
+  if (intelReasons.length) {
+    score += sumWeatherIntelligenceScore(intelReasons);
+    reasons.push(...intelReasons);
   }
 
   // Experience first (kindred-recommendations.mdc): Kindred isn't a

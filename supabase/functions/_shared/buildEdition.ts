@@ -32,6 +32,13 @@ import type { MorningEditionPayload } from "./morningEdition/types.ts";
 import { composeHeroOpening } from "./morningEdition/heroOpening.ts";
 import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
 import {
+  buildWeatherIntelligence,
+  fetchWeatherForecast,
+  isOpenWeatherConfigured,
+  toLegacyWeatherPayload,
+  weatherSourceAttribution,
+} from "./weather/providers/index.ts";
+import {
   formatTempC,
   formatWeatherSummary,
   resolveTemperatureUnit,
@@ -274,20 +281,6 @@ export async function resolveEditionLocation(
   return null;
 }
 
-async function getWeather(lat: number, lon: number) {
-  const res = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code&forecast_days=2&timezone=auto`
-  );
-  console.log("[buildEdition] provider Open-Meteo", {
-    httpStatus: res.status,
-    ok: res.ok,
-  });
-  if (!res.ok) {
-    return null;
-  }
-  return res.json();
-}
-
 async function getOnThisDay() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -518,6 +511,7 @@ export async function buildEditionForUser(
     ANTHROPIC_API_KEY: Boolean(anthropicApiKey),
     EVENTS_API_KEY: Boolean(Deno.env.get("EVENTS_API_KEY")),
     FOURSQUARE_API_KEY: Boolean(Deno.env.get("FOURSQUARE_API_KEY")),
+    OPENWEATHER_API_KEY: isOpenWeatherConfigured(),
   });
 
   if (!newsApiKey || !anthropicApiKey) {
@@ -660,9 +654,11 @@ export async function buildEditionForUser(
     editionDayOfWeek === 6 ||
     isUsHolidayOrEve(editionDateObj);
 
-  const [weather, onThisDay, localEventsRaw, localPlaces, editorial] =
+  const [weatherForecast, onThisDay, localEventsRaw, localPlaces, editorial] =
     await Promise.all([
-    timer.timed("Weather", () => getWeather(weatherLat, weatherLon)),
+    timer.timed("Weather", () =>
+      fetchWeatherForecast(weatherLat, weatherLon, supabaseAdmin)
+    ),
     timer.timed("Today in History", () => getOnThisDay()),
     timer.timed("Local Events", () => getLocalEvents(eventsLocation, { isBusyDay })),
     // Shared per-metro cache (see places/cache.ts) — this call almost
@@ -705,6 +701,7 @@ export async function buildEditionForUser(
   // Computed early (was previously derived just before the real Discovery
   // Engine call) — Bandit's Pick needs it too, and every input here
   // (weather, city, tempUnit) is already resolved by this point.
+  const weather = toLegacyWeatherPayload(weatherForecast);
   const weatherConditionCode =
     weather?.current?.weather_code ?? weather?.daily?.weather_code?.[0] ?? null;
   const weatherSummary = formatWeatherSummary({
@@ -714,6 +711,15 @@ export async function buildEditionForUser(
     lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
     unit: tempUnit,
     conditionCode: weatherConditionCode,
+  });
+  const weatherIntel = buildWeatherIntelligence(weatherForecast, weatherSummary);
+  const weatherAttribution = weatherSourceAttribution(weatherForecast);
+
+  console.log("[buildEdition] weather provider", {
+    provider: weatherForecast?.provider ?? null,
+    hasAlerts: Boolean(weatherIntel?.hasActiveAlerts),
+    bucket: weatherIntel?.bucket ?? null,
+    airQuality: Boolean(weatherForecast?.airQuality),
   });
 
   // Bandit's Pick candidate selection is pure CPU over the already-scored
@@ -737,6 +743,7 @@ export async function buildEditionForUser(
     followedTopics,
     favoriteSources: personalization.favoriteSources,
     weatherSummary,
+    weatherIntel,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localPlaces,
@@ -900,15 +907,6 @@ export async function buildEditionForUser(
     };
   });
 
-  console.log("[buildEdition] weather provider", {
-    provider: "Open-Meteo",
-    city: city ?? location.city,
-    lat: weatherLat,
-    lon: weatherLon,
-    unit: tempUnit,
-    summary: weatherSummary,
-  });
-
   const discovery: DiscoveryPayload = runDiscoveryDecisions({
     editionDate,
     now: new Date(),
@@ -921,6 +919,7 @@ export async function buildEditionForUser(
     followedTopics,
     favoriteSources: personalization.favoriteSources,
     weatherSummary,
+    weatherIntel,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localEvents,
@@ -1697,7 +1696,7 @@ export async function buildEditionForUser(
       position: 1,
       headline: heroWeatherTag,
       body: heroWeatherTag,
-      source_note: "Sourced from Open-Meteo",
+      source_note: weatherAttribution,
     });
   }
 
