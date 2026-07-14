@@ -53,7 +53,8 @@ export {
   pickProviderEventImage,
   splitEventSchedule,
 } from "./localEvents/provider.ts";
-export { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+export { enrichEventsWithBanditNotes };
 
 export type BuildEditionResult =
   | { ok: true; editionId: string }
@@ -924,7 +925,7 @@ export async function buildEditionForUser(
   try {
     discoveryWithImages = await enrichDiscoveryImages(supabaseAdmin, discovery, {
       banditPickItemId: banditsPickStory?.discoveryItem?.id ?? null,
-      seedIfSparse: true,
+      seedIfSparse: false,
     });
     if (banditsPickStory?.discoveryItem?.id) {
       const enrichedItem = findDiscoveryItemById(
