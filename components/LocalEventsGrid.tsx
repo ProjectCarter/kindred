@@ -18,6 +18,7 @@ import {
 } from "../lib/edition/eventStore";
 import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
+import { BanditCharacter } from "./BanditCharacter";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
 
@@ -28,6 +29,12 @@ type Props = {
   limit?: number;
   /** Present only on the front page — shown below the grid once there are more events than fit. */
   onSeeAll?: () => void;
+  /**
+   * Shows Bandit (resting, no newspaper — "nothing more to deliver") beside
+   * the empty message. Reserved for the dedicated "See all" list screen so
+   * the busy front page never carries more than one Bandit at a time.
+   */
+  showBanditWhenEmpty?: boolean;
 };
 
 /**
@@ -40,6 +47,7 @@ export function LocalEventsGrid({
   onOpenEvent,
   limit = LOCAL_EVENTS_GRID_LIMIT,
   onSeeAll,
+  showBanditWhenEmpty = false,
 }: Props) {
   const { width } = useWindowDimensions();
   /** Page column inside home’s 28px folio padding. */
@@ -60,9 +68,22 @@ export function LocalEventsGrid({
           <Text style={styles.kicker}>Local Events</Text>
           <View style={styles.labelRule} />
         </View>
-        <Text style={styles.empty}>
-          A quiet day nearby — the perfect excuse for a slow walk.
-        </Text>
+        {showBanditWhenEmpty ? (
+          <View style={styles.emptyWithBandit}>
+            <BanditCharacter
+              pose="standing-no-newspaper"
+              size={88}
+              accessibilityLabel="Bandit, waiting calmly with nothing more to deliver right now"
+            />
+            <Text style={[styles.empty, styles.emptyWithBanditText]}>
+              A quiet day nearby — the perfect excuse for a slow walk.
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.empty}>
+            A quiet day nearby — the perfect excuse for a slow walk.
+          </Text>
+        )}
       </View>
     );
   }
@@ -239,6 +260,17 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontStyle: "italic",
     color: paper.inkMuted,
+  },
+  emptyWithBandit: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  emptyWithBanditText: {
+    marginTop: 18,
+    fontSize: 17,
+    lineHeight: 26,
+    textAlign: "center",
+    maxWidth: 320,
   },
   row: {
     flexDirection: "row",

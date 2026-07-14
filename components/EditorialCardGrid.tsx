@@ -11,6 +11,7 @@ import { SymbolView, type SFSymbol } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
+import { BanditCharacter } from "./BanditCharacter";
 
 export type EditorialGridCard = {
   id: string;
@@ -38,6 +39,12 @@ type Props = {
   emptyCopy?: string;
   fallbackIcon?: SFSymbol;
   fallbackIconIonicon?: keyof typeof Ionicons.glyphMap;
+  /**
+   * Shows Bandit (resting, no newspaper — "nothing more to deliver") beside
+   * the empty message. Reserved for the dedicated "See all" list screens so
+   * the busy front page never carries more than one Bandit at a time.
+   */
+  showBanditWhenEmpty?: boolean;
 };
 
 /**
@@ -58,6 +65,7 @@ export function EditorialCardGrid({
   emptyCopy = "Nothing new to surface here today — check back tomorrow.",
   fallbackIcon = "square.grid.2x2",
   fallbackIconIonicon = "grid-outline",
+  showBanditWhenEmpty = false,
 }: Props) {
   const { width } = useWindowDimensions();
   /** Page column inside home’s 28px folio padding. */
@@ -78,7 +86,20 @@ export function EditorialCardGrid({
           <Text style={styles.kicker}>{kicker}</Text>
           <View style={styles.labelRule} />
         </View>
-        <Text style={styles.empty}>{emptyCopy}</Text>
+        {showBanditWhenEmpty ? (
+          <View style={styles.emptyWithBandit}>
+            <BanditCharacter
+              pose="standing-no-newspaper"
+              size={88}
+              accessibilityLabel="Bandit, waiting calmly with nothing more to deliver right now"
+            />
+            <Text style={[styles.empty, styles.emptyWithBanditText]}>
+              {emptyCopy}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.empty}>{emptyCopy}</Text>
+        )}
       </View>
     );
   }
@@ -253,6 +274,17 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontStyle: "italic",
     color: paper.inkMuted,
+  },
+  emptyWithBandit: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  emptyWithBanditText: {
+    marginTop: 18,
+    fontSize: 17,
+    lineHeight: 26,
+    textAlign: "center",
+    maxWidth: 320,
   },
   row: {
     flexDirection: "row",

@@ -7,6 +7,14 @@ type Props = {
   /** Rendered size — Bandit's illustrations are square-canvas, so width == height. */
   size?: number;
   style?: StyleProp<ViewStyle>;
+  /** Overrides the default accessibility label for this placement. */
+  accessibilityLabel?: string;
+  /**
+   * Set when a wrapping element already announces Bandit's presence and
+   * message (e.g. an `accessible` parent View with its own label), so his
+   * portrait doesn't get read out twice by screen readers.
+   */
+  decorative?: boolean;
 };
 
 /**
@@ -16,14 +24,22 @@ type Props = {
  * `require`-ing an asset directly, so future pose additions and any
  * corrections stay centralized in `lib/bandit/character.ts`.
  */
-export function BanditCharacter({ pose = BANDIT_SIGNATURE_POSE, size = 96, style }: Props) {
+export function BanditCharacter({
+  pose = BANDIT_SIGNATURE_POSE,
+  size = 96,
+  style,
+  accessibilityLabel = "Bandit, Kindred's newspaper dog",
+  decorative = false,
+}: Props) {
   return (
     <View style={[{ width: size, height: size }, style]}>
       <Image
         source={BANDIT_ASSETS[pose]}
         style={styles.image}
         resizeMode="contain"
-        accessibilityLabel="Bandit, Kindred's newspaper dog"
+        accessibilityLabel={decorative ? undefined : accessibilityLabel}
+        accessibilityElementsHidden={decorative}
+        importantForAccessibility={decorative ? "no" : "auto"}
       />
     </View>
   );

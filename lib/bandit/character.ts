@@ -118,3 +118,13 @@ export const BANDIT_ASSETS: Record<BanditPose, ImageSourcePropType> = {
 
 /** Bandit's signature pose — the primary illustration used throughout Kindred. */
 export const BANDIT_SIGNATURE_POSE: BanditPose = "walking-newspaper";
+
+/**
+ * The official Bandit v1.0 pose library reference sheet — ten approved poses
+ * (walking-with-newspaper, standing, sitting, lying down, head portrait,
+ * waving, looking up, holding a recommendation card, sleeping, reading the
+ * newspaper) on one page. For design review / future asset generation
+ * grounding; individual production `BANDIT_ASSETS` above are separate clean
+ * renders, since a single grid image can't be sliced into in-app assets.
+ */
+export const BANDIT_POSE_LIBRARY_SHEET: ImageSourcePropType = require("../../assets/bandit/v1/bandit-v1-pose-library-full.png");

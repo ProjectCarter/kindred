@@ -19,6 +19,7 @@ import { openKindredArticle } from "../lib/edition/openArticle";
 import { clipSectionIdForArticle } from "../lib/edition/surfaceIntelligence";
 import { LocalEventsSection } from "../components/LocalEventsSection";
 import { PaperLoading } from "../components/PaperLoading";
+import { BanditCharacter } from "../components/BanditCharacter";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type ClippingRow = {
@@ -157,10 +158,18 @@ export default function ClippingsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         {clippings.length === 0 ? (
-          <Text style={styles.empty}>
-            Nothing clipped yet. When a passage is worth keeping, tap “Save for
-            later” in today’s paper — it will wait here.
-          </Text>
+          <View
+            style={styles.emptyState}
+            accessible
+            accessibilityLabel="Bandit says: Nothing clipped yet. When a passage is worth keeping, tap Save for later in today's paper — it will wait here for you."
+          >
+            <BanditCharacter pose="sitting" size={120} decorative />
+            <Text style={styles.empty}>
+              Nothing clipped yet. When a story, event, recommendation, or
+              activity is worth keeping, tap “Save for later” — it will wait
+              here for you.
+            </Text>
+          </View>
         ) : (
           clippings.map((clip) => {
             if (!clip.section) return null;
@@ -333,12 +342,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontStyle: "italic",
   },
+  emptyState: {
+    alignItems: "center",
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
   empty: {
+    marginTop: 20,
     fontFamily: "Georgia",
     fontSize: 16,
     lineHeight: 25,
     color: paper.inkMuted,
     fontStyle: "italic",
+    textAlign: "center",
+    maxWidth: 340,
   },
   card: {
     marginBottom: 32,

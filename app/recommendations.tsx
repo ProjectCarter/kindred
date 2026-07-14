@@ -51,6 +51,7 @@ export default function RecommendationsScreen() {
           fallbackIcon="mappin.and.ellipse"
           fallbackIconIonicon="location-outline"
           emptyCopy="Nothing new to recommend nearby today — check back tomorrow."
+          showBanditWhenEmpty
           onOpenCard={(card) => {
             const item = items.find((i) => i.item.id === card.id);
             if (!item) return;

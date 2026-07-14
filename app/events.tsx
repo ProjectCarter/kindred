@@ -44,6 +44,7 @@ export default function EventsScreen() {
         <LocalEventsGrid
           events={events}
           limit={Math.max(events.length, 1)}
+          showBanditWhenEmpty
           onOpenEvent={(event) =>
             openKindredEvent(router, event, { backLabel: "← Local Events" })
           }

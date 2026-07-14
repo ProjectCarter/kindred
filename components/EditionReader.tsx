@@ -48,6 +48,7 @@ import { RecommendationsSection } from "./RecommendationsSection";
 import { BanditsNotebook } from "./BanditsNotebook";
 import { FolioReveal } from "./FolioReveal";
 import { EditionClose } from "./EditionClose";
+import { BanditCharacter } from "./BanditCharacter";
 
 type Props = {
   sections: EditionSection[];
@@ -499,13 +500,30 @@ export function EditionReader({
 
       {banditsPick ? (
         <FolioReveal index={folioCursor++}>
+          {banditsPick.intro?.trim() ? (
+            <View
+              style={styles.banditPickNoteRow}
+              accessible
+              accessibilityLabel={`Bandit says: ${banditsPick.intro.trim()}`}
+            >
+              <BanditCharacter
+                pose="head-portrait"
+                size={40}
+                style={styles.banditPickAvatar}
+                decorative
+              />
+              <Text style={styles.banditPickNote} maxFontSizeMultiplier={1.3}>
+                {banditsPick.intro.trim()}
+              </Text>
+            </View>
+          ) : null}
           <TimeStylePackage
             sectionLabel="Bandit’s Pick"
             feature={{
               id: banditsPick.story.id,
               kicker: BANDITS_PICK_KICKER[banditsPick.kind],
               headline: banditsPick.story.headline,
-              dek: banditsPick.intro || banditsPick.story.summary,
+              dek: banditsPick.story.summary,
               byline:
                 banditsPick.kind === "article" && banditsPick.story.source
                   ? `by ${banditsPick.story.source}`
@@ -752,6 +770,23 @@ export function EditionReader({
 const styles = StyleSheet.create({
   folio: {
     paddingBottom: space.endPadding,
+  },
+  banditPickNoteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+  },
+  banditPickAvatar: {
+    marginTop: 2,
+  },
+  banditPickNote: {
+    flex: 1,
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 22,
+    fontStyle: "italic",
+    color: paper.inkBody,
   },
   sectionCard: {
     marginBottom: space.sectionGap,

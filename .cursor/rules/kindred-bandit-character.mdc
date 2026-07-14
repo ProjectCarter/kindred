@@ -13,13 +13,26 @@ same discipline as a real brand mark (Nike swoosh, Duolingo owl).
 
 The single source of truth is the **approved Bandit v1.0 master reference**,
 `assets/bandit/v1/bandit-v1-master-reference.png` — matched to the real
-Kindred app icon. His **Core Pose Library v1** lives in `assets/bandit/v1/`
-and is registered in `BANDIT_ASSETS` (`lib/bandit/character.ts`):
-`reference`, `standing-neutral`, `walking-newspaper` (his **signature pose**,
-`BANDIT_SIGNATURE_POSE` — the primary illustration throughout Kindred),
-`sitting`, `head-portrait`, `standing-no-newspaper`.
+Kindred app icon. His identity is frozen: head/muzzle/ear/patch/nose shape,
+body/tail/leg proportions, line weight, color palette, expression, and gentle
+smile never change. Only pose, body position, accessories, props, and small
+in-character expression tweaks may vary.
 
-Never reinterpret, restyle, or "improve" his design. To add a new surface
+His **Core Pose Library v1** lives in `assets/bandit/v1/` and is registered
+in `BANDIT_ASSETS` (`lib/bandit/character.ts`): `reference`,
+`standing-neutral`, `walking-newspaper` (his **signature pose**,
+`BANDIT_SIGNATURE_POSE` — the primary illustration throughout Kindred),
+`sitting`, `head-portrait`, `standing-no-newspaper`. The full approved
+ten-pose reference sheet (adds lying down, waving, looking up, holding a
+recommendation card, sleeping, reading the newspaper) is
+`assets/bandit/v1/bandit-v1-pose-library-full.png`
+(`BANDIT_POSE_LIBRARY_SHEET`) — generate matching individual production
+assets from it before wiring any of those five poses into a real screen.
+
+**Bandit v1.0 is permanently locked** — including body proportions (adult
+athletic Jack Russell: longer legs, deeper chest, longer torso, smaller
+head-to-body ratio). No further redesigns unless explicitly requested by the
+user. Never reinterpret, restyle, or "improve" his design. To add a new surface
 that needs a pose not yet in the library, generate it with the app icon +
 `bandit-v1-master-reference.png` as reference images (strong visual
 grounding, not description alone), register it in `BANDIT_ASSETS`, then use

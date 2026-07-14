@@ -18,6 +18,7 @@ import type { MorningBriefing } from "../lib/edition/morningEdition";
 import { motion, paper, space, type } from "../lib/edition/newspaperTheme";
 import { MorningBriefing as MorningBriefingBlock } from "./MorningBriefing";
 import { KindredFullMasthead } from "./KindredMasthead";
+import { BanditCharacter } from "./BanditCharacter";
 
 type Props = {
   editionDate?: string | null;
@@ -225,26 +226,36 @@ export function MorningGreeting({
           accessible
           accessibilityLabel={`Bandit, your editor. ${banditLine}`}
         >
-          <Text style={styles.banditLabel}>From the editor</Text>
-          <Text style={styles.banditText} maxFontSizeMultiplier={1.35}>
-            {banditLine}
-          </Text>
-          <Text style={styles.banditSign} maxFontSizeMultiplier={1.2}>
-            — Bandit
-          </Text>
-          {banditAside?.trim() ? (
-            <Text style={styles.banditAside} maxFontSizeMultiplier={1.3}>
-              {banditAside.trim()}
-            </Text>
-          ) : null}
-          {memoryNote?.trim() ? (
-            <View style={styles.memoryBlock} accessibilityRole="text">
-              <Text style={styles.memoryKicker}>Since you last read</Text>
-              <Text style={styles.memoryNote} maxFontSizeMultiplier={1.3}>
-                {memoryNote.trim()}
+          <View style={styles.banditRow}>
+            <BanditCharacter
+              pose="walking-newspaper"
+              size={48}
+              style={styles.banditAvatar}
+              decorative
+            />
+            <View style={styles.banditTextCol}>
+              <Text style={styles.banditLabel}>From the editor</Text>
+              <Text style={styles.banditText} maxFontSizeMultiplier={1.35}>
+                {banditLine}
               </Text>
+              <Text style={styles.banditSign} maxFontSizeMultiplier={1.2}>
+                — Bandit
+              </Text>
+              {banditAside?.trim() ? (
+                <Text style={styles.banditAside} maxFontSizeMultiplier={1.3}>
+                  {banditAside.trim()}
+                </Text>
+              ) : null}
+              {memoryNote?.trim() ? (
+                <View style={styles.memoryBlock} accessibilityRole="text">
+                  <Text style={styles.memoryKicker}>Since you last read</Text>
+                  <Text style={styles.memoryNote} maxFontSizeMultiplier={1.3}>
+                    {memoryNote.trim()}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          ) : null}
+          </View>
         </Animated.View>
       ) : null}
 
@@ -286,6 +297,18 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: paper.inkRule,
+  },
+  banditRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+  },
+  banditAvatar: {
+    marginTop: 2,
+  },
+  banditTextCol: {
+    flex: 1,
+    minWidth: 0,
   },
   banditLabel: {
     fontFamily: "Georgia",

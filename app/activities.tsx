@@ -51,6 +51,7 @@ export default function ActivitiesScreen() {
           fallbackIcon="figure.run"
           fallbackIconIonicon="walk-outline"
           emptyCopy="Nothing new to try nearby today — check back tomorrow."
+          showBanditWhenEmpty
           onOpenCard={(card) => {
             const item = items.find((i) => i.item.id === card.id);
             if (!item) return;
