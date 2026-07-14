@@ -172,15 +172,34 @@ function dedupeEvents(events: LocalEvent[]): LocalEvent[] {
 
   for (const e of events) {
     const venueKey = e.venue.toLowerCase().trim();
-    const key = `${e.name.toLowerCase().trim()}__${venueKey}`;
-    if (seen.has(key)) continue;
+    const scheduleKey = e.startDateTime.toLowerCase().trim();
+    const key = `${e.name.toLowerCase().trim()}__${venueKey}__${scheduleKey}`;
+    if (seen.has(key)) {
+      if (Deno.env.get("DENO_ENV") !== "production") {
+        console.log("[localEvents] dedupe removed exact duplicate", {
+          name: e.name.slice(0, 60),
+          venue: e.venue,
+          startDateTime: e.startDateTime,
+        });
+      }
+      continue;
+    }
 
     const words = significantWords(e.name);
     const existingAtVenue = wordsByVenue.get(venueKey) ?? [];
     const isFuzzyDuplicate = existingAtVenue.some(
       (other) => wordOverlap(words, other) >= 0.75
     );
-    if (isFuzzyDuplicate) continue;
+    if (isFuzzyDuplicate) {
+      if (Deno.env.get("DENO_ENV") !== "production") {
+        console.log("[localEvents] dedupe removed fuzzy duplicate", {
+          name: e.name.slice(0, 60),
+          venue: e.venue,
+          startDateTime: e.startDateTime,
+        });
+      }
+      continue;
+    }
 
     seen.add(key);
     existingAtVenue.push(words);
@@ -312,6 +331,11 @@ function parseCandidates(
 ): LocalEvent[] {
   const candidates: LocalEvent[] = [];
 
+  let rawTotal = 0;
+  let rejectedNoSource = 0;
+  let rejectedForeignCity = 0;
+  let rejectedNoTitle = 0;
+
   for (const raw of rawEvents) {
     if (!raw || typeof raw !== "object") continue;
     const event = raw as {
@@ -333,7 +357,11 @@ function parseCandidates(
     };
 
     const name = event.title?.trim();
-    if (!name) continue;
+    if (!name) {
+      rejectedNoTitle += 1;
+      continue;
+    }
+    rawTotal += 1;
 
     const startDateTime =
       event.date?.when?.trim() ||
@@ -354,12 +382,16 @@ function parseCandidates(
     const ticketMeta = parseSerpTicketInfo(event.ticket_info);
     const ticket = event.ticket_info?.[0];
     const sourceUrl = ticket?.link?.trim() || event.link?.trim() || "";
-    if (!sourceUrl) continue;
+    if (!sourceUrl) {
+      rejectedNoSource += 1;
+      continue;
+    }
 
     const sourceName = ticket?.source?.trim() || "Google Events";
     const resolvedCity = cityFromAddress || cityQuery;
 
     if (!eventMatchesCity(resolvedCity, venue, name, cityQuery)) {
+      rejectedForeignCity += 1;
       console.log("[localEvents] getLocalEvents rejected foreign city", {
         expected: cityQuery,
         eventCity: resolvedCity,
@@ -417,6 +449,15 @@ function parseCandidates(
 
     if (candidates.length >= CANDIDATE_CAP) break;
   }
+
+  console.log("[localEvents] getLocalEvents parseCandidates", {
+    cityQuery,
+    rawTotal,
+    rejectedNoTitle,
+    rejectedNoSource,
+    rejectedForeignCity,
+    candidateCount: candidates.length,
+  });
 
   return candidates;
 }
@@ -476,8 +517,12 @@ async function fetchLocalEventsFromSerpApi(
   console.log("[localEvents] getLocalEvents filtered", {
     provider: "SerpApi Google Events",
     cityQuery,
+    state: location.state ?? null,
+    region: location.region ?? null,
     lat: location.lat,
     lon: location.lon,
+    dateRange: "htichips=date:week",
+    searchRadius: "city_query_inclusive",
     pagesFetched,
     targetEvents,
     candidateCount: candidates.length,

@@ -21,6 +21,7 @@ import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
 import { BanditCharacter } from "./BanditCharacter";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { SEE_ALL_MAX } from "../lib/edition/seeAllLimit";
+import type { LocalEventsLoadStatus } from "../lib/edition/localEventsPipeline";
 
 type Props = {
   events: LocalEventCard[];
@@ -35,6 +36,8 @@ type Props = {
    * the busy front page never carries more than one Bandit at a time.
    */
   showBanditWhenEmpty?: boolean;
+  /** Distinguishes a confirmed quiet day from a failed/recovering fetch. */
+  loadStatus?: LocalEventsLoadStatus;
 };
 
 /**
@@ -48,6 +51,7 @@ export function LocalEventsGrid({
   limit = LOCAL_EVENTS_GRID_LIMIT,
   onSeeAll,
   showBanditWhenEmpty = false,
+  loadStatus = "ready",
 }: Props) {
   const { width } = useWindowDimensions();
   /** Page column inside home’s 28px folio padding. */
@@ -62,6 +66,13 @@ export function LocalEventsGrid({
   const seeAllTotal = Math.min(events.length, SEE_ALL_MAX);
 
   if (visible.length === 0) {
+    const emptyCopy =
+      loadStatus === "failed"
+        ? "Local events are having trouble loading right now. Pull to refresh in a moment."
+        : loadStatus === "recovering"
+          ? "Checking for events nearby…"
+          : "A quiet day nearby — the perfect excuse for a slow walk.";
+
     return (
       <View style={styles.section}>
         <View style={styles.labelRow}>
@@ -76,13 +87,11 @@ export function LocalEventsGrid({
               accessibilityLabel="Bandit, waiting calmly with nothing more to deliver right now"
             />
             <Text style={[styles.empty, styles.emptyWithBanditText]}>
-              A quiet day nearby — the perfect excuse for a slow walk.
+              {emptyCopy}
             </Text>
           </View>
         ) : (
-          <Text style={styles.empty}>
-            A quiet day nearby — the perfect excuse for a slow walk.
-          </Text>
+          <Text style={styles.empty}>{emptyCopy}</Text>
         )}
       </View>
     );

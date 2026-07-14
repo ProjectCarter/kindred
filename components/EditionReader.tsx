@@ -35,7 +35,12 @@ import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
-import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localEvents";
+import { parseLocalEventsBody, orderEventsForGrid, type LocalEventCard } from "../lib/edition/localEvents";
+import {
+  logLocalEventsPipeline,
+  pipelineCountsFromSections,
+  type LocalEventsLoadStatus,
+} from "../lib/edition/localEventsPipeline";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import { resetImageRegistry } from "../lib/edition/imageRegistry";
 import {
@@ -110,6 +115,7 @@ type Props = {
   mastheadTrailing?: ReactNode;
   mastheadLeading?: ReactNode;
   mastheadScrollY?: Animated.Value;
+  localEventsStatus?: LocalEventsLoadStatus;
 };
 
 /**
@@ -276,12 +282,30 @@ export function EditionReader({
   mastheadTrailing,
   mastheadLeading,
   mastheadScrollY,
+  localEventsStatus = "ready",
 }: Props) {
   const weather = sections.find((s) => s.section_type === "weather");
   const localEvents = sections.find((s) => s.section_type === "local_events");
   const greetingSection = sections.find((s) => s.section_type === "greeting");
   const events =
     (localEvents?.body ? parseLocalEventsBody(localEvents.body) : null) ?? [];
+
+  const visibleEvents = useMemo(
+    () => orderEventsForGrid(events),
+    [events]
+  );
+
+  useMemo(() => {
+    logLocalEventsPipeline(
+      "EditionReader render",
+      pipelineCountsFromSections(sections, visibleEvents.length),
+      {
+        editionId,
+        editionDate,
+        loadStatus: localEventsStatus,
+      }
+    );
+  }, [sections, visibleEvents.length, editionId, editionDate, localEventsStatus]);
 
   const remaining = sections.filter(
     (s) =>
@@ -536,6 +560,7 @@ export function EditionReader({
           events={events}
           onOpenEvent={onOpenEvent}
           onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
+          loadStatus={localEventsStatus}
         />
       </FolioReveal>
 

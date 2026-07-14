@@ -2,6 +2,7 @@ import type { ImageSourcePropType } from "react-native";
 import type { EventInfoBadgeId } from "./eventBadges";
 import { inferEventInfoBadges } from "./eventBadges";
 import { claimImage } from "./imageRegistry";
+import { filterValidEvents } from "./localEventsValidation";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -234,8 +235,20 @@ export function parseLocalEventsBody(
 ): LocalEventCard[] | null {
   try {
     const parsed = JSON.parse(body) as LocalEventsBody;
-    if (!parsed || !Array.isArray(parsed.events)) return null;
-    return parsed.events
+    if (!parsed || !Array.isArray(parsed.events)) {
+      if (__DEV__) {
+        console.warn("[localEvents:parse] invalid body shape", {
+          hasEventsArray: Boolean(
+            parsed && Array.isArray((parsed as LocalEventsBody).events)
+          ),
+          bodyPreview: body.slice(0, 120),
+        });
+      }
+      return null;
+    }
+
+    const rawCount = parsed.events.length;
+    const mapped = parsed.events
       .filter((e) => e && typeof e.name === "string" && e.name.trim().length > 0)
       .map((e) => {
         const imageUrl = normalizeImageUrl(e.imageUrl);
@@ -274,7 +287,26 @@ export function parseLocalEventsBody(
           badges: badges.length ? badges : undefined,
         };
       });
-  } catch {
+
+    const { valid, dropped } = filterValidEvents(mapped);
+
+    if (__DEV__) {
+      console.log("[localEvents:parse] body parsed", {
+        rawCount,
+        afterNameFilter: mapped.length,
+        afterValidation: valid.length,
+        droppedCount: dropped.length,
+      });
+    }
+
+    return valid;
+  } catch (err) {
+    if (__DEV__) {
+      console.warn("[localEvents:parse] JSON parse failed", {
+        message: err instanceof Error ? err.message : String(err),
+        bodyPreview: body.slice(0, 120),
+      });
+    }
     return null;
   }
 }

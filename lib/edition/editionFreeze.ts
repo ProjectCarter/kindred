@@ -89,6 +89,13 @@ export function clearEditionFreeze(): void {
  * changes into the frozen sections — never drop Local Events, never reorder
  * the folio, never blank a section that was already printed.
  */
+export function mergeEventsSectionIntoSections(
+  current: EditionSection[],
+  eventsSection: EditionSection
+): EditionSection[] {
+  return mergeFrozenSections(current, [eventsSection]);
+}
+
 export function mergeFrozenSections(
   current: EditionSection[],
   incoming: EditionSection[]
@@ -105,10 +112,6 @@ export function mergeFrozenSections(
   }
 
   const currentHasEvents = current.some((s) => s.section_type === "local_events");
-  if (!currentHasEvents) {
-    return [...current, incomingEvents];
-  }
-
   const incomingParsed = incomingEvents.body
     ? parseLocalEventsBody(incomingEvents.body)
     : null;
@@ -116,12 +119,38 @@ export function mergeFrozenSections(
     ? parseLocalEventsBody(currentEvents.body)
     : null;
 
-  if (!incomingParsed?.length && currentParsed?.length) {
+  const incomingCount = incomingParsed?.length ?? 0;
+  const currentCount = currentParsed?.length ?? 0;
+
+  if (__DEV__) {
+    console.log("[editionFreeze] mergeFrozenSections", {
+      currentHasEvents,
+      currentCount,
+      incomingCount,
+      incomingParseFailed: Boolean(incomingEvents.body && incomingParsed === null),
+    });
+  }
+
+  // First time events arrive — insert or replace even when parse is empty
+  // but the section row exists (recovery path).
+  if (!currentHasEvents) {
+    return [...current, incomingEvents];
+  }
+
+  // Keep printed events if the fresh fetch failed parse or returned empty.
+  if (incomingParsed === null) {
+    return currentCount > 0 ? current : current;
+  }
+
+  if (incomingCount === 0 && currentCount > 0) {
     return current;
   }
 
-  if (!incomingParsed?.length) {
-    return current;
+  if (incomingCount === 0) {
+    // Both empty — still keep the section shell so the desk stays visible.
+    return current.map((section) =>
+      section.section_type === "local_events" ? incomingEvents : section
+    );
   }
 
   return current.map((section) =>

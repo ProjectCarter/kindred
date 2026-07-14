@@ -72,6 +72,16 @@ import {
   type CachedEditionBundle,
 } from "../lib/edition/editionCache";
 import { loadWithRetry } from "../lib/edition/loadWithRetry";
+import {
+  countValidEventsInSections,
+  logLocalEventsPipeline,
+  pipelineCountsFromSections,
+  type LocalEventsLoadStatus,
+} from "../lib/edition/localEventsPipeline";
+import {
+  needsLocalEventsRecovery,
+  recoverLocalEvents,
+} from "../lib/edition/localEventsRecovery";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -134,6 +144,8 @@ export default function HomeScreen() {
     status: string;
     lastError: string | null;
   } | null>(null);
+  const [localEventsStatus, setLocalEventsStatus] =
+    useState<LocalEventsLoadStatus>("loading");
   const { pending: firstRunPending, dismiss: dismissFirstRun } =
     useLocationFirstRun();
   const loadGen = useRef(0);
@@ -336,6 +348,59 @@ export default function HomeScreen() {
     });
     if (bundle.heroImageId) setFrozenHeroImageId(bundle.heroImageId);
     editionFrozenRef.current = true;
+    const cachedEventCount = countValidEventsInSections(bundle.sections);
+    setLocalEventsStatus(cachedEventCount > 0 ? "ready" : "loading");
+  }
+
+  function persistSectionsToCache(mergedSections: EditionSection[]): void {
+    const bundle = cachedBundleRef.current;
+    if (!bundle) return;
+    const next: CachedEditionBundle = {
+      ...bundle,
+      sections: mergedSections,
+      cachedAt: Date.now(),
+    };
+    cachedBundleRef.current = next;
+    void saveCachedEdition(next);
+  }
+
+  async function maybeRecoverLocalEvents(params: {
+    editionId: string;
+    editionDate: string;
+    place: KindredPlace | null;
+    sections: EditionSection[];
+  }): Promise<EditionSection[]> {
+    const { editionId, editionDate, place, sections } = params;
+    if (!place || !needsLocalEventsRecovery(sections)) {
+      const count = countValidEventsInSections(sections);
+      setLocalEventsStatus(count > 0 ? "ready" : "quiet_day");
+      return sections;
+    }
+
+    setLocalEventsStatus("recovering");
+    const result = await recoverLocalEvents({
+      editionId,
+      editionDate,
+      place,
+      currentSections: sections,
+      cachedBundle: cachedBundleRef.current,
+    });
+
+    if (result.recovered) {
+      setLocalEventsStatus("ready");
+      if (__DEV__) {
+        console.log("[home] localEvents recovery succeeded", {
+          eventCount: result.eventCount,
+        });
+      }
+      return result.mergedSections;
+    }
+
+    setLocalEventsStatus(result.attempted ? "failed" : "quiet_day");
+    if (__DEV__) {
+      console.warn("[home] localEvents recovery did not restore events", result);
+    }
+    return sections;
   }
 
   type LoadEditionOptions = {
@@ -583,6 +648,27 @@ export default function HomeScreen() {
             elapsedMs: result.elapsedMs,
           });
         }
+        const id = editionIdRef.current;
+        const date =
+          cachedBundleRef.current?.editionDate ?? localEditionDate();
+        const active = activeLocationRef.current?.place ?? null;
+        if (id && date && active && needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])) {
+          void maybeRecoverLocalEvents({
+            editionId: id,
+            editionDate: date,
+            place: active,
+            sections: cachedBundleRef.current?.sections ?? [],
+          }).then((recovered) => {
+            if (mountedRef.current && recovered.length > 0) {
+              setSections(recovered);
+              persistSectionsToCache(recovered);
+            }
+          });
+        } else if (!needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])) {
+          setLocalEventsStatus("ready");
+        } else {
+          setLocalEventsStatus("failed");
+        }
         setLoading(false);
         setRefreshing(false);
         return;
@@ -758,14 +844,32 @@ export default function HomeScreen() {
       editionId: edition.id,
       editionDate: edition.edition_date,
     });
-    const patchEventsOnly =
-      eventsOnly || (frozenNow && (quiet || editionFrozenRef.current));
+    const narrativeFrozen = frozenNow && editionFrozenRef.current;
+    const patchEventsOnly = eventsOnly || (quiet && narrativeFrozen);
+    const syncAfterCache = narrativeFrozen && !isRefresh && !eventsOnly;
+
+    let nextSections = loaded;
 
     if (patchEventsOnly && editionFrozenRef.current) {
-      setSections((prev) => mergeFrozenSections(prev, loaded));
+      nextSections = mergeFrozenSections(
+        cachedBundleRef.current?.sections ?? loaded,
+        loaded
+      );
+      setSections(nextSections);
       setOlder(adjacent.older);
+    } else if (syncAfterCache) {
+      nextSections = mergeFrozenSections(
+        cachedBundleRef.current?.sections ?? loaded,
+        loaded
+      );
+      setSections(nextSections);
+      setEditionDate(edition.edition_date);
+      setEditionId(edition.id);
+      setOlder(adjacent.older);
+      persistSectionsToCache(nextSections);
     } else {
       setSections(loaded);
+      nextSections = loaded;
       setEditionDate(edition.edition_date);
       setEditionId(edition.id);
       setLeadStory(lead);
@@ -785,6 +889,35 @@ export default function HomeScreen() {
       });
       editionFrozenRef.current = true;
       setOlder(adjacent.older);
+    }
+
+    if (__DEV__) {
+      logLocalEventsPipeline(
+        "loadEdition sections applied",
+        pipelineCountsFromSections(nextSections),
+        {
+          patchEventsOnly,
+          syncAfterCache,
+          narrativeFrozen,
+        }
+      );
+    }
+
+    const recoveredSections = await maybeRecoverLocalEvents({
+      editionId: edition.id,
+      editionDate: edition.edition_date,
+      place: active.place,
+      sections: nextSections,
+    });
+
+    if (
+      recoveredSections !== nextSections &&
+      mountedRef.current &&
+      gen === loadGen.current
+    ) {
+      setSections(recoveredSections);
+      nextSections = recoveredSections;
+      persistSectionsToCache(recoveredSections);
     }
 
     if (loaded.length > 0) {
@@ -814,13 +947,13 @@ export default function HomeScreen() {
 
     if (!mountedRef.current || gen !== loadGen.current) return;
 
-    if (!patchEventsOnly) {
+    if (!patchEventsOnly && !syncAfterCache) {
       const bundle: CachedEditionBundle = {
         userId: user.id,
         editionId: edition.id,
         editionDate: edition.edition_date,
         cachedAt: Date.now(),
-        sections: loaded,
+        sections: recoveredSections,
         leadStory: lead,
         topStories: topStoriesFromEditorialContext(
           (edition as { editorial_context?: unknown }).editorial_context
@@ -831,6 +964,8 @@ export default function HomeScreen() {
       };
       cachedBundleRef.current = bundle;
       void saveCachedEdition(bundle);
+    } else if (recoveredSections.length > 0) {
+      persistSectionsToCache(recoveredSections);
     }
 
     setLoading(false);
@@ -1521,6 +1656,7 @@ export default function HomeScreen() {
               discoveryItems={intelligence?.discoveryItems}
               discovery={intelligence?.discovery}
               banditsPick={banditsPick(bandit)}
+              localEventsStatus={localEventsStatus}
               mastheadScrollY={mastheadScrollY}
               mastheadTrailing={
                 <MastheadLink
