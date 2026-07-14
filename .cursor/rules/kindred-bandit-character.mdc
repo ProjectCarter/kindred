@@ -1,0 +1,79 @@
+---
+description: Bandit character system — canonical design, personality, and integration rules
+alwaysApply: true
+---
+
+# Bandit — Kindred's Newspaper Dog
+
+Bandit is not a mascot. He is the face of Kindred: the loyal newspaper dog who
+personally delivers every user's morning edition. Treat his design with the
+same discipline as a real brand mark (Nike swoosh, Duolingo owl).
+
+## Bandit v1.0 — approved and locked
+
+The single source of truth is the **approved Bandit v1.0 master reference**,
+`assets/bandit/v1/bandit-v1-master-reference.png` — matched to the real
+Kindred app icon. His **Core Pose Library v1** lives in `assets/bandit/v1/`
+and is registered in `BANDIT_ASSETS` (`lib/bandit/character.ts`):
+`reference`, `standing-neutral`, `walking-newspaper` (his **signature pose**,
+`BANDIT_SIGNATURE_POSE` — the primary illustration throughout Kindred),
+`sitting`, `head-portrait`, `standing-no-newspaper`.
+
+Never reinterpret, restyle, or "improve" his design. To add a new surface
+that needs a pose not yet in the library, generate it with the app icon +
+`bandit-v1-master-reference.png` as reference images (strong visual
+grounding, not description alone), register it in `BANDIT_ASSETS`, then use
+it — don't improvise a pose inline. Earlier concept sheets and single-dog
+drafts that predate v1.0 are superseded; never resurrect them as a reference.
+
+**Build:** a mature adult dog (~3-5 years old) — never a puppy. Adult Jack
+Russell proportions: longer muzzle, broader chest, stronger shoulders, longer
+legs, confident grounded stance in every pose.
+
+**Fixed markings (never change):**
+- Warm white coat and face
+- Two dark chocolate-brown floppy ears
+- One warm golden-brown patch over his **RIGHT eye only** — large and
+  soft-rounded, covering roughly one-third of the visible side of his face;
+  his single most defining feature, matched to the official app icon
+- Warm rich brown eyes, small relative to his head; dark chocolate-brown nose
+  (same color as his ears)
+- Kindred gold bandana around his neck
+- Rolled newspaper (warm cream paper), often carried in his mouth
+
+**Brand colors (never substitute):** Coat `#F8F8F6` · Eye patch `#B7772E` ·
+Bandana `#D8A63A` · Ears/nose `#4A3326` · Eyes `#5A3E2B` · Newspaper `#F3E8CF`
+· All outline/line-work `#1C2746`.
+
+**Orientation rule:** in every side or three-quarter pose, Bandit faces
+**screen-RIGHT** (matching the real app icon), so the cheek nearest the
+viewer is correctly his right eye (and the patch). Never draw him facing
+screen-left in profile. In a direct front-facing pose, the patch appears on
+the **viewer's left** (mirror-correct for his own right eye).
+
+**Hard rules:** always on all four paws · never anthropomorphic (no human
+hands, no upright human posture) · never clothed beyond the bandana.
+
+## Personality
+
+Always: calm, friendly, dependable, intelligent, gentle, trustworthy, warm —
+soft eyes, relaxed eyebrows, a gentle genuine smile, like a beloved
+neighborhood dog. Never: hyper, silly, loud, chaotic, goofy, overly
+cartoonish, or reading as a guard/working dog. Any copy voiced as Bandit
+(Bandit's Pick intros, greetings, empty states) should read as one or two
+quiet, simple sentences — never a joke, never exclamation-heavy.
+
+## Using Bandit in the app
+
+- Render Bandit only through `components/BanditCharacter.tsx`
+  (`<BanditCharacter pose="..." />`), never by `require`-ing an asset path
+  directly in a screen.
+- Only use poses defined in `BanditPose` (`lib/bandit/character.ts`).
+- Approved near-term surfaces: home screen (waiting beside today's paper, or
+  his signature walking-with-newspaper pose), Bandit's Pick (`sitting` beside
+  the featured recommendation), loading states (`walking-newspaper` instead
+  of a spinner), pull-to-refresh (trots off, returns with a fresh paper),
+  empty Saved/Clippings board (`sitting`), notifications/speech bubbles
+  (`head-portrait`).
+- Consistency over creativity — when in doubt, match the existing reference
+  rather than adding a new stylistic flourish.

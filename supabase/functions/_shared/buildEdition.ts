@@ -14,7 +14,7 @@ import {
 import type { BanditsPick } from "./bandit/types.ts";
 import { runEditorialDecisions } from "./editor/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
-import type { DiscoveryPayload } from "./discovery/types.ts";
+import type { DiscoveryPayload, DiscoveryRankingContext } from "./discovery/types.ts";
 import { runKnowledgeDecisions } from "./knowledge/index.ts";
 import type { KnowledgePayload, KnowledgeStoryInput } from "./knowledge/types.ts";
 import {
@@ -691,12 +691,47 @@ export async function buildEditionForUser(
   const topStories = frontPage.stories;
   let leadStory: LeadStory | null = editorial.leadStory;
 
+  // Computed early (was previously derived just before the real Discovery
+  // Engine call) — Bandit's Pick needs it too, and every input here
+  // (weather, city, tempUnit) is already resolved by this point.
+  const weatherConditionCode =
+    weather?.current?.weather_code ?? weather?.daily?.weather_code?.[0] ?? null;
+  const weatherSummary = formatWeatherSummary({
+    city: city ?? location.city,
+    currentC: weather?.current?.temperature_2m ?? null,
+    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
+    lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
+    unit: tempUnit,
+    conditionCode: weatherConditionCode,
+  });
+
   // Bandit's Pick candidate selection is pure CPU over the already-scored
-  // candidate pool — it only needs `editorial`, not the edited lead/top
-  // stories. Resolving it now (instead of after the front page is fully
-  // edited) lets its Story Editor pass join the SAME parallel batch below
-  // instead of running afterward on its own — previously the single
-  // biggest sequential AI call sitting after the front-page batch.
+  // news pool plus verified local places/events (raw, pre-AI-enrichment —
+  // Bandit writes his own line for the pick, he doesn't need the events
+  // desk's separately-enriched Bandit note) and Bandit's own seasonal
+  // calendar. It only needs `editorial` + today's raw local data, not the
+  // edited lead/top stories. Resolving it now (instead of after the front
+  // page is fully edited) lets its Story Editor pass — only needed when
+  // the winner is an article — join the SAME parallel batch below instead
+  // of running afterward on its own.
+  const banditDiscoveryCtx: DiscoveryRankingContext = {
+    editionDate,
+    now: new Date(),
+    city,
+    region: region ?? null,
+    state: state ?? null,
+    interests: personalization.interests.length
+      ? personalization.interests
+      : interests,
+    followedTopics,
+    favoriteSources: personalization.favoriteSources,
+    weatherSummary,
+    isWeekend: editorial.calendar.isWeekend,
+    isSunday: editorial.calendar.isSunday,
+    localPlaces,
+    recentKeys: recentDiscoveryKeys,
+  };
+
   const banditsPickStory = selectBanditsPick({
     scored: frontPage.scoredCandidates ?? [],
     leadId: leadStory?.id ?? null,
@@ -705,7 +740,23 @@ export async function buildEditionForUser(
       ? personalization.interests
       : interests,
     recentKeys: blendedRecentKeys,
+    localEvents: localEventsRaw,
+    discovery: banditDiscoveryCtx,
   });
+
+  // Bandit's Pick just claimed one specific place/event — remove it from
+  // every downstream pool so it never also turns up in Local Events,
+  // Activities, Recommendations, or Bandit's Notebook. "No duplicates" is
+  // a hard rule (kindred-mission.mdc), not a nice-to-have.
+  const claim = banditsPickStory?.claim ?? null;
+  const localEventsForBandit =
+    claim?.kind === "event"
+      ? localEventsRaw.filter((_e, i) => i !== claim.index)
+      : localEventsRaw;
+  const localPlacesForDiscovery =
+    claim?.kind === "place"
+      ? localPlaces.filter((p) => p.providerId !== claim.providerId)
+      : localPlaces;
 
   // Story Editor — lead + every Top Story + Bandit's Pick, all in parallel,
   // alongside the (independent) Local Events Bandit Notes pass. Each Story
@@ -737,7 +788,12 @@ export async function buildEditionForUser(
                 anthropicApiKey
               )
             : Promise.resolve(null),
-          banditsPickStory && anthropicApiKey
+          // Only articles need the Story Editor's AI rewrite — an event,
+          // place, hidden gem, or seasonal moment already carries its own
+          // Kindred-voiced copy (places/notes.ts, the events desk, or
+          // Bandit's own seasonal line), so skip the extra AI round trip
+          // whenever the winner isn't an article.
+          banditsPickStory?.kind === "article" && anthropicApiKey
             ? runStoryEditorSafe(
                 {
                   id: banditsPickStory.id,
@@ -773,7 +829,7 @@ export async function buildEditionForUser(
         ])
     ),
     timer.timed("Local Events - Bandit Notes (AI)", () =>
-      enrichEventsWithBanditNotes(localEventsRaw)
+      enrichEventsWithBanditNotes(localEventsForBandit)
     ),
   ]);
   const [editedLead, editedPick, ...editedTopStories] = editedBatch;
@@ -833,18 +889,6 @@ export async function buildEditionForUser(
     };
   });
 
-  const weatherConditionCode =
-    weather?.current?.weather_code ?? weather?.daily?.weather_code?.[0] ?? null;
-
-  const weatherSummary = formatWeatherSummary({
-    city: city ?? location.city,
-    currentC: weather?.current?.temperature_2m ?? null,
-    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
-    lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
-    unit: tempUnit,
-    conditionCode: weatherConditionCode,
-  });
-
   console.log("[buildEdition] weather provider", {
     provider: "Open-Meteo",
     city: city ?? location.city,
@@ -869,7 +913,7 @@ export async function buildEditionForUser(
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localEvents,
-    localPlaces,
+    localPlaces: localPlacesForDiscovery,
     // A newspaper should feel abundant — 4 per surface starved sections
     // (like Recommendations) that draw from a single category surface.
     maxPerSurface: 8,
@@ -1181,40 +1225,48 @@ export async function buildEditionForUser(
   // banditsPickStory / editedPick were already resolved above, inside the
   // same parallel batch as the front-page Story Editor calls — see the
   // "Bandit's Pick candidate selection" comment near the top of this
-  // function for why that merge is safe.
+  // function for why that merge is safe. editedPick only exists when the
+  // winner is an article (see the Story Editor batch above) — every other
+  // kind already carries Kindred-voiced copy from its own desk.
   let banditsPick: BanditsPick | null = null;
-  if (banditsPickStory && editedPick) {
+  if (banditsPickStory) {
+    const isArticle = banditsPickStory.kind === "article";
+    const headline =
+      (isArticle && editedPick?.headline) || banditsPickStory.headline;
+    const summary =
+      (isArticle && editedPick?.bodyText) || banditsPickStory.summary;
+
     banditsPick = {
+      kind: banditsPickStory.kind,
       intro: composeBanditsPickIntro(
-        {
-          ...banditsPickStory,
-          headline: editedPick.headline || banditsPickStory.headline,
-          summary: editedPick.bodyText || banditsPickStory.summary,
-        },
-        banditReader.firstName,
+        { ...banditsPickStory, headline, summary },
         editionDate
       ),
       story: {
         id: banditsPickStory.id,
-        headline: editedPick.headline || banditsPickStory.headline,
-        summary: editedPick.bodyText || banditsPickStory.summary,
+        headline,
+        summary,
         source: banditsPickStory.source,
         url: banditsPickStory.url,
         publishedAt: banditsPickStory.publishedAt,
         imageUrl: banditsPickStory.imageUrl,
         category: banditsPickStory.category,
         why: banditsPickStory.why,
+        discoveryItem: banditsPickStory.discoveryItem,
       },
     };
-    console.log("[buildEdition] storyEditor bandits_pick", {
-      path: editedPick.desk.path,
-      passes: editedPick.desk.passes,
-      paras: editedPick.paragraphs.length,
-    });
+    if (isArticle && editedPick) {
+      console.log("[buildEdition] storyEditor bandits_pick", {
+        path: editedPick.desk.path,
+        passes: editedPick.desk.passes,
+        paras: editedPick.paragraphs.length,
+      });
+    }
   }
 
   console.log("[buildEdition] bandits pick", {
     selected: Boolean(banditsPick),
+    kind: banditsPick?.kind ?? null,
     headline: banditsPick?.story.headline?.slice(0, 60) ?? null,
   });
 

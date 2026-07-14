@@ -1,5 +1,6 @@
 import { banditDayLine } from "./morningRitual";
 import { isDisqualifiedBanditsPickStory } from "./banditPickQuality";
+import type { DiscoveryItem } from "./discovery";
 
 /**
  * Bandit — Kindred’s calm morning newspaper editor.
@@ -39,7 +40,22 @@ export type BanditMoment = {
   generatedAt: string;
 };
 
+/**
+ * What kind of thing Bandit is pointing at today. Bandit's Pick is not
+ * always an article — it's whatever one thing feels most worth noticing:
+ * a real local event, a real verified place, a quieter "hidden gem" find,
+ * a seasonal moment on the calendar, or (still sometimes) a story.
+ */
+export type BanditsPickKind =
+  | "article"
+  | "event"
+  | "activity"
+  | "place"
+  | "hidden_gem"
+  | "seasonal";
+
 export type BanditsPick = {
+  kind: BanditsPickKind;
   intro: string;
   story: {
     id: string;
@@ -51,6 +67,12 @@ export type BanditsPick = {
     imageUrl?: string | null;
     category?: string | null;
     why: string;
+    /**
+     * Present only when `kind !== "article"` — the full Discovery Engine
+     * item, so the reader can open Kindred's purpose-built template for
+     * it instead of a generic article shell.
+     */
+    discoveryItem?: DiscoveryItem | null;
   };
 };
 
@@ -132,6 +154,15 @@ export function parseBanditPayload(value: unknown): BanditPayload | null {
   };
 }
 
+const BANDITS_PICK_KINDS: readonly BanditsPickKind[] = [
+  "article",
+  "event",
+  "activity",
+  "place",
+  "hidden_gem",
+  "seasonal",
+];
+
 function parseBanditsPick(value: unknown): BanditsPick | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<BanditsPick> & {
@@ -143,7 +174,17 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
     typeof story?.headline === "string" ? story.headline.trim() : "";
   const id = typeof story?.id === "string" ? story.id.trim() : "";
   if (!intro || !headline || !id) return null;
+  // Editions stored before this field existed have no `kind` — they were
+  // always articles.
+  const kind = BANDITS_PICK_KINDS.includes(raw.kind as BanditsPickKind)
+    ? (raw.kind as BanditsPickKind)
+    : "article";
+  const discoveryItem =
+    story?.discoveryItem && typeof story.discoveryItem === "object"
+      ? (story.discoveryItem as DiscoveryItem)
+      : null;
   return {
+    kind,
     intro: intro.slice(0, 280),
     story: {
       id,
@@ -162,6 +203,7 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
       category:
         typeof story?.category === "string" ? story.category : null,
       why: typeof story?.why === "string" ? story.why.trim() : "",
+      discoveryItem,
     },
   };
 }

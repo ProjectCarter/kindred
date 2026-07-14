@@ -39,6 +39,7 @@ import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localE
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import { resolveArticleHero } from "../lib/edition/articleHero";
 import { experienceImageFor } from "../lib/edition/experiences";
+import { activityImageFor } from "../lib/edition/activities";
 import { MorningArrival } from "./MorningArrival";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
@@ -125,6 +126,70 @@ function wireOrFallbackImage(input: {
     source: input.source ?? null,
   });
   return (hero.source ?? require("../assets/heroes/hero-default-morning.jpg")) as ImageSourcePropType;
+}
+
+const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
+  article: "From Bandit",
+  event: "Happening Soon",
+  activity: "Something To Do",
+  hidden_gem: "Hidden Gem",
+  place: "Worth Finding",
+  seasonal: "Right Now",
+};
+
+const SEASONAL_IMAGE_BY_MONTH: ImageSourcePropType[] = [
+  require("../assets/heroes/hero-winter-snowfall.jpg"), // Jan
+  require("../assets/heroes/hero-winter-snowfall.jpg"), // Feb
+  require("../assets/heroes/hero-spring-flowers.jpg"), // Mar
+  require("../assets/heroes/hero-spring-flowers.jpg"), // Apr
+  require("../assets/heroes/hero-spring-flowers.jpg"), // May
+  require("../assets/heroes/hero-summer-sunrise.jpg"), // Jun
+  require("../assets/heroes/hero-summer-sunrise.jpg"), // Jul
+  require("../assets/heroes/hero-summer-sunrise.jpg"), // Aug
+  require("../assets/heroes/hero-autumn-leaves.jpg"), // Sep
+  require("../assets/heroes/hero-autumn-leaves.jpg"), // Oct
+  require("../assets/heroes/hero-autumn-leaves.jpg"), // Nov
+  require("../assets/heroes/hero-winter-snowfall.jpg"), // Dec
+];
+
+/**
+ * Bandit's Pick is not always an article — give each kind its own honest
+ * photograph instead of stretching the wire-photo fallback (built for
+ * news headlines) over an event, a place, or a seasonal moment.
+ */
+function banditsPickImage(
+  pick: BanditsPickData,
+  editionDate?: string | null
+): ImageSourcePropType {
+  const { kind, story } = pick;
+  const realPhoto = story.imageUrl?.trim();
+  if (realPhoto) return { uri: realPhoto };
+
+  if (kind === "article") {
+    return wireOrFallbackImage({
+      imageUrl: story.imageUrl,
+      headline: story.headline,
+      section: "bandits_pick",
+      summary: story.summary,
+      source: story.source,
+    });
+  }
+
+  if (kind === "activity" && story.discoveryItem) {
+    return activityImageFor(story.discoveryItem);
+  }
+
+  if (kind === "seasonal") {
+    const month = editionDate?.match(/^\d{4}-(\d{2})/)?.[1];
+    const index = month ? Number(month) - 1 : new Date().getMonth();
+    return (
+      SEASONAL_IMAGE_BY_MONTH[index] ??
+      require("../assets/heroes/hero-default-morning.jpg")
+    );
+  }
+
+  // event / place / hidden_gem without a real listing photo
+  return experienceImageFor(story.discoveryItem?.category ?? "experiences", story.id);
 }
 
 /**
@@ -435,22 +500,17 @@ export function EditionReader({
       {banditsPick ? (
         <FolioReveal index={folioCursor++}>
           <TimeStylePackage
-            sectionLabel="Bandit’s Picks"
+            sectionLabel="Bandit’s Pick"
             feature={{
               id: banditsPick.story.id,
-              kicker: banditsPick.story.category ?? "From Bandit",
+              kicker: BANDITS_PICK_KICKER[banditsPick.kind],
               headline: banditsPick.story.headline,
               dek: banditsPick.intro || banditsPick.story.summary,
-              byline: banditsPick.story.source
-                ? `by ${banditsPick.story.source}`
-                : "— Bandit",
-              image: wireOrFallbackImage({
-                imageUrl: banditsPick.story.imageUrl,
-                headline: banditsPick.story.headline,
-                section: "bandits_pick",
-                summary: banditsPick.story.summary,
-                source: banditsPick.story.source,
-              }),
+              byline:
+                banditsPick.kind === "article" && banditsPick.story.source
+                  ? `by ${banditsPick.story.source}`
+                  : "— Bandit",
+              image: banditsPickImage(banditsPick, editionDate),
             }}
             sides={banditPickSides.map((d, i) => ({
               id: d.item.id,
@@ -463,6 +523,20 @@ export function EditionReader({
               onOpenArticle
                 ? (id) => {
                     if (id === banditsPick.story.id) {
+                      if (
+                        banditsPick.kind !== "article" &&
+                        banditsPick.story.discoveryItem
+                      ) {
+                        onOpenArticle(
+                          articleFromDiscoveryItem({
+                            item: banditsPick.story.discoveryItem,
+                            score: 0,
+                            reasons: [],
+                            surfaces: [],
+                          })
+                        );
+                        return;
+                      }
                       onOpenArticle(articleFromBanditsPick(banditsPick.story));
                       return;
                     }

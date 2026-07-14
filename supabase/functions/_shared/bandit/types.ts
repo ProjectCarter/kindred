@@ -1,3 +1,5 @@
+import type { DiscoveryItem } from "../discovery/types.ts";
+
 /**
  * Bandit — shared contracts for Edge + app.
  * Warm, concise, optimistic. Never overwhelming.
@@ -35,11 +37,26 @@ export type BanditMoment = {
 };
 
 /**
+ * What kind of thing Bandit is pointing at today. Bandit's Pick is not
+ * always an article — it's whatever one thing feels most worth noticing:
+ * a real local event, a real verified place, a quieter "hidden gem" find,
+ * a seasonal moment on the calendar, or (still sometimes) a story.
+ */
+export type BanditsPickKind =
+  | "article"
+  | "event"
+  | "activity"
+  | "place"
+  | "hidden_gem"
+  | "seasonal";
+
+/**
  * Stored on editions.bandit — morning is shown today;
  * pick is Bandit's single end-of-edition recommendation.
  */
 export type BanditsPick = {
-  /** One or two warm sentences from Bandit. */
+  kind: BanditsPickKind;
+  /** Bandit's own short, dog-voiced line — one or two sentences, never a pitch. */
   intro: string;
   story: {
     id: string;
@@ -51,6 +68,13 @@ export type BanditsPick = {
     imageUrl?: string | null;
     category?: string | null;
     why: string;
+    /**
+     * Present only when `kind !== "article"` — the full Discovery Engine
+     * item, so the reader can open Kindred's purpose-built template for
+     * it (event / activity / place / hidden gem) instead of a generic
+     * article shell.
+     */
+    discoveryItem?: DiscoveryItem | null;
   };
 };
 
