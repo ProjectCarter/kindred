@@ -103,6 +103,11 @@ export type StockSearchCandidate = {
   tags: string[];
   orientation: ImageOrientation;
   altDescription?: string | null;
+  /** Wikimedia Commons license metadata — preserved for attribution. */
+  licenseShortName?: string | null;
+  licenseUrl?: string | null;
+  /** Full attribution line when provider supplies one (Wikimedia). */
+  attributionText?: string | null;
 };
 
 export const IMAGE_BUCKET = "kindred-images";

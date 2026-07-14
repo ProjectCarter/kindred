@@ -263,11 +263,13 @@ export async function ingestStockImage(
     original_source_image_id: candidate.providerImageId,
     photographer_name: candidate.photographerName,
     source_page_url: candidate.sourcePageUrl,
-    attribution_text: attributionFor(
-      candidate.provider,
-      candidate.photographerName,
-      candidate.sourcePageUrl
-    ),
+    attribution_text:
+      candidate.attributionText?.trim() ||
+      attributionFor(
+        candidate.provider,
+        candidate.photographerName,
+        candidate.sourcePageUrl
+      ),
     primary_category: category,
     secondary_tags: [
       ...secondaryTags,

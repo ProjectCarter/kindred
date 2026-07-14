@@ -7,7 +7,7 @@ export type ImageAttribution = {
   photographerName?: string | null;
   sourcePageUrl?: string | null;
   attributionText?: string | null;
-  source: "pexels" | "pixabay" | "unsplash" | "provider" | "kindred";
+  source: "pexels" | "pixabay" | "unsplash" | "wikimedia" | "provider" | "kindred";
 };
 
 export function attributionFromEditorialImage(
@@ -35,4 +35,5 @@ export const STOCK_PHOTO_CREDITS = [
   { label: "Photos provided by Unsplash", url: "https://unsplash.com" },
   { label: "Photos provided by Pexels", url: "https://www.pexels.com" },
   { label: "Photos provided by Pixabay", url: "https://pixabay.com" },
+  { label: "Media from Wikimedia Commons", url: "https://commons.wikimedia.org" },
 ] as const;
