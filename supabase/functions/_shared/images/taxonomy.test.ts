@@ -1,6 +1,11 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { classifyImageSubject } from "./taxonomy.ts";
 import { resolveVenueClassification } from "../venueClassification.ts";
+import {
+  buildCategoryImageSearchQueries,
+  editorialCopyConflicts,
+  resolveVerifiedEditorialCategory,
+} from "../editorialCategory.ts";
 
 Deno.test("classify country club not as beach", () => {
   const result = classifyImageSubject({
@@ -88,4 +93,80 @@ Deno.test("low confidence for vague title", () => {
     discoveryCategory: "scenic_drives",
   });
   assertEquals(result.confidence === "low" || result.primary === "scenic_drive", true);
+});
+
+Deno.test("classify winery not beach from misleading category", () => {
+  const verified = resolveVerifiedEditorialCategory({
+    title: "The Wine Box",
+    venueCategories: ["Winery", "Wine Bar"],
+    discoveryCategory: "beaches",
+    dek: "Wine tasting and patio seating downtown.",
+  });
+  assertEquals(verified.categoryId, "winery");
+  assertEquals(verified.confidence, "verified");
+  const queries = buildCategoryImageSearchQueries({
+    title: "The Wine Box",
+    city: "Gilbert",
+    category: verified,
+  });
+  assertEquals(queries.some((q) => /winery|wine/i.test(q)), true);
+  assertEquals(queries.some((q) => /beach|ocean|sand/i.test(q)), false);
+});
+
+Deno.test("verified dog park image queries exclude playground", () => {
+  const verified = resolveVerifiedEditorialCategory({
+    title: "Cosmo Dog Park",
+    venueCategories: ["Dog Park"],
+    discoveryCategory: "parks",
+  });
+  assertEquals(verified.categoryId, "dog_park");
+  const queries = buildCategoryImageSearchQueries({
+    title: "Cosmo Dog Park",
+    city: "Gilbert",
+    category: verified,
+  });
+  assertEquals(queries.some((q) => /dog park|dogs/i.test(q)), true);
+  assertEquals(queries.some((q) => /playground|swing|slide/i.test(q)), false);
+});
+
+Deno.test("classify observatory not scenic drive", () => {
+  const verified = resolveVerifiedEditorialCategory({
+    title: "Gilbert Rotary Centennial Observatory",
+    venueCategories: ["Observatory"],
+    discoveryCategory: "scenic_drives",
+    dek: "Public telescope viewing and astronomy programs.",
+  });
+  assertEquals(verified.categoryId, "observation_deck");
+  const queries = buildCategoryImageSearchQueries({
+    title: "Gilbert Rotary Centennial Observatory",
+    city: "Gilbert",
+    category: verified,
+  });
+  assertEquals(queries.some((q) => /observatory|telescope|astronomy/i.test(q)), true);
+  assertEquals(queries.some((q) => /scenic drive|highway|road trip/i.test(q)), false);
+});
+
+Deno.test("classify bowling alley not kayaking", () => {
+  const verified = resolveVerifiedEditorialCategory({
+    title: "Bowlero Gilbert",
+    venueCategories: ["Bowling Alley"],
+    discoveryCategory: "activities",
+  });
+  assertEquals(verified.categoryId, "bowling_alley");
+  assertEquals(
+    editorialCopyConflicts(verified.categoryId, "Bowlero is great for kayaking."),
+    true
+  );
+  assertEquals(
+    editorialCopyConflicts(verified.categoryId, "Book a lane for Friday night."),
+    false
+  );
+});
+
+Deno.test("never classify from single weak keyword alone", () => {
+  const verified = resolveVerifiedEditorialCategory({
+    title: "Sunset Viewpoint",
+    discoveryCategory: "scenic_drives",
+  });
+  assertEquals(verified.confidence, "tentative");
 });

@@ -137,6 +137,51 @@ export function isLibraryRowSelectable(
 }
 
 /** Reject stock photos whose tags obviously conflict with the venue type. */
+import type { ImageCategoryTag } from "./images/taxonomy.ts";
+import {
+  stockTagsConflictWithCategory,
+  type EditorialCategoryId,
+} from "../editorialCategory.ts";
+
+const IMAGE_TAG_TO_EDITORIAL: Partial<Record<ImageCategoryTag, EditorialCategoryId>> = {
+  dog_park: "dog_park",
+  playground: "playground",
+  country_club: "country_club",
+  restaurant: "restaurant",
+  coffee_shop: "coffee_shop",
+  museum: "museum",
+  history_museum: "historic_site",
+  escape_room: "escape_room",
+  bowling: "bowling_alley",
+  scenic_drive: "scenic_drive",
+  specialty_museum: "observation_deck",
+  park: "park",
+  winery: "winery",
+  brewery: "brewery",
+  cocktail_bar: "cocktail_bar",
+  mini_golf: "mini_golf",
+  rock_climbing: "rock_climbing_gym",
+  kayaking: "kayaking",
+  paddleboarding: "paddleboarding",
+  beach: "beach",
+  lake: "lake",
+  river: "river",
+  botanical_garden: "botanical_garden",
+  zoo: "zoo",
+  aquarium: "aquarium",
+  farm: "farm",
+  farmers_market: "farmers_market",
+  market: "market",
+  bookstore: "bookstore",
+  library: "library",
+  arcade: "arcade",
+  golf_course: "golf_course",
+  pickleball: "pickleball",
+  theater: "theater",
+  rock_shop: "rock_shop",
+  shopping_district: "shopping_district",
+};
+
 const STOCK_CONFLICT_PATTERNS: Partial<Record<ImageCategoryTag, RegExp>> = {
   dog_park: /\bplayground\b|\bswing set\b|\bslide\b(?!.*\bdog)/i,
   country_club: /\bbeach\b|\bocean\b|\bsurf\b|\bsandy shore/i,
@@ -155,6 +200,14 @@ export function stockCandidateConflictsWithVenue(
   candidate: { tags?: string[]; alt?: string | null },
   primary: ImageCategoryTag
 ): boolean {
+  const editorialId = IMAGE_TAG_TO_EDITORIAL[primary];
+  if (editorialId) {
+    return stockTagsConflictWithCategory(
+      editorialId,
+      candidate.tags ?? [],
+      candidate.alt
+    );
+  }
   const pattern = STOCK_CONFLICT_PATTERNS[primary];
   if (!pattern) return false;
   const hay = [...(candidate.tags ?? []), candidate.alt ?? ""]

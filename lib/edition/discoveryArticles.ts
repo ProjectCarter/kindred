@@ -17,6 +17,12 @@ import type { ContentType, EditorialFieldAnswers } from "./contentSystem";
 import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
 import type { LocalEventCard } from "./localEvents";
 import { resolveVenueClassification } from "./venueClassification";
+import {
+  editorialCopyConflicts,
+  resolveVerifiedEditorialCategory,
+  sanitizeEditorialParagraphs,
+  validateEditorialArticle,
+} from "./editorialCategory";
 
 export type CuratedDiscoveryArticle = {
   /** Editorial subheading for the reader — distinct from the homepage card dek. */
@@ -527,15 +533,37 @@ export function composeCategorySeedArticle(input: {
   dek?: string | null;
   category: DiscoveryCategory | string | null | undefined;
   seedKey: string;
+  venueCategories?: string[] | null;
 }): { dek: string; body: string[]; fieldAnswers: EditorialFieldAnswers } | null {
-  const essay = getCategoryDiscoveryArticle(input.category, input.seedKey);
+  const essay = getCategoryDiscoveryArticle(input.category, input.seedKey, {
+    venueCategories: input.venueCategories,
+  });
   if (!essay) return null;
+
+  const verified = resolveVerifiedEditorialCategory({
+    title: input.title,
+    venueCategories: input.venueCategories,
+    discoveryCategory: input.category,
+    dek: input.dek,
+  });
+
   const dek = input.dek?.trim() || essay.dek;
-  return {
-    dek,
-    body: dedupeDiscoveryBody(essay.body),
-    fieldAnswers: essay.fieldAnswers,
-  };
+  const body = sanitizeEditorialParagraphs(
+    verified.categoryId,
+    dedupeDiscoveryBody(essay.body)
+  );
+
+  const fieldAnswers: EditorialFieldAnswers = {};
+  for (const [key, value] of Object.entries(essay.fieldAnswers)) {
+    if (typeof value === "string" && editorialCopyConflicts(verified.categoryId, value)) {
+      continue;
+    }
+    fieldAnswers[key] = value;
+  }
+
+  if (body.length === 0) return null;
+
+  return { dek, body, fieldAnswers };
 }
 
 /**
@@ -670,6 +698,27 @@ function editorialBriefForVenueType(typeLabel: string): {
       tips: "Go earlier than feels necessary — the best pastries and quiet seats go first.",
     };
   }
+  if (/observatory|planetarium|stargazing/.test(t)) {
+    return {
+      who: "Anyone curious about the night sky — families with older kids, date nights, and first-time stargazers.",
+      howLong: "Plan for 60–90 minutes, especially if there's a scheduled viewing or talk.",
+      tips: "Check the schedule for telescope viewing hours. Dress warmer than the daytime forecast suggests.",
+    };
+  }
+  if (/winery|vineyard|wine bar|tasting/.test(t)) {
+    return {
+      who: "Anyone who wants a relaxed tasting afternoon — couples, small groups, and visitors who'd rather sit on a patio than rush a meal.",
+      howLong: "Budget 90 minutes for a tasting flight and a slow walk through the room or patio.",
+      tips: "Reserve tastings on weekends when you can. Eat something beforehand — this is wine, not a beach day.",
+    };
+  }
+  if (/bowling/.test(t)) {
+    return {
+      who: "Friends, families, and anyone who wants an easy group activity without a complicated plan.",
+      howLong: "Budget 60–90 minutes for a couple of games, including shoe rental and setup.",
+      tips: "Book lanes ahead on Friday and Saturday. Closed-toe shoes are the right call — this is bowling, not kayaking.",
+    };
+  }
   if (/bowling|mini golf|arcade|climbing|axe|go-kart|kayak|paddle/.test(t)) {
     return {
       who: "Friends, families, and anyone who'd rather do something than scroll through options all afternoon.",
@@ -726,14 +775,14 @@ export function composePlaceDiscoveryArticle(input: {
   const note = input.dek?.trim() || "";
   const city = input.city?.trim() || "";
   const address = input.address?.trim() || "";
-  const venue = resolveVenueClassification({
+  const verified = resolveVerifiedEditorialCategory({
     title,
     venueCategories: input.venueCategories,
     discoveryCategory: input.category,
     dek: note,
     address,
   });
-  const typeLabel = venue.displayLabel;
+  const typeLabel = verified.displayLabel;
   const typeLabelWithArticle = withIndefiniteArticle(typeLabel);
   const brief = editorialBriefForVenueType(typeLabel);
 
@@ -756,12 +805,16 @@ export function composePlaceDiscoveryArticle(input: {
     venueCategories: input.venueCategories,
   });
 
-  const practicalTips =
+  let practicalTips =
     typeof essay?.fieldAnswers?.tips === "string" && essay.fieldAnswers.tips.trim()
       ? essay.fieldAnswers.tips
       : typeof essay?.fieldAnswers?.booking === "string" && essay.fieldAnswers.booking.trim()
         ? essay.fieldAnswers.booking
         : brief.tips;
+
+  if (editorialCopyConflicts(verified.categoryId, practicalTips)) {
+    practicalTips = brief.tips;
+  }
 
   const closing = city
     ? `Kindred flagged ${title} because a confirmed ${typeLabel} in ${city} beats another algorithmic suggestion — worth going to find out the rest for yourself.`
@@ -771,25 +824,44 @@ export function composePlaceDiscoveryArticle(input: {
     ? `The listing is verified through ${input.sourceName}. Kindred's read above is grounded in what we could confirm about ${title} — not a line-by-line review of every detail.`
     : `The name and location above are verified. Kindred's read is grounded in what we could confirm — not a line-by-line review of every detail.`;
 
+  const rawBody = dedupeDiscoveryBody([
+    factSentence,
+    whyVisit,
+    uniqueness,
+    brief.who,
+    brief.howLong,
+    practicalTips,
+    attribution,
+    closing,
+  ]);
+
+  const body = sanitizeEditorialParagraphs(verified.categoryId, rawBody);
+
+  const safeFieldAnswers: EditorialFieldAnswers = {
+    why_go: whyVisit,
+    best_for: brief.who,
+    how_long: brief.howLong,
+    tips: practicalTips,
+  };
+  if (essay?.fieldAnswers) {
+    for (const [key, value] of Object.entries(essay.fieldAnswers)) {
+      if (typeof value === "string" && editorialCopyConflicts(verified.categoryId, value)) {
+        continue;
+      }
+      safeFieldAnswers[key] = value;
+    }
+  }
+
+  const validated = validateEditorialArticle({
+    categoryId: verified.categoryId,
+    dek,
+    body,
+  });
+
   return {
     dek,
-    body: dedupeDiscoveryBody([
-      factSentence,
-      whyVisit,
-      uniqueness,
-      brief.who,
-      brief.howLong,
-      practicalTips,
-      attribution,
-      closing,
-    ]),
-    fieldAnswers: {
-      why_go: whyVisit,
-      best_for: brief.who,
-      how_long: brief.howLong,
-      tips: practicalTips,
-      ...(essay?.fieldAnswers ?? {}),
-    },
+    body: validated.valid ? body : sanitizeEditorialParagraphs(verified.categoryId, [factSentence, whyVisit, brief.who, brief.howLong, practicalTips, closing]),
+    fieldAnswers: safeFieldAnswers,
   };
 }
 

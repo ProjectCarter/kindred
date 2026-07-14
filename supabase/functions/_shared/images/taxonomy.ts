@@ -47,6 +47,17 @@ export type ImageCategoryTag =
   | "axe_throwing"
   | "go_karts"
   | "networking_event"
+  | "winery"
+  | "brewery"
+  | "cocktail_bar"
+  | "pickleball"
+  | "zoo"
+  | "aquarium"
+  | "river"
+  | "bookstore"
+  | "farm"
+  | "market"
+  | "shopping_district"
   | "general_activity";
 
 export type ImageOrientation = "portrait" | "landscape" | "square";
@@ -86,7 +97,18 @@ const RULES: Rule[] = [
   { tag: "rock_shop", pattern: /rock shop|gem shop|mineral|crystals?\b|lapidary/i, weight: 10 },
   { tag: "coffee_shop", pattern: /coffee|café|cafe|espresso|roaster|roastery/i, weight: 9 },
   { tag: "storytime", pattern: /story\s*time|storytime|children'?s reading/i, weight: 10 },
-  { tag: "library", pattern: /\blibrary\b|bookstore|books?\b/i, weight: 8 },
+  { tag: "bookstore", pattern: /bookstore|book shop/i, weight: 9 },
+  { tag: "library", pattern: /\blibrary\b/i, weight: 8 },
+  { tag: "winery", pattern: /winery|vineyard|wine bar|tasting room/i, weight: 10 },
+  { tag: "brewery", pattern: /brewery|brewpub|taproom/i, weight: 10 },
+  { tag: "cocktail_bar", pattern: /cocktail bar|speakeasy|mixology/i, weight: 10 },
+  { tag: "pickleball", pattern: /pickleball/i, weight: 10 },
+  { tag: "zoo", pattern: /\bzoo\b|wildlife park|safari park/i, weight: 10 },
+  { tag: "aquarium", pattern: /aquarium|sea life|marine center/i, weight: 10 },
+  { tag: "river", pattern: /\briver\b|riverwalk|waterfront trail/i, weight: 8 },
+  { tag: "farm", pattern: /\bfarm\b|u-pick|orchard|petting zoo/i, weight: 9 },
+  { tag: "market", pattern: /public market|food hall|market hall/i, weight: 9 },
+  { tag: "shopping_district", pattern: /shopping mall|retail district|outlet mall/i, weight: 8 },
   { tag: "painting_class", pattern: /paint\s*(?:night|class)|flutter and glow|canvas class|sip and paint/i, weight: 10 },
   { tag: "cooking_class", pattern: /cooking class|culinary class|chef class|bake class/i, weight: 10 },
   { tag: "escape_room", pattern: /escape room|escapology|puzzle room/i, weight: 10 },
@@ -172,6 +194,17 @@ const SEARCH_QUERY_BY_TAG: Record<ImageCategoryTag, string> = {
   axe_throwing: "axe throwing venue",
   go_karts: "go kart track",
   networking_event: "business networking event",
+  winery: "winery wine tasting patio",
+  brewery: "craft brewery taproom",
+  cocktail_bar: "cocktail bar interior",
+  pickleball: "pickleball court outdoor",
+  zoo: "zoo animals habitat",
+  aquarium: "aquarium tunnel fish",
+  river: "river walk trail waterfront",
+  bookstore: "independent bookstore shelves",
+  farm: "family farm orchard barn",
+  market: "public market vendors stalls",
+  shopping_district: "shopping street storefronts",
   general_activity: "local activity venue",
 };
 
