@@ -17,8 +17,10 @@ import { openKindredArticle } from "../lib/edition/openArticle";
 import {
   listClippings,
   clippingTypeLabel,
+  sweepExpiredEventClippings,
   type ClippingListRow,
 } from "../lib/edition/clippings";
+import { isPastEvent } from "../lib/edition/eventExpiry";
 import type { ClippingContentType } from "../lib/edition/clippingTypes";
 import { PaperLoading } from "../components/PaperLoading";
 import { BanditCharacter } from "../components/BanditCharacter";
@@ -85,6 +87,15 @@ export default function ClippingsScreen() {
           setRefreshing(false);
         }
         return;
+      }
+
+      // Quietly remove any event whose 30-day grace period has fully
+      // elapsed before the list is even fetched — Articles, Activities,
+      // and Recommendations are never touched by this.
+      try {
+        await sweepExpiredEventClippings(user.id);
+      } catch {
+        /* Best effort — an unswept expired event just shows up next load. */
       }
 
       const rows = await listClippings(user.id);
@@ -291,6 +302,8 @@ function ClippingCard({
     .filter(Boolean)
     .join("  ·  ");
   const savedDate = formatSavedDate(clip.createdAt);
+  const showPastEvent =
+    clip.contentType === "event" && isPastEvent(clip.eventEndsAt);
 
   return (
     <View style={styles.card}>
@@ -334,9 +347,14 @@ function ClippingCard({
         </View>
 
         <View style={styles.cardCopy}>
-          <Text style={styles.typeLabel}>
-            {clippingTypeLabel(clip.contentType)}
-          </Text>
+          <View style={styles.typeLabelRow}>
+            <Text style={styles.typeLabel}>
+              {clippingTypeLabel(clip.contentType)}
+            </Text>
+            {showPastEvent ? (
+              <Text style={styles.pastEventBadge}>Past Event</Text>
+            ) : null}
+          </View>
           <Text style={styles.headline} numberOfLines={2}>
             {clip.headline}
           </Text>
@@ -525,13 +543,24 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  typeLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
   typeLabel: {
     fontSize: 10,
     letterSpacing: 1.6,
     fontWeight: "600",
     textTransform: "uppercase",
     color: paper.terracotta,
-    marginBottom: 6,
+  },
+  pastEventBadge: {
+    fontSize: 10,
+    letterSpacing: 0.2,
+    fontStyle: "italic",
+    color: paper.inkFaint,
   },
   headline: {
     fontFamily: "Georgia",

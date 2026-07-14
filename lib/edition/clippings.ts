@@ -17,6 +17,7 @@ import {
   CLIPPING_TYPE_LABEL,
   type ClippingContentType,
 } from "./clippingTypes";
+import { isEventExpired, resolveEventEndsAt } from "./eventExpiry";
 
 export type ClipTarget = {
   contentType: ClippingContentType;
@@ -111,6 +112,8 @@ export async function saveClipping(
     image_url: article.heroImage?.uri ?? null,
     location: article.savedLocation ?? null,
     event_time: article.savedEventTime ?? null,
+    event_ends_at:
+      target.contentType === "event" ? article.savedEventEndsAt ?? null : null,
     payload: article,
   });
 
@@ -148,6 +151,8 @@ export type ClippingListRow = {
   imageSource: ImageSourcePropType | null;
   location: string | null;
   eventTime: string | null;
+  /** ISO end timestamp for `contentType === "event"`; null otherwise or unresolvable. */
+  eventEndsAt: string | null;
   /** Full snapshot — reopens the item exactly as saved. Null only if corrupted. */
   article: KindredArticle | null;
 };
@@ -163,6 +168,7 @@ type ClippingDbRow = {
   image_url: string | null;
   location: string | null;
   event_time: string | null;
+  event_ends_at: string | null;
   payload: KindredArticle | null;
 };
 
@@ -172,7 +178,7 @@ export async function listClippings(
   const { data, error } = await supabase
     .from("clippings")
     .select(
-      "id, created_at, content_type, clip_key, headline, summary, source, image_url, location, event_time, payload"
+      "id, created_at, content_type, clip_key, headline, summary, source, image_url, location, event_time, event_ends_at, payload"
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -195,9 +201,60 @@ export async function listClippings(
         imageSource: article?.heroImage?.source ?? null,
         location: row.location,
         eventTime: row.event_time,
+        eventEndsAt: row.event_ends_at ?? article?.savedEventEndsAt ?? null,
         article,
       };
     });
+}
+
+/**
+ * Quietly removes event clippings whose 30-day post-event grace period
+ * has fully elapsed. Never touches Articles, Activities, or
+ * Recommendations — scoped to `content_type = 'event'` throughout.
+ *
+ * Safe to call often (My Clippings load, pull-to-refresh, app focus) —
+ * it's a no-op read plus, at most, a small batched delete. Legacy rows
+ * saved before `event_ends_at` existed fall back to parsing the display
+ * string (`event_time`) so pre-existing pins still expire correctly.
+ *
+ * Returns the number of clippings removed, purely for logging/testing.
+ */
+export async function sweepExpiredEventClippings(
+  userId: string
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("clippings")
+    .select("id, event_time, event_ends_at, payload")
+    .eq("user_id", userId)
+    .eq("content_type", "event");
+
+  if (error || !data || data.length === 0) return 0;
+
+  const now = new Date();
+  const expiredIds: string[] = [];
+
+  for (const row of data as Array<
+    Pick<ClippingDbRow, "id" | "event_time" | "event_ends_at" | "payload">
+  >) {
+    let endsAt = row.event_ends_at ?? row.payload?.savedEventEndsAt ?? null;
+    if (!endsAt && row.event_time) {
+      // Pre-dates this migration — best-effort backfill from the display
+      // string ("Sat, Jul 12 · 7 – 9 PM") rather than leaving it stuck.
+      const [datePart, timePart] = row.event_time.split("·").map((p) => p.trim());
+      endsAt = resolveEventEndsAt(datePart, timePart, now);
+    }
+    if (isEventExpired(endsAt, now)) expiredIds.push(row.id);
+  }
+
+  if (expiredIds.length === 0) return 0;
+
+  const { error: deleteError } = await supabase
+    .from("clippings")
+    .delete()
+    .eq("user_id", userId)
+    .in("id", expiredIds);
+
+  return deleteError ? 0 : expiredIds.length;
 }
 
 export function clippingTypeLabel(type: ClippingContentType): string {

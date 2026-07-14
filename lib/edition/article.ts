@@ -14,6 +14,7 @@ import {
 } from "./contentSystem";
 import type { LocalEventCard } from "./localEvents";
 import type { ClippingContentType } from "./clippingTypes";
+import { resolveEventEndsAt } from "./eventExpiry";
 import {
   composeCategorySeedArticle,
   composeFallbackDiscoveryBody,
@@ -103,6 +104,13 @@ export type KindredArticle = {
   savedLocation?: string | null;
   /** Human-readable date/time line, for the Clippings card (events). */
   savedEventTime?: string | null;
+  /**
+   * ISO timestamp for when this event actually ends — resolved once, at
+   * adapter time, from the event's own date/time (never from when it was
+   * saved). Powers Clippings' 30-day auto-expiry and "Past Event" note.
+   * Null when Kindred can't confidently parse an end date/time.
+   */
+  savedEventEndsAt?: string | null;
 };
 
 /** Inline magazine photograph within the long-form body. */
@@ -708,6 +716,7 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
     savedContentType: "event",
     savedLocation: place || null,
     savedEventTime: whenLine || null,
+    savedEventEndsAt: resolveEventEndsAt(event.date, event.time),
   };
 }
 
