@@ -1,5 +1,9 @@
 import type { ImageOrientation } from "./types.ts";
 import type { ImageCategoryTag } from "./taxonomy.ts";
+import {
+  stockTagsConflictWithCategory,
+  type EditorialCategoryId,
+} from "../editorialCategory.ts";
 
 /**
  * Per-dimension quality signals (0–100 each). Future versions can populate
@@ -137,12 +141,6 @@ export function isLibraryRowSelectable(
 }
 
 /** Reject stock photos whose tags obviously conflict with the venue type. */
-import type { ImageCategoryTag } from "./images/taxonomy.ts";
-import {
-  stockTagsConflictWithCategory,
-  type EditorialCategoryId,
-} from "../editorialCategory.ts";
-
 const IMAGE_TAG_TO_EDITORIAL: Partial<Record<ImageCategoryTag, EditorialCategoryId>> = {
   dog_park: "dog_park",
   playground: "playground",
@@ -197,20 +195,21 @@ const STOCK_CONFLICT_PATTERNS: Partial<Record<ImageCategoryTag, RegExp>> = {
 };
 
 export function stockCandidateConflictsWithVenue(
-  candidate: { tags?: string[]; alt?: string | null },
+  candidate: { tags?: string[]; alt?: string | null; altDescription?: string | null },
   primary: ImageCategoryTag
 ): boolean {
   const editorialId = IMAGE_TAG_TO_EDITORIAL[primary];
+  const alt = candidate.altDescription ?? candidate.alt ?? null;
   if (editorialId) {
     return stockTagsConflictWithCategory(
       editorialId,
       candidate.tags ?? [],
-      candidate.alt
+      alt
     );
   }
   const pattern = STOCK_CONFLICT_PATTERNS[primary];
   if (!pattern) return false;
-  const hay = [...(candidate.tags ?? []), candidate.alt ?? ""]
+  const hay = [...(candidate.tags ?? []), alt ?? ""]
     .join(" ")
     .toLowerCase();
   return pattern.test(hay);

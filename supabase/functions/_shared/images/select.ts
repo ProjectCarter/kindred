@@ -2,70 +2,24 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import type { EditorialImageRecord, ImageOrientation } from "./types.ts";
 import { classifyImageSubject, type ClassificationInput } from "./taxonomy.ts";
 import { EditionImageRegistry } from "./editionRegistry.ts";
-import { getEditorialSearchProviders } from "./providers.ts";
-import { getCachedSearch, setCachedSearch } from "./searchCache.ts";
 import {
   findLibraryImageForVenue,
   findUnusedLibraryMatch,
   incrementLibrarySkipCount,
-  ingestStockImage,
-  markLibraryImageUsed,
   rowToRecord,
+  markLibraryImageUsed,
 } from "./library.ts";
-import type { StockSearchCandidate } from "./types.ts";
-import { computeBaselineQualityScore, stockCandidateConflictsWithVenue } from "./quality.ts";
-import {
-  compositionSearchQuery,
-  inferCompositionTag,
-  inferDominantColor,
-  pickCompositionSlot,
-  rankStockCandidates,
-} from "./variety.ts";
 import {
   extractCityState,
   venueLibraryTag,
 } from "../venueClassification.ts";
+import { pickCompositionSlot } from "./variety.ts";
+import { searchEditorialStockImage } from "./editorialImageEngine.ts";
 
 export type ImageSelectionInput = ClassificationInput & {
   providerImageUrl?: string | null;
   orientation?: ImageOrientation;
 };
-
-async function cachedProviderSearch(
-  admin: SupabaseClient,
-  providerId: string,
-  query: string,
-  orientation: ImageOrientation,
-  searchFn: (query: string, options?: { orientation?: ImageOrientation; perPage?: number }) => Promise<StockSearchCandidate[]>
-): Promise<StockSearchCandidate[]> {
-  const cached = await getCachedSearch<StockSearchCandidate>(
-    admin,
-    providerId,
-    `${query}|${orientation}`
-  );
-  if (cached) return cached;
-
-  const results = await searchFn(query, { orientation, perPage: 8 });
-  if (results.length) {
-    await setCachedSearch(admin, providerId, `${query}|${orientation}`, results);
-  }
-  return results;
-}
-
-function stockCandidateQuality(
-  candidate: StockSearchCandidate,
-  preferredOrientation: ImageOrientation,
-  compositionTag: string
-): number {
-  return computeBaselineQualityScore({
-    width: candidate.width,
-    height: candidate.height,
-    orientation: candidate.orientation,
-    preferredOrientation,
-    compositionTag,
-    tags: candidate.tags,
-  }).score;
-}
 
 function tryClaimLibraryRow(
   admin: SupabaseClient,
@@ -201,71 +155,20 @@ export async function selectEditorialImage(
   );
   if (categoryClaimed) return categoryClaimed;
 
-  const baseQueries =
-    classification.searchQueries?.length > 0
-      ? classification.searchQueries
-      : [classification.searchQuery];
-
-  for (const provider of getEditorialSearchProviders()) {
-    for (const baseQuery of baseQueries) {
-      const editorialQuery = compositionSearchQuery(baseQuery, compositionSlot);
-      const results = await cachedProviderSearch(
-        admin,
-        provider.id,
-        editorialQuery,
-        orientation,
-        provider.search.bind(provider)
-      );
-
-      const ranked = rankStockCandidates(
-        results.filter(
-          (candidate) =>
-            !stockCandidateConflictsWithVenue(candidate, classification.primary)
-        ),
-        (candidate) => stockCandidateQuality(candidate, orientation, compositionSlot),
-        variety,
-        compositionSlot,
-        classification.primary
-      );
-
-      for (const candidate of ranked) {
-        if (registry.hasProviderId(provider.id, candidate.providerImageId)) continue;
-        if (registry.hasPhotographer(candidate.photographerName)) continue;
-
-        const ingested = await ingestStockImage(
-          admin,
-          candidate,
-          classification.primary,
-          classification.secondary,
-          classification.environmentTags,
-          {
-            compositionTag: compositionSlot,
-            inferComposition: inferCompositionTag,
-            inferDominantColor,
-            venueTag,
-          }
-        );
-        if (!ingested) continue;
-
-        const dominantColor = inferDominantColor(candidate.tags);
-        if (
-          registry.claim({
-            libraryId: ingested.libraryId,
-            url: ingested.url,
-            source: ingested.source,
-            providerImageId: candidate.providerImageId,
-            photographerName: ingested.photographerName,
-            compositionTag: compositionSlot,
-            dominantSubject: compositionSlot,
-            dominantColor,
-          })
-        ) {
-          await markLibraryImageUsed(admin, ingested.libraryId);
-          return ingested;
-        }
-      }
-    }
-  }
+  const stockResult = await searchEditorialStockImage(admin, {
+    title: input.title,
+    dek: input.dek,
+    address: input.address,
+    city,
+    venueCategories: input.venueCategories,
+    discoveryCategory: input.discoveryCategory,
+    classification,
+    orientation,
+    compositionSlot,
+    venueTag,
+    registry,
+  });
+  if (stockResult) return stockResult.record;
 
   return null;
 }

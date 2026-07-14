@@ -1,14 +1,14 @@
 import type { ImageOrientation, StockSearchCandidate } from "./types.ts";
+import { searchUnsplash } from "./unsplash.ts";
 import { searchPexels } from "./pexels.ts";
 import { searchPixabay } from "./pixabay.ts";
 
 /**
- * Provider-agnostic search interface. Pexels and Pixabay are active today;
- * museum and archive sources (Wikimedia, Rijksmuseum, Met, Smithsonian, LoC,
- * National Gallery, Art Institute of Chicago) plug in here later without
- * redesigning select/ingest/library.
+ * Provider-agnostic search interface. Unsplash, Pixabay, and Pexels are active;
+ * museum and archive sources plug in here later without redesigning select/ingest/library.
  */
 export type ImageSearchProviderId =
+  | "unsplash"
   | "pexels"
   | "pixabay"
   | "wikimedia"
@@ -32,8 +32,11 @@ export interface ImageSearchProvider {
 }
 
 function wrapStockAdapter(
-  id: "pexels" | "pixabay",
-  searchFn: typeof searchPexels
+  id: "unsplash" | "pexels" | "pixabay",
+  searchFn: (
+    query: string,
+    options?: ImageSearchOptions
+  ) => Promise<StockSearchCandidate[]>
 ): ImageSearchProvider {
   return {
     id,
@@ -42,23 +45,19 @@ function wrapStockAdapter(
   };
 }
 
-/** Active royalty-free stock providers — called only at edition build time. */
+/** Active royalty-free stock providers — priority: Unsplash → Pixabay → Pexels. */
 export const ACTIVE_STOCK_PROVIDERS: ImageSearchProvider[] = [
-  wrapStockAdapter("pexels", searchPexels),
+  wrapStockAdapter("unsplash", searchUnsplash),
   wrapStockAdapter("pixabay", searchPixabay),
+  wrapStockAdapter("pexels", searchPexels),
 ];
 
-/**
- * Future museum/archive providers register here when implemented.
- * Example: registerProvider({ id: "wikimedia", enabled: hasApiKey(), search: searchWikimedia })
- */
 const FUTURE_PROVIDER_REGISTRY = new Map<ImageSearchProviderId, ImageSearchProvider>();
 
 export function registerImageSearchProvider(provider: ImageSearchProvider): void {
   FUTURE_PROVIDER_REGISTRY.set(provider.id, provider);
 }
 
-/** Returns enabled providers in priority order for editorial discovery images. */
 export function getEditorialSearchProviders(): ImageSearchProvider[] {
   const future = [...FUTURE_PROVIDER_REGISTRY.values()].filter((p) => p.enabled);
   return [...ACTIVE_STOCK_PROVIDERS.filter((p) => p.enabled), ...future];

@@ -95,5 +95,6 @@ export async function searchPexels(
       sourcePageUrl: photo.url,
       tags: photo.alt ? photo.alt.toLowerCase().split(/\s+/).slice(0, 12) : [],
       orientation: orientationOf(photo.width, photo.height),
+      altDescription: photo.alt ?? null,
     }));
 }

@@ -650,6 +650,12 @@ export function validateEditorialArticle(input: {
   return { valid: conflicts.length === 0, conflicts };
 }
 
+export function editorialImagePhrasesFor(
+  categoryId: EditorialCategoryId
+): string[] {
+  return PROFILE_BY_ID.get(categoryId)?.imagePhrases ?? ["local place exterior"];
+}
+
 export function buildCategoryImageSearchQueries(input: {
   title: string;
   city?: string | null;

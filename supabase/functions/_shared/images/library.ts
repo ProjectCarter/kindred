@@ -40,6 +40,9 @@ function attributionFor(
   if (source === "pexels" && photographerName) {
     return `Photo by ${photographerName} on Pexels`;
   }
+  if (source === "unsplash" && photographerName) {
+    return `Photo by ${photographerName} on Unsplash`;
+  }
   if (source === "pixabay" && photographerName) {
     return `Image by ${photographerName} on Pixabay`;
   }

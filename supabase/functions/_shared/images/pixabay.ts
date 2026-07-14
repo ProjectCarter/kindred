@@ -78,5 +78,6 @@ export async function searchPixabay(
       sourcePageUrl: hit.pageURL,
       tags: hit.tags.split(",").map((t) => t.trim()).filter(Boolean),
       orientation: orientationOf(hit.imageWidth, hit.imageHeight),
+      altDescription: hit.tags,
     }));
 }

@@ -73,7 +73,7 @@ export type DiscoveryItem = {
   editorialImage?: {
     url: string;
     libraryId: string;
-    source: "pexels" | "pixabay" | "provider" | "kindred";
+    source: "pexels" | "pixabay" | "unsplash" | "provider" | "kindred";
     orientation?: "portrait" | "landscape" | "square";
     photographerName?: string | null;
     sourcePageUrl?: string | null;

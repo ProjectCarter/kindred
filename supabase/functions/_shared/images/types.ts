@@ -3,6 +3,7 @@
  * (`lib/edition/hero/*`) and must never share this library or selection path.
  */
 export type ImageLibrarySource =
+  | "unsplash"
   | "pexels"
   | "pixabay"
   | "provider"
@@ -17,6 +18,26 @@ export type ImageLibrarySource =
 
 export type ImageOrientation = "portrait" | "landscape" | "square";
 
+export type EditorialImageSelectionReport = {
+  provider: string;
+  searchTermsAttempted: string[];
+  selectedQuery: string;
+  searchTier: "venue" | "category" | "broader";
+  relevanceScore: number;
+  winReason: string;
+  breakdown: {
+    exactNameMatch: number;
+    categoryMatch: number;
+    tagMatch: number;
+    titleMatch: number;
+    descriptionMatch: number;
+    visualConfidence: number;
+    resolution: number;
+    editorialQuality: number;
+    tierBonus: number;
+  };
+};
+
 export type EditorialImageRecord = {
   url: string;
   libraryId: string;
@@ -25,6 +46,8 @@ export type EditorialImageRecord = {
   photographerName?: string | null;
   sourcePageUrl?: string | null;
   attributionText?: string | null;
+  /** Server-side selection audit trail — not shown in UI. */
+  selectionReport?: EditorialImageSelectionReport;
 };
 
 export type ImageQualitySignals = {
@@ -69,7 +92,7 @@ export type ImageLibraryRow = {
 };
 
 export type StockSearchCandidate = {
-  provider: "pexels" | "pixabay" | ImageLibrarySource;
+  provider: "unsplash" | "pexels" | "pixabay" | ImageLibrarySource;
   providerImageId: string;
   downloadUrl: string;
   previewUrl: string;
@@ -79,6 +102,7 @@ export type StockSearchCandidate = {
   sourcePageUrl: string;
   tags: string[];
   orientation: ImageOrientation;
+  altDescription?: string | null;
 };
 
 export const IMAGE_BUCKET = "kindred-images";
