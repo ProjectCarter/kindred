@@ -189,6 +189,10 @@ export function composeEditorialNotes(
   if ((input.personalization?.confidence ?? 0) > 0.4) {
     notes.push("Personalization confidence moderate — may reference tastes lightly");
   }
+  const planning = input.planningNote?.trim();
+  if (planning) {
+    notes.push(`Planning: ${planning.slice(0, 220)}`);
+  }
   return notes;
 }
 
@@ -246,6 +250,7 @@ export function buildBanditGrounding(input: BanditComposeInput): string {
     `Holiday: ${occasions.holidayName ?? "none"}`,
     `Season: ${occasions.season}${occasions.isSeasonTurn ? " (turning today)" : ""}`,
     `Weather summary: ${input.weatherSummary?.trim() || "(none)"}`,
+    `Planning note: ${input.planningNote?.trim() || "(none)"}`,
     `Has local events: ${input.signals?.hasLocalEvents ? "yes" : "no"}`,
     `Weather change ahead: ${input.signals?.weatherChange ? "yes" : "no"}`,
     `Holiday tomorrow: ${input.signals?.holidayTomorrow ?? "none"}`,

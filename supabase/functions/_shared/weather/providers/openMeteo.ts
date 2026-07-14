@@ -4,6 +4,9 @@ type OpenMeteoResponse = {
   current?: {
     time?: string;
     temperature_2m?: number;
+    apparent_temperature?: number;
+    relative_humidity_2m?: number;
+    wind_speed_10m?: number;
     weather_code?: number;
   };
   daily?: {
@@ -14,10 +17,15 @@ type OpenMeteoResponse = {
     sunrise?: string[];
     sunset?: string[];
     uv_index_max?: number[];
+    precipitation_probability_max?: number[];
+    wind_speed_10m_max?: number[];
   };
   hourly?: {
     time?: string[];
     temperature_2m?: number[];
+    apparent_temperature?: number[];
+    relative_humidity_2m?: number[];
+    wind_speed_10m?: number[];
     weather_code?: number[];
     precipitation_probability?: number[];
   };
@@ -50,10 +58,12 @@ export async function fetchOpenMeteoForecast(
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
-    current: "temperature_2m,weather_code",
-    hourly: "temperature_2m,weather_code,precipitation_probability",
+    current:
+      "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code",
+    hourly:
+      "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation_probability",
     daily:
-      "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,uv_index_max",
+      "temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,uv_index_max,precipitation_probability_max,wind_speed_10m_max",
     forecast_days: "7",
     timezone: "auto",
   });
@@ -85,14 +95,21 @@ export async function fetchOpenMeteoForecast(
     uvi: data.daily?.uv_index_max?.[i] ?? null,
     sunrise: parseIsoToUnix(data.daily?.sunrise?.[i]),
     sunset: parseIsoToUnix(data.daily?.sunset?.[i]),
+    popMax: (data.daily?.precipitation_probability_max?.[i] ?? 0) / 100,
+    windSpeedMaxMs: data.daily?.wind_speed_10m_max?.[i] ?? null,
   }));
 
   const hourlyTimes = data.hourly?.time ?? [];
   const hourly = hourlyTimes.slice(0, 48).map((_, i) => ({
     dt: parseIsoToUnix(hourlyTimes[i]),
     tempC: data.hourly?.temperature_2m?.[i] ?? currentTemp,
+    feelsLikeC: data.hourly?.apparent_temperature?.[i] ?? data.hourly?.temperature_2m?.[i] ?? currentTemp,
     weatherCode: data.hourly?.weather_code?.[i] ?? currentCode,
     pop: (data.hourly?.precipitation_probability?.[i] ?? 0) / 100,
+    humidityPct: data.hourly?.relative_humidity_2m?.[i] ?? null,
+    windSpeedMs: data.hourly?.wind_speed_10m?.[i] != null
+      ? (data.hourly!.wind_speed_10m![i]! / 3.6)
+      : null,
   }));
 
   const today = daily[0];
@@ -104,12 +121,18 @@ export async function fetchOpenMeteoForecast(
     retrievedAt: new Date().toISOString(),
     current: {
       temperatureC: currentTemp,
-      feelsLikeC: currentTemp,
+      feelsLikeC: data.current?.apparent_temperature ?? currentTemp,
       weatherCode: currentCode,
       conditionLabel: "Open-Meteo",
       uvi: today?.uvi ?? null,
       sunrise: today?.sunrise ?? 0,
       sunset: today?.sunset ?? 0,
+      humidityPct: data.current?.relative_humidity_2m ?? null,
+      windSpeedMs: data.current?.wind_speed_10m != null
+        ? data.current.wind_speed_10m / 3.6
+        : null,
+      windGustMs: null,
+      precipitationProbability: hourly[0]?.pop ?? today?.popMax ?? null,
     },
     daily,
     hourly,

@@ -22,8 +22,11 @@ export type WeatherAirQuality = {
 export type WeatherHourlyPoint = {
   dt: number;
   tempC: number;
+  feelsLikeC: number | null;
   weatherCode: number;
   pop: number;
+  humidityPct: number | null;
+  windSpeedMs: number | null;
 };
 
 export type WeatherDailyPoint = {
@@ -34,6 +37,22 @@ export type WeatherDailyPoint = {
   uvi: number | null;
   sunrise: number;
   sunset: number;
+  popMax: number | null;
+  windSpeedMaxMs: number | null;
+};
+
+export type WeatherCurrentConditions = {
+  temperatureC: number;
+  feelsLikeC: number;
+  weatherCode: number;
+  conditionLabel: string;
+  uvi: number | null;
+  sunrise: number;
+  sunset: number;
+  humidityPct: number | null;
+  windSpeedMs: number | null;
+  windGustMs: number | null;
+  precipitationProbability: number | null;
 };
 
 export type NormalizedWeatherForecast = {
@@ -41,15 +60,7 @@ export type NormalizedWeatherForecast = {
   lat: number;
   lon: number;
   retrievedAt: string;
-  current: {
-    temperatureC: number;
-    feelsLikeC: number;
-    weatherCode: number;
-    conditionLabel: string;
-    uvi: number | null;
-    sunrise: number;
-    sunset: number;
-  };
+  current: WeatherCurrentConditions;
   daily: WeatherDailyPoint[];
   hourly: WeatherHourlyPoint[];
   alerts: WeatherAlert[];
@@ -71,14 +82,23 @@ export type WeatherIntelligence = {
   isStormy: boolean;
   isHot: boolean;
   isCold: boolean;
+  isWindy: boolean;
   isIdealBeachWeather: boolean;
   isIndoorPreferred: boolean;
   isIdealSunriseHike: boolean;
+  isIdealMorningOutdoor: boolean;
+  isIdealShadedPark: boolean;
+  isIdealPatios: boolean;
+  rainBeginsAfternoon: boolean;
   hasActiveAlerts: boolean;
+  severeWeather: boolean;
   alertSummary: string | null;
   uviHigh: number | null;
   airQualityPoor: boolean;
+  windSpeedMs: number | null;
   provider: WeatherProviderId;
+  /** Editorial planning note — for Bandit / future surfaces, not raw API copy. */
+  planningNote: string | null;
 };
 
 export type WeatherProvider = {

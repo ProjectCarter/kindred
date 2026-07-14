@@ -25,6 +25,10 @@ Deno.test("weather intelligence prefers beaches on clear warm days", () => {
       uvi: 6,
       sunrise: 1_700_000_000,
       sunset: 1_700_030_000,
+      humidityPct: 35,
+      windSpeedMs: 2,
+      windGustMs: null,
+      precipitationProbability: 0.05,
     },
     daily: [
       {
@@ -35,6 +39,8 @@ Deno.test("weather intelligence prefers beaches on clear warm days", () => {
         uvi: 7,
         sunrise: 1_700_000_000,
         sunset: 1_700_030_000,
+        popMax: 0.05,
+        windSpeedMaxMs: 3,
       },
     ],
     hourly: [],
@@ -72,6 +78,10 @@ Deno.test("weather intelligence prefers indoor on rainy days", () => {
       uvi: 2,
       sunrise: 1_700_000_000,
       sunset: 1_700_030_000,
+      humidityPct: 90,
+      windSpeedMs: 5,
+      windGustMs: null,
+      precipitationProbability: 0.8,
     },
     daily: [
       {
@@ -82,9 +92,11 @@ Deno.test("weather intelligence prefers indoor on rainy days", () => {
         uvi: 2,
         sunrise: 1_700_000_000,
         sunset: 1_700_030_000,
+        popMax: 0.8,
+        windSpeedMaxMs: 6,
       },
     ],
-    hourly: [{ dt: 1_700_010_000, tempC: 18, weatherCode: 61, pop: 0.8 }],
+    hourly: [{ dt: 1_700_010_000, tempC: 18, feelsLikeC: 17, weatherCode: 61, pop: 0.8, humidityPct: 85, windSpeedMs: 4 }],
     alerts: [],
     airQuality: null,
     legacy: {
@@ -100,6 +112,7 @@ Deno.test("weather intelligence prefers indoor on rainy days", () => {
   const intel = buildWeatherIntelligence(forecast, "Current 64°F; rain likely.");
   assertEquals(intel?.isIndoorPreferred, true);
   assertEquals(intel?.isRainy, true);
+  assertEquals(intel?.planningNote?.includes("Rain"), true);
 });
 
 Deno.test("openweather provider registers when key is configured", () => {

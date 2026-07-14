@@ -32,18 +32,27 @@ type OwOneCall = {
     uvi?: number;
     sunrise?: number;
     sunset?: number;
+    humidity?: number;
+    wind_speed?: number;
+    wind_gust?: number;
+    pop?: number;
     weather?: OwWeather[];
   };
   hourly?: Array<{
     dt?: number;
     temp?: number;
+    feels_like?: number;
     pop?: number;
+    humidity?: number;
+    wind_speed?: number;
     weather?: OwWeather[];
   }>;
   daily?: Array<{
     dt?: number;
     temp?: { max?: number; min?: number };
     uvi?: number;
+    pop?: number;
+    wind_speed?: number;
     sunrise?: number;
     sunset?: number;
     weather?: OwWeather[];
@@ -66,14 +75,28 @@ type OwAirPollution = {
 
 type OwCurrentWeather = {
   coord?: { lat?: number; lon?: number };
-  main?: { temp?: number; feels_like?: number };
+  main?: {
+    temp?: number;
+    feels_like?: number;
+    humidity?: number;
+    temp_min?: number;
+    temp_max?: number;
+  };
+  wind?: { speed?: number; gust?: number };
   weather?: OwWeather[];
   sys?: { sunrise?: number; sunset?: number };
 };
 
 type OwForecastItem = {
   dt?: number;
-  main?: { temp?: number; temp_min?: number; temp_max?: number };
+  main?: {
+    temp?: number;
+    temp_min?: number;
+    temp_max?: number;
+    feels_like?: number;
+    humidity?: number;
+  };
+  wind?: { speed?: number; gust?: number };
   weather?: OwWeather[];
   pop?: number;
 };
@@ -136,14 +159,19 @@ function normalizeOneCall(
       uvi: day.uvi ?? null,
       sunrise: day.sunrise ?? 0,
       sunset: day.sunset ?? 0,
+      popMax: day.pop ?? null,
+      windSpeedMaxMs: day.wind_speed ?? null,
     };
   });
 
   const hourly = (data.hourly ?? []).slice(0, 48).map((hour) => ({
     dt: hour.dt ?? 0,
     tempC: hour.temp ?? current.temp!,
+    feelsLikeC: hour.feels_like ?? hour.temp ?? current.temp!,
     weatherCode: openWeatherIdToWmo(primaryOpenWeatherId(hour.weather)),
     pop: hour.pop ?? 0,
+    humidityPct: hour.humidity ?? null,
+    windSpeedMs: hour.wind_speed ?? null,
   }));
 
   const alerts = (data.alerts ?? []).map((a) => ({
@@ -171,6 +199,10 @@ function normalizeOneCall(
       uvi: current.uvi ?? null,
       sunrise: current.sunrise ?? daily[0]?.sunrise ?? 0,
       sunset: current.sunset ?? daily[0]?.sunset ?? 0,
+      humidityPct: current.humidity ?? null,
+      windSpeedMs: current.wind_speed ?? null,
+      windGustMs: current.wind_gust ?? null,
+      precipitationProbability: current.pop ?? hourly[0]?.pop ?? null,
     },
     daily,
     hourly,
@@ -261,6 +293,8 @@ function aggregateDailyFromForecast(
     uvi: null,
     sunrise: 0,
     sunset: 0,
+    popMax: row.pop,
+    windSpeedMaxMs: null,
   }));
 }
 
@@ -313,8 +347,11 @@ async function fetchCompositeForecast(
   const hourly = (forecastData.list ?? []).slice(0, 16).map((item) => ({
     dt: item.dt ?? 0,
     tempC: item.main?.temp ?? temp,
+    feelsLikeC: item.main?.feels_like ?? item.main?.temp ?? temp,
     weatherCode: openWeatherIdToWmo(primaryOpenWeatherId(item.weather)),
     pop: item.pop ?? 0,
+    humidityPct: item.main?.humidity ?? null,
+    windSpeedMs: item.wind?.speed ?? null,
   }));
 
   if (daily.length === 0) {
@@ -326,6 +363,8 @@ async function fetchCompositeForecast(
       uvi: null,
       sunrise: currentData.sys?.sunrise ?? forecastData.city?.sunrise ?? 0,
       sunset: currentData.sys?.sunset ?? forecastData.city?.sunset ?? 0,
+      popMax: hourly[0]?.pop ?? null,
+      windSpeedMaxMs: currentData.wind?.speed ?? null,
     });
   } else {
     daily[0]!.sunrise = currentData.sys?.sunrise ?? forecastData.city?.sunrise ?? 0;
@@ -345,6 +384,10 @@ async function fetchCompositeForecast(
       uvi: null,
       sunrise: currentData.sys?.sunrise ?? daily[0]?.sunrise ?? 0,
       sunset: currentData.sys?.sunset ?? daily[0]?.sunset ?? 0,
+      humidityPct: currentData.main?.humidity ?? null,
+      windSpeedMs: currentData.wind?.speed ?? null,
+      windGustMs: currentData.wind?.gust ?? null,
+      precipitationProbability: hourly[0]?.pop ?? null,
     },
     daily,
     hourly,

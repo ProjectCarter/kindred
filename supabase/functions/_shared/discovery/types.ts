@@ -169,6 +169,8 @@ export type DiscoveryRankingContext = {
   recentKeys?: string[];
   /** Structured weather signals from WeatherProvider — optional enrichment. */
   weatherIntel?: import("../weather/providers/types.ts").WeatherIntelligence | null;
+  /** NPS parks near the reader — become hiking / scenic discovery candidates. */
+  npsParks?: import("../nps/types.ts").NpsParkRecord[];
   /** Local events from the edition — become discovery candidates. */
   localEvents?: Array<{
     name: string;

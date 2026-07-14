@@ -39,6 +39,11 @@ import {
   weatherSourceAttribution,
 } from "./weather/providers/index.ts";
 import {
+  getNpsParksForEdition,
+  isNpsConfigured,
+  topNpsPlanningNote,
+} from "./nps/index.ts";
+import {
   formatTempC,
   formatWeatherSummary,
   resolveTemperatureUnit,
@@ -512,6 +517,7 @@ export async function buildEditionForUser(
     EVENTS_API_KEY: Boolean(Deno.env.get("EVENTS_API_KEY")),
     FOURSQUARE_API_KEY: Boolean(Deno.env.get("FOURSQUARE_API_KEY")),
     OPENWEATHER_API_KEY: isOpenWeatherConfigured(),
+    NPS_API_KEY: isNpsConfigured(),
   });
 
   if (!newsApiKey || !anthropicApiKey) {
@@ -720,7 +726,17 @@ export async function buildEditionForUser(
     hasAlerts: Boolean(weatherIntel?.hasActiveAlerts),
     bucket: weatherIntel?.bucket ?? null,
     airQuality: Boolean(weatherForecast?.airQuality),
+    planningNote: weatherIntel?.planningNote?.slice(0, 60) ?? null,
   });
+
+  const npsParks = await timer.timed("NPS Parks", () =>
+    getNpsParksForEdition(
+      supabaseAdmin,
+      { lat: weatherLat, lon: weatherLon, state },
+      weatherIntel
+    )
+  );
+  const banditPlanningNote = topNpsPlanningNote(npsParks, weatherIntel);
 
   // Bandit's Pick candidate selection is pure CPU over the already-scored
   // news pool plus verified local places/events (raw, pre-AI-enrichment —
@@ -744,6 +760,7 @@ export async function buildEditionForUser(
     favoriteSources: personalization.favoriteSources,
     weatherSummary,
     weatherIntel,
+    npsParks,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localPlaces,
@@ -920,6 +937,7 @@ export async function buildEditionForUser(
     favoriteSources: personalization.favoriteSources,
     weatherSummary,
     weatherIntel,
+    npsParks,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localEvents,
@@ -1343,6 +1361,7 @@ export async function buildEditionForUser(
           location: { city, region, state },
           weatherSummary,
           weather: { currentTempC: weather?.current?.temperature_2m ?? null },
+          planningNote: banditPlanningNote,
           signals: {
             hasBreakingNews: editorialContext.signals.hasBreakingNews,
             hasLocalEvents: editorialContext.signals.hasLocalEvents,

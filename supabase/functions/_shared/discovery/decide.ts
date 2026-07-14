@@ -3,6 +3,7 @@ import {
   localEventsAsDiscoveryItems,
   localPlacesAsDiscoveryItems,
 } from "./catalog.ts";
+import { npsParksAsDiscoveryItems } from "../nps/catalog.ts";
 import { scoreDiscoveryItem } from "./score.ts";
 import {
   formatDiscoveryBrief,
@@ -75,6 +76,7 @@ export function runDiscoveryDecisions(
     ...DISCOVERY_SEED_CATALOG,
     ...localEventsAsDiscoveryItems(ctx.localEvents ?? []),
     ...localPlacesAsDiscoveryItems(ctx.localPlaces ?? []),
+    ...npsParksAsDiscoveryItems(ctx.npsParks ?? []),
   ];
 
   const ranked = catalog

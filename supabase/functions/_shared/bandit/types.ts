@@ -116,6 +116,8 @@ export type BanditComposeInput = {
     state?: string | null;
   };
   weatherSummary?: string | null;
+  /** Weather + NPS editorial planning hint — for notes/grounding, not the morning line. */
+  planningNote?: string | null;
   /** Raw fact only, never AI prose — feeds the deterministic weather-mood line. */
   weather?: { currentTempC: number | null } | null;
   signals?: {
