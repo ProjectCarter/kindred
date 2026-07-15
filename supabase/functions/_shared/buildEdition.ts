@@ -1739,7 +1739,7 @@ export async function buildEditionForUser(
       position: 3,
       headline: "A Few Things Happening Around Town",
       body: buildLocalEventsBody(localEvents),
-      source_note: "Sourced from Google Events",
+      source_note: "Curated from trusted local event sources",
     });
   }
 

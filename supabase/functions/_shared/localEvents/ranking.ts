@@ -11,6 +11,25 @@ import {
   venueHayFromParts,
 } from "../editorial/venueQuality.ts";
 import type { LocalEvent } from "./provider.ts";
+import { trustScoreForSource } from "./sources/types.ts";
+
+const SEASONAL_PATTERN =
+  /\b(festival|fair|parade|farmers market|holiday|seasonal|summer concert|winter|spring|autumn|harvest|christmas|halloween|fourth of july|memorial day|labor day)\b/i;
+
+const UNIQUE_PATTERN =
+  /\b(first annual|one.?night only|limited|premiere|opening night|debut|exclusive|only|rare|unique)\b/i;
+
+const EDUCATIONAL_PATTERN =
+  /\b(workshop|lecture|class|learn|science|history|museum|gallery|author talk|storytime|guided tour|demonstration|planetarium)\b/i;
+
+const COMMUNITY_PATTERN =
+  /\b(community|neighborhood|local|charity|fundraiser|volunteer|town hall|civic|nonprofit|benefit)\b/i;
+
+const RECURRING_FAVORITE_PATTERN =
+  /\b(annual|tradition|every (year|month|week)|recurring|classic|beloved|staple)\b/i;
+
+const DRIVE_WORTHY_PATTERN =
+  /\b(amphitheater|arena|stadium|botanical|zoo|aquarium|state park|national park|symphony|broadway|headliner)\b/i;
 
 const OUTDOOR_EVENT_PATTERN =
   /\b(festival|farmers market|outdoor|concert|marathon|race|parade|fair|market|5k|10k|park|garden tour|food truck|block party|street fair|amphitheater|tailgate|soccer|baseball)\b/i;
@@ -59,7 +78,37 @@ function completenessScore(event: LocalEvent): number {
     score += 6;
   }
   if (event.banditNote?.trim()) score += 3;
-  if (event.imageUrl?.trim()) score += 1;
+  if (event.imageUrl?.trim()) score += 3;
+  if (event.sourceTier === "official") score += 8;
+  else if (event.sourceTier === "venue") score += 4;
+  else score += trustScoreForSource(event.sourceId) >= 90 ? 6 : 0;
+  return score;
+}
+
+function discoveryEditorialAdjustments(event: LocalEvent): number {
+  let score = 0;
+  const hay = venueHayFromParts([event.name, event.venue, event.category, event.sourceName]);
+
+  if (SEASONAL_PATTERN.test(hay)) score += 6;
+  if (UNIQUE_PATTERN.test(hay)) score += 5;
+  if (event.category === "family") score += 5;
+  if (event.badges?.includes("free")) score += 6;
+  if (COMMUNITY_PATTERN.test(hay)) score += 4;
+  if (RECURRING_FAVORITE_PATTERN.test(hay)) score += 3;
+  if (EDUCATIONAL_PATTERN.test(hay)) score += 4;
+  if (DRIVE_WORTHY_PATTERN.test(hay)) score += 4;
+  if (/\b(concert|market|food truck|art walk|block party)\b/i.test(hay)) score += 3;
+
+  // Popularity alone should not dominate — slight penalty for generic aggregators
+  // with thin detail when an official source would read better.
+  if (
+    event.sourceTier === "aggregator" &&
+    isGenericEventTitle(event.name) &&
+    !(event.imageUrl?.trim())
+  ) {
+    score -= 4;
+  }
+
   return score;
 }
 
@@ -106,6 +155,7 @@ export function scoreLocalEventForEdition(
     timelinessScore(event.startDateTime, now) +
     completenessScore(event) +
     editorialQualityAdjustments(event) +
+    discoveryEditorialAdjustments(event) +
     weatherAdjustment(event, options?.weatherIntel)
   );
 }

@@ -12,6 +12,7 @@ import {
   type EventInfoBadgeId,
 } from "./badgeResolver.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
+import { mergeEventsFromSources } from "./merge.ts";
 import {
   SERPAPI_CANDIDATE_CAP,
   SERPAPI_MAX_PAGES,
@@ -54,6 +55,10 @@ export type LocalEvent = {
   category?: LocalEventCategory;
   /** Utility badges inferred from listing signals — structured, not decorative. */
   badges?: EventInfoBadgeId[];
+  /** Connector that surfaced this listing. */
+  sourceId?: string;
+  /** Trust tier for merge priority and ranking. */
+  sourceTier?: "official" | "venue" | "aggregator";
   /** Server-only parse context for badge re-resolution — never serialized. */
   badgeSignals?: EventBadgeSignals;
 };
@@ -166,105 +171,36 @@ export type LocalEventsPipelineProbe = {
   rawResponseSample: unknown;
 };
 
-/** Strip filler words so near-duplicate titles compare on the words that matter. */
-function significantWords(name: string): Set<string> {
-  const stop = new Set([
-    "the",
-    "a",
-    "an",
-    "at",
-    "in",
-    "on",
-    "of",
-    "and",
-    "with",
-    "to",
-    "for",
-  ]);
-  return new Set(
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 2 && !stop.has(w))
-  );
-}
-
-function wordOverlap(a: Set<string>, b: Set<string>): number {
-  if (!a.size || !b.size) return 0;
-  let shared = 0;
-  for (const w of a) if (b.has(w)) shared += 1;
-  return shared / Math.min(a.size, b.size);
-}
-
-/**
- * Exact key match catches the common case (same listing re-fetched across
- * pages); fuzzy title comparison at the same venue catches near-duplicates
- * the provider lists slightly differently (e.g. "Live Jazz at The Room" vs
- * "Jazz Night — The Room"), without discarding genuinely different events
- * that just happen to recur at the same address on different nights.
- */
 function dedupeEvents(events: LocalEvent[]): LocalEvent[] {
-  const seen = new Set<string>();
-  const out: LocalEvent[] = [];
-  const wordsByVenue = new Map<string, Set<string>[]>();
+  return mergeEventsFromSources([events]);
+}
 
-  for (const e of events) {
-    const venueKey = e.venue.toLowerCase().trim();
-    const scheduleKey = e.startDateTime.toLowerCase().trim();
-    const key = `${e.name.toLowerCase().trim()}__${venueKey}__${scheduleKey}`;
-    if (seen.has(key)) {
-      if (Deno.env.get("DENO_ENV") !== "production") {
-        console.log("[localEvents] dedupe removed exact duplicate", {
-          name: e.name.slice(0, 60),
-          venue: e.venue,
-          startDateTime: e.startDateTime,
-        });
-      }
-      continue;
-    }
-
-    const words = significantWords(e.name);
-    const existingAtVenue = wordsByVenue.get(venueKey) ?? [];
-    const isFuzzyDuplicate = existingAtVenue.some(
-      (other) => wordOverlap(words, other) >= 0.75
-    );
-    if (isFuzzyDuplicate) {
-      if (Deno.env.get("DENO_ENV") !== "production") {
-        console.log("[localEvents] dedupe removed fuzzy duplicate", {
-          name: e.name.slice(0, 60),
-          venue: e.venue,
-          startDateTime: e.startDateTime,
-        });
-      }
-      continue;
-    }
-
-    seen.add(key);
-    existingAtVenue.push(words);
-    wordsByVenue.set(venueKey, existingAtVenue);
-    out.push(e);
-  }
-  return out;
+function targetCandidateCount(isBusyDay?: boolean): number {
+  return isBusyDay ? CANDIDATE_CAP : Math.max(32, Math.round(CANDIDATE_CAP * 0.65));
 }
 
 /**
- * Provider-agnostic local events fetch.
- * V1 adapter: SerpApi Google Events.
- * Prefers photograph-backed listings so the homepage grid can feel alive.
+ * Provider-agnostic local events fetch — runs the multi-source editorial pipeline.
  */
 export async function getLocalEvents(
   location: LocalEventLocation,
   options?: LocalEventsFetchOptions
 ): Promise<LocalEvent[]> {
+  const { getLocalEventsFromPipeline } = await import("./pipeline.ts");
+  return getLocalEventsFromPipeline(location, options);
+}
+
+/**
+ * SerpAPI Google Events — raw candidates before cross-source merge and rank.
+ */
+export async function fetchSerpGoogleEventCandidates(
+  location: LocalEventLocation,
+  options?: LocalEventsFetchOptions
+): Promise<LocalEvent[]> {
   const apiKey = Deno.env.get("EVENTS_API_KEY");
   if (!apiKey) {
-    console.log("[localEvents] getLocalEvents", {
-      provider: "SerpApi Google Events",
-      skipped: true,
+    console.log("[localEvents] serp gather skipped", {
       reason: "EVENTS_API_KEY not set",
-      rawEventCount: 0,
-      filteredCount: 0,
     });
     return [];
   }
@@ -272,11 +208,8 @@ export async function getLocalEvents(
   try {
     return await fetchLocalEventsFromSerpApi(location, apiKey, options);
   } catch (err) {
-    console.error("[localEvents] getLocalEvents provider failure", {
-      provider: "SerpApi Google Events",
+    console.error("[localEvents] serp gather failed", {
       error: err instanceof Error ? err.message : String(err),
-      rawEventCount: 0,
-      filteredCount: 0,
     });
     return [];
   }
@@ -423,7 +356,7 @@ export async function probeLocalEventsPipeline(
   let rawEventsTotal = 0;
   let rawResponseSample: unknown = null;
 
-  const first = await fetchEventsPageWithProbe(cityQuery, apiKey, 0, htichips);
+  const first = await fetchEventsPageWithProbe(cityQuery, apiKey, 0, htichips ?? undefined);
   pages.push({
     start: 0,
     httpStatus: first.httpStatus,
@@ -451,7 +384,7 @@ export async function probeLocalEventsPipeline(
       cityQuery,
       apiKey,
       pagesFetched * RESULTS_PER_PAGE,
-      htichips
+      htichips ?? undefined
     );
     pages.push({
       start: pagesFetched * RESULTS_PER_PAGE,
@@ -874,6 +807,8 @@ function parseCandidatesWithStats(
       city: displayCity,
       sourceUrl,
       sourceName,
+      sourceId: "serp_google_events",
+      sourceTier: "aggregator",
       imageUrl,
       imageSource: imageUrl ? "provider_thumbnail" : null,
       category,
@@ -934,8 +869,9 @@ async function fetchLocalEventsFromSerpApi(
   // A quiet town's first page can easily fall short of the target — only
   // pay for a second page when we actually need more material.
   let pagesFetched = 1;
+  const targetCandidates = targetCandidateCount(options?.isBusyDay);
   while (
-    candidates.length < targetEvents &&
+    candidates.length < targetCandidates &&
     rawEvents.length >= RESULTS_PER_PAGE &&
     pagesFetched < MAX_PAGES &&
     activeStrategy
@@ -956,10 +892,8 @@ async function fetchLocalEventsFromSerpApi(
     ]);
   }
 
-  // Photo-first: the grid needs real photography whenever possible.
-  const ranked = rankLocalEventsForEdition(candidates.slice(0, CANDIDATE_CAP));
-
-  console.log("[localEvents] getLocalEvents filtered", {
+  // Return candidates — cross-source merge and final rank happen in pipeline.ts.
+  console.log("[localEvents] serp gather complete", {
     provider: "SerpApi Google Events",
     cityQuery,
     state: location.state ?? null,
@@ -977,13 +911,13 @@ async function fetchLocalEventsFromSerpApi(
           activeStrategy.htichips !== "date:week")
     ),
     pagesFetched,
+    targetCandidates,
     candidateCap: CANDIDATE_CAP,
     candidateCount: candidates.length,
-    publishedCount: ranked.length,
-    eventsWithImages: ranked.filter((e) => Boolean(e.imageUrl)).length,
+    eventsWithImages: candidates.filter((e) => Boolean(e.imageUrl)).length,
   });
 
-  return ranked;
+  return candidates.slice(0, CANDIDATE_CAP);
 }
 
 /**

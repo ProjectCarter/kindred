@@ -1,0 +1,49 @@
+# Kindred Local Events Discovery Engine
+
+Kindred is not trying to list every event. Kindred discovers the **best**
+events before anyone else and presents them in a calm, beautiful newspaper.
+
+The reader goal: *"I had no idea this was happening near me."*
+
+## Trusted source network
+
+Build connectors for official and semi-official sources — city calendars,
+parks & recreation, libraries, museums, tourism bureaus, universities, NPS,
+Eventbrite, Ticketmaster, AXS, Fever, and official venue websites.
+
+Registry: `supabase/functions/_shared/localEvents/sources/types.ts`
+
+Active connectors expand over time; inactive sources are documented for future wiring.
+
+## Editorial pipeline (every edition build)
+
+1. Gather from all enabled connectors
+2. Remove duplicates (prefer official > venue > aggregator)
+3. Normalize dates, URLs, and provenance
+4. Rank by editorial quality and relevance — not raw popularity
+5. Publish events meeting the quality threshold
+
+Orchestrator: `supabase/functions/_shared/localEvents/pipeline.ts`
+
+## Editorial ranking favors
+
+Unique, seasonal, family-friendly, community-focused, free, educational,
+visually interesting, outdoor-suitable (weather-aware), and worth driving to.
+
+Do not rank by popularity alone. Think like an experienced newspaper editor.
+
+## Images
+
+Prefer authentic listing photography from providers. Never invent facts from photos.
+Genre fallbacks on the client are last resort only when the provider supplies nothing.
+
+## Implementation map
+
+| Stage | Module |
+| --- | --- |
+| SerpAPI Google Events | `localEvents/provider.ts` |
+| NPS park programs | `localEvents/sources/npsParkEvents.ts` |
+| Merge / dedupe | `localEvents/merge.ts` |
+| Normalize | `localEvents/normalize.ts` |
+| Rank | `localEvents/ranking.ts` |
+| Entry | `getLocalEvents()` → pipeline |
