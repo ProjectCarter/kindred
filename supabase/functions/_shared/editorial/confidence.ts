@@ -96,9 +96,13 @@ export function isPlaceLikeDiscoveryItem(item: DiscoveryItem): boolean {
 }
 
 function hasOfficialWebsite(item: DiscoveryItem): boolean {
+  if (item.officialWebsite?.trim()) return true;
   const url = (item.url ?? item.source.url ?? "").trim();
   if (!url) return false;
   if (/foursquare\.com|google\.com\/maps|yelp\.com|tripadvisor/i.test(url)) {
+    return false;
+  }
+  if (/\b(ticketmaster|eventbrite|axs|dice\.fm|seatgeek|stubhub)\b/i.test(url)) {
     return false;
   }
   return true;

@@ -37,9 +37,16 @@ function eventQualityRank(event: LocalEvent): number {
 function pickPreferred(existing: LocalEvent, incoming: LocalEvent): LocalEvent {
   const existingRank = eventQualityRank(existing);
   const incomingRank = eventQualityRank(incoming);
-  if (incomingRank > existingRank) return incoming;
-  if (incomingRank < existingRank) return existing;
-  return (incoming.imageUrl && !existing.imageUrl) ? incoming : existing;
+  let winner: LocalEvent;
+  if (incomingRank > existingRank) winner = incoming;
+  else if (incomingRank < existingRank) winner = existing;
+  else winner = (incoming.imageUrl && !existing.imageUrl) ? incoming : existing;
+
+  const loser = winner === existing ? incoming : existing;
+  const officialWebsite =
+    winner.officialWebsite?.trim() || loser.officialWebsite?.trim() || null;
+
+  return officialWebsite ? { ...winner, officialWebsite } : winner;
 }
 
 /**

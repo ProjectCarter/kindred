@@ -7,12 +7,14 @@
 import type { LocalEvent, LocalEventLocation } from "../provider.ts";
 import { inferEventCategory } from "../provider.ts";
 import { isEventbriteOnlyMode } from "../eventbriteOnlyMode.ts";
+import { pickOfficialWebsiteFromUrls } from "../officialWebsite.ts";
 
 const USER_AGENT =
   "Mozilla/5.0 (compatible; Kindred/1.0; +https://kindred.app)";
 
 type EventbriteVenue = {
   name?: string;
+  website?: string;
   address?: {
     city?: string;
     region?: string;
@@ -29,6 +31,11 @@ type EventbriteServerEvent = {
   start_time?: string;
   image?: { url?: string };
   primary_venue?: EventbriteVenue;
+  primary_organizer?: {
+    website?: string;
+    website_url?: string;
+    url?: string;
+  };
 };
 
 function listingUrl(city: string, state: string, page = 1): string {
@@ -103,6 +110,15 @@ function formatSchedule(startDate: string | null, startTime: string | null): {
   };
 }
 
+function organizerWebsite(row: EventbriteServerEvent): string | null {
+  return pickOfficialWebsiteFromUrls([
+    row.primary_organizer?.website_url,
+    row.primary_organizer?.website,
+    row.primary_organizer?.url,
+    row.primary_venue?.website,
+  ]);
+}
+
 function parseServerDataEvents(html: string): Array<{
   name: string;
   city: string;
@@ -113,6 +129,7 @@ function parseServerDataEvents(html: string): Array<{
   imageUrl: string | null;
   lat: number | null;
   lon: number | null;
+  officialWebsite: string | null;
 }> {
   const data = extractServerData(html) as {
     search_data?: { events?: { results?: EventbriteServerEvent[] } };
@@ -171,6 +188,7 @@ function parseServerDataEvents(html: string): Array<{
       imageUrl: row.image?.url?.replace(/&amp;/g, "&") ?? null,
       lat: Number.isFinite(lat) ? lat : null,
       lon: Number.isFinite(lon) ? lon : null,
+      officialWebsite: organizerWebsite(row),
     });
   }
 
@@ -211,6 +229,7 @@ function parseListingCards(html: string): ReturnType<typeof parseServerDataEvent
       imageUrl: imageMatch?.[1]?.replace(/&amp;/g, "&") ?? null,
       lat: null,
       lon: null,
+      officialWebsite: null,
     });
   }
 
@@ -285,6 +304,7 @@ export async function fetchEventbriteSearchCandidates(
         sourceName: "Eventbrite",
         sourceId: "eventbrite",
         sourceTier: "aggregator",
+        ...(card.officialWebsite ? { officialWebsite: card.officialWebsite } : {}),
         imageUrl: card.imageUrl,
         imageSource: card.imageUrl ? "provider_thumbnail" : null,
         lat: card.lat,

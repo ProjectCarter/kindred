@@ -7,6 +7,7 @@ import { KINDRED_LOCAL_RADIUS_KM } from "../../editorial/editorialStandard.ts";
 import type { LocalEvent, LocalEventLocation } from "../provider.ts";
 import { inferEventCategory } from "../provider.ts";
 import { buildEventBadgeSignals, resolveEventBadges } from "../badgeResolver.ts";
+import { normalizeOfficialWebsite } from "../officialWebsite.ts";
 
 function formatNpsSchedule(begin: string | null, end: string | null): string {
   const start = begin?.trim();
@@ -47,6 +48,7 @@ export async function fetchNpsParkEvents(
       const venue = park.fullName;
       const startDateTime = formatNpsSchedule(event.beginDate, event.endDate);
       const sourceUrl = event.url?.trim() || park.url;
+      const officialWebsite = normalizeOfficialWebsite(sourceUrl);
       const category = inferEventCategory(name, venue);
       const badgeSignals = buildEventBadgeSignals({
         name,
@@ -73,6 +75,7 @@ export async function fetchNpsParkEvents(
         sourceName: "National Park Service",
         sourceId: "nps_park_events",
         sourceTier: "official",
+        ...(officialWebsite ? { officialWebsite } : {}),
         imageUrl: park.imageUrl,
         imageSource: park.imageUrl ? "provider_thumbnail" : null,
         category,

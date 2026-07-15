@@ -19,6 +19,7 @@ import {
 } from "../editorial/publishing.ts";
 import { attachEventHorizon } from "./horizon.ts";
 import { buildEditorialDiscoveryStrategies } from "./searchStrategies.ts";
+import { pickOfficialWebsiteFromUrls } from "./officialWebsite.ts";
 
 export type LocalEventLocation = {
   lat: number;
@@ -51,6 +52,8 @@ export type LocalEvent = {
   city: string;
   sourceUrl: string;
   sourceName: string;
+  /** Organizer or venue official site — never a ticket aggregator listing. */
+  officialWebsite?: string | null;
   /** Authentic listing photograph when the provider supplies one. */
   imageUrl?: string | null;
   /** Provenance for the photograph — never invent stock heroes. */
@@ -794,7 +797,12 @@ function parseCandidatesWithStats(
 
     const ticketMeta = parseSerpTicketInfo(event.ticket_info);
     const ticket = event.ticket_info?.[0];
-    const sourceUrl = ticket?.link?.trim() || event.link?.trim() || "";
+    const ticketLinks = (event.ticket_info ?? [])
+      .map((entry) => entry.link?.trim())
+      .filter((link): link is string => Boolean(link));
+    const eventLink = event.link?.trim() || null;
+    const officialWebsite = pickOfficialWebsiteFromUrls([...ticketLinks, eventLink]);
+    const sourceUrl = ticket?.link?.trim() || eventLink || "";
     if (!sourceUrl) {
       rejectedNoSource += 1;
       noteRejection("no_source", name, venue, cityFromAddress || cityQuery);
@@ -856,6 +864,7 @@ function parseCandidatesWithStats(
       city: displayCity,
       sourceUrl,
       sourceName,
+      ...(officialWebsite ? { officialWebsite } : {}),
       sourceId: "serp_google_events",
       sourceTier: "aggregator",
       imageUrl,
@@ -1096,6 +1105,9 @@ export function buildLocalEventsBody(
         city: enriched.city,
         sourceUrl: enriched.sourceUrl,
         sourceName: enriched.sourceName,
+        ...(enriched.officialWebsite?.trim()
+          ? { officialWebsite: enriched.officialWebsite.trim() }
+          : {}),
         ...(enriched.sourceId ? { sourceId: enriched.sourceId } : {}),
         imageUrl: enriched.imageUrl?.trim() || null,
         imageSource: enriched.imageUrl ? enriched.imageSource ?? "provider_thumbnail" : null,

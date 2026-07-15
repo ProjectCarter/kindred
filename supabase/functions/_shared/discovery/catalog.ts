@@ -5,12 +5,29 @@ import {
   isScenicOrHiddenGem,
   venueHayFromParts,
 } from "../editorial/venueQuality.ts";
+import { isUsableStreetAddress } from "../places/addressValidation.ts";
+import {
+  normalizeOfficialWebsite,
+  pickOfficialWebsiteFromUrls,
+} from "../editorial/officialWebsite.ts";
+
+function sanitizeAddressForDisplay(
+  address: string | null | undefined
+): string | null {
+  const line = address?.trim();
+  if (!line) return null;
+  return isUsableStreetAddress(line) ? line : null;
+}
 
 function item(
   partial: Omit<DiscoveryItem, "family"> & { family?: DiscoveryItem["family"] }
 ): DiscoveryItem {
+  const officialWebsite =
+    normalizeOfficialWebsite(partial.officialWebsite) ??
+    pickOfficialWebsiteFromUrls([partial.url, partial.source?.url]);
   return {
     ...partial,
+    ...(officialWebsite ? { officialWebsite } : {}),
     family: partial.family ?? CATEGORY_FAMILY[partial.category],
   };
 }
@@ -638,6 +655,7 @@ export function localEventsAsDiscoveryItems(
     city: string;
     sourceUrl?: string;
     sourceName?: string;
+    officialWebsite?: string | null;
   }>
 ): DiscoveryItem[] {
   return events.map((e, i) => {
@@ -667,6 +685,7 @@ export function localEventsAsDiscoveryItems(
         url: e.sourceUrl ?? null,
       },
       url: e.sourceUrl ?? null,
+      officialWebsite: e.officialWebsite ?? null,
       tags: ["local_event", "local"],
       seasons: ["anytime"],
       weatherFit: ["any"],
@@ -729,6 +748,7 @@ export function localPlacesAsDiscoveryItems(
     address: string | null;
     city: string | null;
     url: string | null;
+    officialWebsite?: string | null;
     lat?: number | null;
     lon?: number | null;
     note?: string | null;
@@ -760,16 +780,17 @@ export function localPlacesAsDiscoveryItems(
       title: p.name,
       dek:
         p.note?.trim() ||
-        [p.address, p.city].filter(Boolean).join(" — ") ||
+        [sanitizeAddressForDisplay(p.address), p.city].filter(Boolean).join(" — ") ||
         "A local place worth a closer look.",
       category,
-      place: { city: p.city ?? null },
+      place: { city: p.city ?? null, state: p.state ?? null },
       source: {
         name: "Foursquare",
         tier: "local",
         url: p.url ?? null,
       },
       url: p.url ?? null,
+      officialWebsite: p.officialWebsite ?? null,
       address: p.address ?? null,
       lat: p.lat ?? null,
       lon: p.lon ?? null,

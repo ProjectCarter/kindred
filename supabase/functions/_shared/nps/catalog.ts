@@ -1,12 +1,17 @@
 import type { DiscoveryItem } from "../discovery/types.ts";
 import { CATEGORY_FAMILY } from "../discovery/taxonomy.ts";
 import type { NpsParkRecord } from "./types.ts";
+import { normalizeOfficialWebsite, pickOfficialWebsiteFromUrls } from "../editorial/officialWebsite.ts";
 
 function discoveryItem(
   partial: Omit<DiscoveryItem, "family"> & { family?: DiscoveryItem["family"] }
 ): DiscoveryItem {
+  const officialWebsite =
+    normalizeOfficialWebsite(partial.officialWebsite) ??
+    pickOfficialWebsiteFromUrls([partial.url, partial.source?.url]);
   return {
     ...partial,
+    ...(officialWebsite ? { officialWebsite } : {}),
     family: partial.family ?? CATEGORY_FAMILY[partial.category],
   };
 }
@@ -53,6 +58,7 @@ export function npsParksAsDiscoveryItems(parks: NpsParkRecord[]): DiscoveryItem[
         url: park.url,
       },
       url: park.url,
+      officialWebsite: normalizeOfficialWebsite(park.url),
       lat: park.lat,
       lon: park.lon,
       providerConfidence: park.confidence,

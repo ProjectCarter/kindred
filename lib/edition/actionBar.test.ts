@@ -105,12 +105,26 @@ function npsParkItem(): DiscoveryItem {
 }
 
 describe("Universal Action Bar", () => {
-  it("paid event article surfaces Buy Tickets and Open in Maps without Share", () => {
-    const actions = resolveEventArticleActions(paidEvent());
+  it("paid event article surfaces Open in Maps, Official Website, then Buy Tickets", () => {
+    const event: LocalEventCard = {
+      ...paidEvent(),
+      sourceUrl: "https://www.eventbrite.com/e/summer-concert-123",
+      sourceName: "Eventbrite",
+      officialWebsite: "https://www.desertbotanical.org/events",
+      lat: 33.4617,
+      lon: -111.9446,
+    };
+    const actions = resolveEventArticleActions(event);
     expect(actions.map((a) => a.label)).toEqual([
-      "Buy Tickets",
       "Open in Maps",
+      "Official Website",
+      "Buy Tickets",
     ]);
+  });
+
+  it("paid event without official website surfaces Buy Tickets only when location is unverified", () => {
+    const actions = resolveEventArticleActions(paidEvent());
+    expect(actions.map((a) => a.label)).toEqual(["Buy Tickets"]);
     expect(actions.some((a) => a.label === "Share")).toBe(false);
   });
 
@@ -146,6 +160,26 @@ describe("Universal Action Bar", () => {
     expect(isThirdPartyTicketUrl(urls.ticketUrl)).toBe(true);
   });
 
+  it("explicit officialWebsite appears beneath Open in Maps for ticketed listings", () => {
+    const event: LocalEventCard = {
+      ...paidEvent(),
+      sourceUrl: "https://www.eventbrite.com/e/summer-concert-123",
+      sourceName: "Eventbrite",
+      officialWebsite: "https://www.desertbotanical.org/events",
+      lat: 33.4617,
+      lon: -111.9446,
+    };
+    const actions = resolveEventArticleActions(event);
+    expect(actions.map((a) => a.label)).toEqual([
+      "Open in Maps",
+      "Official Website",
+      "Buy Tickets",
+    ]);
+    expect(actions.find((a) => a.id === "website")?.url).toBe(
+      "https://www.desertbotanical.org/events"
+    );
+  });
+
   it("legacy resolveActionsForLocalEvent with includeSave adds save and share", () => {
     const actions = resolveActionsForLocalEvent(paidEvent());
     expect(actions.some((a) => a.label === "Share")).toBe(true);
@@ -161,15 +195,15 @@ describe("Universal Action Bar", () => {
     expect(actions.some((a) => a.label === "Open in Maps")).toBe(true);
   });
 
-  it("restaurant surfaces menu, Google Maps, website, and call when provider data exists", () => {
+  it("restaurant surfaces Maps, Official Website, menu, and call when provider data exists", () => {
     const actions = resolveActionsForRecommendation(restaurantItem(), {
       includeSave: false,
     });
     expect(actions.map((a) => a.label)).toEqual(
       expect.arrayContaining([
-        "View Menu",
         GOOGLE_MAPS_ACTION_LABEL,
         "Official Website",
+        "View Menu",
         "Call",
         "Share",
       ])
@@ -183,23 +217,36 @@ describe("Universal Action Bar", () => {
       includeSave: false,
     });
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
-    expect(actions.some((a) => a.label === "Website")).toBe(false);
+    expect(actions.some((a) => a.label === "Official Website")).toBe(false);
     expect(isThirdPartyListingUrl(coffeeItem().url)).toBe(true);
   });
 
-  it("museum surfaces museum website and Google Maps", () => {
+  it("discovery item with explicit officialWebsite surfaces Official Website", () => {
+    const item: DiscoveryItem = {
+      ...coffeeItem(),
+      url: "https://foursquare.com/v/joes-coffee/abc",
+      officialWebsite: "https://www.joescoffee.example",
+    };
+    const actions = resolveActionsForActivity(item, { includeSave: false });
+    expect(actions.some((a) => a.label === "Official Website")).toBe(true);
+    expect(
+      actions.find((a) => a.id === "website")?.url
+    ).toBe("https://www.joescoffee.example");
+  });
+
+  it("museum surfaces Official Website and Google Maps", () => {
     const actions = resolveActionsForRecommendation(museumItem(), {
       includeSave: false,
     });
-    expect(actions.some((a) => a.label === "Museum Website")).toBe(true);
+    expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
   });
 
-  it("national park surfaces NPS page and Google Maps", () => {
+  it("national park surfaces Official Website and Google Maps", () => {
     const actions = resolveActionsForRecommendation(npsParkItem(), {
       includeSave: false,
     });
-    expect(actions.some((a) => a.label === "NPS Page")).toBe(true);
+    expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
     const maps = actions.find((a) => a.id === "maps");
     expect(maps?.url).toContain(encodeURIComponent("Yosemite National Park, CA"));
@@ -219,7 +266,7 @@ describe("Universal Action Bar", () => {
     expect(actions.some((a) => a.label === "Call")).toBe(false);
   });
 
-  it("Bandit's Pick surfaces Learn More and Google Maps when URLs exist", () => {
+  it("Bandit's Pick surfaces Official Website and Open in Maps when URLs exist", () => {
     const actions = resolveActionsForBanditsPick({
       url: "https://www.nps.gov/yose/planyourvisit/trails.htm",
       mapsDestination: {
@@ -228,7 +275,7 @@ describe("Universal Action Bar", () => {
       },
       includeSave: false,
     });
-    expect(actions.some((a) => a.label === "Learn More")).toBe(true);
+    expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
     expect(buildMapsUrl("Yosemite National Park, CA")).toContain(
       "google.com/maps/search"

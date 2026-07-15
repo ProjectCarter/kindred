@@ -4,6 +4,9 @@
  * Every future recommendation surface should use this same engine.
  */
 
+import { isInternalScoreLabel } from "./contentQuality";
+import { containsEngineLanguage } from "./editorialVoice";
+
 export type DiscoverySurface =
   | "bandits_picks"
   | "weekend_ideas"
@@ -64,6 +67,8 @@ export type DiscoveryItem = {
     url?: string | null;
   };
   url?: string | null;
+  /** Organizer or venue official site — never a listing aggregator. */
+  officialWebsite?: string | null;
   /** Verified street address (local places only) — never fabricated. */
   address?: string | null;
   /** Provider-supplied phone when available — never fabricated. */
@@ -113,6 +118,8 @@ export type DiscoveryPayload = {
     city: string | null;
     region: string | null;
     state: string | null;
+    lat?: number | null;
+    lon?: number | null;
   };
   surfaces: Partial<Record<DiscoverySurface, DiscoverySurfaceResult>>;
   picks: Array<{
@@ -177,8 +184,18 @@ export function discoveryItemsForSurface(
  * it should always factor into ranking — showing it as a "why" would make
  * nearly every card's caption open with the same line.
  */
-const GENERIC_REASON_CODES = new Set(["editorial_quality"]);
+const GENERIC_REASON_CODES = new Set([
+  "editorial_quality",
+  "trusted_source",
+  "reader_interest",
+  "followed_topic",
+  "favorite_source",
+]);
 
+/**
+ * Never surface scoring rationale to readers — the dek and article carry
+ * the editorial voice. Return empty when only engine reasons exist.
+ */
 export function formatDiscoveryWhy(item: RankedDiscoveryItem): string {
   const top = (item.reasons ?? [])
     .filter(
@@ -189,14 +206,12 @@ export function formatDiscoveryWhy(item: RankedDiscoveryItem): string {
         !GENERIC_REASON_CODES.has(String(r.code)) &&
         typeof r.label === "string" &&
         r.label.trim() &&
-        !/editorial quality|magazine desk|matches what you tend|hand-selected|algorithm|score/i.test(
-          r.label
-        )
+        !isInternalScoreLabel(r.label) &&
+        !containsEngineLanguage(r.label)
     )
     .slice(0, 2)
     .map((r) => r.label);
   if (top.length) return top.join(" · ");
-  if (item.item.place?.city) return `Nearby in ${item.item.place.city}.`;
   return "";
 }
 

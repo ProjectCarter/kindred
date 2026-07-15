@@ -4,6 +4,7 @@
 
 import type { LocalEvent } from "./provider.ts";
 import { inferEventCategory } from "./provider.ts";
+import { normalizeOfficialWebsite } from "./officialWebsite.ts";
 
 const OFFICIAL_URL_PATTERN =
   /\.gov|\.edu|nps\.gov|library|museum|botanical|zoo|aquarium|parks?\.|recreation|visitor|tourism|chamber|arts\.org/i;
@@ -39,6 +40,10 @@ export function normalizeEventRecord(event: LocalEvent): LocalEvent {
   const city = event.city.replace(/\s+/g, " ").trim();
   const sourceUrl = event.sourceUrl.trim();
   const sourceName = event.sourceName.trim() || "Event listing";
+  let officialWebsite = normalizeOfficialWebsite(event.officialWebsite);
+  if (!officialWebsite && event.sourceTier === "official") {
+    officialWebsite = normalizeOfficialWebsite(sourceUrl);
+  }
   const startDateTime = event.startDateTime.replace(/\s+/g, " ").trim() || "Date TBA";
   const category = event.category ?? inferEventCategory(name, venue);
   const sourceId = inferSourceId(event);
@@ -51,6 +56,7 @@ export function normalizeEventRecord(event: LocalEvent): LocalEvent {
     city,
     sourceUrl,
     sourceName,
+    ...(officialWebsite ? { officialWebsite } : {}),
     startDateTime,
     category,
     sourceId,

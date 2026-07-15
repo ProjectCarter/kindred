@@ -81,6 +81,8 @@ export type DiscoveryItem = {
   };
   /** Optional deep link or original article. */
   url?: string | null;
+  /** Organizer or venue official site — never a listing aggregator. */
+  officialWebsite?: string | null;
   /** Verified street address (local places only) — never fabricated. */
   address?: string | null;
   /** Verified coordinates from provider data — never fabricated. */
@@ -141,6 +143,9 @@ export type DiscoveryPayload = {
     city: string | null;
     region: string | null;
     state: string | null;
+    /** Edition center — used for local Recommendations radius. */
+    lat?: number | null;
+    lon?: number | null;
   };
   surfaces: Partial<Record<DiscoverySurface, DiscoverySurfaceResult>>;
   /** Flat list of all selected items for Bandit / AI. */
@@ -193,6 +198,7 @@ export type DiscoveryRankingContext = {
     city: string;
     sourceUrl?: string;
     sourceName?: string;
+    officialWebsite?: string | null;
   }>;
   /**
    * Verified local places (Foursquare today) — become discovery candidates
@@ -232,6 +238,7 @@ export type DiscoveryRankingContext = {
     address: string | null;
     city: string | null;
     url: string | null;
+    officialWebsite?: string | null;
     note?: string | null;
     /** Provider-supplied category names — passed through for richer article grounding. */
     providerCategories?: string[];
