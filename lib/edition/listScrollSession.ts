@@ -45,3 +45,8 @@ export async function loadListScroll(sessionKey: string): Promise<number> {
     return 0;
   }
 }
+
+/** TEMP(Phase One perf): wipe list scroll memory for cold-launch simulation. */
+export function clearAllListScrollSessions(): void {
+  memory.clear();
+}

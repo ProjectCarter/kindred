@@ -57,3 +57,8 @@ export function clearHomeScroll(sessionKey: string): void {
   memory.delete(sessionKey);
   void AsyncStorage.removeItem(storageKey(sessionKey)).catch(() => {});
 }
+
+/** TEMP(Phase One perf): wipe scroll memory for cold-launch simulation. */
+export function clearAllHomeScrollSessions(): void {
+  memory.clear();
+}

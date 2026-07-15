@@ -7,6 +7,7 @@ import {
   Pressable,
   RefreshControl,
 } from "react-native";
+import { clearAppCachesForColdLaunch } from "../lib/perf/clearAppCachesForColdLaunch";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
@@ -293,6 +294,38 @@ export default function LocationSettingsScreen() {
             changing units.
           </Text>
         </View>
+
+        {/* TEMP(Phase One perf): remove before release — simulates a true cold launch. */}
+        {__DEV__ ? (
+          <View style={styles.devBlock}>
+            <Text style={styles.statusLabel}>Developer</Text>
+            <Text style={styles.devHint}>
+              Clears edition cache, scroll position, location prefs, and other
+              newspaper data — you stay signed in. Force-quit and reopen to
+              measure a cold launch.
+            </Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.devAction,
+                busy && styles.disabled,
+                pressed && !busy && styles.pressed,
+              ]}
+              disabled={busy}
+              onPress={() =>
+                void withBusy(async () => {
+                  const result = await clearAppCachesForColdLaunch();
+                  setMessage(
+                    `Cleared ${result.removedKeyCount} cache key(s). Force-quit Kindred, then reopen to test a cold launch.`
+                  );
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Clear local cache"
+            >
+              <Text style={styles.devActionText}>🧹 Clear Local Cache</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
@@ -436,6 +469,30 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
     marginTop: 14,
     lineHeight: 20,
+  },
+  devBlock: {
+    marginTop: 36,
+    paddingTop: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: paper.inkRule,
+  },
+  devHint: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    lineHeight: 20,
+    color: paper.inkFaint,
+    marginBottom: 12,
+  },
+  devAction: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.terracotta,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  devActionText: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    color: paper.terracotta,
   },
   disabled: {
     opacity: 0.55,

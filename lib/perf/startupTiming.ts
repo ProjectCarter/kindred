@@ -15,9 +15,23 @@ export function markStartup(name: string): void {
 }
 
 export function logStartupSummary(context?: string): void {
-  if (!__DEV__ || marks.length === 0) return;
+  const elapsedMs = startupElapsedMs();
   const label = context ? ` (${context})` : "";
-  console.log(`[perf:startup] timeline${label}`, marks);
+  const overBudget = elapsedMs > 5000;
+
+  if (__DEV__ && marks.length > 0) {
+    console.log(`[perf:startup] timeline${label}`, marks);
+  }
+
+  // Always surface budget violations — V1 requires measured verification.
+  if (overBudget) {
+    console.warn(
+      `[perf:startup] OVER BUDGET${label}: ${elapsedMs}ms (max 5000ms)`,
+      __DEV__ ? marks : undefined
+    );
+  } else if (__DEV__) {
+    console.log(`[perf:startup] within budget${label}: ${elapsedMs}ms`);
+  }
 }
 
 export function startupElapsedMs(): number {

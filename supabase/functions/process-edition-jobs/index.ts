@@ -145,7 +145,9 @@ Deno.serve(async (req) => {
 
     let enqueued = 0;
     let skippedTooEarly = 0;
+    let skippedReady = 0;
     const localDatesInPlay = new Set<string>();
+    const toEnqueue: Array<{ userId: string; localDate: string }> = [];
 
     for (const profile of eligible) {
       const tz = profile.timezone || DEFAULT_TIMEZONE;
@@ -158,32 +160,54 @@ Deno.serve(async (req) => {
         continue; // before 12:01 AM local — wait for the generation window
       }
 
-      const { data: existingEdition } = await supabaseAdmin
+      toEnqueue.push({ userId: profile.id, localDate });
+    }
+
+    if (toEnqueue.length > 0) {
+      const userIds = [...new Set(toEnqueue.map((row) => row.userId))];
+      const editionDates = [...new Set(toEnqueue.map((row) => row.localDate))];
+
+      const { data: readyEditions, error: readyError } = await supabaseAdmin
         .from("editions")
-        .select("id")
-        .eq("user_id", profile.id)
-        .eq("edition_date", localDate)
+        .select("user_id, edition_date")
         .eq("status", "ready")
-        .maybeSingle();
+        .in("user_id", userIds)
+        .in("edition_date", editionDates);
 
-      if (existingEdition) continue;
+      if (readyError) {
+        console.error("[process-edition-jobs] ready lookup failed", readyError.message);
+      }
 
-      const { error: upsertError } = await supabaseAdmin
-        .from("generation_jobs")
-        .upsert(
-          {
-            user_id: profile.id,
-            edition_date: localDate,
-            status: "pending",
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: "user_id,edition_date",
-            ignoreDuplicates: true,
-          }
-        );
+      const readyKeys = new Set(
+        (readyEditions ?? []).map(
+          (row: { user_id: string; edition_date: string }) =>
+            `${row.user_id}:${row.edition_date}`
+        )
+      );
 
-      if (!upsertError) enqueued += 1;
+      for (const { userId, localDate } of toEnqueue) {
+        if (readyKeys.has(`${userId}:${localDate}`)) {
+          skippedReady += 1;
+          continue;
+        }
+
+        const { error: upsertError } = await supabaseAdmin
+          .from("generation_jobs")
+          .upsert(
+            {
+              user_id: userId,
+              edition_date: localDate,
+              status: "pending",
+              updated_at: new Date().toISOString(),
+            },
+            {
+              onConflict: "user_id,edition_date",
+              ignoreDuplicates: true,
+            }
+          );
+
+        if (!upsertError) enqueued += 1;
+      }
     }
 
     // 2) Atomically claim a batch. Not scoped to one edition_date — every
@@ -262,6 +286,7 @@ Deno.serve(async (req) => {
       localDatesInPlay: Array.from(localDatesInPlay),
       enqueued,
       skippedTooEarly,
+      skippedReady,
       processed: results.length,
       succeeded,
       failed,

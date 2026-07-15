@@ -549,35 +549,51 @@ export default function HomeScreen() {
       });
     }
 
-    // Show a cached paper immediately on cold start while the network loads.
-    if (!quiet && !isRefresh && !editionIdRef.current) {
-      const cached = await loadCachedEdition(user.id, todayStr);
-      if (cached && mountedRef.current && gen === loadGen.current) {
-        applyCachedBundle(cached);
-        setLoading(false);
-        markStartup("home_cache_paint");
-        void maybeRecoverTodayInHistory({
-          userId: user.id,
-          editionId: cached.editionId,
-          editionDate: cached.editionDate,
-          sections: cached.sections,
-          intelligence: cached.intelligence,
-        }).then((recovered) => {
-          if (!mountedRef.current || gen !== loadGen.current) return;
-          if (
-            recovered.sections !== cached.sections ||
-            recovered.intelligence !== cached.intelligence
-          ) {
-            setSections(recovered.sections);
-            setIntelligence(recovered.intelligence);
-          }
-        });
-        if (__DEV__) {
-          console.log("[home] loadEdition: hydrated from cache", {
-            editionId: cached.editionId,
-            sectionCount: cached.sections.length,
-          });
+    // Overlap cache read with the editions network query on cold start.
+    const shouldHydrateCache =
+      !quiet && !isRefresh && !editionIdRef.current;
+
+    const editionQuery = supabase
+      .from("editions")
+      .select(
+        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context"
+      )
+      .eq("user_id", user.id)
+      .eq("edition_date", todayStr)
+      .maybeSingle();
+
+    const [cached, editionResult] = await Promise.all([
+      shouldHydrateCache
+        ? loadCachedEdition(user.id, todayStr)
+        : Promise.resolve(null),
+      editionQuery,
+    ]);
+
+    if (cached && mountedRef.current && gen === loadGen.current) {
+      applyCachedBundle(cached);
+      setLoading(false);
+      markStartup("home_cache_paint");
+      void maybeRecoverTodayInHistory({
+        userId: user.id,
+        editionId: cached.editionId,
+        editionDate: cached.editionDate,
+        sections: cached.sections,
+        intelligence: cached.intelligence,
+      }).then((recovered) => {
+        if (!mountedRef.current || gen !== loadGen.current) return;
+        if (
+          recovered.sections !== cached.sections ||
+          recovered.intelligence !== cached.intelligence
+        ) {
+          setSections(recovered.sections);
+          setIntelligence(recovered.intelligence);
         }
+      });
+      if (__DEV__) {
+        console.log("[home] loadEdition: hydrated from cache", {
+          editionId: cached.editionId,
+          sectionCount: cached.sections.length,
+        });
       }
     }
 
@@ -586,14 +602,7 @@ export default function HomeScreen() {
       error: editionError,
       status: editionStatus,
       statusText: editionStatusText,
-    } = await supabase
-      .from("editions")
-      .select(
-        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context"
-      )
-      .eq("user_id", user.id)
-      .eq("edition_date", todayStr)
-      .maybeSingle();
+    } = editionResult;
 
     markStartup("home_editions_query_done");
 
@@ -873,39 +882,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // Resolve the saved scroll offset for this exact edition + location
-    // *here*, from the values this function already knows — rather than
-    // depending on a separate focus-time effect that can run before
-    // editionId has ever been set (e.g. right after the screen remounts
-    // on `router.back()`, before this query has resolved). The lookup
-    // itself hits an in-memory, module-level cache first (populated
-    // synchronously before navigating away), so this resolves instantly
-    // in the common case.
-    if (!resetScroll) {
-      const targetKey = homeScrollSessionKey(
-        edition.id,
-        activeLocationKey(active)
-      );
-      const savedScroll = await loadHomeScroll(targetKey);
-      if (
-        mountedRef.current &&
-        gen === loadGen.current &&
-        savedScroll > 0 &&
-        !skipScrollRestoreRef.current
-      ) {
-        pendingScrollRestoreY.current = savedScroll;
-        restoredScrollRef.current = false;
-        homeScrollYRef.current = savedScroll;
-        mastheadScrollY.setValue(savedScroll);
-        if (__DEV__) {
-          console.log("[home] scroll: resolved restore target", {
-            editionId: edition.id,
-            savedScroll,
-          });
-        }
-      }
-    }
-
     setLocationMismatch(null);
     setBackgroundJob(null);
 
@@ -979,6 +955,31 @@ export default function HomeScreen() {
 
     void (async () => {
       if (!mountedRef.current || gen !== loadGen.current) return;
+
+      if (!resetScroll) {
+        const targetKey = homeScrollSessionKey(
+          edition.id,
+          activeLocationKey(active)
+        );
+        const savedScroll = await loadHomeScroll(targetKey);
+        if (
+          mountedRef.current &&
+          gen === loadGen.current &&
+          savedScroll > 0 &&
+          !skipScrollRestoreRef.current
+        ) {
+          pendingScrollRestoreY.current = savedScroll;
+          restoredScrollRef.current = false;
+          homeScrollYRef.current = savedScroll;
+          mastheadScrollY.setValue(savedScroll);
+          if (__DEV__) {
+            console.log("[home] scroll: resolved restore target", {
+              editionId: edition.id,
+              savedScroll,
+            });
+          }
+        }
+      }
 
       void fetchAdjacentEditions(user.id, edition.edition_date).then((adjacent) => {
         if (mountedRef.current && gen === loadGen.current) {
@@ -1417,14 +1418,19 @@ export default function HomeScreen() {
   }
 
   // After withholding a wrong-city paper in Current Location mode, regenerate once.
+  // Never duplicate-build while the overnight job is already on the press.
   useEffect(() => {
     if (!pendingCityRegen) return;
     if (generating || loading) return;
+    const jobActive =
+      backgroundJob?.status === "pending" ||
+      backgroundJob?.status === "processing";
     setPendingCityRegen(false);
+    if (jobActive) return;
     void handleGenerate();
     // handleGenerate is intentionally stable enough for this one-shot trigger
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingCityRegen, generating, loading]);
+  }, [pendingCityRegen, generating, loading, backgroundJob]);
 
   async function handleToggleClip(section: EditionSection) {
     if (clipPendingId) return;

@@ -12,6 +12,11 @@ const LAST_SYNCED_KEY = "@kindred/timezone/last-synced";
 
 let memoryLastSynced: string | null = null;
 
+/** TEMP(Phase One perf): allow timezone to re-sync after cache wipe. */
+export function clearTimezoneSyncMemory(): void {
+  memoryLastSynced = null;
+}
+
 export function deviceTimezone(): string | null {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;

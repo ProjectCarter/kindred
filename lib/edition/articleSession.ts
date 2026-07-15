@@ -93,3 +93,8 @@ export function clearArticleSession(id: string): void {
   memory.delete(id);
   void AsyncStorage.removeItem(storageKey(id)).catch(() => {});
 }
+
+/** TEMP(Phase One perf): wipe reader handoff memory for cold-launch simulation. */
+export function clearAllArticleSessions(): void {
+  memory.clear();
+}

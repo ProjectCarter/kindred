@@ -17,6 +17,11 @@ const MIN_INTERVAL_MS = 15 * 60 * 1000;
 
 const memoryLastRefreshedAt = new Map<string, number>();
 
+/** TEMP(Phase One perf): wipe live-refresh throttle memory for cold-launch simulation. */
+export function clearLiveRefreshMemory(): void {
+  memoryLastRefreshedAt.clear();
+}
+
 async function shouldRefresh(editionId: string): Promise<boolean> {
   const now = Date.now();
   const inMemory = memoryLastRefreshedAt.get(editionId);
