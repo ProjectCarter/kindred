@@ -1,27 +1,23 @@
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MastheadLink } from "./KindredMasthead";
-import {
-  PULL_DOWN_NAV_BAR_HEIGHT,
-} from "../lib/navigation/usePullDownNav";
-import { paper, shadow, type } from "../lib/edition/newspaperTheme";
+import { PULL_DOWN_NAV_BAR_HEIGHT } from "../lib/navigation/usePullDownNav";
+import { paper, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   title: string;
   translateY: Animated.Value;
-  visible: boolean;
   onBack: () => void;
   backAccessibilityLabel?: string;
 };
 
 /**
- * Compact navigation revealed by a gentle downward pull on long pages.
- * Slides from above the viewport; never stays permanently visible.
+ * Temporary back navigation — absolute overlay only.
+ * Slides above scroll content; never resizes or obscures the page layout.
  */
 export function PullDownNavHeader({
   title,
   translateY,
-  visible,
   onBack,
   backAccessibilityLabel = "Back",
 }: Props) {
@@ -29,21 +25,17 @@ export function PullDownNavHeader({
 
   return (
     <Animated.View
-      pointerEvents={visible ? "box-none" : "none"}
+      pointerEvents="none"
       style={[
         styles.wrap,
         {
           transform: [{ translateY }],
         },
       ]}
-      accessibilityElementsHidden={!visible}
+      accessibilityElementsHidden
     >
       <View
-        style={[
-          styles.panel,
-          { paddingTop: insets.top },
-          shadow.page,
-        ]}
+        style={[styles.panel, { paddingTop: insets.top }]}
         pointerEvents="box-none"
       >
         <View style={styles.bar}>
@@ -73,6 +65,11 @@ const styles = StyleSheet.create({
     backgroundColor: paper.page,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
+    shadowColor: "#2D2926",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   bar: {
     height: PULL_DOWN_NAV_BAR_HEIGHT,

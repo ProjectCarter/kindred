@@ -6,9 +6,10 @@ import { EditorialCardGrid } from "../components/EditorialCardGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNav } from "../lib/navigation/usePullDownNav";
+import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
 import { selectActivityCards } from "../lib/edition/activities";
 import { getTodaysActivities } from "../lib/edition/activitiesListStore";
-import { articleFromDiscoveryItem } from "../lib/edition/article";
+import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
 import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
@@ -24,6 +25,10 @@ export default function ActivitiesScreen() {
   const pullDownNav = usePullDownNav();
   const items = useMemo(() => getTodaysActivities(), []);
   const cards = useMemo(() => selectActivityCards(items), [items]);
+  const articlesById = useMemo(
+    () => discoveryArticlesById(items, "activity"),
+    [items]
+  );
 
   function handleBack() {
     persistNow();
@@ -32,22 +37,11 @@ export default function ActivitiesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PullDownNavHeader
-        title="Activities"
-        translateY={pullDownNav.translateY}
-        visible={pullDownNav.visible}
-        onBack={handleBack}
-        backAccessibilityLabel="Back to today’s paper"
-      />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={(event) => {
-          onScrollOffset(event.nativeEvent.contentOffset.y);
-          pullDownNav.onScroll(event);
-        }}
+        {...pullDownNavScrollProps(pullDownNav, onScrollOffset)}
       >
         <View style={styles.backRow}>
           <KindredDetailBackButton onPress={handleBack} />
@@ -68,20 +62,22 @@ export default function ActivitiesScreen() {
           emptyCopy="Nothing new to try nearby today — check back tomorrow."
           showBanditWhenEmpty
           onOpenCard={(card) => {
-            const item = items.find((i) => i.item.id === card.id);
-            if (!item) return;
+            const article = articlesById.get(card.id);
+            if (!article) return;
             persistNow();
-            openKindredArticle(
-              router,
-              { ...articleFromDiscoveryItem(item), savedContentType: "activity" },
-              {
-                editionId: getActiveEditionId(),
-                backLabel: "← Activities",
-              }
-            );
+            openKindredArticle(router, article, {
+              editionId: getActiveEditionId(),
+              backLabel: "← Activities",
+            });
           }}
         />
       </ScrollView>
+      <PullDownNavHeader
+        title="Activities"
+        translateY={pullDownNav.translateY}
+        onBack={handleBack}
+        backAccessibilityLabel="Back to today’s paper"
+      />
     </SafeAreaView>
   );
 }

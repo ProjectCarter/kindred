@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNav } from "../lib/navigation/usePullDownNav";
+import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
 import {
   searchCities,
   setHomeCity,
@@ -83,13 +84,6 @@ export default function LocationSearchScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PullDownNavHeader
-        title={title}
-        translateY={pullDownNav.translateY}
-        visible={pullDownNav.visible}
-        onBack={() => router.back()}
-        backAccessibilityLabel="Back"
-      />
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -128,8 +122,7 @@ export default function LocationSearchScreen() {
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={pullDownNav.onScroll}
+        {...pullDownNavScrollProps(pullDownNav)}
         renderItem={({ item }) => (
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -149,6 +142,12 @@ export default function LocationSearchScreen() {
             </Text>
           ) : null
         }
+      />
+      <PullDownNavHeader
+        title={title}
+        translateY={pullDownNav.translateY}
+        onBack={() => router.back()}
+        backAccessibilityLabel="Back"
       />
     </SafeAreaView>
   );

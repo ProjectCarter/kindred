@@ -6,9 +6,11 @@ import { LocalEventsGrid } from "../components/LocalEventsGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNav } from "../lib/navigation/usePullDownNav";
+import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
 import { getTodaysEvents } from "../lib/edition/eventsListStore";
+import { articleFromLocalEvent } from "../lib/edition/article";
 import { getActiveEditionId } from "../lib/edition/editionContext";
-import { openKindredEvent } from "../lib/edition/openEvent";
+import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
@@ -21,6 +23,14 @@ export default function EventsScreen() {
   );
   const pullDownNav = usePullDownNav();
   const events = useMemo(() => getTodaysEvents(), []);
+  const eventArticlesById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof articleFromLocalEvent>>();
+    for (const event of events) {
+      const key = `${event.name}:${event.date}`;
+      map.set(key, articleFromLocalEvent(event));
+    }
+    return map;
+  }, [events]);
 
   function handleBack() {
     persistNow();
@@ -29,22 +39,11 @@ export default function EventsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PullDownNavHeader
-        title="Local Events"
-        translateY={pullDownNav.translateY}
-        visible={pullDownNav.visible}
-        onBack={handleBack}
-        backAccessibilityLabel="Back to today’s paper"
-      />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={(event) => {
-          onScrollOffset(event.nativeEvent.contentOffset.y);
-          pullDownNav.onScroll(event);
-        }}
+        {...pullDownNavScrollProps(pullDownNav, onScrollOffset)}
       >
         <View style={styles.backRow}>
           <KindredDetailBackButton onPress={handleBack} />
@@ -61,14 +60,22 @@ export default function EventsScreen() {
           initialRenderCount={Math.max(events.length, 1)}
           showBanditWhenEmpty
           onOpenEvent={(event) => {
+            const article = eventArticlesById.get(`${event.name}:${event.date}`);
+            if (!article) return;
             persistNow();
-            openKindredEvent(router, event, {
+            openKindredArticle(router, article, {
               editionId: getActiveEditionId(),
               backLabel: "← Local Events",
             });
           }}
         />
       </ScrollView>
+      <PullDownNavHeader
+        title="Local Events"
+        translateY={pullDownNav.translateY}
+        onBack={handleBack}
+        backAccessibilityLabel="Back to today’s paper"
+      />
     </SafeAreaView>
   );
 }

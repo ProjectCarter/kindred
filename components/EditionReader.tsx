@@ -27,6 +27,7 @@ import {
   articleFromNotebookItem,
   sectionOpensArticleReader,
 } from "../lib/edition/article";
+import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
 import {
   articleFromTopStory,
   type TopStoryItem,
@@ -434,11 +435,53 @@ export function EditionReader({
     [stableDiscovery, stableDiscoveryItems, eventVenueNames]
   );
 
+  const activityArticlesById = useMemo(
+    () => discoveryArticlesById(fullSectionAllocation.activities, "activity"),
+    [fullSectionAllocation.activities]
+  );
+
+  const recommendationArticlesById = useMemo(
+    () =>
+      discoveryArticlesById(
+        fullSectionAllocation.recommendations,
+        "recommendation"
+      ),
+    [fullSectionAllocation.recommendations]
+  );
+
+  const notebookArticlesById = useMemo(() => {
+    const map = new Map<string, KindredArticle>();
+    for (const item of sectionAllocation.notebook) {
+      map.set(item.item.id, articleFromNotebookItem(item, events));
+    }
+    return map;
+  }, [sectionAllocation.notebook, events]);
+
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
   );
   const banditPickSides = localBiz.slice(0, 2);
   const banditPickSideImages = localBizSideImages(banditPickSides);
+  const localBizArticlesById = useMemo(
+    () => discoveryArticlesById(localBiz),
+    [localBiz]
+  );
+
+  const banditsPickArticle = useMemo(() => {
+    if (!banditsPick) return null;
+    if (banditsPick.kind !== "article" && banditsPick.story.discoveryItem) {
+      return articleFromDiscoveryItem({
+        item: banditsPick.story.discoveryItem,
+        score: 0,
+        reasons: [],
+        surfaces: [],
+      });
+    }
+    return articleFromBanditsPick({
+      ...banditsPick.story,
+      discoveryItem: banditsPick.story.discoveryItem ?? null,
+    });
+  }, [banditsPick]);
 
   const localTopStories = topStories.filter((s) =>
     /local/i.test(s.role ?? "")
@@ -589,11 +632,10 @@ export function EditionReader({
           locationCity={locationCity}
           onOpenItem={
             onOpenArticle
-              ? (item) =>
-                  onOpenArticle({
-                    ...articleFromDiscoveryItem(item),
-                    savedContentType: "activity",
-                  })
+              ? (item) => {
+                  const article = activityArticlesById.get(item.item.id);
+                  if (article) onOpenArticle(article);
+                }
               : undefined
           }
           onSeeAll={
@@ -610,11 +652,10 @@ export function EditionReader({
           locationCity={locationCity}
           onOpenItem={
             onOpenArticle
-              ? (item) =>
-                  onOpenArticle({
-                    ...articleFromDiscoveryItem(item),
-                    savedContentType: "recommendation",
-                  })
+              ? (item) => {
+                  const article = recommendationArticlesById.get(item.item.id);
+                  if (article) onOpenArticle(article);
+                }
               : undefined
           }
           onSeeAll={
@@ -668,28 +709,11 @@ export function EditionReader({
               onOpenArticle
                 ? (id) => {
                     if (id === banditsPick.story.id) {
-                      if (
-                        banditsPick.kind !== "article" &&
-                        banditsPick.story.discoveryItem
-                      ) {
-                        onOpenArticle(
-                          articleFromDiscoveryItem({
-                            item: banditsPick.story.discoveryItem,
-                            score: 0,
-                            reasons: [],
-                            surfaces: [],
-                          })
-                        );
-                        return;
-                      }
-                      onOpenArticle(articleFromBanditsPick({
-                        ...banditsPick.story,
-                        discoveryItem: banditsPick.story.discoveryItem ?? null,
-                      }));
+                      if (banditsPickArticle) onOpenArticle(banditsPickArticle);
                       return;
                     }
-                    const hit = localBiz.find((d) => d.item.id === id);
-                    if (hit) onOpenArticle(articleFromDiscoveryItem(hit));
+                    const article = localBizArticlesById.get(id);
+                    if (article) onOpenArticle(article);
                   }
                 : undefined
             }
@@ -896,7 +920,10 @@ export function EditionReader({
           discovery={null}
           onOpenItem={
             onOpenArticle
-              ? (item) => onOpenArticle(articleFromNotebookItem(item, events))
+              ? (item) => {
+                  const article = notebookArticlesById.get(item.item.id);
+                  if (article) onOpenArticle(article);
+                }
               : undefined
           }
         />

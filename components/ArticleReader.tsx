@@ -80,6 +80,8 @@ type Props = {
   backLabel?: string;
   initialScrollY?: number;
   onOpenContinue?: (item: ContinueReadingItem) => void;
+  /** Skip the entrance fade — show known card data immediately on navigation. */
+  instantEnter?: boolean;
 };
 
 /**
@@ -94,6 +96,7 @@ export function ArticleReader({
   backLabel = "← Today’s paper",
   initialScrollY = 0,
   onOpenContinue,
+  instantEnter = false,
 }: Props) {
   const companion =
     companionProp ?? getArticleCompanion(article.id) ?? null;
@@ -126,9 +129,20 @@ export function ArticleReader({
   const pullDownNav = usePullDownNav();
 
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const enterOpacity = useRef(new Animated.Value(0)).current;
-  const enterRise = useRef(new Animated.Value(motion.risePx)).current;
-  const heroOpacity = useRef(new Animated.Value(0)).current;
+  const enterOpacity = useRef(
+    new Animated.Value(instantEnter ? 1 : 0)
+  ).current;
+  const enterRise = useRef(
+    new Animated.Value(instantEnter ? 0 : motion.risePx)
+  ).current;
+  const heroOpacity = useRef(
+    new Animated.Value(
+      instantEnter &&
+        (article.heroImage?.source || !article.heroImage?.uri?.trim())
+        ? 1
+        : 0
+    )
+  ).current;
 
   const briefing = isKindredBriefing(article);
   const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
@@ -163,6 +177,20 @@ export function ArticleReader({
     restoredScroll.current = false;
     scrollYRef.current = initialScrollY;
     pullDownNav.reset();
+
+    const hasLocalHero =
+      Boolean(article.heroImage?.source) || !article.heroImage?.uri?.trim();
+
+    if (instantEnter) {
+      enterOpacity.setValue(1);
+      enterRise.setValue(0);
+      if (hasLocalHero) {
+        setHeroReady(true);
+        heroOpacity.setValue(1);
+      }
+      return;
+    }
+
     enterOpacity.setValue(0);
     enterRise.setValue(motion.risePx);
     Animated.parallel([
@@ -179,7 +207,17 @@ export function ArticleReader({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [article.id, enterOpacity, enterRise, initialScrollY, pullDownNav]);
+  }, [
+    article.heroImage?.source,
+    article.heroImage?.uri,
+    article.id,
+    enterOpacity,
+    enterRise,
+    heroOpacity,
+    initialScrollY,
+    instantEnter,
+    pullDownNav,
+  ]);
 
   const swapInEditorialHero = useCallback(() => {
     if (article.section === "today_in_history") {
@@ -207,14 +245,23 @@ export function ArticleReader({
 
   useEffect(() => {
     setHeroFailed(false);
-    setHeroReady(false);
     setEditorialFallback(null);
-    heroOpacity.setValue(0);
+    heroOpacity.setValue(
+      instantEnter &&
+        (article.heroImage?.source || !article.heroImage?.uri?.trim())
+        ? 1
+        : 0
+    );
     // Local catalog assets are ready immediately.
     if (article.heroImage?.source && !article.heroImage?.uri) {
       setHeroReady(true);
       return;
     }
+    if (instantEnter && !article.heroImage?.uri?.trim()) {
+      setHeroReady(true);
+      return;
+    }
+    setHeroReady(false);
     // A wire photo that never resolves — no onLoad, no onError — would
     // otherwise leave the hero permanently blank. Give it a generous
     // window, then quietly swap in an editorial photograph instead.
@@ -236,18 +283,23 @@ export function ArticleReader({
     article.heroImage?.uri,
     article.heroImage?.source,
     heroOpacity,
+    instantEnter,
     swapInEditorialHero,
   ]);
 
   useEffect(() => {
     if (!heroReady) return;
+    if (instantEnter) {
+      heroOpacity.setValue(1);
+      return;
+    }
     Animated.timing(heroOpacity, {
       toValue: 1,
       duration: motion.photoMs,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [heroReady, heroOpacity]);
+  }, [heroReady, heroOpacity, instantEnter]);
 
   useEffect(() => {
     stashArticleSession({
@@ -414,11 +466,6 @@ export function ArticleReader({
       progressAnim.setValue(0);
     }
   }, [contentHeight, viewportHeight, progressAnim]);
-
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
-  });
 
   async function handleToggleClip() {
     if (!clipTarget || clipPending) return;
@@ -598,18 +645,6 @@ export function ArticleReader({
         { paddingTop: insets.top, paddingBottom: insets.bottom * 0.25 },
       ]}
     >
-      <View style={styles.progressTrack} accessibilityElementsHidden>
-        <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
-      </View>
-
-      <PullDownNavHeader
-        title={pullDownTitle}
-        translateY={pullDownNav.translateY}
-        visible={pullDownNav.visible}
-        onBack={handleBack}
-        backAccessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
-      />
-
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -618,6 +653,10 @@ export function ArticleReader({
           { paddingBottom: 96 + insets.bottom },
         ]}
         onScroll={onScroll}
+        onScrollBeginDrag={pullDownNav.onScrollBeginDrag}
+        onScrollEndDrag={pullDownNav.onScrollEndDrag}
+        onMomentumScrollBegin={pullDownNav.onMomentumScrollBegin}
+        onMomentumScrollEnd={pullDownNav.onMomentumScrollEnd}
         scrollEventThrottle={16}
         onContentSizeChange={onContentSizeChange}
         onLayout={onLayout}
@@ -949,6 +988,12 @@ export function ArticleReader({
           </View>
         </Animated.View>
       </ScrollView>
+      <PullDownNavHeader
+        title={pullDownTitle}
+        translateY={pullDownNav.translateY}
+        onBack={handleBack}
+        backAccessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
+      />
     </View>
   );
 }
@@ -1267,15 +1312,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: paper.page,
-  },
-  progressTrack: {
-    height: 1.5,
-    backgroundColor: paper.border,
-  },
-  progressFill: {
-    height: 1.5,
-    backgroundColor: paper.terracotta,
-    opacity: 0.4,
   },
   detailBackBar: {
     paddingHorizontal: reader.gutter,

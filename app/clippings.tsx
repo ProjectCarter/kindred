@@ -27,6 +27,7 @@ import { BanditCharacter } from "../components/BanditCharacter";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNav } from "../lib/navigation/usePullDownNav";
+import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
 
 type Filter = "all" | ClippingContentType;
 
@@ -186,18 +187,10 @@ export default function ClippingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PullDownNavHeader
-        title="Clippings"
-        translateY={pullDownNav.translateY}
-        visible={pullDownNav.visible}
-        onBack={() => router.back()}
-        backAccessibilityLabel="Back to library"
-      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={pullDownNav.onScroll}
+        {...pullDownNavScrollProps(pullDownNav)}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -291,6 +284,12 @@ export default function ClippingsScreen() {
           ))
         )}
       </ScrollView>
+      <PullDownNavHeader
+        title="Clippings"
+        translateY={pullDownNav.translateY}
+        onBack={() => router.back()}
+        backAccessibilityLabel="Back to library"
+      />
     </SafeAreaView>
   );
 }

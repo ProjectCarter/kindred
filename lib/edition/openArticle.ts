@@ -55,6 +55,25 @@ export function openKindredArticle(
     updatedAt: Date.now(),
   });
 
+  const pushParams = options.editionId
+    ? {
+        pathname: "/article/[id]" as const,
+        params: {
+          id,
+          editionId: options.editionId,
+          backLabel,
+        },
+      }
+    : {
+        pathname: "/article/[id]" as const,
+        params: {
+          id,
+          backLabel,
+        },
+      };
+
+  router.push(pushParams);
+
   void trackReadingSignal({
     signalType: "open",
     storyKey: withHero.id,
@@ -68,23 +87,4 @@ export function openKindredArticle(
       heroKind: withHero.heroImage?.kind ?? null,
     },
   });
-
-  if (options.editionId) {
-    router.push({
-      pathname: "/article/[id]",
-      params: {
-        id,
-        editionId: options.editionId,
-        backLabel,
-      },
-    });
-  } else {
-    router.push({
-      pathname: "/article/[id]",
-      params: {
-        id,
-        backLabel,
-      },
-    });
-  }
 }

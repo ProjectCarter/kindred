@@ -14,6 +14,7 @@ import { formatEditionDate } from "../lib/edition/types";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNav } from "../lib/navigation/usePullDownNav";
+import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
 import { PaperLoading } from "../components/PaperLoading";
 
 type EditionRow = {
@@ -88,18 +89,10 @@ export default function LibraryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PullDownNavHeader
-        title="Library"
-        translateY={pullDownNav.translateY}
-        visible={pullDownNav.visible}
-        onBack={() => router.back()}
-        backAccessibilityLabel="Back to today"
-      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={pullDownNav.onScroll}
+        {...pullDownNavScrollProps(pullDownNav)}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -191,6 +184,12 @@ export default function LibraryScreen() {
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </ScrollView>
+      <PullDownNavHeader
+        title="Library"
+        translateY={pullDownNav.translateY}
+        onBack={() => router.back()}
+        backAccessibilityLabel="Back to today"
+      />
     </SafeAreaView>
   );
 }

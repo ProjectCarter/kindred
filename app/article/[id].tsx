@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -7,13 +7,6 @@ import { ArticleReader } from "../../components/ArticleReader";
 import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
 import { articleFromSectionItem, articleFromBanditsPick } from "../../lib/edition/article";
-import {
-  getGoldRelatedArticle,
-  getGoldStandardArticle,
-  getGoldStandardCompanion,
-  GOLD_STANDARD_ARTICLE_ID,
-  isGoldStandardArticleId,
-} from "../../lib/edition/goldStandard/algalBloomArticle";
 import { getStashedArticle } from "../../lib/edition/articleStore";
 import {
   getArticleCompanion,
@@ -21,12 +14,22 @@ import {
 } from "../../lib/edition/articleCompanion";
 import { terminalEditorialContinuation } from "../../lib/edition/editorialContinuation";
 import {
-  getArticleSessionSync,
-  loadArticleSession,
-  type ArticleSession,
-} from "../../lib/edition/articleSession";
+  getGoldRelatedArticle,
+} from "../../lib/edition/goldStandard/algalBloomArticle";
+import {
+  loadArticleSessionFromPersistence,
+  resolveArticleSessionSync,
+  type ResolveArticleSessionResult,
+} from "../../lib/edition/resolveArticleSession";
+import type { ArticleSession } from "../../lib/edition/articleSession";
 import { openKindredArticle } from "../../lib/edition/openArticle";
 import { paper } from "../../lib/edition/newspaperTheme";
+
+function routeParam(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return null;
+}
 
 /**
  * Shared article route for every Kindred section.
@@ -39,125 +42,59 @@ export default function ArticleScreen() {
     backLabel?: string;
   }>();
   const router = useRouter();
-  const [session, setSession] = useState<ArticleSession | null>(null);
-  const [ready, setReady] = useState(false);
+
+  const routeArticleId = routeParam(id);
+  const routeEditionId = routeParam(editionId);
+  const routeBackLabel = routeParam(backLabel);
+
+  const initial = useMemo<ResolveArticleSessionResult>(
+    () =>
+      resolveArticleSessionSync(routeArticleId, {
+        editionId: routeEditionId,
+        backLabel: routeBackLabel,
+      }),
+    [routeArticleId, routeEditionId, routeBackLabel]
+  );
+
+  const [session, setSession] = useState<ArticleSession | null>(
+    initial.session
+  );
+  const [needsAsync, setNeedsAsync] = useState(initial.needsAsync);
 
   useEffect(() => {
-    const articleId =
-      typeof id === "string" ? id : Array.isArray(id) ? id[0] : null;
-    if (!articleId) {
-      setSession(null);
-      setReady(true);
-      return;
-    }
+    const resolved = resolveArticleSessionSync(routeArticleId, {
+      editionId: routeEditionId,
+      backLabel: routeBackLabel,
+    });
+    setSession(resolved.session);
+    setNeedsAsync(resolved.needsAsync);
+  }, [routeArticleId, routeEditionId, routeBackLabel]);
+
+  useEffect(() => {
+    if (!needsAsync || !routeArticleId) return;
 
     let cancelled = false;
-
-    async function hydrate() {
-      const sync = getArticleSessionSync(articleId!);
-      if (sync) {
-        if (!cancelled) {
-          setSession(sync);
-          setReady(true);
-        }
-        return;
-      }
-
-      const memoryArticle = getStashedArticle(articleId!);
-      if (memoryArticle) {
-        const built: ArticleSession = {
-          article: memoryArticle,
-          companion:
-            getArticleCompanion(articleId!) ??
-            (isGoldStandardArticleId(articleId!)
-              ? getGoldStandardCompanion()
-              : null),
-          editionId:
-            typeof editionId === "string" && editionId ? editionId : null,
-          backLabel:
-            typeof backLabel === "string" && backLabel.trim()
-              ? backLabel
-              : "← Today’s paper",
-          scrollY: 0,
-          updatedAt: Date.now(),
-        };
-        if (!cancelled) {
-          setSession(built);
-          setReady(true);
-        }
-        return;
-      }
-
-      // Gold-standard blueprint + related pieces — openable without a prior stash.
-      if (articleId === GOLD_STANDARD_ARTICLE_ID) {
-        const built: ArticleSession = {
-          article: getGoldStandardArticle(),
-          companion: getGoldStandardCompanion(),
-          editionId:
-            typeof editionId === "string" && editionId ? editionId : null,
-          backLabel:
-            typeof backLabel === "string" && backLabel.trim()
-              ? backLabel
-              : "← Today’s paper",
-          scrollY: 0,
-          updatedAt: Date.now(),
-        };
-        if (!cancelled) {
-          setSession(built);
-          setReady(true);
-        }
-        return;
-      }
-
-      const goldRelated = getGoldRelatedArticle(articleId!);
-      if (goldRelated) {
-        const built: ArticleSession = {
-          article: goldRelated,
-          companion: {
-            whyThisMatters: null,
-            whyChosen: null,
-            banditNote: goldRelated.banditNote ?? null,
-            knowledgeNotes: [],
-            knowledgeCards: [],
-            continueReading: terminalEditorialContinuation(),
-          },
-          editionId:
-            typeof editionId === "string" && editionId ? editionId : null,
-          backLabel:
-            typeof backLabel === "string" && backLabel.trim()
-              ? backLabel
-              : "← Previous story",
-          scrollY: 0,
-          updatedAt: Date.now(),
-        };
-        if (!cancelled) {
-          setSession(built);
-          setReady(true);
-        }
-        return;
-      }
-
-      const persisted = await loadArticleSession(articleId!);
+    void loadArticleSessionFromPersistence(routeArticleId, {
+      editionId: routeEditionId,
+      backLabel: routeBackLabel,
+    }).then((persisted) => {
       if (!cancelled) {
         setSession(persisted);
-        setReady(true);
+        setNeedsAsync(false);
       }
-    }
+    });
 
-    void hydrate();
     return () => {
       cancelled = true;
     };
-  }, [id, editionId, backLabel]);
+  }, [needsAsync, routeArticleId, routeEditionId, routeBackLabel]);
 
   function goBack() {
     if (router.canGoBack()) {
       router.back();
       return;
     }
-    const eid =
-      session?.editionId ??
-      (typeof editionId === "string" ? editionId : null);
+    const eid = session?.editionId ?? routeEditionId;
     if (eid) {
       router.replace(`/edition/${eid}`);
       return;
@@ -165,7 +102,7 @@ export default function ArticleScreen() {
     router.replace("/home");
   }
 
-  if (!ready) {
+  if (needsAsync && !session?.article) {
     return (
       <SafeAreaView style={styles.flex}>
         <StatusBar style="dark" />
@@ -197,13 +134,8 @@ export default function ArticleScreen() {
 
   const article: KindredArticle = session.article;
   const resolvedBack =
-    (typeof backLabel === "string" && backLabel.trim()) ||
-    session.backLabel ||
-    "← Today’s paper";
-  const resolvedEdition =
-    (typeof editionId === "string" && editionId ? editionId : null) ||
-    session.editionId ||
-    null;
+    routeBackLabel?.trim() || session.backLabel || "← Today’s paper";
+  const resolvedEdition = routeEditionId || session.editionId || null;
 
   function openContinue(item: ContinueReadingItem) {
     if (item.action === "return_to_edition") {
@@ -221,8 +153,6 @@ export default function ArticleScreen() {
     };
 
     if (item.targetArticleId && item.targetArticleId !== article.id) {
-      // Real destination article, pre-stashed from the homepage when this
-      // reader opened — the actual piece the card names, not a stand-in.
       const stashed = getStashedArticle(item.targetArticleId);
       if (stashed) {
         openKindredArticle(router, stashed, {
@@ -301,6 +231,7 @@ export default function ArticleScreen() {
         backLabel={resolvedBack}
         initialScrollY={session.scrollY ?? 0}
         onOpenContinue={openContinue}
+        instantEnter
       />
     </View>
   );

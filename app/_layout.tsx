@@ -217,6 +217,7 @@ export default function RootLayout() {
             headerShown: false,
             animation: "slide_from_right",
             gestureEnabled: true,
+            freezeOnBlur: false,
             contentStyle: { backgroundColor: paper.sky },
           }}
         />
