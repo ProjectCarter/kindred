@@ -200,7 +200,55 @@ export function resolveEventArticleActionsFromArticle(
   });
 }
 
-/** @deprecated Homepage cards no longer show actions — use resolveEventArticleActions in the reader. */
+const PRACTICAL_LISTING_ACTION_IDS = new Set<ActionBarActionId>([
+  "maps",
+  "website",
+  "buy_tickets",
+  "reserve_spot",
+  "learn_more",
+  "admission",
+  "official_event_page",
+]);
+
+/** Maps, Official Website, and ticket-style links — no Pin / Save / Share. */
+export function filterPracticalListingActions(
+  actions: ActionBarAction[]
+): ActionBarAction[] {
+  return actions.filter(
+    (a) =>
+      (a.kind === "maps" || a.kind === "url") &&
+      PRACTICAL_LISTING_ACTION_IDS.has(a.id)
+  );
+}
+
+/** Local Events listing — Maps, Official Website, Buy Tickets when applicable. */
+export function resolveListingActionsForEvent(
+  event: LocalEventCard
+): ActionBarAction[] {
+  return resolveEventArticleActions(event);
+}
+
+/** Activities / Recommendations listing actions from a discovery item. */
+export function resolveListingActionsForDiscoveryItem(
+  item: DiscoveryItem,
+  options?: { fallbackCity?: string | null; surface?: "activity" | "recommendation" }
+): ActionBarAction[] {
+  const surface =
+    options?.surface ??
+    (item.category === "activities" ? "activity" : "recommendation");
+  const raw =
+    surface === "activity"
+      ? resolveActionsForActivity(item, {
+          fallbackCity: options?.fallbackCity,
+          includeSave: false,
+        })
+      : resolveActionsForRecommendation(item, {
+          fallbackCity: options?.fallbackCity,
+          includeSave: false,
+        });
+  return filterPracticalListingActions(raw);
+}
+
 export function resolveActionsForLocalEvent(
   event: LocalEventCard,
   options?: { includeSave?: boolean }
@@ -396,16 +444,23 @@ export function resolveActionsForRecommendation(
   return out;
 }
 
-/** Bandit's Pick — Maps, then Official Website when available. */
+/** Bandit's Pick — Maps, Official Website, and tickets when applicable. */
 export function resolveActionsForBanditsPick(input: {
   url?: string | null;
   officialWebsite?: string | null;
+  ticketUrl?: string | null;
   mapsDestination?: MapsDestination | null;
   mapsActionLabel?: string | null;
+  ticketsRequired?: boolean;
+  isFreeEvent?: boolean;
   includeSave?: boolean;
 }): ActionBarAction[] {
   const out: ActionBarAction[] = [];
   const seen = new Set<string>();
+  const listingUrl = input.url?.trim() || null;
+  const ticketUrl =
+    input.ticketUrl?.trim() ||
+    (listingUrl && isThirdPartyTicketUrl(listingUrl) ? listingUrl : null);
 
   if (input.mapsDestination) {
     const maps = mapsAction(input.mapsDestination);
@@ -423,10 +478,36 @@ export function resolveActionsForBanditsPick(input: {
 
   const website = pickOfficialWebsiteFromUrls([
     input.officialWebsite,
-    input.url,
+    listingUrl && !isThirdPartyTicketUrl(listingUrl) ? listingUrl : null,
   ]);
   const site = websiteAction(website, "Official Website");
   if (site) pushUniqueUrl(out, site, seen);
+
+  if (input.ticketsRequired && !input.isFreeEvent && ticketUrl) {
+    pushUniqueUrl(
+      out,
+      {
+        id: "buy_tickets",
+        label: "Buy Tickets",
+        icon: "🎟",
+        kind: "url",
+        url: ticketUrl,
+      },
+      seen
+    );
+  } else if (ticketUrl && !website && !seen.has(ticketUrl)) {
+    pushUniqueUrl(
+      out,
+      {
+        id: "learn_more",
+        label: "Learn More",
+        icon: "🎟",
+        kind: "url",
+        url: ticketUrl,
+      },
+      seen
+    );
+  }
 
   return out;
 }
@@ -479,12 +560,15 @@ export function resolveArticleContextActions(
     });
   } else if (ctx.surface === "bandits_pick") {
     actions = resolveActionsForBanditsPick({
-      url: ctx.websiteUrl ?? article.sourceUrl,
+      url: article.sourceUrl ?? ctx.websiteUrl,
       officialWebsite: ctx.websiteUrl,
+      ticketUrl: ctx.ticketUrl,
       mapsDestination:
         ctx.mapsDestination ??
         mapsDestinationFromSavedLocation(article.savedLocation),
       mapsActionLabel: ctx.mapsActionLabel,
+      ticketsRequired: ctx.ticketsRequired,
+      isFreeEvent: ctx.isFreeEvent,
       includeSave: false,
     });
   } else {
@@ -494,15 +578,15 @@ export function resolveArticleContextActions(
     );
   }
 
-  return actions
-    .filter((a) => a.kind !== "save" && a.kind !== "share")
-    .map((a) =>
+  return filterPracticalListingActions(
+    actions.map((a) =>
       a.id === "maps" && ctx?.mapsActionLabel?.trim()
         ? { ...a, label: ctx.mapsActionLabel.trim() }
         : a.id === "maps"
           ? { ...a, label: "Open in Maps" }
           : a
-    );
+    )
+  );
 }
 
 /** Resolve from a KindredArticle + optional stored context. */
@@ -635,13 +719,18 @@ export function actionContextFromBanditsPick(input: {
           : null)
     ) ?? null;
 
+  const listingUrl = input.url?.trim() || item?.url?.trim() || null;
+  const officialWebsite =
+    (item ? resolveDiscoveryOfficialWebsite(item) : null) ??
+    (listingUrl && isOfficialProviderUrl(listingUrl) ? listingUrl : null);
+
   return {
     surface: "bandits_pick",
     mapsDestination,
     mapsActionLabel: input.actionLabel?.trim() || null,
-    websiteUrl:
-      input.url ??
-      (item ? resolveDiscoveryOfficialWebsite(item) ?? item.url ?? null : null),
+    websiteUrl: officialWebsite,
+    ticketUrl:
+      listingUrl && isThirdPartyTicketUrl(listingUrl) ? listingUrl : null,
     discoveryCategory: item?.category ?? null,
     tags: item?.tags,
   };

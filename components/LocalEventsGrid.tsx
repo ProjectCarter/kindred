@@ -16,7 +16,9 @@ import {
   eventPlaceLine,
 } from "../lib/edition/eventStore";
 import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
+import { resolveListingActionsForEvent } from "../lib/edition/actionBar";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
+import { ArticleActionList } from "./ArticleActionList";
 import { BanditCharacter } from "./BanditCharacter";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import type { LocalEventsLoadStatus } from "../lib/edition/localEventsPipeline";
@@ -141,95 +143,104 @@ export function LocalEventsGrid({
                   : null;
             const overline = [category, badge, timeLine].filter(Boolean).join("  ·  ");
             const note = event.banditNote?.trim() || null;
+            const actions = resolveListingActionsForEvent(event);
             const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
             const isLeft = colIndex === 0;
 
             return (
-              <Pressable
+              <View
                 key={`${event.name}-${event.date}-${index}`}
-                onPress={open}
-                disabled={!open}
-                accessibilityRole={open ? "button" : "text"}
-                accessibilityLabel={[
-                  event.name,
-                  category,
-                  timeLine,
-                  venue,
-                  addressLine,
-                  note,
-                  badge,
-                  infoBadges.length
-                    ? eventInfoBadgeAccessibilitySummary(infoBadges)
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(". ")}
-                style={({ pressed }) => [
+                style={[
                   styles.cell,
                   isLeft ? styles.cellLeft : styles.cellRight,
-                  open && pressed && { opacity: press.opacity },
                 ]}
               >
-                <View style={styles.cardRule} />
-                <View style={styles.copy}>
-                  {overline ? (
-                    <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
-                      {overline}
-                    </Text>
-                  ) : null}
+                <Pressable
+                  onPress={open}
+                  disabled={!open}
+                  accessibilityRole={open ? "button" : "text"}
+                  accessibilityLabel={[
+                    event.name,
+                    category,
+                    timeLine,
+                    venue,
+                    addressLine,
+                    note,
+                    badge,
+                    infoBadges.length
+                      ? eventInfoBadgeAccessibilitySummary(infoBadges)
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(". ")}
+                  style={({ pressed }) => [
+                    open && pressed && { opacity: press.opacity },
+                  ]}
+                >
+                  <View style={styles.cardRule} />
+                  <View style={styles.copy}>
+                    {overline ? (
+                      <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
+                        {overline}
+                      </Text>
+                    ) : null}
 
-                  <Text
-                    style={styles.title}
-                    numberOfLines={3}
-                    maxFontSizeMultiplier={1.15}
-                  >
-                    {event.name}
-                  </Text>
-
-                  <EventInfoBadgeRow
-                    badges={infoBadges}
-                    style={styles.badgeRow}
-                  />
-
-                  {venue ? (
                     <Text
-                      style={styles.venue}
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.1}
-                    >
-                      {venue}
-                    </Text>
-                  ) : null}
-
-                  {addressLine ? (
-                    <Text
-                      style={styles.address}
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.1}
-                    >
-                      {addressLine}
-                    </Text>
-                  ) : !venue ? (
-                    <Text
-                      style={styles.venue}
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.1}
-                    >
-                      {eventPlaceLine(event)}
-                    </Text>
-                  ) : null}
-
-                  {note ? (
-                    <Text
-                      style={styles.bandit}
-                      numberOfLines={2}
+                      style={styles.title}
+                      numberOfLines={3}
                       maxFontSizeMultiplier={1.15}
                     >
-                      {note}
+                      {event.name}
                     </Text>
-                  ) : null}
-                </View>
-              </Pressable>
+
+                    <EventInfoBadgeRow
+                      badges={infoBadges}
+                      style={styles.badgeRow}
+                    />
+
+                    {venue ? (
+                      <Text
+                        style={styles.venue}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.1}
+                      >
+                        {venue}
+                      </Text>
+                    ) : null}
+
+                    {addressLine ? (
+                      <Text
+                        style={styles.address}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.1}
+                      >
+                        {addressLine}
+                      </Text>
+                    ) : !venue ? (
+                      <Text
+                        style={styles.venue}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.1}
+                      >
+                        {eventPlaceLine(event)}
+                      </Text>
+                    ) : null}
+
+                    {note ? (
+                      <Text
+                        style={styles.bandit}
+                        numberOfLines={2}
+                        maxFontSizeMultiplier={1.15}
+                      >
+                        {note}
+                      </Text>
+                    ) : null}
+                  </View>
+                </Pressable>
+                {actions.length > 0 ? (
+                  <ArticleActionList actions={actions} variant="listing" />
+                ) : null}
+              </View>
             );
           })}
           {row.length === 1 ? <View style={styles.cell} /> : null}

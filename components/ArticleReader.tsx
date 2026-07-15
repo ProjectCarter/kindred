@@ -847,7 +847,7 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {articleContextActions.length > 0 ? (
+            {!textOnlyListing && articleContextActions.length > 0 ? (
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
@@ -903,6 +903,10 @@ export function ArticleReader({
                   ? "A short Kindred note — the full report lives with the publisher."
                   : "A Kindred summary for your morning paper — not the publisher’s full article."}
               </Text>
+            ) : null}
+
+            {textOnlyListing && articleContextActions.length > 0 ? (
+              <ArticleActionList actions={articleContextActions} />
             ) : null}
 
             {/* 7–9. Body · supporting images · pull quotes */}

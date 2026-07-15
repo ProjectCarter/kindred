@@ -6,6 +6,8 @@ import type { MapsDestination } from "../lib/edition/googleMaps";
 
 type Props = {
   actions: ActionBarAction[];
+  /** Tighter spacing for homepage / grid listings. */
+  variant?: "article" | "listing";
 };
 
 function openUrl(url: string) {
@@ -39,14 +41,15 @@ function handlePress(action: ActionBarAction) {
  * Newspaper-style contextual actions — editorial links beneath Pin / Save / Share.
  * Discovery lives on the homepage; decision-making lives in the article.
  */
-export function ArticleActionList({ actions }: Props) {
+export function ArticleActionList({ actions, variant = "article" }: Props) {
   if (!actions.length) return null;
+  const compact = variant === "listing";
 
   return (
     <View
-      style={styles.block}
+      style={[styles.block, compact && styles.blockCompact]}
       accessibilityRole="menu"
-      accessibilityLabel="Article actions"
+      accessibilityLabel="Listing actions"
     >
       {actions.map((action) => (
         <Pressable
@@ -55,9 +58,16 @@ export function ArticleActionList({ actions }: Props) {
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={`${action.icon} ${action.label}`}
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.row,
+            compact && styles.rowCompact,
+            pressed && styles.pressed,
+          ]}
         >
-          <Text style={styles.label} maxFontSizeMultiplier={1.15}>
+          <Text
+            style={[styles.label, compact && styles.labelCompact]}
+            maxFontSizeMultiplier={1.15}
+          >
             {action.icon} {action.label}
           </Text>
         </Pressable>
@@ -73,11 +83,20 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     paddingTop: 4,
   },
+  blockCompact: {
+    marginTop: 4,
+    marginBottom: 0,
+    paddingTop: 0,
+  },
   row: {
     alignSelf: "flex-start",
     paddingVertical: 14,
     minHeight: 48,
     justifyContent: "center",
+  },
+  rowCompact: {
+    paddingVertical: 8,
+    minHeight: 36,
   },
   label: {
     fontFamily: "Georgia",
@@ -86,6 +105,10 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.terracotta,
     letterSpacing: 0.15,
+  },
+  labelCompact: {
+    fontSize: 13,
+    lineHeight: 20,
   },
   pressed: {
     opacity: press.opacity,

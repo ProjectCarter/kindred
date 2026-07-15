@@ -10,6 +10,7 @@
 
 import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
+import { resolveListingActionsForDiscoveryItem } from "./actionBar";
 import { resolveVenueClassification } from "./venueClassification";
 import {
   compareByLocalProximity,
@@ -99,6 +100,10 @@ export function selectRecommendationCards(
     title: d.item.title.trim(),
     subtitle: recommendationLocationLine(d.item, options?.city),
     note: recommendationNote(d.item),
+    actions: resolveListingActionsForDiscoveryItem(d.item, {
+      fallbackCity: options?.city,
+      surface: "recommendation",
+    }),
   }));
 }
 

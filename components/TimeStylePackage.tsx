@@ -9,6 +9,8 @@ import {
   type ImageSourcePropType,
 } from "react-native";
 import { paper, press } from "../lib/edition/newspaperTheme";
+import { ArticleActionList } from "./ArticleActionList";
+import type { ActionBarAction } from "../lib/edition/actionBar";
 
 function CardPhoto({
   source,
@@ -44,6 +46,7 @@ export type TimeStoryCard = {
   byline?: string | null;
   image?: ImageSourcePropType | null;
   imageLabel?: string | null;
+  actions?: ActionBarAction[];
 };
 
 type Props = {
@@ -98,44 +101,46 @@ export function TimeStylePackage({
           />
         ) : null}
 
-        <Pressable
-          onPress={() => open(feature.id)}
-          disabled={!onOpen}
-          style={({ pressed }) => [
-            { width: featureW },
-            onOpen && pressed && { opacity: press.opacity },
-          ]}
-          accessibilityRole={onOpen ? "button" : "text"}
-          accessibilityLabel={feature.headline}
-        >
-          {feature.image ? (
-            <CardPhoto
-              source={feature.image}
-              width={featureW}
-              height={featureH}
-              label={feature.imageLabel || feature.headline}
-            />
-          ) : (
-            <View style={[styles.textLeadRule, { width: featureW }]} />
-          )}
-          {feature.kicker ? (
-            <Text style={styles.cardKicker}>{feature.kicker}</Text>
-          ) : null}
-          <Text
-            style={[styles.featureHeadline, wide && styles.featureHeadlineWide]}
-            maxFontSizeMultiplier={1.2}
+        <View style={{ width: featureW }}>
+          <Pressable
+            onPress={() => open(feature.id)}
+            disabled={!onOpen}
+            style={({ pressed }) => [onOpen && pressed && { opacity: press.opacity }]}
+            accessibilityRole={onOpen ? "button" : "text"}
+            accessibilityLabel={feature.headline}
           >
-            {feature.headline}
-          </Text>
-          {feature.dek ? (
-            <Text style={styles.dek} numberOfLines={3} maxFontSizeMultiplier={1.15}>
-              {feature.dek}
+            {feature.image ? (
+              <CardPhoto
+                source={feature.image}
+                width={featureW}
+                height={featureH}
+                label={feature.imageLabel || feature.headline}
+              />
+            ) : (
+              <View style={[styles.textLeadRule, { width: featureW }]} />
+            )}
+            {feature.kicker ? (
+              <Text style={styles.cardKicker}>{feature.kicker}</Text>
+            ) : null}
+            <Text
+              style={[styles.featureHeadline, wide && styles.featureHeadlineWide]}
+              maxFontSizeMultiplier={1.2}
+            >
+              {feature.headline}
             </Text>
+            {feature.dek ? (
+              <Text style={styles.dek} numberOfLines={3} maxFontSizeMultiplier={1.15}>
+                {feature.dek}
+              </Text>
+            ) : null}
+            {feature.byline ? (
+              <Text style={styles.byline}>{feature.byline}</Text>
+            ) : null}
+          </Pressable>
+          {feature.actions && feature.actions.length > 0 ? (
+            <ArticleActionList actions={feature.actions} variant="listing" />
           ) : null}
-          {feature.byline ? (
-            <Text style={styles.byline}>{feature.byline}</Text>
-          ) : null}
-        </Pressable>
+        </View>
 
         {wide && sides[1] ? (
           <SideCard
@@ -176,35 +181,37 @@ function SideCard({
   onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        { width },
-        pressed && { opacity: press.opacity },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={story.headline}
-    >
-      {story.image ? (
-        <Image
-          source={story.image}
-          style={{ width, height: photoH }}
-          resizeMode="cover"
-          accessibilityLabel={story.imageLabel || story.headline}
-        />
-      ) : (
-        <View style={[styles.textLeadRule, { width }]} />
-      )}
-      {story.kicker ? (
-        <Text style={styles.cardKicker}>{story.kicker}</Text>
+    <View style={{ width }}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [pressed && { opacity: press.opacity }]}
+        accessibilityRole="button"
+        accessibilityLabel={story.headline}
+      >
+        {story.image ? (
+          <Image
+            source={story.image}
+            style={{ width, height: photoH }}
+            resizeMode="cover"
+            accessibilityLabel={story.imageLabel || story.headline}
+          />
+        ) : (
+          <View style={[styles.textLeadRule, { width }]} />
+        )}
+        {story.kicker ? (
+          <Text style={styles.cardKicker}>{story.kicker}</Text>
+        ) : null}
+        <Text style={styles.sideHeadline} numberOfLines={4} maxFontSizeMultiplier={1.2}>
+          {story.headline}
+        </Text>
+        {story.byline ? (
+          <Text style={styles.byline}>{story.byline}</Text>
+        ) : null}
+      </Pressable>
+      {story.actions && story.actions.length > 0 ? (
+        <ArticleActionList actions={story.actions} variant="listing" />
       ) : null}
-      <Text style={styles.sideHeadline} numberOfLines={4} maxFontSizeMultiplier={1.2}>
-        {story.headline}
-      </Text>
-      {story.byline ? (
-        <Text style={styles.byline}>{story.byline}</Text>
-      ) : null}
-    </Pressable>
+    </View>
   );
 }
 

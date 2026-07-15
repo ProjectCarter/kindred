@@ -16,7 +16,9 @@ import {
   getStashedEvent,
 } from "../../lib/edition/eventStore";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
+import { resolveListingActionsForEvent } from "../../lib/edition/actionBar";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
+import { ArticleActionList } from "../../components/ArticleActionList";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
 import { paper, press } from "../../lib/edition/newspaperTheme";
@@ -57,6 +59,7 @@ export default function EventDetailScreen() {
   const badge = event ? deriveEventBadge(event) : null;
   const infoBadges = event ? eventInfoBadgesFor(event) : [];
   const place = event ? eventPlaceLine(event) : "";
+  const listingActions = event ? resolveListingActionsForEvent(event) : [];
 
   if (!event) {
     return (
@@ -116,13 +119,17 @@ export default function EventDetailScreen() {
             </Text>
           ) : null}
 
+          {listingActions.length > 0 ? (
+            <ArticleActionList actions={listingActions} />
+          ) : null}
+
           {event.sourceName ? (
             <Text style={styles.source} maxFontSizeMultiplier={1.15}>
               Listed via {event.sourceName}
             </Text>
           ) : null}
 
-          {event.sourceUrl ? (
+          {event.sourceUrl && listingActions.length === 0 ? (
             <Pressable
               onPress={() => {
                 void Linking.openURL(event.sourceUrl).catch(() => {});
