@@ -9,6 +9,7 @@ import { setAuthLinkError } from "../lib/auth/authLinkError";
 import { PaperLoading } from "../components/PaperLoading";
 import { AppErrorBoundary } from "../components/AppErrorBoundary";
 import { paper } from "../lib/edition/newspaperTheme";
+import { markStartup } from "../lib/perf/startupTiming";
 
 function getAuthCodeFromUrl(url: string): string | null {
   try {
@@ -101,12 +102,14 @@ export default function RootLayout() {
     }
 
     async function boot() {
+      markStartup("layout_boot_start");
       try {
         const initialUrl = await Linking.getInitialURL();
         await createSessionFromUrl(initialUrl);
         if (cancelled) return;
 
         const { data, error } = await supabase.auth.getSession();
+        markStartup("layout_session_ready");
         if (cancelled) return;
         if (error && __DEV__) {
           console.error("[auth] getSession", error.message);
@@ -115,6 +118,7 @@ export default function RootLayout() {
         setSession(next);
         if (next?.user?.id) {
           await refreshInterests(next.user.id);
+          markStartup("layout_interests_ready");
         } else {
           setHasInterests(null);
         }

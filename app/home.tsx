@@ -115,6 +115,7 @@ import {
   loadHomeScroll,
   updateHomeScroll,
 } from "../lib/edition/homeSession";
+import { markStartup, logStartupSummary } from "../lib/perf/startupTiming";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -311,11 +312,11 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [generating]);
 
-  // Resolve shared location (GPS / home / travel). Never silent city default.
+  // Resolve shared location from prefs — never block first paint on GPS.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const active = await resolveActivePlace({ refreshIfStale: true });
+      const active = await resolveActivePlace({ refreshIfStale: false });
       if (!cancelled && mountedRef.current) {
         setActiveLocation(active);
         focusedLocationKeyRef.current = activeLocationKey(active);
@@ -513,10 +514,12 @@ export default function HomeScreen() {
     }
 
     const fetchEdition = async () => {
+    markStartup("home_fetch_start");
     const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
 
     if (__DEV__) {
       console.log("[home] loadEdition: start", {
@@ -524,13 +527,13 @@ export default function HomeScreen() {
         quiet,
         eventsOnly,
         userId: user?.id ?? null,
-        userError: userError?.message ?? null,
+        sessionError: sessionError?.message ?? null,
       });
     }
 
     if (!user) {
-      if (__DEV__) console.warn("[home] loadEdition: no user", userError?.message);
-      return { kind: "no_user" as const, userError };
+      if (__DEV__) console.warn("[home] loadEdition: no user", sessionError?.message);
+      return { kind: "no_user" as const, userError: sessionError };
     }
 
     // Fire-and-forget — lets overnight generation compute this user's own
@@ -552,6 +555,7 @@ export default function HomeScreen() {
       if (cached && mountedRef.current && gen === loadGen.current) {
         applyCachedBundle(cached);
         setLoading(false);
+        markStartup("home_cache_paint");
         void maybeRecoverTodayInHistory({
           userId: user.id,
           editionId: cached.editionId,
@@ -580,19 +584,18 @@ export default function HomeScreen() {
     const {
       data: edition,
       error: editionError,
-      count: editionCount,
       status: editionStatus,
       statusText: editionStatusText,
     } = await supabase
       .from("editions")
       .select(
-        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context",
-        {
-        count: "exact",
-      })
+        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context"
+      )
       .eq("user_id", user.id)
       .eq("edition_date", todayStr)
       .maybeSingle();
+
+    markStartup("home_editions_query_done");
 
     __DEV__ && console.log("[home] loadEdition: editions query", {
       filterUserId: user.id,
@@ -606,7 +609,6 @@ export default function HomeScreen() {
             hint: editionError.hint,
           }
         : null,
-      count: editionCount ?? null,
       httpStatus: editionStatus ?? null,
       statusText: editionStatusText ?? null,
     });
@@ -644,26 +646,19 @@ export default function HomeScreen() {
       };
     }
 
-    const [
-      {
-        data: sectionRows,
-        error: sectionsError,
-        count: sectionsCount,
-        status: sectionsStatus,
-      },
-      adjacent,
-    ] = await Promise.all([
-      supabase
-        .from("edition_sections")
-        .select("id, section_type, position, headline, body, source_note", {
-          count: "exact",
-        })
-        .eq("edition_id", edition.id)
-        .order("position", { ascending: true }),
-      fetchAdjacentEditions(user.id, todayStr),
-    ]);
+    const {
+      data: sectionRows,
+      error: sectionsError,
+      status: sectionsStatus,
+    } = await supabase
+      .from("edition_sections")
+      .select("id, section_type, position, headline, body, source_note")
+      .eq("edition_id", edition.id)
+      .order("position", { ascending: true });
 
     const loaded = (sectionRows as EditionSection[] | null) ?? [];
+
+    markStartup("home_sections_query_done");
 
     __DEV__ && console.log("[home] loadEdition: edition_sections query", {
       editionId: edition.id,
@@ -681,7 +676,6 @@ export default function HomeScreen() {
             hint: sectionsError.hint,
           }
         : null,
-      count: sectionsCount ?? null,
       httpStatus: sectionsStatus ?? null,
     });
 
@@ -690,13 +684,14 @@ export default function HomeScreen() {
       user,
       edition,
       loaded,
-      adjacent,
       sectionsError,
     };
     };
 
     const result = await loadWithRetry(fetchEdition, {
       label: "loadEdition",
+      timeoutMs: 10_000,
+      maxAttempts: 2,
       onAttempt: (attempt, error) => {
         if (__DEV__) {
           console.log("[home] loadEdition: attempt", {
@@ -788,11 +783,10 @@ export default function HomeScreen() {
       return;
     }
 
-    const { user, edition, loaded, adjacent } = payload;
+    const { user, edition, loaded } = payload;
 
-    // Resolve active location before deciding whether this edition is fresh.
-    // Current Location mode always refreshes GPS when stale.
-    const active = await resolveActivePlace({ refreshIfStale: true });
+    // Use cached prefs for city check — never block first paint on GPS refresh.
+    const active = await resolveActivePlace({ refreshIfStale: false });
     if (mountedRef.current) setActiveLocation(active);
 
     const lead = parseLeadStory((edition as { lead_story?: unknown }).lead_story);
@@ -857,11 +851,16 @@ export default function HomeScreen() {
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
-      setOlder(adjacent.older);
       setBackgroundJob(null);
       setLocationMismatch(builtCity ?? "another city");
       setLoading(false);
       setRefreshing(false);
+
+      void fetchAdjacentEditions(user.id, edition.edition_date).then((adjacent) => {
+        if (mountedRef.current && gen === loadGen.current) {
+          setOlder(adjacent.older);
+        }
+      });
 
       const regenKey = `${edition.id}:${activeCity}:${active.mode}`;
       if (autoRegenKey.current !== regenKey) {
@@ -926,7 +925,6 @@ export default function HomeScreen() {
         loaded
       );
       setSections(nextSections);
-      setOlder(adjacent.older);
     } else if (syncAfterCache) {
       nextSections = mergeFrozenSections(
         cachedBundleRef.current?.sections ?? loaded,
@@ -935,7 +933,6 @@ export default function HomeScreen() {
       setSections(nextSections);
       setEditionDate(edition.edition_date);
       setEditionId(edition.id);
-      setOlder(adjacent.older);
       persistSectionsToCache(nextSections);
     } else {
       setSections(loaded);
@@ -958,7 +955,6 @@ export default function HomeScreen() {
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
       });
       editionFrozenRef.current = true;
-      setOlder(adjacent.older);
     }
 
     if (__DEV__) {
@@ -973,115 +969,137 @@ export default function HomeScreen() {
       );
     }
 
-    const recoveredSections = await maybeRecoverLocalEvents({
-      editionId: edition.id,
-      editionDate: edition.edition_date,
-      place: active.place,
-      sections: nextSections,
-    });
+    // First paint — text is readable; everything below runs in the background.
+    setLoading(false);
+    setRefreshing(false);
+    markStartup("home_first_paint");
+    logStartupSummary(
+      cachedBundleRef.current ? "repeat_launch" : "cold_launch"
+    );
 
-    if (
-      recoveredSections !== nextSections &&
-      mountedRef.current &&
-      gen === loadGen.current
-    ) {
-      setSections(recoveredSections);
-      nextSections = recoveredSections;
-      persistSectionsToCache(recoveredSections);
-    }
-
-    const historyRecovery = await maybeRecoverTodayInHistory({
-      userId: user.id,
-      editionId: edition.id,
-      editionDate: edition.edition_date,
-      sections: nextSections,
-      intelligence: intel,
-    });
-
-    if (
-      historyRecovery.sections !== nextSections ||
-      historyRecovery.intelligence !== intel
-    ) {
-      if (mountedRef.current && gen === loadGen.current) {
-        setSections(historyRecovery.sections);
-        setIntelligence(historyRecovery.intelligence);
-        nextSections = historyRecovery.sections;
-      }
-    }
-
-    if (loaded.length > 0) {
-      const sectionIdsForClips = patchEventsOnly
-        ? loaded.map((s) => s.id)
-        : loaded.map((s) => s.id);
-      const { data: clips, error: clipsError } = await supabase
-        .from("clippings")
-        .select("section_id")
-        .eq("user_id", user.id)
-        .in("section_id", sectionIdsForClips);
-
-      if (clipsError && __DEV__) {
-        console.error("[home] loadEdition: clippings query error", {
-          message: clipsError.message,
-          code: clipsError.code,
-        });
-      }
-
+    void (async () => {
       if (!mountedRef.current || gen !== loadGen.current) return;
-      if (!patchEventsOnly) {
-        setClippedIds(new Set((clips ?? []).map((c) => c.section_id)));
+
+      void fetchAdjacentEditions(user.id, edition.edition_date).then((adjacent) => {
+        if (mountedRef.current && gen === loadGen.current) {
+          setOlder(adjacent.older);
+        }
+      });
+
+      const refreshed = await resolveActivePlace({ refreshIfStale: true });
+      if (mountedRef.current && gen === loadGen.current) {
+        setActiveLocation(refreshed);
       }
-    } else if (!patchEventsOnly) {
-      setClippedIds(new Set());
-    }
 
-    if (!mountedRef.current || gen !== loadGen.current) return;
+      let bgSections = nextSections;
+      let bgIntel: EditionIntelligence | null = intel;
 
-    if (!patchEventsOnly && !syncAfterCache) {
-      const bundle: CachedEditionBundle = {
+      const recoveredSections = await maybeRecoverLocalEvents({
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        place: refreshed.place,
+        sections: bgSections,
+      });
+
+      if (
+        recoveredSections !== bgSections &&
+        mountedRef.current &&
+        gen === loadGen.current
+      ) {
+        setSections(recoveredSections);
+        bgSections = recoveredSections;
+        persistSectionsToCache(recoveredSections);
+      }
+
+      const historyRecovery = await maybeRecoverTodayInHistory({
         userId: user.id,
         editionId: edition.id,
         editionDate: edition.edition_date,
-        cachedAt: Date.now(),
-        sections: recoveredSections,
-        leadStory: lead,
-        topStories: topStoriesFromEditorialContext(
-          (edition as { editorial_context?: unknown }).editorial_context
-        ),
-        bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
-        intelligence: intel,
-        heroImageId: cachedBundleRef.current?.heroImageId ?? null,
-        morningHero: intel.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
-      };
-      cachedBundleRef.current = bundle;
-      void saveCachedEdition(bundle);
-    } else if (recoveredSections.length > 0) {
-      persistSectionsToCache(recoveredSections);
-    }
-
-    setLoading(false);
-    setRefreshing(false);
-
-    if (__DEV__) {
-      console.log("[home] loadEdition: render decision", {
-        patchEventsOnly,
-        sectionCount: loaded.length,
-        elapsedMs: result.elapsedMs,
-        attempt: result.attempt,
+        sections: bgSections,
+        intelligence: bgIntel,
       });
-    }
 
-    // Fire-and-forget — only structured event facts may patch through.
-    // Discovery reshuffles are ignored on the client for frozen editions.
-    void maybeTriggerLiveRefresh({
-      editionId: edition.id,
-      editionDate: edition.edition_date,
-      place: active.place,
-      onEventsChanged: () => {
-        if (mountedRef.current) {
-          void loadEdition({ quiet: true, eventsOnly: true });
+      if (
+        (historyRecovery.sections !== bgSections ||
+          historyRecovery.intelligence !== bgIntel) &&
+        mountedRef.current &&
+        gen === loadGen.current
+      ) {
+        setSections(historyRecovery.sections);
+        setIntelligence(historyRecovery.intelligence);
+        bgSections = historyRecovery.sections;
+        bgIntel = historyRecovery.intelligence;
+      }
+
+      if (loaded.length > 0) {
+        const sectionIdsForClips = loaded.map((s) => s.id);
+        const { data: clips, error: clipsError } = await supabase
+          .from("clippings")
+          .select("section_id")
+          .eq("user_id", user.id)
+          .in("section_id", sectionIdsForClips);
+
+        if (clipsError && __DEV__) {
+          console.error("[home] loadEdition: clippings query error", {
+            message: clipsError.message,
+            code: clipsError.code,
+          });
         }
-      },
-    });
+
+        if (mountedRef.current && gen === loadGen.current && !patchEventsOnly) {
+          setClippedIds(new Set((clips ?? []).map((c) => c.section_id)));
+        }
+      } else if (
+        mountedRef.current &&
+        gen === loadGen.current &&
+        !patchEventsOnly
+      ) {
+        setClippedIds(new Set());
+      }
+
+      if (!patchEventsOnly && !syncAfterCache) {
+        const bundle: CachedEditionBundle = {
+          userId: user.id,
+          editionId: edition.id,
+          editionDate: edition.edition_date,
+          cachedAt: Date.now(),
+          sections: bgSections,
+          leadStory: lead,
+          topStories: topStoriesFromEditorialContext(
+            (edition as { editorial_context?: unknown }).editorial_context
+          ),
+          bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
+          intelligence: bgIntel,
+          heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+          morningHero:
+            bgIntel?.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
+        };
+        cachedBundleRef.current = bundle;
+        void saveCachedEdition(bundle);
+      } else if (bgSections.length > 0) {
+        persistSectionsToCache(bgSections);
+      }
+
+      if (__DEV__) {
+        console.log("[home] loadEdition: post-paint work finished", {
+          patchEventsOnly,
+          sectionCount: loaded.length,
+          elapsedMs: result.elapsedMs,
+          attempt: result.attempt,
+        });
+      }
+
+      void maybeTriggerLiveRefresh({
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        place: refreshed.place,
+        onEventsChanged: () => {
+          if (mountedRef.current) {
+            void loadEdition({ quiet: true, eventsOnly: true });
+          }
+        },
+      });
+    })();
     } catch (err) {
       if (__DEV__) {
         console.error(
@@ -1411,8 +1429,9 @@ export default function HomeScreen() {
   async function handleToggleClip(section: EditionSection) {
     if (clipPendingId) return;
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
     if (!user) {
       setClipError("Sign in again to save passages from your paper.");
       return;

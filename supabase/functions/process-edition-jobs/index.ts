@@ -4,7 +4,7 @@
 // auth is a shared secret. Each invocation:
 //   1. Reaps jobs stuck in `processing` from a worker that crashed mid-build.
 //   2. Enqueues one job per eligible user whose *local* clock says it's time
-//      (>= EARLIEST_LOCAL_HOUR) and who doesn't already have a ready edition
+//      (>= 12:01 AM local) and who doesn't already have a ready edition
 //      for their own local date.
 //   3. Atomically claims a batch of pending/failed jobs — `FOR UPDATE SKIP
 //      LOCKED` under the hood, so overlapping sweeps can't double-build the
@@ -19,11 +19,12 @@ import {
 const BATCH_SIZE = 15;
 const MAX_ATTEMPTS = 3;
 const STALE_PROCESSING_MINUTES = 10;
-// Don't build before 2am local — avoids generating on yesterday's news the
-// instant a user's local midnight ticks over. Everything from here through
+// V1 requirement: begin generating at 12:01 AM local — one minute after
+// midnight so the calendar date is stable. Everything from here through
 // end-of-day is "catch-up": if a user still has no ready edition, try now
 // rather than waiting for a narrow window that might have been missed.
-const EARLIEST_LOCAL_HOUR = 2;
+const EARLIEST_LOCAL_HOUR = 0;
+const EARLIEST_LOCAL_MINUTE = 1;
 // Fallback for any profile that hasn't reported a device timezone yet
 // (lib/edition/timezone.ts populates this opportunistically on the client).
 const DEFAULT_TIMEZONE = "America/Phoenix";
@@ -48,11 +49,11 @@ function isAuthorized(req: Request): boolean {
   return false;
 }
 
-/** A user's local calendar date + hour, from an IANA timezone name. */
-function localDateAndHour(
+/** A user's local calendar date + clock time, from an IANA timezone name. */
+function localDateAndTime(
   timeZone: string,
   now: Date
-): { dateStr: string; hour: number } {
+): { dateStr: string; hour: number; minute: number } {
   try {
     const fmt = new Intl.DateTimeFormat("en-US", {
       timeZone,
@@ -60,6 +61,7 @@ function localDateAndHour(
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
+      minute: "2-digit",
       hour12: false,
     });
     const parts = fmt.formatToParts(now);
@@ -68,20 +70,31 @@ function localDateAndHour(
     const month = get("month");
     const day = get("day");
     let hour = Number(get("hour"));
+    const minute = Number(get("minute"));
     if (hour === 24) hour = 0; // some locales render midnight as "24"
-    if (!year || !month || !day || Number.isNaN(hour)) {
+    if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) {
       throw new Error("unparseable parts");
     }
-    return { dateStr: `${year}-${month}-${day}`, hour };
+    return { dateStr: `${year}-${month}-${day}`, hour, minute };
   } catch {
     // Invalid/unknown IANA zone string stored on a profile — fall back
     // rather than let one bad value break the whole sweep.
     if (timeZone === DEFAULT_TIMEZONE) {
       // Guard against DEFAULT_TIMEZONE itself somehow failing.
-      return { dateStr: now.toISOString().slice(0, 10), hour: now.getUTCHours() };
+      return {
+        dateStr: now.toISOString().slice(0, 10),
+        hour: now.getUTCHours(),
+        minute: now.getUTCMinutes(),
+      };
     }
-    return localDateAndHour(DEFAULT_TIMEZONE, now);
+    return localDateAndTime(DEFAULT_TIMEZONE, now);
   }
+}
+
+/** True once the user's local clock has reached 12:01 AM on edition_date. */
+function isPastEditionGenerationWindow(hour: number, minute: number): boolean {
+  return hour > EARLIEST_LOCAL_HOUR ||
+    (hour === EARLIEST_LOCAL_HOUR && minute >= EARLIEST_LOCAL_MINUTE);
 }
 
 type GenerationJobRow = {
@@ -136,12 +149,13 @@ Deno.serve(async (req) => {
 
     for (const profile of eligible) {
       const tz = profile.timezone || DEFAULT_TIMEZONE;
-      const { dateStr: localDate, hour: localHour } = localDateAndHour(tz, now);
+      const { dateStr: localDate, hour: localHour, minute: localMinute } =
+        localDateAndTime(tz, now);
       localDatesInPlay.add(localDate);
 
-      if (localHour < EARLIEST_LOCAL_HOUR) {
+      if (!isPastEditionGenerationWindow(localHour, localMinute)) {
         skippedTooEarly += 1;
-        continue; // still the middle of this user's night — wait for the window
+        continue; // before 12:01 AM local — wait for the generation window
       }
 
       const { data: existingEdition } = await supabaseAdmin
