@@ -10,7 +10,7 @@
 import {
   createServiceClient,
   resolveEditionLocation,
-} from "../_shared/buildEdition.ts";
+} from "../_shared/editionRuntime.ts";
 import { refreshLiveDataForEdition } from "../_shared/liveRefresh.ts";
 
 const BATCH_SIZE = 25;

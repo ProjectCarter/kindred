@@ -11,7 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import {
   createServiceClient,
   resolveEditionLocation,
-} from "../_shared/buildEdition.ts";
+} from "../_shared/editionRuntime.ts";
 import { refreshLiveDataForEdition } from "../_shared/liveRefresh.ts";
 
 type ClientLocation = {

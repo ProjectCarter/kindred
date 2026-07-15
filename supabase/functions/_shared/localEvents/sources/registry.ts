@@ -6,6 +6,7 @@ import type { LocalEvent, LocalEventLocation, LocalEventsFetchOptions } from "..
 import { fetchSerpGoogleEventCandidates } from "../provider.ts";
 import { fetchNpsParkEvents } from "./npsParkEvents.ts";
 import { fetchEventbriteSearchCandidates } from "./eventbriteSearch.ts";
+import { isEventbriteOnlyMode } from "../eventbriteOnlyMode.ts";
 import type {
   LocalEventSourceConnector,
   LocalEventSourceId,
@@ -36,7 +37,13 @@ const CONNECTORS: LocalEventSourceConnector[] = [
   },
 ];
 
-export function getActiveEventConnectors(): LocalEventSourceConnector[] {
+export function getActiveEventConnectors(
+  options?: LocalEventsFetchOptions
+): LocalEventSourceConnector[] {
+  const eventbriteOnly = options?.eventbriteOnly ?? isEventbriteOnlyMode();
+  if (eventbriteOnly) {
+    return CONNECTORS.filter((c) => c.id === "eventbrite");
+  }
   return CONNECTORS;
 }
 
@@ -45,7 +52,10 @@ export async function gatherFromAllSources(
   location: LocalEventLocation,
   options?: LocalEventsFetchOptions
 ): Promise<SourceGatherResult[]> {
-  const connectors = getActiveEventConnectors();
+  const connectors = getActiveEventConnectors(options);
+  if ((options?.eventbriteOnly ?? isEventbriteOnlyMode()) && connectors.length === 1) {
+    console.log("[localEvents:registry] EVENTBRITE_ONLY mode — other sources disabled");
+  }
   const results = await Promise.all(
     connectors.map(async (connector): Promise<SourceGatherResult> => {
       try {

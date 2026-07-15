@@ -71,7 +71,10 @@ export async function refreshEventsSection(
     }
 
     const events = await enrichEventsWithBanditNotes(fetched);
-    const body = buildLocalEventsBody(events);
+    const { isEventbriteOnlyMode } = await import("./localEvents/eventbriteOnlyMode.ts");
+    const body = buildLocalEventsBody(events, {
+      eventbriteOnly: isEventbriteOnlyMode(),
+    });
 
     const { data: existing, error: existingError } = await admin
       .from("edition_sections")

@@ -62,12 +62,17 @@ export function LocalEventsGrid({
   /** See All passes the full persisted list — keep server editorial order. */
   const usePersistedOrder =
     events.length > 0 && initialRenderCount >= events.length;
-  const published = usePersistedOrder
-    ? events
-    : orderEventsForEdition(events);
-  const visible = usePersistedOrder
-    ? events.slice(0, initialRenderCount)
-    : orderEventsForGrid(events, initialRenderCount);
+  /** TEMPORARY — Eventbrite-only test: skip client re-scoring, use persisted order. */
+  const eventbriteOnlyTest =
+    events.length > 0 && events.every((e) => e.sourceId === "eventbrite");
+  const published =
+    usePersistedOrder || eventbriteOnlyTest
+      ? events
+      : orderEventsForEdition(events);
+  const visible =
+    usePersistedOrder || eventbriteOnlyTest
+      ? events.slice(0, initialRenderCount)
+      : orderEventsForGrid(events, initialRenderCount);
   const remainingCount = published.length - visible.length;
   const seeAllTotal = published.length;
 

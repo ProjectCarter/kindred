@@ -65,6 +65,9 @@ export type LocalEvent = {
   sourceId?: string;
   /** Trust tier for merge priority and ranking. */
   sourceTier?: "official" | "venue" | "aggregator";
+  /** Verified venue coordinates when the provider supplies them. */
+  lat?: number | null;
+  lon?: number | null;
   /** Provider venue rating when available — popularity signal only. */
   venueRating?: number | null;
   venueReviewCount?: number | null;
@@ -163,6 +166,8 @@ export type LocalEventsFetchOptions = {
   isBusyDay?: boolean;
   /** Override SerpAPI date chip — pass null to omit htichips entirely. */
   htichips?: string | null;
+  /** TEMPORARY — force Eventbrite-only gather + basic qualification. */
+  eventbriteOnly?: boolean;
 };
 
 export type LocalEventsPipelineProbe = {
@@ -1048,8 +1053,12 @@ export function splitEventSchedule(startDateTime: string): {
   return { date: raw, time: "See listing" };
 }
 
-export function buildLocalEventsBody(events: LocalEvent[]): string {
+export function buildLocalEventsBody(
+  events: LocalEvent[],
+  options?: { eventbriteOnly?: boolean }
+): string {
   return JSON.stringify({
+    ...(options?.eventbriteOnly ? { testMode: "eventbrite_only" as const } : {}),
     events: events.map((e, index) => {
       const enriched = attachEventHorizon(e);
       const { date, time } = splitEventSchedule(enriched.startDateTime);
@@ -1085,6 +1094,7 @@ export function buildLocalEventsBody(events: LocalEvent[]): string {
         city: enriched.city,
         sourceUrl: enriched.sourceUrl,
         sourceName: enriched.sourceName,
+        ...(enriched.sourceId ? { sourceId: enriched.sourceId } : {}),
         imageUrl: enriched.imageUrl?.trim() || null,
         imageSource: enriched.imageUrl ? enriched.imageSource ?? "provider_thumbnail" : null,
         banditNote: enriched.banditNote?.trim() || null,

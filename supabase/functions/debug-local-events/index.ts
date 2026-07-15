@@ -191,6 +191,7 @@ Deno.serve(async (req) => {
       isBusyDay,
       probe,
       pipeline: pipeline.meta,
+      eventbriteOnlyReport: pipeline.meta.eventbriteOnly ?? null,
       productionEventCount: productionEvents.length,
       publishedEvents: summarize(productionEvents),
       discoveredEvents: summarize(pipeline.events),

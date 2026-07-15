@@ -93,6 +93,8 @@ export type LocalEventCard = {
   lon?: number | null;
   sourceUrl: string;
   sourceName: string;
+  /** Connector that surfaced this listing — e.g. eventbrite. */
+  sourceId?: string | null;
   /** Authentic listing photograph when the provider supplies one. */
   imageUrl?: string | null;
   /** Provenance — never filled by HeroImageService / weather stock. */
@@ -129,6 +131,7 @@ export type LocalEventCard = {
 };
 
 export type LocalEventsBody = {
+  testMode?: "eventbrite_only";
   events: LocalEventCard[];
 };
 
@@ -318,6 +321,10 @@ export function parseLocalEventsBody(
             typeof e.sourceName === "string" && e.sourceName.trim()
               ? e.sourceName.trim()
               : "Listing",
+          sourceId:
+            typeof e.sourceId === "string" && e.sourceId.trim()
+              ? e.sourceId.trim()
+              : null,
           imageUrl,
           imageSource: normalizeImageSource(e.imageSource, imageUrl),
           banditNote,

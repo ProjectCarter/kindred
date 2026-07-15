@@ -54,10 +54,10 @@ export default function EventsScreen() {
           <KindredDetailBackButton onPress={handleBack} />
         </View>
 
-        <Text style={styles.kicker}>Around town today</Text>
+        <Text style={styles.kicker}>Around town</Text>
         <Text style={styles.title}>Local Events</Text>
         <Text style={styles.subtitle}>
-          Everything happening nearby, gathered in one place.
+          Concerts, festivals, markets, and community happenings — today through the coming month.
         </Text>
 
         <LocalEventsGrid

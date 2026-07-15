@@ -26,6 +26,10 @@ import { normalizeEvents } from "./normalize.ts";
 import { enrichEventImages } from "./enrichImages.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
 import { attachEventHorizon } from "./horizon.ts";
+import {
+  isEventbriteOnlyMode,
+  qualifyEventbriteEvents,
+} from "./eventbriteOnlyMode.ts";
 
 export type LocalEventsPipelineMeta = {
   candidateCount: number;
@@ -41,6 +45,8 @@ export type LocalEventsPipelineMeta = {
   editorNotes: string[];
   /** Validation — titles in the ranked pool in editorial order. */
   rankedPoolTitles?: string[];
+  /** TEMPORARY — Eventbrite-only test diagnostics. */
+  eventbriteOnly?: import("./eventbriteOnlyMode.ts").EventbriteQualificationReport;
 };
 
 export type LocalEventsPipelineOptions = LocalEventsFetchOptions & {
@@ -52,6 +58,11 @@ export async function runLocalEventsPipeline(
   location: LocalEventLocation,
   options?: LocalEventsPipelineOptions
 ): Promise<{ events: LocalEvent[]; meta: LocalEventsPipelineMeta }> {
+  const eventbriteOnly = options?.eventbriteOnly ?? isEventbriteOnlyMode();
+  if (eventbriteOnly) {
+    return runEventbriteOnlyPipeline(location, options);
+  }
+
   const editorNotes: string[] = [];
   const sourceCounts: Record<string, number> = {};
 
@@ -131,6 +142,67 @@ export async function runLocalEventsPipeline(
   console.log("[localEvents:pipeline] complete", meta);
 
   return { events: ranked, meta };
+}
+
+/** TEMPORARY — Eventbrite-only test path through the real production pipeline. */
+async function runEventbriteOnlyPipeline(
+  location: LocalEventLocation,
+  options?: LocalEventsPipelineOptions
+): Promise<{ events: LocalEvent[]; meta: LocalEventsPipelineMeta }> {
+  const now = options?.now ?? new Date();
+  const editorNotes = [
+    "EVENTBRITE_ONLY test mode — all other Local Events sources disabled.",
+  ];
+
+  const gatherResults = await gatherFromAllSources(location, {
+    ...options,
+    eventbriteOnly: true,
+  });
+
+  const raw = gatherResults.flatMap((r) => r.events);
+  const sourceCounts: Record<string, number> = {};
+  for (const result of gatherResults) {
+    if (result.events.length) {
+      sourceCounts[result.sourceId] = result.events.length;
+    }
+  }
+
+  console.log("[localEvents:eventbriteOnly] gathered", {
+    totalReturned: raw.length,
+    sources: Object.keys(sourceCounts),
+  });
+
+  const normalized = normalizeEvents(raw);
+  const withImages = await enrichEventImages(normalized);
+  const { qualified, report } = qualifyEventbriteEvents(withImages, location, now);
+
+  editorNotes.push(
+    `Eventbrite returned ${report.totalReturned}; ` +
+      `${report.rejectedDate} rejected for date; ` +
+      `${report.rejectedDistance} rejected for distance; ` +
+      `${report.rejectedMissing} rejected for missing data; ` +
+      `${report.persisted} persisted.`
+  );
+
+  const meta: LocalEventsPipelineMeta = {
+    candidateCount: raw.length,
+    mergedCount: normalized.length,
+    normalizedCount: normalized.length,
+    imagesEnriched: 0,
+    discoveredInHorizon: qualified.length,
+    scoredAboveThreshold: qualified.length,
+    publishedCount: qualified.length,
+    sourcesUsed: ["eventbrite"],
+    sourceCounts,
+    eventsWithImages: qualified.filter((e) => Boolean(e.imageUrl?.trim())).length,
+    rankedPoolTitles: qualified.map((e) => e.name),
+    editorNotes,
+    eventbriteOnly: report,
+  };
+
+  console.log("[localEvents:eventbriteOnly] complete", meta);
+
+  return { events: qualified, meta };
 }
 
 /** Backward-compatible entry — returns the full ranked qualified pool. */

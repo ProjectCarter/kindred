@@ -6,6 +6,7 @@
 
 import type { LocalEvent, LocalEventLocation } from "../provider.ts";
 import { inferEventCategory } from "../provider.ts";
+import { isEventbriteOnlyMode } from "../eventbriteOnlyMode.ts";
 
 const USER_AGENT =
   "Mozilla/5.0 (compatible; Kindred/1.0; +https://kindred.app)";
@@ -110,6 +111,8 @@ function parseServerDataEvents(html: string): Array<{
   startDateTime: string;
   url: string;
   imageUrl: string | null;
+  lat: number | null;
+  lon: number | null;
 }> {
   const data = extractServerData(html) as {
     search_data?: { events?: { results?: EventbriteServerEvent[] } };
@@ -125,6 +128,8 @@ function parseServerDataEvents(html: string): Array<{
     startDateTime: string;
     url: string;
     imageUrl: string | null;
+    lat: number | null;
+    lon: number | null;
   }> = [];
 
   for (const row of results) {
@@ -141,6 +146,20 @@ function parseServerDataEvents(html: string): Array<{
       "Gilbert";
     const venue = venueName || city;
     const schedule = formatSchedule(row.start_date ?? null, row.start_time ?? null);
+    const latRaw = row.primary_venue?.address?.latitude;
+    const lonRaw = row.primary_venue?.address?.longitude;
+    const lat =
+      typeof latRaw === "number"
+        ? latRaw
+        : typeof latRaw === "string"
+          ? Number(latRaw)
+          : null;
+    const lon =
+      typeof lonRaw === "number"
+        ? lonRaw
+        : typeof lonRaw === "string"
+          ? Number(lonRaw)
+          : null;
 
     out.push({
       name,
@@ -150,6 +169,8 @@ function parseServerDataEvents(html: string): Array<{
       startDateTime: schedule.startDateTime,
       url,
       imageUrl: row.image?.url?.replace(/&amp;/g, "&") ?? null,
+      lat: Number.isFinite(lat) ? lat : null,
+      lon: Number.isFinite(lon) ? lon : null,
     });
   }
 
@@ -188,6 +209,8 @@ function parseListingCards(html: string): ReturnType<typeof parseServerDataEvent
       startDateTime: schedule.startDateTime,
       url,
       imageUrl: imageMatch?.[1]?.replace(/&amp;/g, "&") ?? null,
+      lat: null,
+      lon: null,
     });
   }
 
@@ -264,6 +287,8 @@ export async function fetchEventbriteSearchCandidates(
         sourceTier: "aggregator",
         imageUrl: card.imageUrl,
         imageSource: card.imageUrl ? "provider_thumbnail" : null,
+        lat: card.lat,
+        lon: card.lon,
         category,
       });
     }
@@ -274,7 +299,9 @@ export async function fetchEventbriteSearchCandidates(
     pageCount: pageUrls.length,
     eventCount: out.length,
     withDates: out.filter((e) => e.startDateIso).length,
+    withCoords: out.filter((e) => e.lat != null && e.lon != null).length,
+    eventbriteOnly: isEventbriteOnlyMode(),
   });
 
-  return out.slice(0, 120);
+  return isEventbriteOnlyMode() ? out : out.slice(0, 120);
 }
