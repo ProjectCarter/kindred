@@ -1050,7 +1050,7 @@ export function splitEventSchedule(startDateTime: string): {
 
 export function buildLocalEventsBody(events: LocalEvent[]): string {
   return JSON.stringify({
-    events: events.map((e) => {
+    events: events.map((e, index) => {
       const enriched = attachEventHorizon(e);
       const { date, time } = splitEventSchedule(enriched.startDateTime);
       const category = enriched.category ?? inferEventCategory(enriched.name, enriched.venue);
@@ -1076,6 +1076,7 @@ export function buildLocalEventsBody(events: LocalEvent[]): string {
                 banditNote: enriched.banditNote ?? null,
               })
             ));
+      const editorialScore = enriched.editorialScore ?? null;
       return {
         name: enriched.name,
         date,
@@ -1090,6 +1091,14 @@ export function buildLocalEventsBody(events: LocalEvent[]): string {
         category,
         startDateIso: enriched.startDateIso ?? null,
         horizonBucket: enriched.horizonBucket ?? null,
+        editorialRank: index + 1,
+        ...(editorialScore
+          ? {
+              editorialScore: editorialScore.total,
+              editorialDimensions: editorialScore.dimensions,
+              editorialReasons: editorialScore.reasons.slice(0, 6),
+            }
+          : {}),
         ...(badges.length ? { badges } : {}),
       };
     }),

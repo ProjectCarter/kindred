@@ -76,7 +76,6 @@ export {
   splitEventSchedule,
 } from "./localEvents/provider.ts";
 import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
-import { rankLocalEventsForEdition } from "./localEvents/ranking.ts";
 export { enrichEventsWithBanditNotes };
 
 export type BuildEditionResult =
@@ -667,7 +666,9 @@ export async function buildEditionForUser(
     timer.timed("Today in History - candidates", () =>
       fetchOnThisDayCandidates(editionDate)
     ),
-    timer.timed("Local Events", () => getLocalEvents(eventsLocation, { isBusyDay })),
+    timer.timed("Local Events", () =>
+      getLocalEvents(eventsLocation, { isBusyDay, now: editionDateObj })
+    ),
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
     timer.timed("Recommendations - Places", () =>
@@ -736,15 +737,13 @@ export async function buildEditionForUser(
 
   const onThisDay = historySelection?.event ?? null;
 
-  const localEventsRanked = rankLocalEventsForEdition(localEventsRaw, {
-    now: editionDateObj,
-    weatherIntel,
-  });
+  // Pipeline already returns the full ranked qualified pool — do not re-allocate.
+  const localEventsRanked = localEventsRaw;
 
   console.log("[buildEdition] local events ranked", {
-    raw: localEventsRaw.length,
-    ranked: localEventsRanked.length,
+    qualified: localEventsRanked.length,
     topEvent: localEventsRanked[0]?.name?.slice(0, 48) ?? null,
+    topScore: localEventsRanked[0]?.editorialScore?.total ?? null,
   });
 
   console.log("[buildEdition] weather provider", {
@@ -1773,12 +1772,27 @@ export async function buildEditionForUser(
     .filter((r) => r.headline && r.body);
 
   if (localEvents.length > 0) {
+    const localEventsBody = buildLocalEventsBody(localEvents);
+    const persistedCount = (() => {
+      try {
+        const parsed = JSON.parse(localEventsBody) as { events?: unknown[] };
+        return Array.isArray(parsed.events) ? parsed.events.length : 0;
+      } catch {
+        return localEvents.length;
+      }
+    })();
+    console.log("[buildEdition] local events persisted", {
+      qualified: localEvents.length,
+      persistedInBody: persistedCount,
+      topEvent: localEvents[0]?.name?.slice(0, 48) ?? null,
+      topScore: localEvents[0]?.editorialScore?.total ?? null,
+    });
     rows.push({
       edition_id: edition.id,
       section_type: "local_events",
       position: 3,
       headline: "A Few Things Happening Around Town",
-      body: buildLocalEventsBody(localEvents),
+      body: localEventsBody,
       source_note: "Curated from trusted local event sources",
     });
   }

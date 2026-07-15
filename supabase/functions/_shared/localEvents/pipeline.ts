@@ -12,8 +12,8 @@
  * 5. Enrich authentic event images when providers omit photography
  * 6. Editorial summaries — Bandit notes at edition build (banditNotes.ts)
  * 7. Badges — resolved at parse time (badgeResolver.ts)
- * 8. Rank by editorial quality + category variety
- * 9. Publish events meeting the quality threshold
+ * 8. Rank by editorial quality — persist the full qualified pool in edition order
+ * 9. Homepage rendering caps first paint; the stored edition retains every pick
  */
 
 import type { WeatherIntelligence } from "../weather/providers/types.ts";
@@ -25,7 +25,6 @@ import { mergeEventsFromSources } from "./merge.ts";
 import { normalizeEvents } from "./normalize.ts";
 import { enrichEventImages } from "./enrichImages.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
-import { allocateLocalEventsByHorizon } from "./horizonAllocator.ts";
 import { attachEventHorizon } from "./horizon.ts";
 
 export type LocalEventsPipelineMeta = {
@@ -40,7 +39,7 @@ export type LocalEventsPipelineMeta = {
   sourceCounts: Record<string, number>;
   eventsWithImages: number;
   editorNotes: string[];
-  /** Validation — titles in the ranked pool before horizon allocation. */
+  /** Validation — titles in the ranked pool in editorial order. */
   rankedPoolTitles?: string[];
 };
 
@@ -83,7 +82,7 @@ export async function runLocalEventsPipeline(
   const withImages = await enrichEventImages(normalized);
   const imagesEnriched = withImages.filter((e) => Boolean(e.imageUrl?.trim())).length - beforeImages;
 
-  // 8. Rank within 30-day horizon, then allocate a balanced editorial mix.
+  // 8. Rank within 30-day horizon — persist the full qualified pool in order.
   const now = options?.now ?? new Date();
   const inHorizon = withImages
     .slice(0, SERPAPI_CANDIDATE_CAP)
@@ -94,10 +93,6 @@ export async function runLocalEventsPipeline(
     now,
     weatherIntel: options?.weatherIntel,
     readerCity: location.city,
-  });
-  const varied = allocateLocalEventsByHorizon(ranked, {
-    now,
-    weatherIntel: options?.weatherIntel,
   });
 
   const sourcesUsed = gatherResults
@@ -115,7 +110,7 @@ export async function runLocalEventsPipeline(
   editorNotes.push(
     `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
       `${merged.length} after dedupe; ${inHorizon.length} within 30 days; ` +
-      `${ranked.length} scored above threshold; ${varied.length} published.`
+      `${ranked.length} scored above threshold; ${ranked.length} persisted.`
   );
 
   const meta: LocalEventsPipelineMeta = {
@@ -125,20 +120,20 @@ export async function runLocalEventsPipeline(
     imagesEnriched: Math.max(0, imagesEnriched),
     discoveredInHorizon: inHorizon.length,
     scoredAboveThreshold: ranked.length,
-    publishedCount: varied.length,
+    publishedCount: ranked.length,
     sourcesUsed,
     sourceCounts,
-    eventsWithImages: varied.filter((e) => Boolean(e.imageUrl?.trim())).length,
+    eventsWithImages: ranked.filter((e) => Boolean(e.imageUrl?.trim())).length,
     rankedPoolTitles: ranked.map((e) => e.name),
     editorNotes,
   };
 
   console.log("[localEvents:pipeline] complete", meta);
 
-  return { events: varied, meta };
+  return { events: ranked, meta };
 }
 
-/** Backward-compatible entry — returns published events only. */
+/** Backward-compatible entry — returns the full ranked qualified pool. */
 export async function getLocalEventsFromPipeline(
   location: LocalEventLocation,
   options?: LocalEventsPipelineOptions

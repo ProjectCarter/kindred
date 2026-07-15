@@ -5,6 +5,7 @@
 import {
   getLocalEvents,
   probeLocalEventsPipeline,
+  buildLocalEventsBody,
   type LocalEvent,
   type LocalEventLocation,
 } from "../_shared/localEvents/provider.ts";
@@ -147,6 +148,43 @@ Deno.serve(async (req) => {
       }
     }
 
+    const productionBody = buildLocalEventsBody(productionEvents);
+    const persistedEvents = JSON.parse(productionBody) as {
+      events: Array<{
+        name: string;
+        editorialRank?: number;
+        editorialScore?: number;
+      }>;
+    };
+
+    const persistenceValidation = {
+      /** Same entry point generate-edition and refresh-live-data use. */
+      qualifiedViaGetLocalEvents: productionEvents.length,
+      serializedInEditionBody: persistedEvents.events?.length ?? 0,
+      pipelineDiscovered: pipeline.meta.candidateCount,
+      pipelineInHorizon: pipeline.meta.discoveredInHorizon,
+      pipelineQualified: pipeline.meta.scoredAboveThreshold,
+      pipelineReturnedCount: pipeline.meta.publishedCount,
+      noSecondServerAllocation: pipeline.meta.publishedCount === pipeline.meta.scoredAboveThreshold,
+      editorialOrderPreserved:
+        productionEvents.length === (persistedEvents.events?.length ?? 0) &&
+        productionEvents.every(
+          (event, index) =>
+            persistedEvents.events?.[index]?.name === event.name &&
+            persistedEvents.events?.[index]?.editorialRank === index + 1
+        ),
+      topThreeEditorialOrder: productionEvents.slice(0, 3).map((e, i) => ({
+        rank: i + 1,
+        name: e.name,
+        editorialScore:
+          e.editorialScore?.total ??
+          persistedEvents.events?.[i]?.editorialScore ??
+          null,
+      })),
+      homepageRenderCap: 8,
+      seeAllAvailable: persistedEvents.events?.length ?? 0,
+    };
+
     return Response.json({
       ok: true,
       editionDate,
@@ -160,6 +198,7 @@ Deno.serve(async (req) => {
       eventbriteDiscovered: summarize(eventbriteRaw),
       eventbriteWithDates: eventbriteRaw.filter((e) => e.startDateIso).length,
       eventbriteDiagnostics: eventbriteRaw.map(diagnoseEvent),
+      persistenceValidation,
       backfill,
     });
   } catch (err) {

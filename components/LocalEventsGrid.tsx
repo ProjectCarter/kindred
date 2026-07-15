@@ -59,8 +59,15 @@ export function LocalEventsGrid({
   const halfGap = 12;
   const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
   const photoH = Math.round(colInner * 1.2);
-  const published = orderEventsForEdition(events);
-  const visible = orderEventsForGrid(events, initialRenderCount);
+  /** See All passes the full persisted list — keep server editorial order. */
+  const usePersistedOrder =
+    events.length > 0 && initialRenderCount >= events.length;
+  const published = usePersistedOrder
+    ? events
+    : orderEventsForEdition(events);
+  const visible = usePersistedOrder
+    ? events.slice(0, initialRenderCount)
+    : orderEventsForGrid(events, initialRenderCount);
   const remainingCount = published.length - visible.length;
   const seeAllTotal = published.length;
 

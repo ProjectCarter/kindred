@@ -107,6 +107,25 @@ export type LocalEventCard = {
   startDateIso?: string | null;
   /** Editorial horizon bucket — Today / This Weekend / etc. */
   horizonBucket?: EventHorizonBucket | null;
+  /** Server editorial rank — 1 = strongest pick in today's edition. */
+  editorialRank?: number | null;
+  /** Server Kindred Editorial Score total at edition build time. */
+  editorialScore?: number | null;
+  editorialDimensions?: {
+    editorialQuality: number;
+    localRelevance: number;
+    communityInterest: number;
+    uniqueness: number;
+    timeliness: number;
+    seasonalRelevance: number;
+    worthLeavingHouse: number;
+    familyFriendliness: number;
+  } | null;
+  editorialReasons?: Array<{
+    code: string;
+    label: string;
+    weight: number;
+  }> | null;
 };
 
 export type LocalEventsBody = {
@@ -315,6 +334,31 @@ export function parseLocalEventsBody(
             )
               ? (e.horizonBucket as EventHorizonBucket)
               : null,
+          editorialRank:
+            typeof e.editorialRank === "number" && Number.isFinite(e.editorialRank)
+              ? e.editorialRank
+              : null,
+          editorialScore:
+            typeof e.editorialScore === "number" && Number.isFinite(e.editorialScore)
+              ? e.editorialScore
+              : null,
+          editorialDimensions:
+            e.editorialDimensions &&
+            typeof e.editorialDimensions === "object"
+              ? (e.editorialDimensions as LocalEventCard["editorialDimensions"])
+              : null,
+          editorialReasons: Array.isArray(e.editorialReasons)
+            ? e.editorialReasons
+                .filter(
+                  (r): r is { code: string; label: string; weight: number } =>
+                    Boolean(r) &&
+                    typeof r === "object" &&
+                    typeof (r as { code?: string }).code === "string" &&
+                    typeof (r as { label?: string }).label === "string" &&
+                    typeof (r as { weight?: number }).weight === "number"
+                )
+                .slice(0, 6)
+            : null,
         };
       });
 
