@@ -22,6 +22,9 @@ import {
   enrichEditionKnowledge,
   buildTodayInHistoryGrounding,
 } from "./knowledge/providers/index.ts";
+import { fetchOnThisDayCandidates } from "./history/onThisDay.ts";
+import { selectTodayInHistoryStory } from "./history/selectStory.ts";
+import type { TodayInHistorySelection } from "./history/selectStory.ts";
 import {
   loadMemoryArchive,
   runMemoryDecisions,
@@ -285,30 +288,6 @@ export async function resolveEditionLocation(
   }
 
   return null;
-}
-
-async function getOnThisDay() {
-  const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const res = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/${month}/${day}`,
-    {
-      headers: {
-        "User-Agent": "Kindred/1.0 (https://kindred.app; editorial-knowledge-engine)",
-      },
-    }
-  );
-  const data = await res.json();
-  const events = data.events ?? [];
-  console.log("[buildEdition] provider Wikipedia", {
-    httpStatus: res.status,
-    ok: res.ok,
-    eventCount: events.length,
-  });
-  if (events.length === 0) return null;
-  const pick = events[Math.floor(Math.random() * Math.min(events.length, 10))];
-  return { year: pick.year, text: pick.text };
 }
 
 /** @deprecated Prefer primaryNewsCategory from stories/sources — kept for callers. */
@@ -661,12 +640,14 @@ export async function buildEditionForUser(
     editionDayOfWeek === 6 ||
     isUsHolidayOrEve(editionDateObj);
 
-  const [weatherForecast, onThisDay, localEventsRaw, localPlaces, editorial] =
+  const [weatherForecast, onThisDayCandidates, localEventsRaw, localPlaces, editorial] =
     await Promise.all([
     timer.timed("Weather", () =>
       fetchWeatherForecast(weatherLat, weatherLon, supabaseAdmin)
     ),
-    timer.timed("Today in History", () => getOnThisDay()),
+    timer.timed("Today in History - candidates", () =>
+      fetchOnThisDayCandidates(editionDate)
+    ),
     timer.timed("Local Events", () => getLocalEvents(eventsLocation, { isBusyDay })),
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
@@ -721,6 +702,20 @@ export async function buildEditionForUser(
   });
   const weatherIntel = buildWeatherIntelligence(weatherForecast, weatherSummary);
   const weatherAttribution = weatherSourceAttribution(weatherForecast);
+
+  let historySelection: TodayInHistorySelection | null = null;
+  try {
+    historySelection = await timer.timed("Today in History - select", () =>
+      selectTodayInHistoryStory({
+        candidates: onThisDayCandidates,
+        nowYear: editionDateObj.getFullYear(),
+      })
+    );
+  } catch (historySelectErr) {
+    console.warn("[buildEdition] today in history selection failed", historySelectErr);
+  }
+
+  const onThisDay = historySelection?.event ?? null;
 
   const localEventsRanked = rankLocalEventsForEdition(localEventsRaw, {
     now: editionDateObj,
@@ -1065,8 +1060,26 @@ export async function buildEditionForUser(
       onThisDay,
       location: { city, region, state },
     });
+    if (historySelection && knowledgeWithGrounding.providerGrounding) {
+      knowledgeWithGrounding.providerGrounding.onThisDayImage =
+        historySelection.image;
+      knowledgeWithGrounding.providerGrounding.onThisDaySelection = {
+        editorialScore: historySelection.editorialScore,
+        imageScore: historySelection.imageScore,
+        candidateCount: historySelection.candidateCount,
+        selectedRank: historySelection.selectedRank,
+        editorNotes: historySelection.editorNotes,
+      };
+      knowledgeWithGrounding.selectionMeta.editorNotes.push(
+        ...historySelection.editorNotes
+      );
+    }
     console.log("[buildEdition] knowledge provider grounding enriched", {
       onThisDay: Boolean(knowledgeWithGrounding.providerGrounding?.onThisDay),
+      onThisDayImage: Boolean(
+        knowledgeWithGrounding.providerGrounding?.onThisDayImage?.url
+      ),
+      historyCandidateCount: onThisDayCandidates.length,
     });
   } catch (knowledgeErr) {
     console.warn("[buildEdition] knowledge provider enrichment failed", knowledgeErr);
@@ -1189,7 +1202,7 @@ export async function buildEditionForUser(
 
   // local_events is stored as structured JSON for card UI — not rewritten by Claude.
 
-  if (onThisDay) {
+  if (onThisDay && historySelection?.image?.url) {
     sections.push({
       section_type: "today_in_history",
       position: 4,
@@ -1198,7 +1211,12 @@ export async function buildEditionForUser(
         knowledgeWithGrounding.providerGrounding?.onThisDay
       ),
       instruction:
-        "Write a brief 'Today in History' note based only on this fact and any verified background context provided. Synthesize original prose; do not quote long passages.",
+        `Write Today in History as a curated newspaper feature — not a database entry. ` +
+        `Lead with one engaging opening paragraph (80–140 words) that would make someone stop over coffee. ` +
+        `Then continue with rich historical storytelling: context, why it still matters today, ` +
+        `and one or two fascinating facts readers may not know. Calm, authoritative tone. ` +
+        `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
+        `do not quote long passages or invent facts.`,
     });
   }
 

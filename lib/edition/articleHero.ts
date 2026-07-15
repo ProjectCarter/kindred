@@ -18,7 +18,7 @@ export type ArticleHeroImage = {
   caption?: string | null;
   credit?: string | null;
   /** Provenance for future Learning Engine / analytics. */
-  kind?: "wire" | "editorial";
+  kind?: "wire" | "editorial" | "historical";
 };
 
 type Mood =
@@ -131,9 +131,14 @@ function pickEditorialAsset(
   return catalog.find((a) => a.id === "default-morning") ?? catalog[0];
 }
 
+function isAuthenticHistorySection(section: string): boolean {
+  return section === "today_in_history";
+}
+
 /**
  * Resolve the hero for an article.
  * Wire photo wins; curated editorial fallback otherwise.
+ * Today in History never receives AI or editorial stock substitutes.
  */
 export function resolveArticleHero(input: {
   headline: string;
@@ -150,6 +155,7 @@ export function resolveArticleHero(input: {
 
   if (wireUri) {
     const sourceName = input.source?.trim() || "Kindred";
+    const isHistory = isAuthenticHistorySection(input.section);
     return {
       uri: wireUri,
       source: null,
@@ -158,8 +164,19 @@ export function resolveArticleHero(input: {
         input.existing?.caption?.trim() ||
         input.headline,
       credit:
-        input.existing?.credit?.trim() || `Photograph via ${sourceName}`,
-      kind: "wire",
+        input.existing?.credit?.trim() ||
+        (isHistory ? null : `Photograph via ${sourceName}`),
+      kind: isHistory ? "historical" : "wire",
+    };
+  }
+
+  if (isAuthenticHistorySection(input.section)) {
+    return {
+      uri: null,
+      source: null,
+      caption: input.headline,
+      credit: null,
+      kind: "historical",
     };
   }
 
@@ -195,9 +212,10 @@ export function resolveArticleHero(input: {
 export function ensureArticleHero(article: KindredArticle): KindredArticle {
   const hasWire = Boolean(article.heroImage?.uri?.trim());
   const hasLocal = Boolean(article.heroImage?.source);
+  const isHistory = isAuthenticHistorySection(article.section);
 
   if (hasWire || hasLocal) {
-    if (hasWire && !article.heroImage?.credit) {
+    if (hasWire && !article.heroImage?.credit && !isHistory) {
       return {
         ...article,
         heroImage: {
@@ -208,6 +226,10 @@ export function ensureArticleHero(article: KindredArticle): KindredArticle {
         },
       };
     }
+    return article;
+  }
+
+  if (isHistory) {
     return article;
   }
 
@@ -238,6 +260,10 @@ export function ensureArticleHero(article: KindredArticle): KindredArticle {
 export function supportingFiguresForArticle(
   article: KindredArticle
 ): ArticleFigure[] {
+  if (isAuthenticHistorySection(article.section)) {
+    return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
+  }
+
   if (article.figures?.length) {
     return article.figures.filter(
       (f) => Boolean(f.uri?.trim() || f.source)

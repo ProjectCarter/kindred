@@ -1,0 +1,55 @@
+# Today in History — Editorial Standard
+
+Today in History is **not** an "On This Day" database. It is a carefully curated
+newspaper feature. Kindred never automatically chooses the most famous event.
+
+## Editorial judgment
+
+Evaluate candidates on historical significance, storytelling quality, educational
+value, authentic visual quality, curiosity, emotional impact, timelessness,
+trusted sources, and overall newspaper appeal. The highest-scoring story **that
+can be paired with an authentic visual** becomes Today's History.
+
+Think like a newspaper editor, not a database. Quality over quantity. Curation
+over chronology.
+
+## Visual policy — no exceptions
+
+An authentic visual is **required**. Never use AI-generated images, stock
+photography, or generic placeholders.
+
+If one event cannot be paired with an authentic visual, choose another event
+from that date. Never publish a history card without an image.
+
+Acceptable visuals include historical photographs, public-domain paintings,
+illustrations, engravings, statues, monuments, maps, newspaper front pages,
+documents, artifacts, spacecraft, and other museum-grade historical media from
+Wikimedia Commons, Wikipedia, LOC, NARA, Smithsonian, NPS, and similar archives.
+
+When appropriate, include a subtle photo credit beneath the image.
+
+## Reader experience
+
+Homepage card (entire card tappable):
+
+- Authentic image with credit
+- Compelling headline
+- One engaging intro paragraph (80–140 words)
+- "Continue Reading"
+
+Full article opens in the native reader with rich storytelling, context, why it
+still matters, and additional authentic imagery when available.
+
+## Final test
+
+"Would this make a beautiful newspaper page that someone would stop and read
+over a cup of coffee?"
+
+## Implementation
+
+- Candidates: `supabase/functions/_shared/history/onThisDay.ts`
+- Editorial score: `supabase/functions/_shared/history/scoreCandidate.ts`
+- Selection + image pairing: `supabase/functions/_shared/history/selectStory.ts`
+- Image resolver: `supabase/functions/_shared/history/historicalImages.ts`
+- Stored on `editions.knowledge.providerGrounding` (`onThisDayImage`, `onThisDaySelection`)
+- Client card: `components/EditionReader.tsx` + `lib/edition/historyCard.ts`

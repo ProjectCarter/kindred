@@ -33,10 +33,45 @@ export type KnowledgeLookupResult = {
 
 export type EditionKnowledgeGrounding = {
   onThisDay?: KnowledgeLookupResult | null;
+  /** Authentic historical media for Today in History — never AI or stock. */
+  onThisDayImage?: HistoricalImageAsset | null;
+  onThisDaySelection?: TodayInHistorySelectionMeta | null;
   heroArtwork?: KnowledgeLookupResult | null;
   discoveryByItemId?: Record<string, KnowledgeLookupResult>;
   enrichedAt?: string;
   providersUsed?: KnowledgeProviderId[];
+};
+
+export type HistoricalImageSource = "wikimedia_commons" | "wikipedia";
+
+export type HistoricalAssetKind =
+  | "photograph"
+  | "painting"
+  | "illustration"
+  | "map"
+  | "document"
+  | "engraving"
+  | "artifact";
+
+export type HistoricalImageAsset = {
+  url: string;
+  previewUrl?: string | null;
+  caption: string;
+  credit: string;
+  source: HistoricalImageSource;
+  sourcePageUrl: string;
+  assetKind: HistoricalAssetKind;
+  license?: string | null;
+  matchScore?: number | null;
+  resolvedAt: string;
+};
+
+export type TodayInHistorySelectionMeta = {
+  editorialScore: number;
+  imageScore: number;
+  candidateCount: number;
+  selectedRank: number;
+  editorNotes: string[];
 };
 
 /** Build a museum/landmark background paragraph from stored grounding. */

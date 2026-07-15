@@ -96,7 +96,7 @@ function isAcceptableMime(mime?: string): boolean {
  */
 export async function searchWikimediaCommons(
   query: string,
-  options?: { orientation?: ImageOrientation; perPage?: number }
+  options?: { orientation?: ImageOrientation | "any"; perPage?: number }
 ): Promise<StockSearchCandidate[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
@@ -162,6 +162,7 @@ export async function searchWikimediaCommons(
     const description = metaValue(info, "ImageDescription");
     const orientation = orientationOf(width, height);
     if (
+      preferred !== "any" &&
       preferred !== "square" &&
       orientation !== preferred &&
       orientation !== "square"

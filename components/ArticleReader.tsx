@@ -164,6 +164,10 @@ export function ArticleReader({
   }, [article.id, enterOpacity, enterRise, initialScrollY, mastheadScrollY]);
 
   const swapInEditorialHero = useCallback(() => {
+    if (article.section === "today_in_history") {
+      setHeroFailed(true);
+      return;
+    }
     const fallback = resolveArticleHero({
       headline: article.headline,
       section: article.section,
@@ -199,7 +203,13 @@ export function ArticleReader({
     const wireUri = article.heroImage?.uri?.trim();
     if (wireUri) {
       const timer = setTimeout(() => {
-        if (!heroReadyRef.current) swapInEditorialHero();
+        if (!heroReadyRef.current) {
+          if (article.section === "today_in_history") {
+            setHeroFailed(true);
+            return;
+          }
+          swapInEditorialHero();
+        }
       }, 6000);
       return () => clearTimeout(timer);
     }

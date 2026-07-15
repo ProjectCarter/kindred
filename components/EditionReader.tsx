@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import {
+  Image,
   Text,
   View,
   Pressable,
@@ -49,6 +50,8 @@ import {
   isEditionFrozen,
 } from "../lib/edition/editionFreeze";
 import { resolveArticleHero } from "../lib/edition/articleHero";
+import { onThisDayImageFromKnowledge } from "../lib/edition/historicalImages";
+import { historyCardIntro } from "../lib/edition/historyCard";
 import { experienceImageFor } from "../lib/edition/experiences";
 import { activityImageFor } from "../lib/edition/activities";
 import { MorningArrival } from "./MorningArrival";
@@ -318,6 +321,11 @@ export function EditionReader({
 
   const lookingAhead = remaining.find((s) => s.section_type === "looking_ahead");
   const history = remaining.find((s) => s.section_type === "today_in_history");
+  const historyImage = useMemo(
+    () => onThisDayImageFromKnowledge(knowledge),
+    [knowledge]
+  );
+  const showHistoryCard = Boolean(history && historyImage?.url?.trim());
   const topStoriesSection = remaining.find((s) => s.section_type === "top_stories");
   const otherSections = remaining.filter(
     (s) =>
@@ -441,6 +449,15 @@ export function EditionReader({
 
   let folioCursor = 0;
 
+  function articleForSection(section: EditionSection): KindredArticle {
+    if (section.section_type === "today_in_history") {
+      return articleFromEditionSection(section, {
+        historicalImage: onThisDayImageFromKnowledge(knowledge),
+      });
+    }
+    return articleFromEditionSection(section);
+  }
+
   function openLead(lead: LeadStory) {
     onOpenArticle?.(articleFromLeadStory(lead));
   }
@@ -454,7 +471,7 @@ export function EditionReader({
 
     function openSection() {
       if (!onOpenArticle) return;
-      onOpenArticle(articleFromEditionSection(section));
+      onOpenArticle(articleForSection(section));
     }
 
     const teaser = opensReader ? folioTeaser(section.body) : null;
@@ -680,7 +697,45 @@ export function EditionReader({
         </FolioReveal>
       ) : null}
 
-      {history || lookingAhead ? (
+      {showHistoryCard && history ? (
+        <FolioReveal index={folioCursor++}>
+          <Pressable
+            onPress={
+              onOpenArticle
+                ? () => onOpenArticle(articleForSection(history))
+                : undefined
+            }
+            style={({ pressed }) => [
+              styles.historyFeatureCard,
+              pressed && styles.tapPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Today in History: ${history.headline}`}
+          >
+            <View style={styles.historyImageWrap}>
+              <Image
+                source={{ uri: historyImage!.url.trim() }}
+                style={styles.historyImage}
+                resizeMode="cover"
+                accessibilityLabel={historyImage!.caption}
+              />
+              {historyImage!.credit ? (
+                <Text style={styles.historyImageCredit} numberOfLines={2}>
+                  {historyImage!.credit}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={styles.cardKicker}>Today in History</Text>
+            <Text style={styles.sectionHeadline}>{history.headline}</Text>
+            <Text style={styles.historyIntro}>
+              {historyCardIntro(history.body)}
+            </Text>
+            <Text style={styles.continueReading}>Continue Reading</Text>
+          </Pressable>
+        </FolioReveal>
+      ) : null}
+
+      {lookingAhead ? (
         <FolioReveal index={folioCursor++}>
           <View style={styles.sectionCard}>
             <View style={styles.sectionLabelRow}>
@@ -690,44 +745,23 @@ export function EditionReader({
             <Text style={styles.sectionIntro}>
               Notes from the neighborhood desk.
             </Text>
-            {history ? (
-              <Pressable
-                onPress={
-                  onOpenArticle
-                    ? () => onOpenArticle(articleFromEditionSection(history))
-                    : undefined
-                }
-                style={({ pressed }) => [pressed && styles.tapPressed]}
-              >
-                <Text style={styles.cardKicker}>Today in history</Text>
-                <Text style={styles.sectionHeadline}>{history.headline}</Text>
-                <Text style={styles.sectionDek} numberOfLines={3}>
-                  {folioTeaser(history.body).dek}
-                </Text>
-              </Pressable>
-            ) : null}
-            {lookingAhead ? (
-              <Pressable
-                onPress={
-                  onOpenArticle
-                    ? () =>
-                        onOpenArticle(articleFromEditionSection(lookingAhead))
-                    : undefined
-                }
-                style={({ pressed }) => [
-                  history ? styles.communitySecond : null,
-                  pressed && styles.tapPressed,
-                ]}
-              >
-                <Text style={styles.cardKicker}>Looking ahead</Text>
-                <Text style={styles.sectionHeadline}>
-                  {lookingAhead.headline}
-                </Text>
-                <Text style={styles.sectionDek} numberOfLines={3}>
-                  {folioTeaser(lookingAhead.body).dek}
-                </Text>
-              </Pressable>
-            ) : null}
+            <Pressable
+              onPress={
+                onOpenArticle
+                  ? () =>
+                      onOpenArticle(articleFromEditionSection(lookingAhead))
+                  : undefined
+              }
+              style={({ pressed }) => [pressed && styles.tapPressed]}
+            >
+              <Text style={styles.cardKicker}>Looking ahead</Text>
+              <Text style={styles.sectionHeadline}>
+                {lookingAhead.headline}
+              </Text>
+              <Text style={styles.sectionDek} numberOfLines={3}>
+                {folioTeaser(lookingAhead.body).dek}
+              </Text>
+            </Pressable>
           </View>
         </FolioReveal>
       ) : null}
@@ -906,6 +940,40 @@ const styles = StyleSheet.create({
     paddingBottom: 52,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
+  },
+  historyFeatureCard: {
+    marginBottom: space.sectionGap,
+    paddingBottom: 52,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: paper.border,
+  },
+  historyImageWrap: {
+    marginBottom: 16,
+  },
+  historyImage: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    backgroundColor: paper.creamDeep,
+  },
+  historyImageCredit: {
+    marginTop: 8,
+    fontSize: 11,
+    lineHeight: 15,
+    color: paper.inkFaint,
+    fontFamily: "Georgia",
+  },
+  historyIntro: {
+    ...type.folioDek,
+    color: paper.inkBody,
+    maxWidth: 480,
+    marginBottom: 14,
+  },
+  continueReading: {
+    fontSize: 13,
+    letterSpacing: 0.4,
+    fontWeight: "600",
+    color: paper.terracotta,
+    fontFamily: "Georgia",
   },
   weatherCard: {
     marginTop: 2,

@@ -18,7 +18,7 @@ import {
 import { parseLeadStory, type LeadStory } from "../../lib/edition/LeadStory";
 import { openKindredArticle } from "../../lib/edition/openArticle";
 import { openKindredEvent } from "../../lib/edition/openEvent";
-import { articleFromEditionSection } from "../../lib/edition/article";
+import { articleFromEditionSectionWithKnowledge } from "../../lib/edition/article";
 import { saveClipping, removeClipping } from "../../lib/edition/clippings";
 import {
   banditMorningLine,
@@ -244,7 +244,7 @@ export default function EditionScreen() {
         const result = await saveClipping(
           user.id,
           { contentType: "article", clipKey, sectionId: section.id },
-          articleFromEditionSection(section)
+          articleFromEditionSectionWithKnowledge(section, intelligence?.knowledge)
         );
 
         if (result.ok) {

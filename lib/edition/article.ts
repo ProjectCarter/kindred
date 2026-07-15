@@ -4,7 +4,8 @@ import {
   type DiscoveryItem,
   type RankedDiscoveryItem,
 } from "./discovery";
-import type { KnowledgeFacet } from "./knowledge";
+import type { KnowledgeFacet, KnowledgePayload } from "./knowledge";
+import { onThisDayImageFromKnowledge } from "./historicalImages";
 import { dedupeProse, isNearDuplicateProse } from "./contentQuality";
 import { getGoldStandardArticle } from "./goldStandard/algalBloomArticle";
 import {
@@ -31,7 +32,6 @@ import {
   actionContextFromDiscoveryItem,
   actionContextFromLocalEvent,
 } from "./actionBar";
-
 import type { ImageSourcePropType } from "react-native";
 
 /**
@@ -71,7 +71,7 @@ export type KindredArticle = {
     source?: ImageSourcePropType | null;
     caption?: string | null;
     credit?: string | null;
-    kind?: "wire" | "editorial";
+    kind?: "wire" | "editorial" | "historical";
   } | null;
   /**
    * Supporting figures placed naturally in the body (Phase 1 universal reader).
@@ -318,6 +318,7 @@ export function articleFromSectionItem(input: {
   publishedAt?: string | null;
   imageUrl?: string | null;
   imageCaption?: string | null;
+  imageCredit?: string | null;
   byline?: string | null;
   dek?: string | null;
   pullQuote?: string | null;
@@ -360,7 +361,9 @@ export function articleFromSectionItem(input: {
       ? {
           uri: input.imageUrl,
           caption: input.imageCaption ?? input.headline,
-          credit: `Photograph via ${source}`,
+          credit:
+            input.imageCredit?.trim() ||
+            `Photograph via ${source}`,
           kind: "wire" as const,
         }
       : null,
@@ -381,13 +384,19 @@ export function articleFromSectionItem(input: {
 }
 
 /** Edition folio section → KindredArticle (Top Stories, History, etc.). */
-export function articleFromEditionSection(section: {
+export function articleFromEditionSection(
+  section: {
   id: string;
   section_type: string;
   headline: string;
   body: string;
   source_note?: string | null;
-}): KindredArticle {
+  },
+  options?: {
+    historicalImage?: import("./knowledgeGrounding").HistoricalImageAsset | null;
+  }
+): KindredArticle {
+  const historical = options?.historicalImage;
   return articleFromSectionItem({
     id: section.id,
     section: section.section_type,
@@ -395,6 +404,28 @@ export function articleFromEditionSection(section: {
     body: section.body,
     source: section.source_note?.trim() || "Kindred",
     sourceUrl: null,
+    imageUrl: historical?.url ?? null,
+    imageCaption: historical?.caption ?? section.headline,
+    imageCredit: historical?.credit ?? null,
+  });
+}
+
+/** Edition section with stored knowledge payload (Today in History image). */
+export function articleFromEditionSectionWithKnowledge(
+  section: {
+    id: string;
+    section_type: string;
+    headline: string;
+    body: string;
+    source_note?: string | null;
+  },
+  knowledge: KnowledgePayload | unknown | null | undefined
+): KindredArticle {
+  return articleFromEditionSection(section, {
+    historicalImage:
+      section.section_type === "today_in_history"
+        ? onThisDayImageFromKnowledge(knowledge)
+        : null,
   });
 }
 

@@ -53,6 +53,9 @@ export type KnowledgeProvider = {
 
 export type EditionKnowledgeGrounding = {
   onThisDay?: KnowledgeLookupResult | null;
+  /** Authentic historical media for Today in History — never AI or stock. */
+  onThisDayImage?: import("../../history/types.ts").HistoricalImageAsset | null;
+  onThisDaySelection?: import("../../history/types.ts").TodayInHistorySelectionMeta | null;
   heroArtwork?: KnowledgeLookupResult | null;
   discoveryByItemId?: Record<string, KnowledgeLookupResult>;
   enrichedAt?: string;
