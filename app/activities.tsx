@@ -5,8 +5,7 @@ import { useRouter } from "expo-router";
 import { EditorialCardGrid } from "../components/EditorialCardGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
-import { usePullDownNav } from "../lib/navigation/usePullDownNav";
-import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
+import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { selectActivityCards } from "../lib/edition/activities";
 import { getTodaysActivities } from "../lib/edition/activitiesListStore";
 import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
@@ -22,7 +21,6 @@ export default function ActivitiesScreen() {
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.activities
   );
-  const pullDownNav = usePullDownNav();
   const items = useMemo(() => getTodaysActivities(), []);
   const cards = useMemo(() => selectActivityCards(items), [items]);
   const articlesById = useMemo(
@@ -35,13 +33,20 @@ export default function ActivitiesScreen() {
     router.back();
   }
 
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: handleBack,
+    title: "Activities",
+    backAccessibilityLabel: "Back to today’s paper",
+    onScrollOffset,
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        {...pullDownNavScrollProps(pullDownNav, onScrollOffset)}
+        {...pullDownNavScreen.scrollProps}
       >
         <View style={styles.backRow}>
           <KindredDetailBackButton onPress={handleBack} />
@@ -72,12 +77,7 @@ export default function ActivitiesScreen() {
           }}
         />
       </ScrollView>
-      <PullDownNavHeader
-        title="Activities"
-        translateY={pullDownNav.translateY}
-        onBack={handleBack}
-        backAccessibilityLabel="Back to today’s paper"
-      />
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
   );
 }

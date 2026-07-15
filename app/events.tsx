@@ -5,8 +5,7 @@ import { useRouter } from "expo-router";
 import { LocalEventsGrid } from "../components/LocalEventsGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
-import { usePullDownNav } from "../lib/navigation/usePullDownNav";
-import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
+import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { getTodaysEvents } from "../lib/edition/eventsListStore";
 import { articleFromLocalEvent } from "../lib/edition/article";
 import { getActiveEditionId } from "../lib/edition/editionContext";
@@ -21,7 +20,6 @@ export default function EventsScreen() {
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.events
   );
-  const pullDownNav = usePullDownNav();
   const events = useMemo(() => getTodaysEvents(), []);
   const eventArticlesById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof articleFromLocalEvent>>();
@@ -37,13 +35,20 @@ export default function EventsScreen() {
     router.back();
   }
 
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: handleBack,
+    title: "Local Events",
+    backAccessibilityLabel: "Back to today’s paper",
+    onScrollOffset,
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        {...pullDownNavScrollProps(pullDownNav, onScrollOffset)}
+        {...pullDownNavScreen.scrollProps}
       >
         <View style={styles.backRow}>
           <KindredDetailBackButton onPress={handleBack} />
@@ -70,12 +75,7 @@ export default function EventsScreen() {
           }}
         />
       </ScrollView>
-      <PullDownNavHeader
-        title="Local Events"
-        translateY={pullDownNav.translateY}
-        onBack={handleBack}
-        backAccessibilityLabel="Back to today’s paper"
-      />
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
   );
 }

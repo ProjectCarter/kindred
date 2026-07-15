@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
+import { PullDownNavHeader } from "../components/PullDownNavHeader";
+import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import {
   getActiveLocation,
@@ -79,11 +81,18 @@ export default function LocationSettingsScreen() {
     ? formatPlaceLabel(active.place)
     : "No city chosen yet";
 
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: () => router.back(),
+    title: "Location",
+    backAccessibilityLabel: "Back",
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        {...pullDownNavScreen.scrollProps}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -285,6 +294,7 @@ export default function LocationSettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
   );
 }

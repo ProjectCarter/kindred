@@ -18,6 +18,32 @@ Deno.test("scoreOnThisDayCandidate penalizes overfamous clichés", () => {
   assertEquals(curious.editorialScore > famous.editorialScore, true);
 });
 
+Deno.test("scoreOnThisDayCandidate favors discoveries over war tragedies", () => {
+  const discovery = scoreOnThisDayCandidate({
+    year: 1928,
+    text: "Scottish biologist Alexander Fleming discovered penicillin, a breakthrough that would transform medicine for generations.",
+  });
+  const tragedy = scoreOnThisDayCandidate({
+    year: 1944,
+    text: "The Battle of the Bulge began as German forces launched a major offensive in the Ardennes during World War II.",
+  });
+
+  assertEquals(discovery.editorialScore > tragedy.editorialScore, true);
+});
+
+Deno.test("scoreOnThisDayCandidate penalizes birth-only notices", () => {
+  const birth = scoreOnThisDayCandidate({
+    year: 1809,
+    text: "Born: Charles Darwin, English naturalist.",
+  });
+  const event = scoreOnThisDayCandidate({
+    year: 1859,
+    text: "Charles Darwin published On the Origin of Species, introducing the theory of evolution by natural selection.",
+  });
+
+  assertEquals(event.editorialScore > birth.editorialScore, true);
+});
+
 Deno.test("rankOnThisDayCandidates sorts by editorial score descending", () => {
   const ranked = rankOnThisDayCandidates([
     { year: 1900, text: "A minor administrative boundary was redrawn in a rural province." },

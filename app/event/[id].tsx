@@ -21,11 +21,7 @@ import { eventFallbackImage } from "../../lib/edition/localEvents";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
-import {
-  pullDownNavTitleFromBackLabel,
-  usePullDownNav,
-} from "../../lib/navigation/usePullDownNav";
-import { pullDownNavScrollProps } from "../../lib/navigation/pullDownNavScrollProps";
+import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -38,7 +34,6 @@ export default function EventDetailScreen() {
   }>();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const pullDownNav = usePullDownNav();
 
   const eventId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
   const event = useMemo(
@@ -50,11 +45,18 @@ export default function EventDetailScreen() {
     typeof backLabel === "string" && backLabel.trim()
       ? decodeURIComponent(backLabel)
       : "← Today’s paper";
-  const navTitle = pullDownNavTitleFromBackLabel(back, "Local Events");
 
   function handleBack() {
     router.back();
   }
+
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: handleBack,
+    backLabel: back,
+    itemTitle: event?.name ?? null,
+    fallbackTitle: "Local Events",
+    backAccessibilityLabel: back.replace(/^←\s*/, "Back to "),
+  });
 
   const badge = event ? deriveEventBadge(event) : null;
   const infoBadges = event ? eventInfoBadgesFor(event) : [];
@@ -79,7 +81,7 @@ export default function EventDetailScreen() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
-        {...pullDownNavScrollProps(pullDownNav)}
+        {...pullDownNavScreen.scrollProps}
       >
         <Pressable
           onPress={handleBack}
@@ -151,12 +153,7 @@ export default function EventDetailScreen() {
           ) : null}
         </View>
       </ScrollView>
-      <PullDownNavHeader
-        title={navTitle}
-        translateY={pullDownNav.translateY}
-        onBack={handleBack}
-        backAccessibilityLabel={back.replace(/^←\s*/, "Back to ")}
-      />
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
   );
 }

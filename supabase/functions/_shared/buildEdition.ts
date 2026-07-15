@@ -25,6 +25,7 @@ import {
 import { fetchOnThisDayCandidates } from "./history/onThisDay.ts";
 import { selectTodayInHistoryStory } from "./history/selectStory.ts";
 import type { TodayInHistorySelection } from "./history/selectStory.ts";
+import { writeTodayInHistorySection } from "./history/writeTodayInHistory.ts";
 import {
   loadMemoryArchive,
   runMemoryDecisions,
@@ -369,6 +370,23 @@ async function writeSection(
   });
 
   return parsed;
+}
+
+async function writeEditionSection(
+  section: SectionInput,
+  anthropicApiKey: string,
+  onThisDay: { year: number; text: string } | null
+): Promise<{ headline: string; body: string }> {
+  if (section.section_type === "today_in_history" && onThisDay) {
+    return writeTodayInHistorySection({
+      groundingData: section.groundingData,
+      instruction: section.instruction,
+      year: onThisDay.year,
+      eventText: onThisDay.text,
+      anthropicApiKey,
+    });
+  }
+  return writeSection(section, anthropicApiKey);
 }
 
 /**
@@ -1219,15 +1237,22 @@ export async function buildEditionForUser(
       position: 4,
       groundingData: buildTodayInHistoryGrounding(
         onThisDay,
-        knowledgeWithGrounding.providerGrounding?.onThisDay
+        knowledgeWithGrounding.providerGrounding?.onThisDay,
+        {
+          image: historySelection.image,
+          editorNotes: historySelection.editorNotes,
+        }
       ),
       instruction:
-        `Write Today in History as a curated newspaper feature — not a database entry. ` +
-        `Lead with one engaging opening paragraph (80–140 words) that would make someone stop over coffee. ` +
-        `Then continue with rich historical storytelling: context, why it still matters today, ` +
-        `and one or two fascinating facts readers may not know. Calm, authoritative tone. ` +
+        `Write Today in History as Kindred's signature morning feature — a calm Sunday newspaper ` +
+        `story someone would read over coffee for two or three minutes. ` +
+        `Write 300–700 words across 2–4 paragraphs (separated by blank lines). ` +
+        `Cover: what happened, why it mattered, historical context, lasting impact, and one or two ` +
+        `memorable details that make the story stick. ` +
+        `Headline format: "${onThisDay.year} — Compelling editorial title" (never "Today in History" alone). ` +
+        `Tone: thoughtful, timeless, curious — never encyclopedic, never copied verbatim. ` +
         `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
-        `do not quote long passages or invent facts.`,
+        `do not invent facts.`,
     });
   }
 
@@ -1395,7 +1420,11 @@ export async function buildEditionForUser(
 
   const [written, bandit] = await Promise.all([
     timer.timed("AI Summaries - Section Writing", () =>
-      Promise.all(sections.map((section) => writeSection(section, anthropicApiKey)))
+      Promise.all(
+        sections.map((section) =>
+          writeEditionSection(section, anthropicApiKey, onThisDay)
+        )
+      )
     ),
     timer.timed("Bandit Payload", () =>
       generateBanditPayload(

@@ -20,3 +20,14 @@ export function pullDownNavScrollProps(
     onMomentumScrollEnd: pullDownNav.onMomentumScrollEnd,
   };
 }
+
+/** Compose pull-down scroll tracking with an additional onScroll handler. */
+export function mergePullDownNavOnScroll(
+  pullDownNav: PullDownNav,
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
+) {
+  return (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    pullDownNav.onScroll(event);
+    onScroll?.(event);
+  };
+}

@@ -60,9 +60,9 @@ import {
 } from "./KindredMasthead";
 import { PullDownNavHeader } from "./PullDownNavHeader";
 import {
-  pullDownNavTitleFromBackLabel,
-  usePullDownNav,
-} from "../lib/navigation/usePullDownNav";
+  usePullDownNavScreen,
+} from "../lib/navigation/usePullDownNavScreen";
+import { mergePullDownNavOnScroll } from "../lib/navigation/pullDownNavScrollProps";
 import { ContentTemplateModules } from "./ContentTemplateModules";
 import {
   categoryLabelForType,
@@ -126,7 +126,34 @@ export function ArticleReader({
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(initialScrollY);
   const restoredScroll = useRef(false);
-  const pullDownNav = usePullDownNav();
+
+  const briefing = isKindredBriefing(article);
+
+  const handleBack = useCallback(() => {
+    updateArticleSessionScroll(article.id, scrollYRef.current);
+    stashArticleSession({
+      article,
+      companion,
+      editionId: editionId ?? null,
+      backLabel,
+      scrollY: scrollYRef.current,
+      updatedAt: Date.now(),
+    });
+    onBack();
+  }, [article, companion, editionId, backLabel, onBack]);
+
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: handleBack,
+    backLabel,
+    itemTitle: article.headline,
+    fallbackTitle: briefing
+      ? "Briefing"
+      : article.contentType
+        ? categoryLabelForType(article.contentType)
+        : formatSectionLabel(article.section),
+    backAccessibilityLabel: backLabel.replace(/^←\s*/, "Back to "),
+  });
+  const { pullDownNav } = pullDownNavScreen;
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const enterOpacity = useRef(
@@ -144,7 +171,6 @@ export function ArticleReader({
     )
   ).current;
 
-  const briefing = isKindredBriefing(article);
   const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
   const canClip = Boolean(clipTarget);
   const articleContextActions = useMemo(
@@ -152,20 +178,6 @@ export function ArticleReader({
     [article]
   );
   const continueItems = companion?.continueReading ?? [];
-  const pullDownTitle = useMemo(() => {
-    const fromBack = pullDownNavTitleFromBackLabel(backLabel);
-    if (
-      fromBack !== "Today's paper" &&
-      fromBack !== "Today’s paper"
-    ) {
-      return fromBack;
-    }
-    if (briefing) return "Briefing";
-    if (article.contentType) {
-      return categoryLabelForType(article.contentType);
-    }
-    return formatSectionLabel(article.section);
-  }, [backLabel, briefing, article.contentType, article.section]);
 
   useEffect(() => {
     heroReadyRef.current = heroReady;
@@ -423,12 +435,11 @@ export function ArticleReader({
     (i) => i.kind === "edition" || i.action === "return_to_edition"
   );
 
-  const onScroll = useCallback(
+  const onReadingScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } =
         event.nativeEvent;
       scrollYRef.current = contentOffset.y;
-      pullDownNav.onScroll(event);
       const scrollable = Math.max(
         contentSize.height - layoutMeasurement.height,
         1
@@ -438,7 +449,14 @@ export function ArticleReader({
       setProgress(next);
       updateArticleSessionScroll(article.id, contentOffset.y);
     },
-    [progressAnim, article.id, pullDownNav]
+    [progressAnim, article.id]
+  );
+
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      mergePullDownNavOnScroll(pullDownNav, onReadingScroll)(event);
+    },
+    [pullDownNav, onReadingScroll]
   );
 
   const onContentSizeChange = useCallback(
@@ -607,19 +625,6 @@ export function ArticleReader({
     }
   }
 
-  function handleBack() {
-    updateArticleSessionScroll(article.id, scrollYRef.current);
-    stashArticleSession({
-      article,
-      companion,
-      editionId: editionId ?? null,
-      backLabel,
-      scrollY: scrollYRef.current,
-      updatedAt: Date.now(),
-    });
-    onBack();
-  }
-
   async function handleShare() {
     const parts = [article.headline];
     if (article.dek) parts.push(article.dek);
@@ -653,11 +658,11 @@ export function ArticleReader({
           { paddingBottom: 96 + insets.bottom },
         ]}
         onScroll={onScroll}
-        onScrollBeginDrag={pullDownNav.onScrollBeginDrag}
-        onScrollEndDrag={pullDownNav.onScrollEndDrag}
-        onMomentumScrollBegin={pullDownNav.onMomentumScrollBegin}
-        onMomentumScrollEnd={pullDownNav.onMomentumScrollEnd}
-        scrollEventThrottle={16}
+        onScrollBeginDrag={pullDownNavScreen.scrollProps.onScrollBeginDrag}
+        onScrollEndDrag={pullDownNavScreen.scrollProps.onScrollEndDrag}
+        onMomentumScrollBegin={pullDownNavScreen.scrollProps.onMomentumScrollBegin}
+        onMomentumScrollEnd={pullDownNavScreen.scrollProps.onMomentumScrollEnd}
+        scrollEventThrottle={pullDownNavScreen.scrollProps.scrollEventThrottle}
         onContentSizeChange={onContentSizeChange}
         onLayout={onLayout}
         showsVerticalScrollIndicator={false}
@@ -988,12 +993,7 @@ export function ArticleReader({
           </View>
         </Animated.View>
       </ScrollView>
-      <PullDownNavHeader
-        title={pullDownTitle}
-        translateY={pullDownNav.translateY}
-        onBack={handleBack}
-        backAccessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
-      />
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </View>
   );
 }

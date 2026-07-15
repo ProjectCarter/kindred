@@ -397,7 +397,7 @@ export function articleFromEditionSection(
   }
 ): KindredArticle {
   const historical = options?.historicalImage;
-  return articleFromSectionItem({
+  const article = articleFromSectionItem({
     id: section.id,
     section: section.section_type,
     headline: section.headline,
@@ -408,6 +408,15 @@ export function articleFromEditionSection(
     imageCaption: historical?.caption ?? section.headline,
     imageCredit: historical?.credit ?? null,
   });
+
+  if (historical?.url && article.heroImage) {
+    return {
+      ...article,
+      heroImage: { ...article.heroImage, kind: "historical" },
+    };
+  }
+
+  return article;
 }
 
 /** Edition section with stored knowledge payload (Today in History image). */
@@ -862,7 +871,6 @@ export function isKindredBriefing(article: KindredArticle): boolean {
   if (
     article.section === "discovery" ||
     article.section === "knowledge" ||
-    article.section === "today_in_history" ||
     article.section === "looking_ahead"
   ) {
     return true;
@@ -872,6 +880,9 @@ export function isKindredBriefing(article: KindredArticle): boolean {
     .join(" ")
     .split(/\s+/)
     .filter(Boolean).length;
+  if (article.section === "today_in_history") {
+    return words < 250;
+  }
   return words < 350;
 }
 

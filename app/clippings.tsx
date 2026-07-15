@@ -26,8 +26,7 @@ import { PaperLoading } from "../components/PaperLoading";
 import { BanditCharacter } from "../components/BanditCharacter";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
-import { usePullDownNav } from "../lib/navigation/usePullDownNav";
-import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
+import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 
 type Filter = "all" | ClippingContentType;
 
@@ -74,7 +73,11 @@ export default function ClippingsScreen() {
   );
   const pendingRemovalRef = useRef<Set<string>>(new Set());
   pendingRemovalRef.current = pendingRemovalIds;
-  const pullDownNav = usePullDownNav();
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: () => router.back(),
+    title: "Clippings",
+    backAccessibilityLabel: "Back to library",
+  });
 
   const loadClippings = useCallback(async (isRefresh = false) => {
     const gen = ++loadGen.current;
@@ -190,7 +193,7 @@ export default function ClippingsScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        {...pullDownNavScrollProps(pullDownNav)}
+        {...pullDownNavScreen.scrollProps}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -284,12 +287,7 @@ export default function ClippingsScreen() {
           ))
         )}
       </ScrollView>
-      <PullDownNavHeader
-        title="Clippings"
-        translateY={pullDownNav.translateY}
-        onBack={() => router.back()}
-        backAccessibilityLabel="Back to library"
-      />
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
   );
 }

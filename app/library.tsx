@@ -13,8 +13,7 @@ import { supabase } from "../lib/supabase";
 import { formatEditionDate } from "../lib/edition/types";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
-import { usePullDownNav } from "../lib/navigation/usePullDownNav";
-import { pullDownNavScrollProps } from "../lib/navigation/pullDownNavScrollProps";
+import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { PaperLoading } from "../components/PaperLoading";
 
 type EditionRow = {
@@ -30,7 +29,11 @@ export default function LibraryScreen() {
   const [editions, setEditions] = useState<EditionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const loadGen = useRef(0);
-  const pullDownNav = usePullDownNav();
+  const pullDownNavScreen = usePullDownNavScreen({
+    onBack: () => router.back(),
+    title: "Library",
+    backAccessibilityLabel: "Back to today",
+  });
 
   const loadEditions = useCallback(async (isRefresh = false) => {
     const gen = ++loadGen.current;
@@ -92,7 +95,7 @@ export default function LibraryScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        {...pullDownNavScrollProps(pullDownNav)}
+        {...pullDownNavScreen.scrollProps}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -184,12 +187,7 @@ export default function LibraryScreen() {
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </ScrollView>
-      <PullDownNavHeader
-        title="Library"
-        translateY={pullDownNav.translateY}
-        onBack={() => router.back()}
-        backAccessibilityLabel="Back to today"
-      />
+      <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
   );
 }

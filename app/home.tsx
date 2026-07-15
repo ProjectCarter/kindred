@@ -83,6 +83,7 @@ import {
   needsLocalEventsRecovery,
   recoverLocalEvents,
 } from "../lib/edition/localEventsRecovery";
+import { recoverTodayInHistory } from "../lib/edition/todayInHistoryRecovery";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -369,6 +370,54 @@ export default function HomeScreen() {
     void saveCachedEdition(next);
   }
 
+  function persistBundleToCache(bundle: CachedEditionBundle): void {
+    cachedBundleRef.current = bundle;
+    void saveCachedEdition(bundle);
+  }
+
+  async function maybeRecoverTodayInHistory(params: {
+    userId: string;
+    editionId: string;
+    editionDate: string;
+    sections: EditionSection[];
+    intelligence: EditionIntelligence | null;
+  }): Promise<{
+    sections: EditionSection[];
+    intelligence: EditionIntelligence | null;
+  }> {
+    const result = await recoverTodayInHistory({
+      userId: params.userId,
+      editionId: params.editionId,
+      editionDate: params.editionDate,
+      currentSections: params.sections,
+      intelligence: params.intelligence,
+      cachedBundle: cachedBundleRef.current,
+    });
+
+    if (!result.recovered) return params;
+
+    if (__DEV__) {
+      console.log("[home] todayInHistory recovery applied", {
+        source: result.source,
+        headline: result.headline,
+      });
+    }
+
+    if (cachedBundleRef.current) {
+      persistBundleToCache({
+        ...cachedBundleRef.current,
+        sections: result.sections,
+        intelligence: result.intelligence,
+        cachedAt: Date.now(),
+      });
+    }
+
+    return {
+      sections: result.sections,
+      intelligence: result.intelligence,
+    };
+  }
+
   async function maybeRecoverLocalEvents(params: {
     editionId: string;
     editionDate: string;
@@ -503,6 +552,22 @@ export default function HomeScreen() {
       if (cached && mountedRef.current && gen === loadGen.current) {
         applyCachedBundle(cached);
         setLoading(false);
+        void maybeRecoverTodayInHistory({
+          userId: user.id,
+          editionId: cached.editionId,
+          editionDate: cached.editionDate,
+          sections: cached.sections,
+          intelligence: cached.intelligence,
+        }).then((recovered) => {
+          if (!mountedRef.current || gen !== loadGen.current) return;
+          if (
+            recovered.sections !== cached.sections ||
+            recovered.intelligence !== cached.intelligence
+          ) {
+            setSections(recovered.sections);
+            setIntelligence(recovered.intelligence);
+          }
+        });
         if (__DEV__) {
           console.log("[home] loadEdition: hydrated from cache", {
             editionId: cached.editionId,
@@ -923,6 +988,25 @@ export default function HomeScreen() {
       setSections(recoveredSections);
       nextSections = recoveredSections;
       persistSectionsToCache(recoveredSections);
+    }
+
+    const historyRecovery = await maybeRecoverTodayInHistory({
+      userId: user.id,
+      editionId: edition.id,
+      editionDate: edition.edition_date,
+      sections: nextSections,
+      intelligence: intel,
+    });
+
+    if (
+      historyRecovery.sections !== nextSections ||
+      historyRecovery.intelligence !== intel
+    ) {
+      if (mountedRef.current && gen === loadGen.current) {
+        setSections(historyRecovery.sections);
+        setIntelligence(historyRecovery.intelligence);
+        nextSections = historyRecovery.sections;
+      }
     }
 
     if (loaded.length > 0) {

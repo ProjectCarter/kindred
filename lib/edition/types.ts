@@ -16,7 +16,7 @@ export const SECTION_LABELS: Record<string, string> = {
   business: "Business",
   technology: "Technology",
   discovery: "Discovery",
-  today_in_history: "History",
+  today_in_history: "Today in History",
   looking_ahead: "Looking Ahead",
   recommendations: "Recommendations",
   bandits_picks: "From the desk",

@@ -25,7 +25,7 @@ export function PullDownNavHeader({
 
   return (
     <Animated.View
-      pointerEvents="none"
+      pointerEvents="box-none"
       style={[
         styles.wrap,
         {
@@ -38,7 +38,7 @@ export function PullDownNavHeader({
         style={[styles.panel, { paddingTop: insets.top }]}
         pointerEvents="box-none"
       >
-        <View style={styles.bar}>
+        <View style={styles.bar} pointerEvents="box-none">
           <MastheadLink
             label="← Back"
             onPress={onBack}

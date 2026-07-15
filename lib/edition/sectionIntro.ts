@@ -13,7 +13,7 @@ export const SECTION_INTROS: Record<string, string> = {
   business: "Markets and the week ahead.",
   technology: "Developments shaping tomorrow.",
   discovery: "Things worth knowing today.",
-  today_in_history: "A moment from this day in years past.",
+  today_in_history: "One story from this date, chosen for you.",
   looking_ahead: "What to keep an eye on next.",
   recommendations: "Quiet suggestions from the desk.",
   bandits_picks: "What Bandit set aside for you.",

@@ -30,12 +30,46 @@ const CURIOSITY_BOOST =
 const TIMELESS_BOOST =
   /\b(still|today|legacy|enduring|influenced|changed|transformed|paved the way|shaped|continues)\b/i;
 
+const SCIENCE_BOOST =
+  /\b(discovered|discovery|experiment|theory|vaccine|microscope|laboratory|physicist|chemist|biology|genome|radiation|element|fossil|observatory)\b/i;
+
+const SPACE_BOOST =
+  /\b(spacecraft|satellite|orbit|apollo|nasa|astronaut|cosmonaut|moon|mars|rocket|space station|spacewalk|probe)\b/i;
+
+const INVENTION_BOOST =
+  /\b(invented|invention|patent|prototype|telegraph|telephone|phonograph|light bulb|automobile|airplane|radio|television)\b/i;
+
+const CULTURAL_BOOST =
+  /\b(premiered|debut|symphony|opera|novel|masterpiece|exhibition|gallery|sculpture|painting|film|cinema|literature|poem)\b/i;
+
+const ARCHITECTURE_BOOST =
+  /\b(tower|cathedral|bridge|palace|monument|skyscraper|architect|dedicated|cornerstone|landmark building)\b/i;
+
+const CONSERVATION_BOOST =
+  /\b(national park|preserve|protected|conservation|wildlife refuge|sanctuary|endangered)\b/i;
+
+const EXPEDITION_BOOST =
+  /\b(expedition|summit|crossed|voyage|explored|navigator|reached the|circumnavig)\b/i;
+
+const ACHIEVEMENT_BOOST =
+  /\b(first human|world record|championship|medal|nobel|pulitzer|milestone|pioneer|breakthrough)\b/i;
+
+const SPEECH_BOOST =
+  /\b(speech|address|proclamation|declaration|emancipation|inaugural|famous words)\b/i;
+
 /** Penalize the obvious "everyone already knows this" on-this-day picks. */
 const OVERFAMOUS_PENALTY =
   /\b(world war ii|world war i|september 11|pearl harbor|assassination of (president )?john f\.? kennedy|moon landing|apollo 11|fall of the berlin wall|d-day|invasion of normandy)\b/i;
 
+/** Wars and tragedies are valid — but should not dominate the morning ritual. */
+const WAR_TRAGEDY_PENALTY =
+  /\b(world war|battle of|massacre|genocide|terrorist attack|bombing|earthquake|tsunami|hurricane|flood killed|plane crash|disaster|tragedy|assassinated|executed|killed in action)\b/i;
+
 const CLICHE_PENALTY =
   /\b(born,|died,|was born|was an American|was a British|politician who|actor who|singer who)\b/i;
+
+const BIRTH_DEATH_ONLY =
+  /^(born|died)\b/i;
 
 const LISTLIKE_PENALTY = /^\d+\s+(people|persons|men|women|soldiers|others)\b/i;
 
@@ -134,6 +168,34 @@ export function scoreOnThisDayCandidate(
     });
   }
 
+  const categoryBoosts: Array<{
+    re: RegExp;
+    code: string;
+    label: string;
+    weight: number;
+  }> = [
+    { re: SCIENCE_BOOST, code: "science", label: "Scientific discovery", weight: 9 },
+    { re: SPACE_BOOST, code: "space", label: "Space exploration", weight: 10 },
+    { re: INVENTION_BOOST, code: "invention", label: "Historic invention", weight: 9 },
+    { re: CULTURAL_BOOST, code: "cultural", label: "Cultural milestone", weight: 8 },
+    { re: ARCHITECTURE_BOOST, code: "architecture", label: "Architectural achievement", weight: 7 },
+    { re: CONSERVATION_BOOST, code: "conservation", label: "Conservation success", weight: 8 },
+    { re: EXPEDITION_BOOST, code: "expedition", label: "Famous expedition", weight: 8 },
+    { re: ACHIEVEMENT_BOOST, code: "achievement", label: "Inspiring human achievement", weight: 8 },
+    { re: SPEECH_BOOST, code: "speech", label: "Important speech or declaration", weight: 7 },
+  ];
+
+  for (const boost of categoryBoosts) {
+    if (boost.re.test(text)) {
+      score += boost.weight;
+      reasons.push({
+        code: boost.code,
+        label: boost.label,
+        weight: boost.weight,
+      });
+    }
+  }
+
   if (candidate.pages?.some((p) => p.thumbnail?.source || p.originalimage?.source)) {
     score += 7;
     reasons.push({
@@ -149,6 +211,24 @@ export function scoreOnThisDayCandidate(
       code: "overfamous",
       label: "Too familiar for a curated feature",
       weight: -22,
+    });
+  }
+
+  if (WAR_TRAGEDY_PENALTY.test(blob)) {
+    score -= 14;
+    reasons.push({
+      code: "war_tragedy",
+      label: "War or tragedy — valid but not the morning default",
+      weight: -14,
+    });
+  }
+
+  if (BIRTH_DEATH_ONLY.test(text.trim()) && !NARRATIVE_BOOST.test(text)) {
+    score -= 18;
+    reasons.push({
+      code: "birth_death_only",
+      label: "Birth or death notice — thin for a feature",
+      weight: -18,
     });
   }
 
