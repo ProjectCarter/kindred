@@ -16,13 +16,19 @@ function ranked(score: number, id: string): RankedDiscoveryItem {
   return {
     score,
     item: {
-      id,
-      title: `Item ${id}`,
-      dek: "Verified listing.",
+      id: id.startsWith("place_") ? id : `place_${id}`,
+      title: `Verified Venue ${id}`,
+      dek: "A verified local listing with enough editorial detail for publication.",
       category: "restaurants",
       family: "food_drink",
-      source: { name: "Foursquare", tier: "local" },
-      tags: ["verified"],
+      place: { city: "Gilbert" },
+      source: { name: "Foursquare", tier: "local", url: "https://example.com/venue" },
+      url: "https://example.com/venue",
+      address: "123 Main St",
+      lat: 33.35,
+      lon: -111.79,
+      venueCategories: ["Restaurant"],
+      tags: ["local_place", "verified"],
       seasons: ["anytime"],
       weatherFit: ["any"],
       popularity: 0.3,
@@ -75,7 +81,7 @@ Deno.test("items below threshold remain unpublished", () => {
   ];
   const published = publishDiscoveryItems(items);
   assertEquals(published.length, 1);
-  assertEquals(published[0].item.id, "ok");
+  assertEquals(published[0].item.id, "place_ok");
 });
 
 Deno.test("higher-quality items rank above weaker items", () => {
@@ -85,7 +91,11 @@ Deno.test("higher-quality items rank above weaker items", () => {
     ranked(70, "mid"),
   ];
   const published = publishDiscoveryItems(items);
-  assertEquals(published.map((p) => p.item.id), ["strong", "mid", "weak"]);
+  assertEquals(published.map((p) => p.item.id), [
+    "place_strong",
+    "place_mid",
+    "place_weak",
+  ]);
 });
 
 Deno.test("initial render slice does not change published edition size", () => {
@@ -130,7 +140,7 @@ Deno.test("duplicate discovery ids do not inflate final pick count", () => {
     }
   }
   assertEquals(picks.length, 3);
-  assertEquals(picks.includes("dup"), true);
+  assertEquals(picks.includes("place_dup"), true);
 });
 
 Deno.test("weather re-ranks local events without dropping eligible items", () => {
@@ -180,6 +190,7 @@ Deno.test("category diversity does not discard high-quality qualifying items", (
   const items = Array.from({ length: 5 }, (_, i) => {
     const row = ranked(DISCOVERY_PUBLISH_MIN_SCORE + 10 + i, `coffee${i}`);
     row.item.category = "coffee";
+    row.item.venueCategories = ["Coffee Shop"];
     return row;
   });
   assertEquals(publishDiscoveryItems(items).length, 5);

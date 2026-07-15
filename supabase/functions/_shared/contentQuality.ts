@@ -19,6 +19,20 @@ export function isPlaceholderCopy(text: string | null | undefined): boolean {
   return PLACEHOLDER_PATTERNS.some((re) => re.test(text));
 }
 
+export function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+/** True when copy is editorial prose, not a placeholder stub. */
+export function hasSubstance(
+  text: string | null | undefined,
+  minWords = 18
+): boolean {
+  if (!text?.trim()) return false;
+  if (isPlaceholderCopy(text)) return false;
+  return wordCount(text) >= minWords;
+}
+
 export function normalizeCity(city: string | null | undefined): string {
   return (city ?? "")
     .trim()

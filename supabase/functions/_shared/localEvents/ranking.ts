@@ -7,6 +7,10 @@
 import type { WeatherIntelligence } from "../weather/providers/types.ts";
 import { LOCAL_EVENT_PUBLISH_MIN_SCORE } from "../editorial/publishing.ts";
 import {
+  computeEventConfidence,
+  shouldPublishEditorialConfidence,
+} from "../editorial/confidence.ts";
+import {
   isGenericEventTitle,
   venueHayFromParts,
 } from "../editorial/venueQuality.ts";
@@ -172,8 +176,13 @@ export function rankLocalEventsForEdition(
     .map((event) => ({
       event,
       score: scoreLocalEventForEdition(event, options),
+      confidence: computeEventConfidence(event),
     }))
-    .filter((row) => row.score >= LOCAL_EVENT_PUBLISH_MIN_SCORE)
+    .filter(
+      (row) =>
+        row.score >= LOCAL_EVENT_PUBLISH_MIN_SCORE &&
+        shouldPublishEditorialConfidence(row.confidence)
+    )
     .sort((a, b) => b.score - a.score)
     .map((row) => row.event);
 }

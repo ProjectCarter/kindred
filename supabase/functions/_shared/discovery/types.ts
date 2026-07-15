@@ -115,6 +115,8 @@ export type DiscoveryItem = {
   } | null;
   /** Wikipedia grounding for museum/landmark briefings — not attached to local businesses. */
   knowledgeGrounding?: import("../knowledge/providers/types.ts").KnowledgeLookupResult | null;
+  /** Internal editorial confidence — never shown to readers. */
+  editorialConfidence?: import("../editorial/confidence.ts").EditorialConfidence | null;
 };
 
 export type RankedDiscoveryItem = {
@@ -154,6 +156,10 @@ export type DiscoveryPayload = {
     candidateCount: number;
     selectedCount: number;
     editorNotes: string[];
+    /** Candidates scoring 70–79 held for enrichment before publication. */
+    enrichQueue?: DiscoveryItem[];
+    /** ISO timestamp when a post-enrichment confidence prune last ran. */
+    confidencePrunedAt?: string | null;
   };
 };
 

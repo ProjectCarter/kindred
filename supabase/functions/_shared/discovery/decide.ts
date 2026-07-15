@@ -5,13 +5,11 @@ import {
 } from "./catalog.ts";
 import { npsParksAsDiscoveryItems } from "../nps/catalog.ts";
 import { scoreDiscoveryItem } from "./score.ts";
-import {
-  formatDiscoveryBrief,
-  selectDiscoverySurface,
-  whyLine,
-} from "./select.ts";
+import { formatDiscoveryBrief, selectDiscoverySurface, whyLine } from "./select.ts";
 import { seasonForDate } from "./taxonomy.ts";
+import { discoveryItemsForEnrichment } from "../editorial/confidencePayload.ts";
 import type {
+  DiscoveryItem,
   DiscoveryPayload,
   DiscoveryRankingContext,
   DiscoverySurface,
@@ -94,11 +92,13 @@ export function runDiscoveryDecisions(
 
   const picks: DiscoveryPayload["picks"] = [];
   const seen = new Set<string>();
+  const publishedIds = new Set<string>();
   for (const result of Object.values(surfaces)) {
     if (!result) continue;
     for (const item of result.items) {
       if (seen.has(item.item.id)) continue;
       seen.add(item.item.id);
+      publishedIds.add(item.item.id);
       picks.push({
         id: item.item.id,
         title: item.item.title,
@@ -108,6 +108,10 @@ export function runDiscoveryDecisions(
       });
     }
   }
+
+  const enrichQueue: DiscoveryItem[] = discoveryItemsForEnrichment(
+    catalog.filter((item) => !publishedIds.has(item.id))
+  );
 
   const editorNotes = [
     "Recommendations curated like a magazine desk — not a social feed.",
@@ -137,6 +141,7 @@ export function runDiscoveryDecisions(
       candidateCount: catalog.length,
       selectedCount: picks.length,
       editorNotes,
+      enrichQueue,
     },
   };
 

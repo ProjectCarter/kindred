@@ -63,6 +63,7 @@ import {
   type LocalEvent,
 } from "./localEvents/provider.ts";
 import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDiscovery.ts";
+import { pruneDiscoveryPayloadByConfidence } from "./editorial/confidencePayload.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlaces } from "./places/index.ts";
 
@@ -990,6 +991,16 @@ export async function buildEditionForUser(
     console.log("[buildEdition] discovery knowledge grounding enriched");
   } catch (knowledgeErr) {
     console.warn("[buildEdition] discovery knowledge enrichment failed", knowledgeErr);
+  }
+
+  try {
+    discoveryWithImages = pruneDiscoveryPayloadByConfidence(discoveryWithImages);
+    console.log("[buildEdition] discovery editorial confidence prune complete", {
+      pickCount: discoveryWithImages.picks.length,
+      enrichQueue: discoveryWithImages.selectionMeta.enrichQueue?.length ?? 0,
+    });
+  } catch (confidenceErr) {
+    console.warn("[buildEdition] discovery confidence prune failed", confidenceErr);
   }
 
   const knowledgeStories: KnowledgeStoryInput[] = [];

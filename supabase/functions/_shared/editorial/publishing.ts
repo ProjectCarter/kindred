@@ -11,6 +11,10 @@
  */
 
 import type { RankedDiscoveryItem } from "../discovery/types.ts";
+import {
+  attachDiscoveryConfidence,
+  meetsDiscoveryConfidenceGate,
+} from "./confidencePayload.ts";
 
 /** Minimum discovery score to publish on any desk surface. */
 export const DISCOVERY_PUBLISH_MIN_SCORE = 48;
@@ -31,13 +35,20 @@ export function meetsDiscoveryPublishThreshold(score: number): boolean {
   return score >= DISCOVERY_PUBLISH_MIN_SCORE;
 }
 
-/** Publish every discovery candidate at or above the editorial quality bar. */
+/** Publish discovery candidates meeting editorial score and confidence gates. */
 export function publishDiscoveryItems(
   ranked: RankedDiscoveryItem[],
   minScore: number = DISCOVERY_PUBLISH_MIN_SCORE
 ): RankedDiscoveryItem[] {
   return ranked
-    .filter((r) => r.score >= minScore)
+    .map((row) => ({
+      ...row,
+      item: attachDiscoveryConfidence(row.item),
+    }))
+    .filter(
+      (r) =>
+        r.score >= minScore && meetsDiscoveryConfidenceGate(r.item)
+    )
     .sort((a, b) => b.score - a.score);
 }
 

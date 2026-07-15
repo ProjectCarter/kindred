@@ -87,6 +87,8 @@ export type DiscoveryItem = {
     attributionText?: string | null;
   } | null;
   knowledgeGrounding?: import("./knowledgeGrounding").KnowledgeLookupResult | null;
+  /** Internal editorial confidence — never shown to readers. */
+  editorialConfidence?: import("./editorialConfidence").EditorialConfidence | null;
 };
 
 export type RankedDiscoveryItem = {
@@ -125,6 +127,8 @@ export type DiscoveryPayload = {
     candidateCount: number;
     selectedCount: number;
     editorNotes: string[];
+    enrichQueue?: DiscoveryItem[];
+    confidencePrunedAt?: string | null;
   };
 };
 

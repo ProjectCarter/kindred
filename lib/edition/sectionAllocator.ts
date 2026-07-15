@@ -57,6 +57,7 @@ import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
   sliceForInitialRender,
 } from "./editorialPublishing";
+import { meetsDiscoveryPublishConfidence } from "./editorialConfidence";
 import {
   isParticipatoryActivityVenue,
   venueHayFromParts,
@@ -258,6 +259,7 @@ export function allocateDiscoverySections(
     .filter((d) => !isRealEvent(d))
     .filter((d) => Boolean(d.item.title?.trim()))
     .filter((d) => d.score >= minScore)
+    .filter((d) => meetsDiscoveryPublishConfidence(d.item))
     .filter((d) => {
       if (!excludeVenueNames?.size) return true;
       return !venueKeysForItem(d).some((key) => excludeVenueNames.has(key));
