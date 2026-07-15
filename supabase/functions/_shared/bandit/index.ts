@@ -28,5 +28,15 @@ export { loadBanditReaderProfile } from "./loadReaderProfile.ts";
 export {
   selectBanditsPick,
   composeBanditsPickIntro,
+  composeBanditsPickClosing,
   type BanditsPickStory,
 } from "./selectPick.ts";
+export {
+  verifySeasonalLocalEvidence,
+  type LocalEvidenceBundle,
+  type ExperienceEvidenceBundle,
+} from "./localEvidence.ts";
+export {
+  assessRegionalAuthenticity,
+  experienceProfile,
+} from "./experienceProfiles.ts";

@@ -8,6 +8,7 @@
  */
 
 import { Linking, Platform } from "react-native";
+import { isUsableStreetAddress } from "./verifiedLocation";
 
 export const GOOGLE_MAPS_ACTION_LABEL = "Open in Google Maps";
 
@@ -36,7 +37,7 @@ export function resolveMapsSearchQuery(dest: MapsDestination): string | null {
   }
 
   const address = dest.address?.trim();
-  if (address) return address;
+  if (address && isUsableStreetAddress(address)) return address;
 
   const name = dest.name?.trim();
   const city = dest.city?.trim();

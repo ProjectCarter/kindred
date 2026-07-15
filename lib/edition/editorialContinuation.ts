@@ -37,6 +37,7 @@ import {
   hasSubstance,
   isPlaceholderCopy,
 } from "./contentQuality";
+import { containsEngineLanguage } from "./editorialVoice";
 import { memoryForStory, type MemoryPayload } from "./memory";
 
 export const CONTINUATION_MAX = 4;
@@ -207,9 +208,10 @@ function banditItem(
     label: DISPLAY.bandit,
     title,
     summary: clip(
-      pick.intro?.trim() ||
-        pick.story.why?.trim() ||
-        pick.story.summary ||
+      pick.story.summary?.trim() ||
+        (pick.story.why?.trim() && !containsEngineLanguage(pick.story.why)
+          ? pick.story.why.trim()
+          : "") ||
         EDITOR_WHY.bandit
     ),
     editorWhy: EDITOR_WHY.bandit,

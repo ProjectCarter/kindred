@@ -1,6 +1,6 @@
 /**
- * Bandit's Pick eligibility — mirrors server logic in
- * supabase/functions/_shared/bandit/selectPick.ts
+ * Bandit's Pick eligibility — mirrors server disqualifiers in
+ * supabase/functions/_shared/bandit/timeliness.ts
  */
 
 const TECHNICAL_PATTERN =
@@ -8,6 +8,9 @@ const TECHNICAL_PATTERN =
 
 const HEAVY_TONE_PATTERN =
   /\b(?:murder|killed|shooting|shot dead|stabbing|stabbed|assault|attack|terror|bomb|explosion|war|invasion|massacre|hostage|kidnap|rape|sexual assault|child abuse|deadly|death toll|bodies found|blood|gunman|shooter|violence|violent|outrage|outraged|scandal|scandalous|celebrity drama|feud|backlash|uproar|fury|furious|chaos|chaotic|crisis|disaster|catastrophe|tragedy|tragic|horror|horrific|nightmare|devastating|alarming|fear|feared|panic|panicked|threat|threatens|warning|warns|danger|dangerous|deadly|fatal|casualties|victim|victims)\b/i;
+
+const DISQUALIFY_PATTERN =
+  /\b(networking event|networking night|job fair|hiring event|career fair|trade show|business conference|industry conference|vendor expo|professional development|resume workshop|recruiting event|b2b expo|sweepstakes|%\s*off|limited time offer|buy one get|clearance sale|grand opening sale|free seminar|lead generation|mlm|multi[- ]level)\b/i;
 
 export function isTechnicalBanditsPickCopy(text: string): boolean {
   const hay = text.trim();
@@ -27,5 +30,9 @@ export function isDisqualifiedBanditsPickStory(input: {
 }): boolean {
   const hay = `${input.headline} ${input.summary ?? ""}`.trim();
   if (!hay) return true;
-  return isTechnicalBanditsPickCopy(hay) || isHeavyBanditsPickCopy(hay);
+  return (
+    isTechnicalBanditsPickCopy(hay) ||
+    isHeavyBanditsPickCopy(hay) ||
+    DISQUALIFY_PATTERN.test(hay)
+  );
 }

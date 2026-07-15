@@ -1,5 +1,6 @@
 import { Text, View, Pressable, StyleSheet } from "react-native";
 import type { BanditsPick as BanditsPickData } from "../lib/edition/bandit";
+import { containsEngineLanguage } from "../lib/edition/editorialVoice";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { FolioReveal } from "./FolioReveal";
 
@@ -10,18 +11,19 @@ type Props = {
 };
 
 /**
- * Bandit's Pick — one thoughtful recommendation after the main paper.
- * Not a feed. Not a stack. A single desk note from a trusted editor.
+ * What's Special Right Now — Bandit's timely desk note after the main paper.
+ * Not a feed. Not a stack. One thing worth noticing this month.
  */
 export function BanditsPick({ pick, onOpen, folioIndex = 11 }: Props) {
   const canOpen = Boolean(onOpen);
-  const why = pick.story.why?.trim();
+  const whyRaw = pick.story.why?.trim();
+  const why = whyRaw && !containsEngineLanguage(whyRaw) ? whyRaw : "";
 
   return (
     <FolioReveal index={folioIndex}>
       <View style={styles.wrap} accessibilityRole="summary">
         <View style={styles.kickerRow}>
-          <Text style={styles.kicker}>Bandit’s Pick</Text>
+          <Text style={styles.kicker}>What's Special Right Now</Text>
           <View style={styles.kickerRule} />
         </View>
 

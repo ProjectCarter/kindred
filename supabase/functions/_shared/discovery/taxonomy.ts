@@ -69,7 +69,7 @@ export const SURFACE_CATEGORIES: Record<DiscoverySurface, DiscoveryCategory[]> =
 };
 
 export const SURFACE_HEADLINES: Record<DiscoverySurface, string> = {
-  bandits_picks: "Bandit's Picks",
+  bandits_picks: "What's Special Right Now",
   weekend_ideas: "Weekend Ideas",
   hidden_gems: "Hidden Gems",
   coffee: "Coffee",
@@ -90,9 +90,9 @@ export const SURFACE_HEADLINES: Record<DiscoverySurface, string> = {
 
 export const SURFACE_EDITOR_NOTES: Record<DiscoverySurface, string> = {
   bandits_picks:
-    "A short weekly list — curious, calm, never overwhelming.",
+    "What Bandit says not to miss this month — seasonal, limited, or on the calendar soon.",
   weekend_ideas:
-    "Outing ideas chosen for the weekend paper — weather-aware when possible.",
+    "Outing ideas for the weeks ahead — weather-aware when possible.",
   hidden_gems:
     "Quieter finds with local character — uniqueness over popularity.",
   coffee: "Places worth the walk — not a chain roundup.",
@@ -106,7 +106,7 @@ export const SURFACE_EDITOR_NOTES: Record<DiscoverySurface, string> = {
   movies: "Films worth the time — not a streaming dump.",
   podcasts: "Listening with editorial care.",
   recipes: "Cooking for a calm kitchen — trustworthy sources only.",
-  activities: "Real, bookable things to go do — not a category guess.",
+  activities: "Things worth getting out and doing nearby this month.",
   bakeries: "Worth the extra stop — bread and pastry, not a chain rack.",
   gardens: "A slower green space — bloom-aware when possible.",
 };

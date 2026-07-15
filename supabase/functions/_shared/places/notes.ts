@@ -86,7 +86,7 @@ export async function writeEditorialNotesForPlaces(
         messages: [
           {
             role: "user",
-            content: `Write Kindred notes for these verified ${CATEGORY_LABEL[category]} listings:\n${listing}`,
+            content: `Write Kindred notes for these ${CATEGORY_LABEL[category]} listings in ${city}:\n${listing}`,
           },
         ],
       }),

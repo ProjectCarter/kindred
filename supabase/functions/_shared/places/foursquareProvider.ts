@@ -20,6 +20,7 @@
  *    IDs, and Foursquare's search ranking already handles this well.
  */
 
+import { composeVerifiedAddress } from "./addressValidation.ts";
 import type {
   NormalizedPlace,
   PlacesCategory,
@@ -209,17 +210,23 @@ function toNormalizedPlace(
   const name = place.name?.trim();
   if (!providerId || !name) return null;
 
-  const address =
-    place.location?.formatted_address?.trim() ||
-    place.location?.address?.trim() ||
-    null;
+  const city = place.location?.locality?.trim() || null;
+  const state = place.location?.region?.trim() || null;
+  const address = composeVerifiedAddress({
+    formatted: place.location?.formatted_address,
+    street: place.location?.address,
+    city,
+    region: state,
+    state,
+  });
 
   return {
     providerId,
     name,
     category,
     address,
-    city: place.location?.locality?.trim() || null,
+    city,
+    state,
     lat: typeof place.latitude === "number" ? place.latitude : null,
     lon: typeof place.longitude === "number" ? place.longitude : null,
     url: place.link ? `https://foursquare.com${place.link}` : null,

@@ -41,10 +41,8 @@ export type BanditMoment = {
 };
 
 /**
- * What kind of thing Bandit is pointing at today. Bandit's Pick is not
- * always an article — it's whatever one thing feels most worth noticing:
- * a real local event, a real verified place, a quieter "hidden gem" find,
- * a seasonal moment on the calendar, or (still sometimes) a story.
+ * What kind of thing Bandit is pointing at today. What's Special Right Now
+ * is never timeless filler — it's seasonal, limited, or happening this week.
  */
 export type BanditsPickKind =
   | "article"
@@ -61,6 +59,14 @@ export type BanditsPick = {
     id: string;
     headline: string;
     summary: string;
+    body?: string[];
+    modules?: Array<{ id: string; label: string; body: string }>;
+    closingNote?: string | null;
+    mapsQuery?: string | null;
+    actionLabel?: string | null;
+    nearby?: Array<{ name: string; description: string; glyph?: string }>;
+    heroMomentId?: string | null;
+    imageCaption?: string | null;
     source: string;
     url: string | null;
     publishedAt: string | null;
@@ -183,6 +189,25 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
     story?.discoveryItem && typeof story.discoveryItem === "object"
       ? (story.discoveryItem as DiscoveryItem)
       : null;
+  const body = Array.isArray(story?.body)
+    ? story.body.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    : undefined;
+  const modules = Array.isArray(story?.modules)
+    ? story.modules
+        .filter(
+          (m): m is { id: string; label: string; body: string } =>
+            Boolean(m) &&
+            typeof m === "object" &&
+            typeof (m as { label?: string }).label === "string" &&
+            typeof (m as { body?: string }).body === "string"
+        )
+        .map((m) => ({
+          id: typeof m.id === "string" ? m.id : "note",
+          label: m.label.trim(),
+          body: m.body.trim(),
+        }))
+        .filter((m) => m.body.length > 0)
+    : undefined;
   return {
     kind,
     intro: intro.slice(0, 280),
@@ -190,7 +215,35 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
       id,
       headline,
       summary:
-        typeof story?.summary === "string" ? story.summary.trim() : headline,
+        typeof story?.summary === "string" ? story.summary.trim() : "",
+      body,
+      modules,
+      closingNote:
+        typeof story?.closingNote === "string" ? story.closingNote.trim() : null,
+      mapsQuery:
+        typeof story?.mapsQuery === "string" ? story.mapsQuery.trim() : null,
+      actionLabel:
+        typeof story?.actionLabel === "string" ? story.actionLabel.trim() : null,
+      nearby: Array.isArray(story?.nearby)
+        ? story.nearby
+            .filter(
+              (n): n is { name: string; description: string; glyph?: string } =>
+                Boolean(n) &&
+                typeof n === "object" &&
+                typeof (n as { name?: string }).name === "string" &&
+                typeof (n as { description?: string }).description === "string"
+            )
+            .map((n) => ({
+              name: n.name.trim(),
+              description: n.description.trim(),
+              glyph: typeof n.glyph === "string" ? n.glyph : undefined,
+            }))
+            .filter((n) => n.name && n.description)
+        : undefined,
+      heroMomentId:
+        typeof story?.heroMomentId === "string" ? story.heroMomentId.trim() : null,
+      imageCaption:
+        typeof story?.imageCaption === "string" ? story.imageCaption.trim() : null,
       source:
         typeof story?.source === "string" && story.source.trim()
           ? story.source.trim()
@@ -210,10 +263,6 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
 
 /**
  * Bandit's Pick for the end of the edition — null when none stored.
- * Defensively hides a stale persisted pick that fails the current
- * editorial quality bar (e.g. dry regulatory/technical copy from an
- * edition generated before a ranking fix) without requiring a
- * regeneration — showing nothing beats showing a disqualified story.
  */
 export function banditsPick(
   payload: BanditPayload | null | undefined

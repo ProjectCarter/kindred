@@ -62,6 +62,8 @@ export type NormalizedPlace = {
   category: PlacesCategory;
   address: string | null;
   city: string | null;
+  /** State / region code from the provider when available. */
+  state: string | null;
   lat: number | null;
   lon: number | null;
   /** Link back to the provider listing — required for the truthfulness gate. */

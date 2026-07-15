@@ -41,6 +41,26 @@ describe("Google Maps link builder", () => {
     expect(resolveMapsSearchQuery(dest)).toBe("Yosemite National Park, CA");
   });
 
+  it("rejects partial street numbers and falls back to name + city", () => {
+    const dest: MapsDestination = {
+      address: "1839",
+      name: "The Hang Out",
+      city: "Gilbert",
+      state: "AZ",
+    };
+    expect(resolveMapsSearchQuery(dest)).toBe("The Hang Out, Gilbert, AZ");
+  });
+
+  it("rejects number-only comma addresses", () => {
+    const dest: MapsDestination = {
+      address: "1839, Gilbert, AZ 85296",
+      name: "The Hang Out",
+      city: "Gilbert",
+      state: "AZ",
+    };
+    expect(resolveMapsSearchQuery(dest)).toBe("The Hang Out, Gilbert, AZ");
+  });
+
   it("returns null when no verified location exists", () => {
     expect(resolveMapsSearchQuery({ name: "Mystery Place" })).toBeNull();
     expect(buildGoogleMapsSearchUrl({})).toBeNull();

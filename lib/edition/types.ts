@@ -19,7 +19,7 @@ export const SECTION_LABELS: Record<string, string> = {
   today_in_history: "Today in History",
   looking_ahead: "Looking Ahead",
   recommendations: "Recommendations",
-  bandits_picks: "From the desk",
+  bandits_picks: "What's Special Right Now",
   knowledge: "Context",
   memory: "From the Archive",
   morning_edition: "Morning Edition",

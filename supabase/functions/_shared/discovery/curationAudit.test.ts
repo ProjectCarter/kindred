@@ -5,6 +5,7 @@
 
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { scoreDiscoveryItem } from "./score.ts";
+import { selectDiscoverySurface } from "./select.ts";
 import type { DiscoveryItem, DiscoveryRankingContext } from "./types.ts";
 import { selectBanditsPick } from "../bandit/selectPick.ts";
 import {
@@ -232,6 +233,42 @@ Deno.test("museum scores with proximity and weather indoor preference", () => {
   assert(ranked.reasons.some((r) => r.code === "weather_museum_indoor"));
 });
 
+Deno.test("recommendations surfaces exclude statewide monuments outside local radius", () => {
+  const monument: NpsParkRecord = {
+    provider: "nps",
+    parkCode: "orpi",
+    fullName: "Organ Pipe Cactus National Monument",
+    designation: "National Monument",
+    description: "Sonoran Desert landscape.",
+    states: "AZ",
+    lat: 31.9544,
+    lon: -112.7997,
+    url: "https://www.nps.gov/orpi/index.htm",
+    imageUrl: null,
+    imageAttribution: null,
+    entranceFeeSummary: null,
+    operatingHoursSummary: null,
+    alerts: [],
+    events: [],
+    distanceKm: 220,
+    confidence: 0.92,
+    sourceAttribution: "NPS",
+    retrievedAt: new Date().toISOString(),
+    weatherHint: null,
+  };
+  const ctx = baseCtx({
+    readerLat: 33.3528,
+    readerLon: -111.789,
+    city: "Gilbert",
+    state: "AZ",
+  });
+  const ranked = npsParksAsDiscoveryItems([monument]).map((item) =>
+    scoreDiscoveryItem(item, ctx)
+  );
+  const museums = selectDiscoverySurface(ranked, "museums", ctx);
+  assertEquals(museums.items.length, 0);
+});
+
 Deno.test("NPS park requires geographic confidence and boosts when near", () => {
   const park: NpsParkRecord = {
     provider: "nps",
@@ -267,41 +304,160 @@ Deno.test("NPS park requires geographic confidence and boosts when near", () => 
   );
 });
 
-Deno.test("Bandit's Pick can select verified NPS park with explainable reasons", () => {
-  const park: NpsParkRecord = {
-    provider: "nps",
-    parkCode: "sagu",
-    fullName: "Saguaro National Park",
-    designation: "National Park",
-    description: "Desert trails and saguaro forests.",
-    states: "AZ",
-    lat: 32.174,
-    lon: -110.737,
-    url: "https://www.nps.gov/sagu/index.htm",
-    imageUrl: null,
-    imageAttribution: null,
-    entranceFeeSummary: null,
-    operatingHoursSummary: null,
-    alerts: [],
-    events: [],
-    distanceKm: 35,
-    confidence: 0.92,
-    sourceAttribution: "NPS",
-    retrievedAt: new Date().toISOString(),
-    weatherHint: "Clear morning — start early before the heat.",
-  };
+Deno.test("Bandit's Pick rejects seasonal calendar without local evidence", () => {
   const pick = selectBanditsPick({
-    scored: [],
     discovery: baseCtx({
-      npsParks: [park],
+      editionDate: "2026-01-14",
+      now: new Date("2026-01-14T12:00:00"),
+      city: "Gilbert",
+      state: "AZ",
+      localPlaces: [],
+    }),
+    localEvents: [],
+  });
+  assertEquals(pick, null);
+});
+
+Deno.test("Bandit's Pick publishes verified seasonal experience without a venue", () => {
+  const pick = selectBanditsPick({
+    discovery: baseCtx({
+      editionDate: "2026-07-14",
+      now: new Date("2026-07-14T12:00:00"),
+      city: "Gilbert",
+      state: "AZ",
       localPlaces: [],
     }),
     localEvents: [],
   });
   assert(pick);
-  assertEquals(pick?.kind === "activity" || pick?.kind === "hidden_gem", true);
-  assert(pick?.discoveryItem?.tags.includes("nps_park"));
-  assert(pick?.why.length > 0);
+  assertEquals(pick?.kind, "seasonal");
+  assert(pick?.headline.toLowerCase().includes("monsoon"));
+  assert(!pick?.why || !/\b(verified|experience verified)\b/i.test(pick.why));
+});
+
+Deno.test("Bandit's Pick publishes harvest pick only with verified venue", () => {
+  const pick = selectBanditsPick({
+    discovery: baseCtx({
+      editionDate: "2026-07-14",
+      now: new Date("2026-07-14T12:00:00"),
+      city: "Traverse City",
+      region: "MI",
+      state: "MI",
+      localPlaces: [
+        {
+          providerId: "fsq_1",
+          name: "King Orchards U-Pick Blueberries",
+          category: "attractions",
+          address: "123 Farm Rd",
+          city: "Traverse City",
+          url: "https://example.com/farm",
+          note: "U-pick blueberries open weekday mornings in July.",
+        },
+      ],
+    }),
+    localEvents: [],
+  });
+  assert(pick);
+  assertEquals(pick?.kind, "seasonal");
+  assert(pick?.headline.toLowerCase().includes("blueberr"));
+  assert((pick?.nearby.length ?? 0) >= 1);
+  assert(!pick?.why || !/\bverified near\b/i.test(pick.why));
+});
+
+Deno.test("Bandit's Pick blocks blueberry harvest in desert regions", () => {
+  const pick = selectBanditsPick({
+    discovery: baseCtx({
+      editionDate: "2026-07-14",
+      now: new Date("2026-07-14T12:00:00"),
+      city: "Gilbert",
+      state: "AZ",
+      localPlaces: [
+        {
+          providerId: "fsq_1",
+          name: "Agritopia Farm U-Pick Blueberries",
+          category: "attractions",
+          address: "3000 E Agritopia Loop",
+          city: "Gilbert",
+          url: "https://example.com/farm",
+          note: "U-pick blueberries open weekday mornings in July.",
+        },
+      ],
+    }),
+    localEvents: [],
+  });
+  assert(pick);
+  assert(!pick?.headline.toLowerCase().includes("blueberr"));
+});
+
+Deno.test("Bandit's Pick rejects generic farm as blueberry evidence", () => {
+  const pick = selectBanditsPick({
+    discovery: baseCtx({
+      editionDate: "2026-07-14",
+      now: new Date("2026-07-14T12:00:00"),
+      city: "Gilbert",
+      state: "AZ",
+      localPlaces: [
+        {
+          providerId: "fsq_garden",
+          name: "Desert Breeze Community Garden",
+          category: "gardens",
+          address: "100 S Main St",
+          city: "Gilbert",
+          url: null,
+          note: "Community garden plots and weekend produce stand.",
+        },
+      ],
+    }),
+    localEvents: [],
+  });
+  assert(pick);
+  assert(!pick?.headline.toLowerCase().includes("blueberr"));
+});
+
+Deno.test("Bandit's Pick rejects networking events", () => {
+  const networking: LocalEvent = {
+    name: "Startup Networking Night",
+    startDateTime: "Sat, Jul 18, 7 PM",
+    venue: "WeWork",
+    city: "Gilbert",
+    sourceUrl: "https://example.com/event",
+    sourceName: "Eventbrite",
+  };
+  const pick = selectBanditsPick({
+    discovery: baseCtx({
+      editionDate: "2026-07-14",
+      now: new Date("2026-07-14T12:00:00"),
+      state: "AZ",
+      localPlaces: [],
+    }),
+    localEvents: [networking],
+  });
+  assert(pick);
+  assert(!/networking/i.test(pick?.headline ?? ""));
+});
+
+Deno.test("Bandit's Pick selects verified local event when no experience wins", () => {
+  const farmersMarket: LocalEvent = {
+    name: "Gilbert Farmers Market",
+    startDateTime: "Sat, Feb 12, 7 AM",
+    venue: "Downtown Gilbert",
+    city: "Gilbert",
+    sourceUrl: "https://example.com/market",
+    sourceName: "Town of Gilbert",
+    banditNote: "Saturday farmers market with peak winter produce.",
+  };
+  const pick = selectBanditsPick({
+    discovery: baseCtx({
+      editionDate: "2026-02-12",
+      now: new Date("2026-02-12T12:00:00"),
+      city: "Gilbert",
+      state: "AZ",
+      localPlaces: [],
+    }),
+    localEvents: [farmersMarket],
+  });
+  assert(pick);
+  assertEquals(pick?.kind, "event");
 });
 
 Deno.test("favorite source personalization boosts matching discovery item", () => {

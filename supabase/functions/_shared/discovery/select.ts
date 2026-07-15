@@ -1,5 +1,9 @@
 import { isPlaceholderCopy } from "../contentQuality.ts";
 import {
+  containsEngineLanguage,
+  INTERNAL_REASON_CODES,
+} from "../editorial/readerVoice.ts";
+import {
   DISCOVERY_PUBLISH_MIN_SCORE,
   publishDiscoveryItems,
 } from "../editorial/publishing.ts";
@@ -14,6 +18,10 @@ import type {
   DiscoverySurfaceResult,
   RankedDiscoveryItem,
 } from "./types.ts";
+import {
+  passesLocalDiscoveryRadius,
+  surfaceUsesLocalDiscoveryRadius,
+} from "./localDiscoveryScope.ts";
 
 /** Place-like categories must come from verified local data, not seed templates. */
 const PLACE_CATEGORIES = new Set([
@@ -58,16 +66,17 @@ export function whyLine(item: RankedDiscoveryItem): string {
     .filter(
       (r) =>
         r.weight > 0 &&
+        !INTERNAL_REASON_CODES.has(String(r.code)) &&
         !isPlaceholderCopy(r.label) &&
-        !/magazine desk|tend to care|algorithm|score/i.test(r.label)
+        !containsEngineLanguage(r.label) &&
+        !/magazine desk|tend to care|algorithm|score|held back|trusted source/i.test(
+          r.label
+        )
     )
     .slice(0, 2)
     .map((r) => r.label);
   if (top.length) return top.join(" ");
-  if (item.item.place?.city) {
-    return `Nearby in ${item.item.place.city}.`;
-  }
-  return "From today’s paper.";
+  return "";
 }
 
 /**
@@ -121,13 +130,21 @@ export function selectDiscoverySurface(
   const recentKeys = ctx.recentKeys ?? [];
 
   const strictPool = ranked.filter(
-    (r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r, false)
+    (r) =>
+      allowed.has(r.item.category) &&
+      isVerifiedPlaceItem(r, false) &&
+      (!surfaceUsesLocalDiscoveryRadius(surface) ||
+        passesLocalDiscoveryRadius(r, ctx))
   );
   const pool = (
     strictPool.length > 0
       ? strictPool
       : ranked.filter(
-          (r) => allowed.has(r.item.category) && isVerifiedPlaceItem(r, true)
+          (r) =>
+            allowed.has(r.item.category) &&
+            isVerifiedPlaceItem(r, true) &&
+            (!surfaceUsesLocalDiscoveryRadius(surface) ||
+              passesLocalDiscoveryRadius(r, ctx))
         )
   ).sort((a, b) => b.score - a.score);
 

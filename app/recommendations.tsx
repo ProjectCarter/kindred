@@ -15,7 +15,7 @@ import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Full published Recommendations list — every qualifying place in today's edition. */
+/** Full published Recommendations list — every qualifying place in this edition. */
 export default function RecommendationsScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
@@ -55,7 +55,7 @@ export default function RecommendationsScreen() {
         <Text style={styles.kicker}>Where should I go?</Text>
         <Text style={styles.title}>Recommendations</Text>
         <Text style={styles.subtitle}>
-          Places worth discovering nearby — gathered in one place.
+          Places worth discovering nearby this month.
         </Text>
 
         <EditorialCardGrid
@@ -64,7 +64,7 @@ export default function RecommendationsScreen() {
           initialRenderCount={Math.max(cards.length, 1)}
           fallbackIcon="mappin.and.ellipse"
           fallbackIconIonicon="location-outline"
-          emptyCopy="Nothing new to recommend nearby today — check back tomorrow."
+          emptyCopy="Nothing new to recommend nearby this month — check back tomorrow."
           showBanditWhenEmpty
           onOpenCard={(card) => {
             const article = articlesById.get(card.id);

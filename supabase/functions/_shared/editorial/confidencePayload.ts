@@ -83,7 +83,7 @@ export function pruneDiscoveryPayloadByConfidence(
         title: item.item.title,
         category: item.item.category,
         surface: result.surface,
-        why: payload.picks.find((p) => p.id === item.item.id)?.why ?? "From today’s paper.",
+        why: payload.picks.find((p) => p.id === item.item.id)?.why ?? "",
       });
     }
   }

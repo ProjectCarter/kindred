@@ -232,8 +232,15 @@ export function ArticleReader({
   ]);
 
   const swapInEditorialHero = useCallback(() => {
-    if (article.section === "today_in_history") {
+    if (
+      article.section === "today_in_history" ||
+      article.section === "bandits_pick" ||
+      article.section === "discovery" ||
+      article.section === "local_events" ||
+      article.savedContentType
+    ) {
       setHeroFailed(true);
+      setEditorialFallback(null);
       return;
     }
     const fallback = resolveArticleHero({
@@ -281,7 +288,13 @@ export function ArticleReader({
     if (wireUri) {
       const timer = setTimeout(() => {
         if (!heroReadyRef.current) {
-          if (article.section === "today_in_history") {
+          if (
+            article.section === "today_in_history" ||
+            article.section === "bandits_pick" ||
+            article.section === "discovery" ||
+            article.section === "local_events" ||
+            article.savedContentType
+          ) {
             setHeroFailed(true);
             return;
           }
@@ -404,8 +417,16 @@ export function ArticleReader({
     );
   }, [pullQuote, article.body.length]);
 
-  // Prefer article-supplied figures; skip auto fills so every image is intentional.
+  // Prefer article-supplied figures; never auto-fill discovery/event bodies.
   const figures = useMemo(() => {
+    if (
+      article.section === "bandits_pick" ||
+      article.section === "discovery" ||
+      article.section === "local_events" ||
+      article.savedContentType
+    ) {
+      return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
+    }
     if (article.figures?.length) {
       return article.figures.filter((f) => Boolean(f.uri?.trim() || f.source));
     }
@@ -701,6 +722,17 @@ export function ArticleReader({
                 setHeroReady(true);
                 return;
               }
+              if (
+                article.section === "bandits_pick" ||
+                article.section === "discovery" ||
+                article.section === "local_events" ||
+                article.savedContentType
+              ) {
+                setHeroFailed(true);
+                setEditorialFallback(null);
+                setHeroReady(true);
+                return;
+              }
               swapInEditorialHero();
             }}
           />
@@ -807,7 +839,7 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {articleContextActions.length > 0 ? (
+            {article.section !== "bandits_pick" && articleContextActions.length > 0 ? (
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
@@ -815,9 +847,11 @@ export function ArticleReader({
             <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
               {briefing
                 ? "Kindred briefing"
-                : article.contentType
-                  ? categoryLabelForType(article.contentType)
-                  : formatSectionLabel(article.section)}
+                : article.section === "bandits_pick"
+                  ? "What's Special Right Now"
+                  : article.contentType
+                    ? categoryLabelForType(article.contentType)
+                    : formatSectionLabel(article.section)}
             </Text>
 
             {/* 3. Headline */}
@@ -836,10 +870,12 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {/* 5. Bandit's Note */}
+            {/* 5. Bandit's introduction or note */}
             {banditNote ? (
               <View style={styles.banditNote} accessibilityRole="text">
-                <Text style={styles.banditNoteKicker}>Bandit’s Note</Text>
+                {article.section !== "bandits_pick" ? (
+                  <Text style={styles.banditNoteKicker}>Bandit’s Note</Text>
+                ) : null}
                 <Text style={styles.banditNoteBody} maxFontSizeMultiplier={1.25}>
                   {banditNote}
                 </Text>
@@ -892,6 +928,46 @@ export function ArticleReader({
               <ContentTemplateModules modules={article.modules!} />
             ) : null}
 
+            {(article.nearbyEditorial?.length ?? 0) > 0 ? (
+              <View style={styles.nearbyBlock}>
+                <Text style={styles.nearbyKicker}>Nearby</Text>
+                {article.nearbyEditorial!.map((place, index) => (
+                  <View
+                    key={`nearby-${place.name}-${index}`}
+                    style={[
+                      styles.nearbyItem,
+                      index === article.nearbyEditorial!.length - 1 &&
+                        styles.nearbyItemLast,
+                    ]}
+                  >
+                    <Text style={styles.nearbyName} maxFontSizeMultiplier={1.2}>
+                      {place.glyph ? `${place.glyph} ` : ""}
+                      {place.name}
+                    </Text>
+                    <Text
+                      style={styles.nearbyDescription}
+                      maxFontSizeMultiplier={1.2}
+                    >
+                      {place.description}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            {article.closingBanditNote ? (
+              <View style={styles.banditNote} accessibilityRole="text">
+                <Text style={styles.banditNoteKicker}>Bandit's Note</Text>
+                <Text style={styles.banditNoteBody} maxFontSizeMultiplier={1.25}>
+                  {article.closingBanditNote}
+                </Text>
+              </View>
+            ) : null}
+
+            {article.section === "bandits_pick" && articleContextActions.length > 0 ? (
+              <ArticleActionList actions={articleContextActions} />
+            ) : null}
+
             <View style={styles.colophon}>
               <View style={styles.footerRule} />
               <Text style={styles.endMark}>◆</Text>
@@ -899,9 +975,11 @@ export function ArticleReader({
                 From this morning’s paper  ·  {article.source}
               </Text>
               <Text style={styles.closingCadence} maxFontSizeMultiplier={1.25}>
-                {briefing
-                  ? "That is the desk’s note on this story. Sit with it a moment."
-                  : "That is the end of this story. Sit with it a moment."}
+                {article.section === "bandits_pick"
+                  ? "That is Bandit’s pick for today. See you tomorrow."
+                  : briefing
+                    ? "That is the desk’s note on this story. Sit with it a moment."
+                    : "That is the end of this story. Sit with it a moment."}
               </Text>
             </View>
 
@@ -963,11 +1041,11 @@ export function ArticleReader({
               ))}
             </EndMatterBlock>
 
-            {/* 12. Bandit's Picks */}
+            {/* 12. What's Special Right Now */}
             {banditPickItems.length > 0 ? (
               <EndMatterBlock
-                kicker="Bandit’s Picks"
-                intro="One quiet recommendation from the desk — personal, not a feed."
+                kicker="What's Special Right Now"
+                intro="What Bandit says not to miss today or this week."
               >
                 {banditPickItems.map((item, index) => (
                   <EndMatterItem
@@ -1398,6 +1476,37 @@ const styles = StyleSheet.create({
   },
   banditNoteBody: {
     ...reader.calloutBody,
+    color: paper.inkBody,
+  },
+  nearbyBlock: {
+    marginBottom: 32,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.inkRule,
+  },
+  nearbyKicker: {
+    ...type.kicker,
+    color: paper.terracotta,
+    letterSpacing: 2.2,
+    marginBottom: 18,
+  },
+  nearbyItem: {
+    marginBottom: 20,
+  },
+  nearbyItemLast: {
+    marginBottom: 8,
+  },
+  nearbyName: {
+    fontFamily: "Georgia",
+    fontSize: 18,
+    lineHeight: 26,
+    color: paper.ink,
+    marginBottom: 6,
+  },
+  nearbyDescription: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
     color: paper.inkBody,
   },
   briefingNote: {

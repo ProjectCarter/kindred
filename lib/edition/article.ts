@@ -33,6 +33,11 @@ import {
   actionContextFromDiscoveryItem,
   actionContextFromLocalEvent,
 } from "./actionBar";
+import { enrichBanditsPickStory } from "./banditEditorial";
+import { resolveBanditsPickHero } from "./banditsPickHero";
+import { activityImageFor } from "./activities";
+import { recommendationImageFor } from "./recommendations";
+import { sanitizeAddressForDisplay } from "./verifiedLocation";
 import type { ImageSourcePropType } from "react-native";
 
 /**
@@ -88,7 +93,9 @@ export type KindredArticle = {
    * Shown once near the top; never algorithmic language.
    */
   banditNote?: string | null;
-  /** Publisher URL for “Read Original Article”. */
+  /** Bandit's closing signature — end of Bandit's Pick features. */
+  closingBanditNote?: string | null;
+  /** Publisher URL for "Read Original Article". */
   sourceUrl?: string | null;
   estimatedReadMinutes?: number | null;
   /**
@@ -101,6 +108,12 @@ export type KindredArticle = {
    * Story first in `body`; these answer natural reader questions in prose.
    */
   modules?: EditorialModule[] | null;
+  /** Bandit's Pick — 2–3 local editorial recommendations after the feature. */
+  nearbyEditorial?: Array<{
+    name: string;
+    description: string;
+    glyph?: string | null;
+  }> | null;
   /**
    * Which Clippings bucket this belongs to, when the adapter that built
    * this article already knows (e.g. Activities vs Recommendations both
@@ -236,28 +249,81 @@ export function articleFromBanditsPick(
     id: string;
     headline: string;
     summary: string;
+    body?: string[];
+    modules?: EditorialModule[];
+    closingNote?: string | null;
+    mapsQuery?: string | null;
+    actionLabel?: string | null;
+    nearby?: Array<{ name: string; description: string; glyph?: string }>;
+    heroMomentId?: string | null;
+    imageCaption?: string | null;
+    why?: string;
     source: string;
     url: string | null;
     publishedAt: string | null;
     imageUrl?: string | null;
     discoveryItem?: DiscoveryItem | null;
+  },
+  options?: {
+    intro?: string | null;
+    fallbackCity?: string | null;
+    editionDate?: string | null;
+    kind?: import("./bandit").BanditsPickKind;
   }
 ): KindredArticle {
+  const enriched = enrichBanditsPickStory({
+    ...pick,
+    why: pick.why ?? "",
+  });
+  const bodyText =
+    enriched.body?.length && enriched.body.join("").trim()
+      ? enriched.body.join("\n\n")
+      : enriched.summary?.trim() || "";
+
+  const base = articleFromSectionItem({
+    id: enriched.id,
+    section: "bandits_pick",
+    headline: enriched.headline,
+    body: bodyText,
+    source: enriched.source,
+    sourceUrl: enriched.url,
+    publishedAt: enriched.publishedAt,
+    imageUrl: null,
+    dek: null,
+    banditNote: options?.intro?.trim() || null,
+    contentType: "recommendation",
+  });
+
+  const resolvedHero = resolveBanditsPickHero({
+    id: enriched.id,
+    kind: options?.kind ?? "seasonal",
+    headline: enriched.headline,
+    imageUrl: enriched.imageUrl,
+    imageCaption: enriched.imageCaption,
+    heroMomentId: enriched.heroMomentId,
+    discoveryItem: enriched.discoveryItem ?? pick.discoveryItem ?? null,
+    editionDate: options?.editionDate ?? null,
+  });
+
+  const modules =
+    enriched.modules?.length && enriched.modules.some((m) => m.body?.trim())
+      ? enriched.modules
+      : base.modules;
+
   return {
-    ...articleFromSectionItem({
-      id: pick.id,
-      section: "bandits_pick",
-      headline: pick.headline,
-      body: pick.summary,
-      source: pick.source,
-      sourceUrl: pick.url,
-      publishedAt: pick.publishedAt,
-      imageUrl: pick.imageUrl,
-      dek: null,
-    }),
+    ...base,
+    body: enriched.body?.length ? enriched.body : base.body,
+    modules,
+    figures: [],
+    closingBanditNote: enriched.closingNote?.trim() || null,
+    nearbyEditorial: enriched.nearby?.length ? enriched.nearby : null,
+    heroImage: resolvedHero,
     actionContext: actionContextFromBanditsPick({
-      url: pick.url,
-      discoveryItem: pick.discoveryItem ?? null,
+      url: enriched.url,
+      mapsQuery: enriched.mapsQuery,
+      actionLabel: enriched.actionLabel,
+      discoveryItem: enriched.discoveryItem ?? pick.discoveryItem ?? null,
+      fallbackCity: options?.fallbackCity ?? null,
     }),
   };
 }
@@ -347,7 +413,7 @@ export function articleFromSectionItem(input: {
   }
   if (!body.length) {
     body = [
-      "Kindred has only a short note for this item. View the original source for the full report.",
+      "The note on this one is short — the full report lives with the original source.",
     ];
   }
   const article: KindredArticle = {
@@ -482,6 +548,49 @@ function withDiscoveryEditorialHero(
   };
 }
 
+/** Same bundled photograph the homepage card uses — no unrelated archive fallbacks. */
+function withDiscoveryCardAlignedHero(
+  article: KindredArticle,
+  item: DiscoveryItem
+): KindredArticle {
+  if (article.heroImage?.uri?.trim() || article.heroImage?.source) {
+    return article;
+  }
+  const bundled =
+    item.category === "activities"
+      ? activityImageFor(item)
+      : recommendationImageFor(item);
+  if (!bundled) return article;
+  return {
+    ...article,
+    heroImage: {
+      source: bundled,
+      caption: item.title,
+      credit: "Kindred editorial photography",
+      kind: "editorial",
+    },
+  };
+}
+
+function finalizeDiscoveryArticle(
+  article: KindredArticle,
+  item: DiscoveryItem
+): KindredArticle {
+  return attachDiscoveryActionContext(
+    withDiscoveryCardAlignedHero(withDiscoveryEditorialHero(article, item), item),
+    item
+  );
+}
+
+function discoverySavedLocation(item: DiscoveryItem): string | null {
+  const address = sanitizeAddressForDisplay(item.address);
+  if (address) return address;
+  const city = item.place?.city?.trim();
+  const state = item.place?.state?.trim() || item.place?.region?.trim();
+  if (city && state) return `${city}, ${state}`;
+  return city || null;
+}
+
 function discoveryActionSurface(
   item: DiscoveryItem
 ): "activity" | "recommendation" {
@@ -505,32 +614,31 @@ export function articleFromDiscoveryItem(
 ): KindredArticle {
   const item = ranked.item;
   const why = formatDiscoveryWhy(ranked);
-  const savedLocation = item.place?.city ?? item.address ?? null;
+  const savedLocation = discoverySavedLocation(item);
 
   const curated = getCuratedDiscoveryArticle(item.id);
 
   if (curated) {
-    return attachDiscoveryActionContext(
-      withDiscoveryEditorialHero(
-        {
-          ...articleFromSectionItem({
-            id: item.id,
-            section: "discovery",
-            headline: item.title,
-            body: curated.body.join("\n\n"),
-            dek: curated.dek,
-            pullQuote: curated.pullQuote ?? null,
-            source: item.source?.name ?? "Kindred",
-            sourceUrl: item.url ?? item.source?.url ?? null,
-            discoveryCategory: item.category,
-            contentType: curated.contentType,
-            tags: [item.category],
-            fieldAnswers: curated.fieldAnswers,
-          }),
-          savedLocation,
-        },
-        item
-      ),
+    return finalizeDiscoveryArticle(
+      {
+        ...articleFromSectionItem({
+          id: item.id,
+          section: "discovery",
+          headline: item.title,
+          body: curated.body.join("\n\n"),
+          dek: curated.dek,
+          pullQuote: curated.pullQuote ?? null,
+          source: item.source?.name ?? "Kindred",
+          sourceUrl: item.url ?? item.source?.url ?? null,
+          discoveryCategory: item.category,
+          contentType: curated.contentType,
+          tags: [item.category],
+          fieldAnswers: curated.fieldAnswers,
+        }),
+        savedLocation,
+        savedContentType:
+          item.category === "activities" ? "activity" : "recommendation",
+      },
       item
     );
   }
@@ -544,32 +652,31 @@ export function articleFromDiscoveryItem(
       title: item.title,
       dek: item.dek,
       city: item.place?.city ?? null,
-      address: item.address ?? null,
+      address: sanitizeAddressForDisplay(item.address),
       venueCategories: item.venueCategories ?? null,
       sourceName: item.source?.name ?? null,
       category: item.category,
       seedKey: item.id,
       knowledgeGrounding: item.knowledgeGrounding ?? null,
     });
-    return attachDiscoveryActionContext(
-      withDiscoveryEditorialHero(
-        {
-          ...articleFromSectionItem({
-            id: item.id,
-            section: "discovery",
-            headline: item.title,
-            body: composed.body.join("\n\n"),
-            dek: composed.dek,
-            source: item.source?.name ?? "Kindred",
-            sourceUrl: item.url ?? item.source?.url ?? null,
-            discoveryCategory: item.category,
-            tags: [item.category],
-            fieldAnswers: composed.fieldAnswers,
-          }),
-          savedLocation,
-        },
-        item
-      ),
+    return finalizeDiscoveryArticle(
+      {
+        ...articleFromSectionItem({
+          id: item.id,
+          section: "discovery",
+          headline: item.title,
+          body: composed.body.join("\n\n"),
+          dek: composed.dek,
+          source: item.source?.name ?? "Kindred",
+          sourceUrl: item.url ?? item.source?.url ?? null,
+          discoveryCategory: item.category,
+          tags: [item.category],
+          fieldAnswers: composed.fieldAnswers,
+        }),
+        savedLocation,
+        savedContentType:
+          item.category === "activities" ? "activity" : "recommendation",
+      },
       item
     );
   }
@@ -584,25 +691,24 @@ export function articleFromDiscoveryItem(
     seedKey: item.id,
   });
   if (categoryArticle) {
-    return attachDiscoveryActionContext(
-      withDiscoveryEditorialHero(
-        {
-          ...articleFromSectionItem({
-            id: item.id,
-            section: "discovery",
-            headline: item.title,
-            body: categoryArticle.body.join("\n\n"),
-            dek: categoryArticle.dek,
-            source: item.source?.name ?? "Kindred",
-            sourceUrl: item.url ?? item.source?.url ?? null,
-            discoveryCategory: item.category,
-            tags: [item.category],
-            fieldAnswers: categoryArticle.fieldAnswers,
-          }),
-          savedLocation,
-        },
-        item
-      ),
+    return finalizeDiscoveryArticle(
+      {
+        ...articleFromSectionItem({
+          id: item.id,
+          section: "discovery",
+          headline: item.title,
+          body: categoryArticle.body.join("\n\n"),
+          dek: categoryArticle.dek,
+          source: item.source?.name ?? "Kindred",
+          sourceUrl: item.url ?? item.source?.url ?? null,
+          discoveryCategory: item.category,
+          tags: [item.category],
+          fieldAnswers: categoryArticle.fieldAnswers,
+        }),
+        savedLocation,
+        savedContentType:
+          item.category === "activities" ? "activity" : "recommendation",
+      },
       item
     );
   }
@@ -615,28 +721,24 @@ export function articleFromDiscoveryItem(
     city: item.place?.city ?? null,
   });
 
-  return attachDiscoveryActionContext(
-    withDiscoveryEditorialHero(
-      {
-        ...articleFromSectionItem({
-          id: item.id,
-          section: "discovery",
-          headline: item.title,
-          body: body.join("\n\n"),
-          dek: item.dek,
-          source: item.source?.name ?? "Kindred",
-          sourceUrl: item.url ?? item.source?.url ?? null,
-          discoveryCategory: item.category,
-          tags: [item.category],
-          // Explicitly empty — the fallback body already answers the practical
-          // question; auto-seeding a module from the dek here would repeat it
-          // a third time under a labeled section.
-          fieldAnswers: {},
-        }),
-        savedLocation,
-      },
-      item
-    ),
+  return finalizeDiscoveryArticle(
+    {
+      ...articleFromSectionItem({
+        id: item.id,
+        section: "discovery",
+        headline: item.title,
+        body: body.join("\n\n"),
+        dek: item.dek,
+        source: item.source?.name ?? "Kindred",
+        sourceUrl: item.url ?? item.source?.url ?? null,
+        discoveryCategory: item.category,
+        tags: [item.category],
+        fieldAnswers: {},
+      }),
+      savedLocation,
+      savedContentType:
+        item.category === "activities" ? "activity" : "recommendation",
+    },
     item
   );
 }
@@ -686,7 +788,7 @@ export function articleFromNotebookItem(
       title: item.title,
       dek: item.dek,
       city: item.place?.city ?? null,
-      address: item.address ?? null,
+      address: sanitizeAddressForDisplay(item.address),
       venueCategories: item.venueCategories ?? null,
       sourceName: item.source?.name ?? null,
       category: item.category,
@@ -781,7 +883,13 @@ export function articleFromNotebookItem(
  * Story first (Bandit’s invitation); logistics as magazine modules.
  */
 export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
-  const place = [event.venue, event.city].filter(Boolean).join(", ");
+  const venue =
+    event.venue?.trim() && event.venue.trim() !== "Venue TBA"
+      ? event.venue.trim()
+      : null;
+  const safeVenue =
+    venue && !/^\d+[a-z]?$/i.test(venue) ? venue : null;
+  const place = [safeVenue, event.city?.trim()].filter(Boolean).join(", ");
   const whenParts = [event.date, event.time].filter(
     (p) => p && !/TBA/i.test(p)
   );
@@ -809,9 +917,9 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
         "This is the kind of plan that looks unremarkable on paper and turns out to be exactly the right amount of evening.",
       ]);
   const closing = pickVariant(`${event.name}:${event.date}`, [
-    "Here's what Kindred could confirm — the rest is worth discovering in person.",
-    "That's what Kindred could pin down — the rest is best found out by going.",
-    "Kindred can vouch for the details above; everything else is worth seeing for yourself.",
+    "The rest is worth discovering in person — that is usually where the good part starts.",
+    "Everything beyond the basics is best found by going.",
+    "Show up with a little curiosity; that is often enough.",
   ]);
   const story = [hook, context, closing];
 

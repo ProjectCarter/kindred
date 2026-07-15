@@ -84,7 +84,7 @@ export function composeThinHonest(
       },
       fourQuestions: {
         what: headline,
-        why: "This item earned a place in today’s paper; the wire note is short.",
+        why: "The wire note is short — the full report lives with the publisher.",
         who: "Readers following this thread",
         remember:
           "When the wire is thin, Kindred tells you plainly rather than padding.",

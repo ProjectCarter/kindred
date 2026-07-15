@@ -115,7 +115,7 @@ export function runDiscoveryDecisions(
 
   const editorNotes = [
     "Recommendations curated like a magazine desk — not a social feed.",
-    ctx.isSunday ? "Sunday Bandit's Picks assembled." : "",
+    ctx.isSunday ? "Sunday What's Special Right Now assembled." : "",
     ctx.isWeekend ? "Weekend Ideas weather- and season-aware." : "",
     (ctx.localEvents?.length ?? 0) > 0
       ? "Local events folded into discovery candidates."
@@ -133,6 +133,8 @@ export function runDiscoveryDecisions(
       city: ctx.city,
       region: ctx.region,
       state: ctx.state,
+      lat: ctx.readerLat ?? null,
+      lon: ctx.readerLon ?? null,
     },
     surfaces,
     picks,

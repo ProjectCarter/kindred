@@ -62,6 +62,15 @@ export type BanditsPick = {
     id: string;
     headline: string;
     summary: string;
+    /** Full reader feature — persisted at build time. */
+    body?: string[];
+    modules?: Array<{ id: string; label: string; body: string }>;
+    closingNote?: string | null;
+    mapsQuery?: string | null;
+    actionLabel?: string | null;
+    nearby?: Array<{ name: string; description: string; glyph?: string }>;
+    heroMomentId?: string | null;
+    imageCaption?: string | null;
     source: string;
     url: string | null;
     publishedAt: string | null;

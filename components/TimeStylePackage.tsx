@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Image,
   Pressable,
@@ -33,6 +34,32 @@ function PhotoFallback({
         }
       />
     </View>
+  );
+}
+
+function CardPhoto({
+  source,
+  width,
+  height,
+  label,
+}: {
+  source: ImageSourcePropType;
+  width: number;
+  height: number;
+  label: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <PhotoFallback width={width} height={Math.round(height * 0.4)} />;
+  }
+  return (
+    <Image
+      source={source}
+      style={{ width, height }}
+      resizeMode="cover"
+      accessibilityLabel={label}
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -109,11 +136,11 @@ export function TimeStylePackage({
           accessibilityLabel={feature.headline}
         >
           {feature.image ? (
-            <Image
+            <CardPhoto
               source={feature.image}
-              style={{ width: featureW, height: featureH }}
-              resizeMode="cover"
-              accessibilityLabel={feature.imageLabel || feature.headline}
+              width={featureW}
+              height={featureH}
+              label={feature.imageLabel || feature.headline}
             />
           ) : (
             <PhotoFallback

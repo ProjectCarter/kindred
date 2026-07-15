@@ -494,7 +494,7 @@ export function buildEditionEditorialContext(
           3
         ),
         ...(input.discovery.surfaces.includes("bandits_picks")
-          ? [note("bandits_picks", "Bandit's Picks assembled", "editorial", 3)]
+          ? [note("bandits_picks", "What's Special Right Now assembled", "editorial", 3)]
           : []),
         ...(input.discovery.surfaces.includes("weekend_ideas")
           ? [note("weekend_ideas", "Weekend Ideas assembled", "lifestyle", 3)]

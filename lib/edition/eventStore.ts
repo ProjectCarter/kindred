@@ -1,8 +1,11 @@
 import type { LocalEventCard } from "./localEvents";
+import {
+  HORIZON_BUCKET_LABEL,
+  resolveCardHorizon,
+} from "./eventHorizon";
 
 /**
  * In-memory handoff for the event detail screen.
- * Same pattern as articleStore — Router params are too small for full cards.
  */
 const MAX_STASHED = 16;
 const store = new Map<string, LocalEventCard>();
@@ -39,39 +42,29 @@ export function getStashedEvent(id: string): LocalEventCard | null {
   return event;
 }
 
-export type EventBadge = "Today" | "Starts Soon";
+export type EventBadge =
+  | "Today"
+  | "This Weekend"
+  | "Next Weekend"
+  | "Coming Soon";
 
-/** Derive a small editorial badge from schedule text — never invent “Free” without signal. */
+/** Derive a small editorial badge from the 30-day horizon — never invent signals. */
 export function deriveEventBadge(
   event: LocalEventCard,
   now: Date = new Date()
 ): EventBadge | null {
+  const bucket = resolveCardHorizon(event, now);
+  if (bucket === "beyond") return null;
+
+  if (bucket === "today") return "Today";
+
+  const label = HORIZON_BUCKET_LABEL[bucket];
+  if (label === "This Weekend") return "This Weekend";
+  if (label === "Next Weekend") return "Next Weekend";
+  if (label === "Coming Soon") return "Coming Soon";
+
   const hay = `${event.name} ${event.date} ${event.time}`.toLowerCase();
-
-  const todayLabel = now.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const todayLong = now.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-  const dateLower = event.date.toLowerCase();
-  if (
-    /\btoday\b/i.test(event.date) ||
-    dateLower.includes(todayLabel.toLowerCase()) ||
-    dateLower.includes(
-      now.toLocaleDateString(undefined, { month: "short", day: "numeric" }).toLowerCase()
-    ) ||
-    dateLower.includes(todayLong.toLowerCase())
-  ) {
-    return "Today";
-  }
-
-  // “Starts Soon” — same calendar day language or evening window in the when-string.
-  if (/\b(tonight|this evening|starts soon)\b/i.test(hay)) return "Starts Soon";
+  if (/\b(tonight|this evening)\b/i.test(hay)) return "Today";
 
   return null;
 }

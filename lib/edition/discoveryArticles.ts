@@ -27,6 +27,15 @@ import {
   discoveryBackgroundFromGrounding,
   type KnowledgeLookupResult,
 } from "./knowledgeGrounding";
+import { sanitizeAddressForDisplay } from "./verifiedLocation";
+import {
+  closingLineForPlace,
+  containsEngineLanguage,
+  isNearDuplicateCopy,
+  openingLineForPlace,
+  sanitizeReaderParagraphs,
+  sceneLineForPlace,
+} from "./editorialVoice";
 
 export type CuratedDiscoveryArticle = {
   /** Editorial subheading for the reader — distinct from the homepage card dek. */
@@ -585,35 +594,25 @@ export function composeFallbackDiscoveryBody(input: {
   const why = input.why?.trim() || "";
   const paragraphs: string[] = [];
 
-  if (why && !isNearDuplicateCopy(why, dek)) {
+  if (why && !containsEngineLanguage(why) && !isNearDuplicateCopy(why, dek)) {
     paragraphs.push(why);
-  } else if (!dek) {
-    if (input.city) {
-      paragraphs.push(`A recommendation worth a closer look, near ${input.city}.`);
-    } else {
-      paragraphs.push(input.title.trim());
-    }
+  } else if (dek && !containsEngineLanguage(dek)) {
+    paragraphs.push(dek);
+  } else if (input.city) {
+    paragraphs.push(
+      `${input.title.trim()} is worth a closer look${input.city ? ` near ${input.city}` : ""}.`
+    );
+  } else {
+    paragraphs.push(input.title.trim());
   }
 
-  if (paragraphs.length === 0 && dek) {
+  if (paragraphs.length === 1) {
     paragraphs.push(
-      "Kindred has only a short verified note for this one — the listing below has the latest detail."
-    );
-  } else if (paragraphs.length > 0) {
-    paragraphs.push(
-      "Kindred flagged this for today's paper. Worth a look before the day fills in."
+      "Worth knowing about before the day fills in — the listing has the latest detail."
     );
   }
 
-  return paragraphs;
-}
-
-function isNearDuplicateCopy(a: string, b: string): boolean {
-  const left = a.trim().toLowerCase();
-  const right = b.trim().toLowerCase();
-  if (!left || !right) return false;
-  if (left === right) return true;
-  return left.includes(right) || right.includes(left);
+  return sanitizeReaderParagraphs(paragraphs);
 }
 
 /**
@@ -723,6 +722,13 @@ function editorialBriefForVenueType(typeLabel: string): {
       tips: "Book lanes ahead on Friday and Saturday. Closed-toe shoes are the right call — this is bowling, not kayaking.",
     };
   }
+  if (/esports|gaming lounge|gaming center/.test(t)) {
+    return {
+      who: "Gamers, friend groups, and anyone who wants a few focused hours indoors without a complicated plan.",
+      howLong: "Budget two to three hours if you are settling in for tournaments or open play.",
+      tips: "Peak hours fill up on weekends — arrive a little early if you want your pick of stations.",
+    };
+  }
   if (/bowling|mini golf|arcade|climbing|axe|go-kart|kayak|paddle/.test(t)) {
     return {
       who: "Friends, families, and anyone who'd rather do something than scroll through options all afternoon.",
@@ -745,7 +751,7 @@ function editorialBriefForVenueType(typeLabel: string): {
     };
   }
   return {
-    who: "Anyone looking for a real local option rather than another algorithmic suggestion.",
+    who: "Anyone who wants a local option that feels specific to the neighborhood — not another interchangeable stop.",
     howLong: "Plan for about an hour — enough to actually see the place, not just drive by.",
     tips: "Confirm hours before you go; local spots can shift schedules without much notice.",
   };
@@ -779,7 +785,7 @@ export function composePlaceDiscoveryArticle(input: {
   const title = input.title.trim();
   const note = input.dek?.trim() || "";
   const city = input.city?.trim() || "";
-  const address = input.address?.trim() || "";
+  const address = sanitizeAddressForDisplay(input.address) || "";
   const verified = resolveVerifiedEditorialCategory({
     title,
     venueCategories: input.venueCategories,
@@ -788,23 +794,30 @@ export function composePlaceDiscoveryArticle(input: {
     address,
   });
   const typeLabel = verified.displayLabel;
-  const typeLabelWithArticle = withIndefiniteArticle(typeLabel);
   const brief = editorialBriefForVenueType(typeLabel);
 
   const placeLine = [title, city].filter(Boolean).join(" · ");
   const dek = placeLine || title;
 
   const locationPhrase = address ? `on ${address}` : city ? `in ${city}` : "";
-  const factSentence = `${title} is ${typeLabelWithArticle}${
-    locationPhrase ? ` ${locationPhrase}` : ""
-  } — a verified local listing, not a category guess.`;
+
+  const opening = openingLineForPlace({
+    title,
+    typeLabel,
+    city,
+    note,
+    locationPhrase: locationPhrase || null,
+  });
+
+  const scene = sceneLineForPlace(title, typeLabel, city);
 
   const whyVisit =
-    note && !isNearDuplicateCopy(note, factSentence) && !isNearDuplicateCopy(note, title)
+    note &&
+    !containsEngineLanguage(note) &&
+    !isNearDuplicateCopy(note, opening) &&
+    !isNearDuplicateCopy(note, title)
       ? note
-      : `${title} earned a spot in today's paper because it's a real ${typeLabel}${city ? ` in ${city}` : ""} — the kind of place worth knowing about before another generic suggestion wins the afternoon.`;
-
-  const uniqueness = `What makes ${title} worth the trip is the specific combination of name, place, and kind — a ${typeLabel} you can actually go to${city ? ` in ${city}` : ""}, not a mood board version of one.`;
+      : scene;
 
   const essay = getCategoryDiscoveryArticle(input.category, input.seedKey, {
     venueCategories: input.venueCategories,
@@ -826,25 +839,17 @@ export function composePlaceDiscoveryArticle(input: {
     practicalTips = brief.tips;
   }
 
-  const closing = city
-    ? `Kindred flagged ${title} because a confirmed ${typeLabel} in ${city} beats another algorithmic suggestion — worth going to find out the rest for yourself.`
-    : `Kindred flagged ${title} because a confirmed ${typeLabel} beats another algorithmic suggestion — worth going to find out the rest for yourself.`;
-
-  const attribution = input.sourceName
-    ? `The listing is verified through ${input.sourceName}. Kindred's read above is grounded in what we could confirm about ${title} — not a line-by-line review of every detail.`
-    : `The name and location above are verified. Kindred's read is grounded in what we could confirm — not a line-by-line review of every detail.`;
+  const closing = closingLineForPlace(title, city);
 
   const rawBody = dedupeDiscoveryBody([
-    factSentence,
-    whyVisit,
-    uniqueness,
-    ...(wikipediaBackground ? [wikipediaBackground] : []),
+    opening,
+    whyVisit !== opening ? whyVisit : null,
     brief.who,
     brief.howLong,
     practicalTips,
-    attribution,
+    ...(wikipediaBackground ? [wikipediaBackground] : []),
     closing,
-  ]);
+  ].filter((p): p is string => Boolean(p)));
 
   const body = sanitizeEditorialParagraphs(verified.categoryId, rawBody);
 
@@ -874,7 +879,15 @@ export function composePlaceDiscoveryArticle(input: {
 
   return {
     dek,
-    body: validated.valid ? body : sanitizeEditorialParagraphs(verified.categoryId, [factSentence, whyVisit, brief.who, brief.howLong, practicalTips, closing]),
+    body: validated.valid
+      ? body
+      : sanitizeReaderParagraphs([
+          opening,
+          brief.who,
+          brief.howLong,
+          practicalTips,
+          closing,
+        ]),
     fieldAnswers: safeFieldAnswers,
   };
 }
@@ -924,34 +937,33 @@ export function composeVerifiedEventDiscoveryArticle(
   const isFestival = /festival|fair|parade|carnival/.test(hay);
 
   const opening =
-    banditNote ||
-    `${event.name.trim()} is on${whenLine ? `, ${whenLine}` : ""}${
-      place ? ` at ${place}` : ""
-    } — a real, nearby happening rather than a generic suggestion.`;
+    banditNote && !containsEngineLanguage(banditNote)
+      ? banditNote
+      : `${event.name.trim()} is on${whenLine ? `, ${whenLine}` : ""}${
+          place ? ` at ${place}` : ""
+        }.`;
 
-  const whyItMadeTheNotebook = isFestival
-    ? "Festivals like this are where a town actually shows up for itself. It earned a place in the notebook because it's real and it's close, not because it's the kind of thing that photographs well."
-    : "It earned a place in the notebook for a simple reason: it's a real, nearby happening, not a category suggestion. That's rarer than it sounds.";
+  const whyItMatters = isFestival
+    ? "Festivals like this are where a town actually shows up for itself — worth catching while it is still on the calendar."
+    : "A local happening worth knowing about while it is still upcoming — the sort of evening that is easy to postpone and usually more fun once you go.";
 
   const whatToExpect = whenLine
-    ? `Here's what Kindred can actually verify: it's on ${whenLine}${
-        place ? `, at ${place}` : ""
-      }. Kindred doesn't yet have independently confirmed detail on the atmosphere, the crowd, or exactly what's on offer beyond that — worth a look at the original listing before building the whole outing around it.`
-    : `Kindred has the name and a general sense of where, but the exact timing wasn't in the listing — worth confirming directly before you head out.`;
+    ? `It runs ${whenLine}${place ? ` at ${place}` : ""}. Check the listing below for the latest on hours, tickets, or any last-minute changes.`
+    : `The timing is still coming together — check the listing below before you build the whole evening around it.`;
 
   const who =
-    "This suits someone who likes knowing about a local happening while it's still upcoming, more than someone who needs every detail nailed down first.";
+    "Good for anyone who likes discovering what is on nearby while there is still time to plan around it.";
 
   const goodToKnow = event.sourceUrl
-    ? "Good to know: schedules for local happenings can shift close to the date. The source listing linked below is the most current word on hours and any cost."
-    : "Good to know: schedules for local happenings can shift close to the date — a quick check before you leave is worth it.";
+    ? "Schedules for local happenings can shift close to the date — the source listing is the most current word on hours and any cost."
+    : "Schedules for local happenings can shift close to the date — a quick check before you leave is worth it.";
 
-  const body = [
-    whyItMadeTheNotebook,
+  const body = sanitizeReaderParagraphs([
+    whyItMatters,
     whatToExpect,
     who,
     goodToKnow,
-  ].filter(Boolean);
+  ]);
 
   return {
     dek: place || event.name.trim(),
@@ -996,26 +1008,28 @@ export function composeGenericDynamicDiscoveryArticle(input: {
   const why = input.why?.trim() || "";
   const categoryLabel = input.category.replace(/_/g, " ");
 
-  const opening = dek ? null : `${title} — an idea from today's notebook.`;
+  const opening = dek && !containsEngineLanguage(dek) ? dek : `${title} — an idea worth a look today.`;
 
   const worthConsidering =
-    why && !isNearDuplicateCopy(why, dek)
+    why && !containsEngineLanguage(why) && !isNearDuplicateCopy(why, dek)
       ? why
-      : `It made today's notebook on editorial judgment, not a trending list — worth a look if the idea appeals to you.`;
+      : `Worth considering if the idea appeals — a nudge in a direction, not a full itinerary.`;
 
-  const whatToExpect = `Kindred doesn't have one specific place attached to this idea yet — it's a category recommendation (the kind of ${categoryLabel} experience worth seeking out) rather than a confirmed listing, so treat it as a nudge rather than a review of one exact address.`;
+  const whatToExpect = `This is the kind of ${categoryLabel} experience worth seeking out nearby — treat it as inspiration, then find the version of it closest to you.`;
 
   const who =
-    "Good for anyone who likes a nudge in a direction, and is happy to find the specific version of it nearby.";
+    "Good for anyone who likes a suggestion with room to explore, rather than a fixed plan.";
 
-  const goodToKnow = input.sourceName
-    ? `Good to know: this idea is credited to ${input.sourceName} — worth searching nearby to find a real version of it close to you.`
-    : `Good to know: this is a general idea rather than one specific place — worth searching nearby to find a real version of it.`;
+  const goodToKnow = input.city
+    ? `Start near ${input.city} and see what is open when you are — hours and seasons change.`
+    : "See what is open nearby when you are — hours and seasons change.";
 
   return {
-    body: dedupeDiscoveryBody(
-      [opening, worthConsidering, whatToExpect, who, goodToKnow].filter(
-        (p): p is string => Boolean(p)
+    body: sanitizeReaderParagraphs(
+      dedupeDiscoveryBody(
+        [opening, worthConsidering, whatToExpect, who, goodToKnow].filter(
+          (p): p is string => Boolean(p)
+        )
       )
     ),
     fieldAnswers: {},

@@ -1,5 +1,11 @@
 import { sourceQualityPrior } from "./sources.ts";
 import { haversineKm } from "./geo.ts";
+import { KINDRED_LOCAL_RADIUS_KM, PLANNING_VALUE_PATTERN } from "../editorial/editorialStandard.ts";
+import {
+  LOCAL_DISCOVERY_CATEGORIES,
+  passesLocalDiscoveryRadius,
+  surfaceUsesLocalDiscoveryRadius,
+} from "./localDiscoveryScope.ts";
 import {
   interestToDiscoveryCategories,
   seasonForDate,
@@ -81,7 +87,7 @@ export function scoreDiscoveryItem(
   score += quality;
   reasons.push({
     code: "editorial_quality",
-    label: "A quiet desk recommendation",
+    label: "Worth a closer look",
     weight: quality,
   });
 
@@ -156,7 +162,7 @@ export function scoreDiscoveryItem(
       score += 14;
       reasons.push({
         code: "location_match",
-        label: "Fits your place",
+        label: `In ${ctx.city}`,
         weight: 14,
       });
     }
@@ -170,12 +176,21 @@ export function scoreDiscoveryItem(
     isValidCoord(item.lon)
   ) {
     const km = haversineKm(ctx.readerLat, ctx.readerLon, item.lat, item.lon);
-    if (km <= 25) {
+    const isLocalDesk = LOCAL_DISCOVERY_CATEGORIES.has(item.category);
+
+    if (km <= KINDRED_LOCAL_RADIUS_KM) {
       score += 12;
       reasons.push({
         code: "proximity_near",
-        label: "Close enough for a real outing today",
+        label: "Close enough to visit soon",
         weight: 12,
+      });
+    } else if (isLocalDesk) {
+      score -= 40;
+      reasons.push({
+        code: "local_out_of_radius",
+        label: "Outside the local newspaper radius",
+        weight: -40,
       });
     } else if (km <= 80) {
       score += 6;
@@ -188,7 +203,7 @@ export function scoreDiscoveryItem(
       score -= 10;
       reasons.push({
         code: "proximity_far_nps",
-        label: "National park held back — too far for today",
+        label: "National park held back — outside the local newspaper radius",
         weight: -10,
       });
     }
@@ -232,6 +247,15 @@ export function scoreDiscoveryItem(
       code: "season_mismatch",
       label: "Off-season for this recommendation",
       weight: -6,
+    });
+  }
+
+  if (PLANNING_VALUE_PATTERN.test(hay)) {
+    score += 6;
+    reasons.push({
+      code: "planning_value",
+      label: "Worth planning for this month",
+      weight: 6,
     });
   }
 
@@ -423,7 +447,7 @@ export function scoreDiscoveryItem(
       score -= 18;
       reasons.push({
         code: "thin_recommendation",
-        label: "Held back — not enough reason to recommend today",
+        label: "Held back — not enough reason to recommend",
         weight: -18,
       });
     }

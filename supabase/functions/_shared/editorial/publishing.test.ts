@@ -198,5 +198,5 @@ Deno.test("category diversity does not discard high-quality qualifying items", (
 
 Deno.test("provider retrieval ceilings are documented constants", () => {
   assertEquals(SERPAPI_MAX_PAGES, 3);
-  assertEquals(SERPAPI_CANDIDATE_CAP, 80);
+  assertEquals(SERPAPI_CANDIDATE_CAP, 200);
 });

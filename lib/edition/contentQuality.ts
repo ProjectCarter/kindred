@@ -3,6 +3,8 @@
  * rather than publishing it.
  */
 
+import { containsEngineLanguage } from "./editorialVoice";
+
 const PLACEHOLDER_PATTERNS: RegExp[] = [
   /editorial quality worthy of a magazine desk/i,
   /matches what you tend to care about/i,
@@ -90,8 +92,10 @@ export function hasSubstance(
 /** Filter discovery why-labels that are internal scoring jargon. */
 export function isInternalScoreLabel(label: string): boolean {
   return (
-    /editorial quality|magazine desk|matches what you tend|score|algorithm|boost|rank|weight/i.test(
+    containsEngineLanguage(label) ||
+    /editorial quality|magazine desk|matches what you tend|score|algorithm|boost|rank|weight|held back|trusted source|fits what you/i.test(
       label
-    ) || isPlaceholderCopy(label)
+    ) ||
+    isPlaceholderCopy(label)
   );
 }

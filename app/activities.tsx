@@ -15,7 +15,7 @@ import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Full published Activities list — every qualifying activity in today's edition. */
+/** Full published Activities list — every qualifying activity in this edition. */
 export default function ActivitiesScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
@@ -55,7 +55,7 @@ export default function ActivitiesScreen() {
         <Text style={styles.kicker}>What should I go do?</Text>
         <Text style={styles.title}>Activities</Text>
         <Text style={styles.subtitle}>
-          Real, bookable things to go do nearby — gathered in one place.
+          Things worth getting out and doing nearby this month.
         </Text>
 
         <EditorialCardGrid
@@ -64,7 +64,7 @@ export default function ActivitiesScreen() {
           initialRenderCount={Math.max(cards.length, 1)}
           fallbackIcon="figure.run"
           fallbackIconIonicon="walk-outline"
-          emptyCopy="Nothing new to try nearby today — check back tomorrow."
+          emptyCopy="Nothing new to try nearby this month — check back tomorrow."
           showBanditWhenEmpty
           onOpenCard={(card) => {
             const article = articlesById.get(card.id);
