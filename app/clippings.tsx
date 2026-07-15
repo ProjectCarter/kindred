@@ -25,6 +25,8 @@ import type { ClippingContentType } from "../lib/edition/clippingTypes";
 import { PaperLoading } from "../components/PaperLoading";
 import { BanditCharacter } from "../components/BanditCharacter";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
+import { PullDownNavHeader } from "../components/PullDownNavHeader";
+import { usePullDownNav } from "../lib/navigation/usePullDownNav";
 
 type Filter = "all" | ClippingContentType;
 
@@ -71,6 +73,7 @@ export default function ClippingsScreen() {
   );
   const pendingRemovalRef = useRef<Set<string>>(new Set());
   pendingRemovalRef.current = pendingRemovalIds;
+  const pullDownNav = usePullDownNav();
 
   const loadClippings = useCallback(async (isRefresh = false) => {
     const gen = ++loadGen.current;
@@ -183,9 +186,18 @@ export default function ClippingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <PullDownNavHeader
+        title="Clippings"
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={() => router.back()}
+        backAccessibilityLabel="Back to library"
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={pullDownNav.onScroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

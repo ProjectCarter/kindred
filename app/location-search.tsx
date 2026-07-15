@@ -11,6 +11,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { paper, press } from "../lib/edition/newspaperTheme";
+import { PullDownNavHeader } from "../components/PullDownNavHeader";
+import { usePullDownNav } from "../lib/navigation/usePullDownNav";
 import {
   searchCities,
   setHomeCity,
@@ -34,6 +36,7 @@ export default function LocationSearchScreen() {
   const [results, setResults] = useState<KindredPlace[]>([]);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const pullDownNav = usePullDownNav();
 
   const runSearch = useCallback(async (q: string) => {
     setSearching(true);
@@ -80,6 +83,13 @@ export default function LocationSearchScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <PullDownNavHeader
+        title={title}
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={() => router.back()}
+        backAccessibilityLabel="Back"
+      />
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -117,6 +127,9 @@ export default function LocationSearchScreen() {
         keyExtractor={(item, i) => `${item.city}-${item.lat}-${i}`}
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={pullDownNav.onScroll}
         renderItem={({ item }) => (
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}

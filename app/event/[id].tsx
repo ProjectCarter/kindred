@@ -20,6 +20,11 @@ import {
 import { eventFallbackImage } from "../../lib/edition/localEvents";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
+import { PullDownNavHeader } from "../../components/PullDownNavHeader";
+import {
+  pullDownNavTitleFromBackLabel,
+  usePullDownNav,
+} from "../../lib/navigation/usePullDownNav";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -32,6 +37,7 @@ export default function EventDetailScreen() {
   }>();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const pullDownNav = usePullDownNav();
 
   const eventId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
   const event = useMemo(
@@ -43,6 +49,11 @@ export default function EventDetailScreen() {
     typeof backLabel === "string" && backLabel.trim()
       ? decodeURIComponent(backLabel)
       : "← Today’s paper";
+  const navTitle = pullDownNavTitleFromBackLabel(back, "Local Events");
+
+  function handleBack() {
+    router.back();
+  }
 
   const badge = event ? deriveEventBadge(event) : null;
   const infoBadges = event ? eventInfoBadgesFor(event) : [];
@@ -64,12 +75,24 @@ export default function EventDetailScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <PullDownNavHeader
+        title={navTitle}
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={handleBack}
+        backAccessibilityLabel={back.replace(/^←\s*/, "Back to ")}
+      />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={pullDownNav.onScroll}
+      >
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={styles.backRow}
           accessibilityRole="button"
-          accessibilityLabel="Back to today’s paper"
+          accessibilityLabel={back.replace(/^←\s*/, "Back to ")}
         >
           <Text style={styles.back}>{back}</Text>
         </Pressable>

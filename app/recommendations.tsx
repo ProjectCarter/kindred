@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { EditorialCardGrid } from "../components/EditorialCardGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
+import { PullDownNavHeader } from "../components/PullDownNavHeader";
+import { usePullDownNav } from "../lib/navigation/usePullDownNav";
 import { selectRecommendationCards } from "../lib/edition/recommendations";
 import { getTodaysRecommendations } from "../lib/edition/recommendationsListStore";
 import { articleFromDiscoveryItem } from "../lib/edition/article";
@@ -19,11 +21,24 @@ export default function RecommendationsScreen() {
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.recommendations
   );
+  const pullDownNav = usePullDownNav();
   const items = useMemo(() => getTodaysRecommendations(), []);
   const cards = useMemo(() => selectRecommendationCards(items), [items]);
 
+  function handleBack() {
+    persistNow();
+    router.back();
+  }
+
   return (
     <SafeAreaView style={styles.container}>
+      <PullDownNavHeader
+        title="Recommendations"
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={handleBack}
+        backAccessibilityLabel="Back to today’s paper"
+      />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
@@ -31,15 +46,11 @@ export default function RecommendationsScreen() {
         scrollEventThrottle={16}
         onScroll={(event) => {
           onScrollOffset(event.nativeEvent.contentOffset.y);
+          pullDownNav.onScroll(event);
         }}
       >
         <View style={styles.backRow}>
-          <KindredDetailBackButton
-            onPress={() => {
-              persistNow();
-              router.back();
-            }}
-          />
+          <KindredDetailBackButton onPress={handleBack} />
         </View>
 
         <Text style={styles.kicker}>Where should I go?</Text>

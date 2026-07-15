@@ -56,9 +56,13 @@ import {
 } from "../lib/edition/clippings";
 import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
 import {
-  KindredStickyMasthead,
   MastheadLink,
 } from "./KindredMasthead";
+import { PullDownNavHeader } from "./PullDownNavHeader";
+import {
+  pullDownNavTitleFromBackLabel,
+  usePullDownNav,
+} from "../lib/navigation/usePullDownNav";
 import { ContentTemplateModules } from "./ContentTemplateModules";
 import {
   categoryLabelForType,
@@ -119,7 +123,7 @@ export function ArticleReader({
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(initialScrollY);
   const restoredScroll = useRef(false);
-  const mastheadScrollY = useRef(new Animated.Value(initialScrollY)).current;
+  const pullDownNav = usePullDownNav();
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const enterOpacity = useRef(new Animated.Value(0)).current;
@@ -134,6 +138,20 @@ export function ArticleReader({
     [article]
   );
   const continueItems = companion?.continueReading ?? [];
+  const pullDownTitle = useMemo(() => {
+    const fromBack = pullDownNavTitleFromBackLabel(backLabel);
+    if (
+      fromBack !== "Today's paper" &&
+      fromBack !== "Today’s paper"
+    ) {
+      return fromBack;
+    }
+    if (briefing) return "Briefing";
+    if (article.contentType) {
+      return categoryLabelForType(article.contentType);
+    }
+    return formatSectionLabel(article.section);
+  }, [backLabel, briefing, article.contentType, article.section]);
 
   useEffect(() => {
     heroReadyRef.current = heroReady;
@@ -144,7 +162,7 @@ export function ArticleReader({
   useEffect(() => {
     restoredScroll.current = false;
     scrollYRef.current = initialScrollY;
-    mastheadScrollY.setValue(initialScrollY);
+    pullDownNav.reset();
     enterOpacity.setValue(0);
     enterRise.setValue(motion.risePx);
     Animated.parallel([
@@ -161,7 +179,7 @@ export function ArticleReader({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [article.id, enterOpacity, enterRise, initialScrollY, mastheadScrollY]);
+  }, [article.id, enterOpacity, enterRise, initialScrollY, pullDownNav]);
 
   const swapInEditorialHero = useCallback(() => {
     if (article.section === "today_in_history") {
@@ -358,7 +376,7 @@ export function ArticleReader({
       const { contentOffset, layoutMeasurement, contentSize } =
         event.nativeEvent;
       scrollYRef.current = contentOffset.y;
-      mastheadScrollY.setValue(contentOffset.y);
+      pullDownNav.onScroll(event);
       const scrollable = Math.max(
         contentSize.height - layoutMeasurement.height,
         1
@@ -368,7 +386,7 @@ export function ArticleReader({
       setProgress(next);
       updateArticleSessionScroll(article.id, contentOffset.y);
     },
-    [progressAnim, article.id, mastheadScrollY]
+    [progressAnim, article.id, pullDownNav]
   );
 
   const onContentSizeChange = useCallback(
@@ -584,31 +602,12 @@ export function ArticleReader({
         <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
       </View>
 
-      <View style={styles.detailBackBar}>
-        <MastheadLink
-          label={backLabel}
-          onPress={handleBack}
-          accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
-        />
-      </View>
-
-      <KindredStickyMasthead
-        scrollY={mastheadScrollY}
-        style={styles.stickyMasthead}
-        subtitle={
-          briefing
-            ? "Briefing"
-            : article.contentType
-              ? categoryLabelForType(article.contentType)
-              : formatSectionLabel(article.section)
-        }
-        leading={
-          <MastheadLink
-            label={backLabel}
-            onPress={handleBack}
-            accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
-          />
-        }
+      <PullDownNavHeader
+        title={pullDownTitle}
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={handleBack}
+        backAccessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
       />
 
       <ScrollView
@@ -635,6 +634,14 @@ export function ArticleReader({
             alignItems: "center",
           }}
         >
+          <View style={styles.inScrollBack}>
+            <MastheadLink
+              label={backLabel}
+              onPress={handleBack}
+              accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
+            />
+          </View>
+
           {/* 1. Full-width hero */}
           <HeroFigure
             article={article}
@@ -1276,6 +1283,13 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     alignSelf: "stretch",
     zIndex: 10,
+  },
+  inScrollBack: {
+    alignSelf: "stretch",
+    width: "100%",
+    paddingHorizontal: reader.gutter,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   stickyMasthead: {
     top: 1.5,

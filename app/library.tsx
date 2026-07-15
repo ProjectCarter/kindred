@@ -12,6 +12,8 @@ import { useRouter } from "expo-router";
 import { supabase } from "../lib/supabase";
 import { formatEditionDate } from "../lib/edition/types";
 import { paper, press, type } from "../lib/edition/newspaperTheme";
+import { PullDownNavHeader } from "../components/PullDownNavHeader";
+import { usePullDownNav } from "../lib/navigation/usePullDownNav";
 import { PaperLoading } from "../components/PaperLoading";
 
 type EditionRow = {
@@ -27,6 +29,7 @@ export default function LibraryScreen() {
   const [editions, setEditions] = useState<EditionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const loadGen = useRef(0);
+  const pullDownNav = usePullDownNav();
 
   const loadEditions = useCallback(async (isRefresh = false) => {
     const gen = ++loadGen.current;
@@ -85,9 +88,18 @@ export default function LibraryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <PullDownNavHeader
+        title="Library"
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={() => router.back()}
+        backAccessibilityLabel="Back to today"
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={pullDownNav.onScroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

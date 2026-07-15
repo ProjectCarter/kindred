@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { LocalEventsGrid } from "../components/LocalEventsGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
+import { PullDownNavHeader } from "../components/PullDownNavHeader";
+import { usePullDownNav } from "../lib/navigation/usePullDownNav";
 import { getTodaysEvents } from "../lib/edition/eventsListStore";
 import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredEvent } from "../lib/edition/openEvent";
@@ -17,10 +19,23 @@ export default function EventsScreen() {
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.events
   );
+  const pullDownNav = usePullDownNav();
   const events = useMemo(() => getTodaysEvents(), []);
+
+  function handleBack() {
+    persistNow();
+    router.back();
+  }
 
   return (
     <SafeAreaView style={styles.container}>
+      <PullDownNavHeader
+        title="Local Events"
+        translateY={pullDownNav.translateY}
+        visible={pullDownNav.visible}
+        onBack={handleBack}
+        backAccessibilityLabel="Back to today’s paper"
+      />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
@@ -28,15 +43,11 @@ export default function EventsScreen() {
         scrollEventThrottle={16}
         onScroll={(event) => {
           onScrollOffset(event.nativeEvent.contentOffset.y);
+          pullDownNav.onScroll(event);
         }}
       >
         <View style={styles.backRow}>
-          <KindredDetailBackButton
-            onPress={() => {
-              persistNow();
-              router.back();
-            }}
-          />
+          <KindredDetailBackButton onPress={handleBack} />
         </View>
 
         <Text style={styles.kicker}>Around town today</Text>
