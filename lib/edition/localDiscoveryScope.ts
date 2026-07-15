@@ -31,8 +31,20 @@ export const ACTIVITY_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
 export const LOCAL_DISCOVERY_CATEGORIES: ReadonlySet<DiscoveryCategory> =
   new Set([...RECOMMENDATION_CATEGORIES, ...ACTIVITY_CATEGORIES]);
 
-export function isValidCoord(value: number | null | undefined): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 180;
+function normalizeCoord(
+  value: number | string | null | undefined
+): number | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 180) {
+    return null;
+  }
+  return n;
+}
+
+export function isValidCoord(
+  value: number | string | null | undefined
+): value is number {
+  return normalizeCoord(value) != null;
 }
 
 export type ReaderLocation = {
@@ -44,11 +56,21 @@ export function distanceKmFromReader(
   item: Pick<RankedDiscoveryItem["item"], "lat" | "lon">,
   reader: ReaderLocation
 ): number | null {
-  if (!isValidCoord(item.lat) || !isValidCoord(item.lon)) return null;
-  if (!isValidCoord(reader.lat) || !isValidCoord(reader.lon)) return null;
+  const itemLat = normalizeCoord(item.lat);
+  const itemLon = normalizeCoord(item.lon);
+  const readerLat = normalizeCoord(reader.lat);
+  const readerLon = normalizeCoord(reader.lon);
+  if (
+    itemLat == null ||
+    itemLon == null ||
+    readerLat == null ||
+    readerLon == null
+  ) {
+    return null;
+  }
   return distanceKm(
-    { lat: reader.lat, lon: reader.lon },
-    { lat: item.lat, lon: item.lon }
+    { lat: readerLat, lon: readerLon },
+    { lat: itemLat, lon: itemLon }
   );
 }
 
@@ -66,7 +88,8 @@ export function isWithinLocalDiscoveryRadius(
   if (isStatewideAttraction(item.item)) return false;
   if (!reader) return true;
   const km = distanceKmFromReader(item.item, reader);
-  if (km == null) return false;
+  // No verified coordinates — keep edition-curated items; enforce radius when present.
+  if (km == null) return true;
   return km <= KINDRED_LOCAL_RADIUS_KM;
 }
 
@@ -79,9 +102,9 @@ export const isWithinRecommendationRadius = (
 export function readerLocationFromDiscovery(
   discovery: { location?: { lat?: number | null; lon?: number | null } } | null | undefined
 ): ReaderLocation | null {
-  const lat = discovery?.location?.lat;
-  const lon = discovery?.location?.lon;
-  if (!isValidCoord(lat) || !isValidCoord(lon)) return null;
+  const lat = normalizeCoord(discovery?.location?.lat);
+  const lon = normalizeCoord(discovery?.location?.lon);
+  if (lat == null || lon == null) return null;
   return { lat, lon };
 }
 
@@ -89,7 +112,17 @@ export function resolveReaderLocation(input: {
   readerLocation?: ReaderLocation | null;
   discovery?: { location?: { lat?: number | null; lon?: number | null } } | null;
 }): ReaderLocation | null {
-  if (input.readerLocation) return input.readerLocation;
+  const direct = input.readerLocation;
+  if (
+    direct &&
+    isValidCoord(direct.lat) &&
+    isValidCoord(direct.lon)
+  ) {
+    return {
+      lat: normalizeCoord(direct.lat)!,
+      lon: normalizeCoord(direct.lon)!,
+    };
+  }
   return readerLocationFromDiscovery(input.discovery);
 }
 
@@ -113,7 +146,7 @@ export function isWithinActivitiesSectionRadius(
   if (isStatewideAttraction(item.item)) return false;
   if (!reader) return true;
   const km = distanceKmFromReader(item.item, reader);
-  if (km == null) return false;
+  if (km == null) return true;
   return km <= KINDRED_LOCAL_RADIUS_KM;
 }
 

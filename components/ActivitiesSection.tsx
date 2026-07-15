@@ -5,9 +5,12 @@ import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../lib/edition/editorialPublishin
 import { EditorialCardGrid } from "./EditorialCardGrid";
 import { ACTIVITIES_GRID_LIMIT } from "../lib/edition/activitiesListStore";
 
+import type { ReaderLocation } from "../lib/edition/localDiscoveryScope";
+
 type Props = {
   items: RankedDiscoveryItem[];
   locationCity?: string | null;
+  readerLocation?: ReaderLocation | null;
   onOpenItem?: (item: RankedDiscoveryItem) => void;
   /** Homepage first paint — rendering only. */
   initialRenderCount?: number;
@@ -25,6 +28,7 @@ type Props = {
 export function ActivitiesSection({
   items,
   locationCity,
+  readerLocation,
   onOpenItem,
   initialRenderCount = ACTIVITIES_GRID_LIMIT,
   limit,
@@ -37,8 +41,8 @@ export function ActivitiesSection({
   }, [items]);
 
   const cards = useMemo(
-    () => selectActivityCards(items, { city: locationCity }),
-    [items, locationCity]
+    () => selectActivityCards(items, { city: locationCity, readerLocation }),
+    [items, locationCity, readerLocation]
   );
 
   if (!cards.length) return null;
@@ -50,7 +54,7 @@ export function ActivitiesSection({
       initialRenderCount={initialRenderCount ?? limit}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} activities`}
-      emptyCopy="Nothing new to try nearby today — check back tomorrow."
+      emptyCopy="Nothing new to try nearby this month — check back tomorrow."
       fallbackIcon="figure.run"
       fallbackIconIonicon="walk-outline"
       onOpenCard={

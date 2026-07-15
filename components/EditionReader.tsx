@@ -44,6 +44,10 @@ import {
   type LocalEventsLoadStatus,
 } from "../lib/edition/localEventsPipeline";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
+import {
+  resolveReaderLocation,
+  type ReaderLocation,
+} from "../lib/edition/localDiscoveryScope";
 import { resetImageRegistry, claimRemoteImage } from "../lib/edition/imageRegistry";
 import {
   freezeEdition,
@@ -93,6 +97,7 @@ type Props = {
   locationCity?: string | null;
   locationRegion?: string | null;
   locationState?: string | null;
+  readerLocation?: ReaderLocation | null;
   morningOpening?: MorningBriefing | null;
   morningBriefing?: MorningBriefing | null;
   leadWhyThisMatters?: string | null;
@@ -269,6 +274,7 @@ export function EditionReader({
   locationCity,
   locationRegion,
   locationState,
+  readerLocation,
   morningOpening,
   morningBriefing,
   leadWhyThisMatters,
@@ -415,12 +421,27 @@ export function EditionReader({
   // never show the same item twice. Real local events are excluded here
   // entirely: they live only in Local Events, above, which reads `events`
   // directly and never touches this pool.
+  const resolvedReaderLocation = useMemo(
+    () =>
+      resolveReaderLocation({
+        readerLocation: readerLocation ?? null,
+        discovery: stableDiscovery,
+      }),
+    [readerLocation, stableDiscovery]
+  );
+
   const sectionAllocation = useMemo(
     () =>
       allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
         excludeVenueNames: eventVenueNames,
+        readerLocation: resolvedReaderLocation,
       }),
-    [stableDiscovery, stableDiscoveryItems, eventVenueNames]
+    [
+      stableDiscovery,
+      stableDiscoveryItems,
+      eventVenueNames,
+      resolvedReaderLocation,
+    ]
   );
 
   // Activities/Recommendations need the true full claimed list on the
@@ -435,8 +456,14 @@ export function EditionReader({
       allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
         max: Infinity,
         excludeVenueNames: eventVenueNames,
+        readerLocation: resolvedReaderLocation,
       }),
-    [stableDiscovery, stableDiscoveryItems, eventVenueNames]
+    [
+      stableDiscovery,
+      stableDiscoveryItems,
+      eventVenueNames,
+      resolvedReaderLocation,
+    ]
   );
 
   const activityArticlesById = useMemo(
@@ -633,6 +660,7 @@ export function EditionReader({
         <ActivitiesSection
           items={fullSectionAllocation.activities}
           locationCity={locationCity}
+          readerLocation={resolvedReaderLocation}
           onOpenItem={
             onOpenArticle
               ? (item) => {
@@ -653,6 +681,7 @@ export function EditionReader({
         <RecommendationsSection
           items={fullSectionAllocation.recommendations}
           locationCity={locationCity}
+          readerLocation={resolvedReaderLocation}
           onOpenItem={
             onOpenArticle
               ? (item) => {

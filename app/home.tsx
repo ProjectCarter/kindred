@@ -1759,6 +1759,14 @@ export default function HomeScreen() {
                 intelligence?.discovery?.location?.city ??
                 null
               }
+              readerLocation={
+                activeLocation?.place
+                  ? {
+                      lat: activeLocation.place.lat,
+                      lon: activeLocation.place.lon,
+                    }
+                  : null
+              }
               locationRegion={
                 activeLocation?.place?.region ??
                 intelligence?.discovery?.location?.region ??
@@ -1805,7 +1813,14 @@ export default function HomeScreen() {
                 const full = allocateDiscoverySections(
                   intelligence?.discovery,
                   intelligence?.discoveryItems,
-                  {}
+                  {
+                    readerLocation: activeLocation?.place
+                      ? {
+                          lat: activeLocation.place.lat,
+                          lon: activeLocation.place.lon,
+                        }
+                      : null,
+                  }
                 );
                 persistHomeScrollNow();
                 stashTodaysActivities(full.activities);
@@ -1815,7 +1830,14 @@ export default function HomeScreen() {
                 const full = allocateDiscoverySections(
                   intelligence?.discovery,
                   intelligence?.discoveryItems,
-                  {}
+                  {
+                    readerLocation: activeLocation?.place
+                      ? {
+                          lat: activeLocation.place.lat,
+                          lon: activeLocation.place.lon,
+                        }
+                      : null,
+                  }
                 );
                 persistHomeScrollNow();
                 stashTodaysRecommendations(full.recommendations);

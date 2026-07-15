@@ -12,14 +12,14 @@
  * own editorial purpose — not by venue type, but by what question the
  * reader is actually asking:
  *
- *   Local Events      — "What's happening today?" Real, scheduled events
- *                        only. Not part of this allocator: it reads
- *                        edition_sections.local_events directly. Every
- *                        bucket below excludes real events so they never
+ *   Local Events      — "What's happening this month?" Real, scheduled events
+ *                        within the next 30 days. Not part of this allocator:
+ *                        it reads edition_sections.local_events directly.
+ *                        Every bucket below excludes real events so they never
  *                        duplicate here.
  *   Activities         — "What should I go do?" Real, bookable venues for
- *                        active participation: hiking, plus the
- *                        Activities desk (kayaking, escape rooms,
+ *                        active participation within 25 miles — hiking, plus
+ *                        the Activities desk (kayaking, escape rooms,
  *                        bowling, mini golf, rock climbing, axe
  *                        throwing, go-karts, pickleball) — plus any
  *                        beach/museum/scenic-drive item whose own
@@ -33,9 +33,9 @@
  *                        rather than a place. Claims second, so this
  *                        locked section always has enough for a full
  *                        carousel.
- *   Recommendations    — "Where should I go?" Places worth discovering:
- *                        coffee, restaurants, bakeries, beaches, parks,
- *                        museums, scenic drives, gardens. Claims last,
+ *   Recommendations    — "Where should I go?" Places worth discovering within
+ *                        25 miles: coffee, restaurants, bakeries, beaches,
+ *                        parks, museums, scenic drives, gardens. Claims last,
  *                        from what's left — so a place already claimed
  *                        by Activities (e.g. a beach shown for
  *                        paddleboarding) never also shows up here.
@@ -62,6 +62,14 @@ import {
   isParticipatoryActivityVenue,
   venueHayFromParts,
 } from "./venueQuality";
+import {
+  compareByLocalProximity,
+  isWithinActivitiesSectionRadius,
+  isWithinLocalDiscoveryRadius,
+  RECOMMENDATION_CATEGORIES,
+  resolveReaderLocation,
+  type ReaderLocation,
+} from "./localDiscoveryScope";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -101,16 +109,8 @@ const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
 ]);
 
 /** "Where should I go?" — places worth discovering, not activities to do. */
-const RECOMMENDATION_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
-  "restaurants",
-  "coffee",
-  "bakeries",
-  "beaches",
-  "parks",
-  "museums",
-  "scenic_drives",
-  "gardens",
-]);
+// RECOMMENDATION_CATEGORIES imported from localDiscoveryScope.ts
+
 
 /**
  * A handful of categories are editorially ambiguous — the same beach can
@@ -243,6 +243,8 @@ export function allocateDiscoverySections(
      */
     max?: number;
     excludeVenueNames?: ReadonlySet<string>;
+    /** Reader position — Activities and Recommendations require coords within 25 mi. */
+    readerLocation?: ReaderLocation | null;
   }
 ): SectionAllocation {
   const minScore = options?.publishMinScore ?? DISCOVERY_PUBLISH_MIN_SCORE;
@@ -252,6 +254,10 @@ export function allocateDiscoverySections(
       ? options.max
       : undefined);
   const excludeVenueNames = options?.excludeVenueNames;
+  const readerLocation = resolveReaderLocation({
+    readerLocation: options?.readerLocation ?? null,
+    discovery,
+  });
   const pool = dedupeById([
     ...fullCandidatePool(discovery),
     ...(extraItems ?? []),
@@ -283,13 +289,19 @@ export function allocateDiscoverySections(
       : picked;
   }
 
-  const activities = claim((item) => belongsInActivities(item));
+  const activities = claim(
+    (item) =>
+      belongsInActivities(item) &&
+      isWithinActivitiesSectionRadius(item, readerLocation)
+  ).sort((a, b) => compareByLocalProximity(a, b, readerLocation));
 
   const notebook = claim((item) => NOTEBOOK_CATEGORIES.has(item.item.category));
 
-  const recommendations = claim((item) =>
-    RECOMMENDATION_CATEGORIES.has(item.item.category)
-  );
+  const recommendations = claim(
+    (item) =>
+      RECOMMENDATION_CATEGORIES.has(item.item.category) &&
+      isWithinLocalDiscoveryRadius(item, readerLocation)
+  ).sort((a, b) => compareByLocalProximity(a, b, readerLocation));
 
   return {
     nonEventItems: pool.filter((item) => !claimed.has(item.item.id)),

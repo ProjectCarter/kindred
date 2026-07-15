@@ -14,6 +14,11 @@ import { resolveVenueClassification } from "./venueClassification";
 import type { ImageCategoryTag } from "./imageTaxonomy";
 import { NEUTRAL_PLACEHOLDERS } from "./imageRegistry";
 import {
+  compareByLocalProximity,
+  isWithinActivitiesSectionRadius,
+  type ReaderLocation,
+} from "./localDiscoveryScope";
+import {
   isParticipatoryActivityVenue,
   venueHayFromParts,
 } from "./venueQuality";
@@ -217,11 +222,17 @@ function activitySortScore(d: RankedDiscoveryItem): number {
 
 export function selectActivityCards(
   items: RankedDiscoveryItem[] | null | undefined,
-  options?: { city?: string | null }
+  options?: { city?: string | null; readerLocation?: ReaderLocation | null }
 ): EditorialGridCard[] {
+  const readerLocation = options?.readerLocation ?? null;
   const ranked = [...(items ?? [])]
     .filter((d) => isCompleteCard(d.item))
-    .sort((a, b) => activitySortScore(b) - activitySortScore(a));
+    .filter((d) => isWithinActivitiesSectionRadius(d, readerLocation))
+    .sort((a, b) => {
+      const proximity = compareByLocalProximity(a, b, readerLocation);
+      if (proximity !== 0) return proximity;
+      return activitySortScore(b) - activitySortScore(a);
+    });
 
   return ranked.map((d) => ({
     id: d.item.id,

@@ -3,10 +3,12 @@ import type { RankedDiscoveryItem } from "../lib/edition/discovery";
 import { selectRecommendationCards } from "../lib/edition/recommendations";
 import { EditorialCardGrid } from "./EditorialCardGrid";
 import { RECOMMENDATIONS_GRID_LIMIT } from "../lib/edition/recommendationsListStore";
+import type { ReaderLocation } from "../lib/edition/localDiscoveryScope";
 
 type Props = {
   items: RankedDiscoveryItem[];
   locationCity?: string | null;
+  readerLocation?: ReaderLocation | null;
   onOpenItem?: (item: RankedDiscoveryItem) => void;
   /** Homepage first paint — rendering only. */
   initialRenderCount?: number;
@@ -25,6 +27,7 @@ type Props = {
 export function RecommendationsSection({
   items,
   locationCity,
+  readerLocation,
   onOpenItem,
   initialRenderCount = RECOMMENDATIONS_GRID_LIMIT,
   limit,
@@ -37,8 +40,9 @@ export function RecommendationsSection({
   }, [items]);
 
   const cards = useMemo(
-    () => selectRecommendationCards(items, { city: locationCity }),
-    [items, locationCity]
+    () =>
+      selectRecommendationCards(items, { city: locationCity, readerLocation }),
+    [items, locationCity, readerLocation]
   );
 
   if (!cards.length) return null;
@@ -50,7 +54,7 @@ export function RecommendationsSection({
       initialRenderCount={initialRenderCount ?? limit}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} recommendations`}
-      emptyCopy="Nothing new to recommend nearby today — check back tomorrow."
+      emptyCopy="Nothing new to recommend nearby this month — check back tomorrow."
       fallbackIcon="mappin.and.ellipse"
       fallbackIconIonicon="location-outline"
       onOpenCard={

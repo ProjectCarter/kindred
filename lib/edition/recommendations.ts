@@ -14,6 +14,12 @@ import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveDiscoveryItemImage } from "./resolveItemImage";
 import { resolveVenueClassification } from "./venueClassification";
 import {
+  compareByLocalProximity,
+  isWithinLocalDiscoveryRadius,
+  RECOMMENDATION_CATEGORIES,
+  type ReaderLocation,
+} from "./localDiscoveryScope";
+import {
   isLowValueVenue,
   isScenicOrHiddenGem,
   venueHayFromParts,
@@ -73,17 +79,6 @@ function recommendationImageFor(
   });
 }
 
-const RECOMMENDATION_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
-  "coffee",
-  "restaurants",
-  "bakeries",
-  "beaches",
-  "parks",
-  "museums",
-  "scenic_drives",
-  "gardens",
-]);
-
 function isRecommendationItem(d: RankedDiscoveryItem): boolean {
   return RECOMMENDATION_CATEGORIES.has(d.item.category);
 }
@@ -122,12 +117,18 @@ function recommendationOverline(item: RankedDiscoveryItem["item"]): string {
 
 export function selectRecommendationCards(
   items: RankedDiscoveryItem[] | null | undefined,
-  options?: { city?: string | null }
+  options?: { city?: string | null; readerLocation?: ReaderLocation | null }
 ): EditorialGridCard[] {
+  const readerLocation = options?.readerLocation ?? null;
   const ranked = [...(items ?? [])]
     .filter(isRecommendationItem)
+    .filter((d) => isWithinLocalDiscoveryRadius(d, readerLocation))
     .filter((d) => isCompleteCard(d.item))
-    .sort((a, b) => recommendationSortScore(b) - recommendationSortScore(a));
+    .sort((a, b) => {
+      const proximity = compareByLocalProximity(a, b, readerLocation);
+      if (proximity !== 0) return proximity;
+      return recommendationSortScore(b) - recommendationSortScore(a);
+    });
 
   return ranked.map((d) => ({
     id: d.item.id,

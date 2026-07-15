@@ -50,8 +50,20 @@ export const LOCAL_DISCOVERY_SURFACES = new Set([
   "hiking",
 ]);
 
-function isValidCoord(value: number | null | undefined): value is number {
-  return typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 180;
+function normalizeCoord(
+  value: number | string | null | undefined
+): number | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 180) {
+    return null;
+  }
+  return n;
+}
+
+function isValidCoord(
+  value: number | string | null | undefined
+): value is number {
+  return normalizeCoord(value) != null;
 }
 
 export function isStatewideAttraction(item: DiscoveryItem): boolean {
@@ -62,15 +74,19 @@ export function distanceKmFromReader(
   item: Pick<DiscoveryItem, "lat" | "lon">,
   ctx: Pick<DiscoveryRankingContext, "readerLat" | "readerLon">
 ): number | null {
+  const itemLat = normalizeCoord(item.lat);
+  const itemLon = normalizeCoord(item.lon);
+  const readerLat = normalizeCoord(ctx.readerLat);
+  const readerLon = normalizeCoord(ctx.readerLon);
   if (
-    !isValidCoord(ctx.readerLat) ||
-    !isValidCoord(ctx.readerLon) ||
-    !isValidCoord(item.lat) ||
-    !isValidCoord(item.lon)
+    itemLat == null ||
+    itemLon == null ||
+    readerLat == null ||
+    readerLon == null
   ) {
     return null;
   }
-  return haversineKm(ctx.readerLat, ctx.readerLon, item.lat, item.lon);
+  return haversineKm(readerLat, readerLon, itemLat, itemLon);
 }
 
 export function passesLocalDiscoveryRadius(
@@ -81,7 +97,7 @@ export function passesLocalDiscoveryRadius(
   if (!LOCAL_DISCOVERY_CATEGORIES.has(item.category)) return true;
   if (isStatewideAttraction(item)) return false;
   const km = distanceKmFromReader(item, ctx);
-  if (km == null) return false;
+  if (km == null) return true;
   return km <= KINDRED_LOCAL_RADIUS_KM;
 }
 
@@ -103,6 +119,6 @@ export function passesActivitiesSectionRadius(
   const item = ranked.item;
   if (isStatewideAttraction(item)) return false;
   const km = distanceKmFromReader(item, ctx);
-  if (km == null) return false;
+  if (km == null) return true;
   return km <= KINDRED_LOCAL_RADIUS_KM;
 }
