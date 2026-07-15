@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import {
   splitFeaturedEvents,
+  authorizedEventImageUrl,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
 import { motion, paper, press } from "../lib/edition/newspaperTheme";
@@ -34,7 +35,7 @@ export function DontMissToday({ events }: Props) {
   const photoHeight = Math.round(Math.min(windowWidth * 1.05, 460));
 
   const { featured, secondary } = splitFeaturedEvents(events);
-  const eventPhotoUri = featured?.imageUrl?.trim() || null;
+  const eventPhotoUri = featured ? authorizedEventImageUrl(featured) : null;
 
   const [reduceMotion, setReduceMotion] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -188,7 +189,7 @@ function SecondaryRecommendation({
   isLast: boolean;
 }) {
   const meta = whisperMeta(event);
-  const thumb = event.imageUrl?.trim() || null;
+  const thumb = authorizedEventImageUrl(event);
   const open = event.sourceUrl
     ? () => {
         void Linking.openURL(event.sourceUrl).catch(() => {});

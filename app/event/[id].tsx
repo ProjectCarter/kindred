@@ -17,7 +17,7 @@ import {
   eventPlaceLine,
   getStashedEvent,
 } from "../../lib/edition/eventStore";
-import { eventFallbackImage } from "../../lib/edition/localEvents";
+import { authorizedEventImageUrl } from "../../lib/edition/localEvents";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
@@ -75,6 +75,8 @@ export default function EventDetailScreen() {
     );
   }
 
+  const photoUri = authorizedEventImageUrl(event);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar style="dark" />
@@ -92,18 +94,16 @@ export default function EventDetailScreen() {
           <Text style={styles.back}>{back}</Text>
         </Pressable>
 
-        <Image
-          source={
-            event.imageUrl
-              ? { uri: event.imageUrl }
-              : eventFallbackImage(event.category)
-          }
-          style={{ width, height: photoH, marginLeft: -24 }}
-          resizeMode="cover"
-          accessibilityLabel={event.name}
-        />
+        {photoUri ? (
+          <Image
+            source={{ uri: photoUri }}
+            style={{ width, height: photoH, marginLeft: -24 }}
+            resizeMode="cover"
+            accessibilityLabel={event.name}
+          />
+        ) : null}
 
-        <View style={styles.body}>
+        <View style={[styles.body, !photoUri && styles.bodyNoPhoto]}>
           {badge ? (
             <Text style={styles.badge} maxFontSizeMultiplier={1.2}>
               {badge}
@@ -185,6 +185,9 @@ const styles = StyleSheet.create({
   body: {
     paddingHorizontal: 24,
     paddingTop: 28,
+  },
+  bodyNoPhoto: {
+    paddingTop: 8,
   },
   badge: {
     alignSelf: "flex-start",

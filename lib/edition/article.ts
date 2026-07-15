@@ -15,6 +15,7 @@ import {
   type EditorialModule,
 } from "./contentSystem";
 import type { LocalEventCard } from "./localEvents";
+import { authorizedEventImageUrl } from "./eventImageRights";
 import type { ClippingContentType } from "./clippingTypes";
 import { resolveEventEndsAt } from "./eventExpiry";
 import {
@@ -717,9 +718,8 @@ export function articleFromNotebookItem(
       dek: composed.dek,
       source: verifiedEvent.sourceName?.trim() || "Local listing",
       sourceUrl: verifiedEvent.sourceUrl || item.url || null,
-      // Real provider photo when the listing has one — never a stock
-      // image standing in for a specific verified subject.
-      imageUrl: verifiedEvent.imageUrl ?? null,
+      // Authorized provider photo only — never stock or unlicensed listing art.
+      imageUrl: authorizedEventImageUrl(verifiedEvent),
       imageCaption: verifiedEvent.name,
       banditNote: verifiedEvent.banditNote?.trim() || null,
       discoveryCategory: item.category,
@@ -824,7 +824,7 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
       dek: place || null,
       source: event.sourceName?.trim() || "Local listing",
       sourceUrl: event.sourceUrl || null,
-      imageUrl: event.imageUrl ?? null,
+      imageUrl: authorizedEventImageUrl(event),
       imageCaption: event.name,
       banditNote,
       contentType: isFestival ? "festival" : "local_event",

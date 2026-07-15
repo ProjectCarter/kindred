@@ -1,7 +1,6 @@
 import type { ImageSourcePropType } from "react-native";
 import type { EventInfoBadgeId } from "./eventBadges";
 import { inferEventInfoBadges } from "./eventBadges";
-import { claimImage } from "./imageRegistry";
 import { filterValidEvents } from "./localEventsValidation";
 import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
@@ -15,6 +14,11 @@ import {
   resolveCardHorizon,
   type EventHorizonBucket,
 } from "./eventHorizon";
+import {
+  authorizedEventImageUrl,
+  parseEventImageRights,
+  type EventImageRights,
+} from "./eventImageRights";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -46,41 +50,22 @@ export function eventCategoryLabel(category?: LocalEventCategory | null): string
 }
 
 /**
- * "A recommendation without an image should be considered incomplete"
- * (kindred-mission.mdc). SerpAPI doesn't always return a listing photo —
- * when it doesn't, fall back to a bundled, editorial-quality photograph
- * for that event's genre rather than a bare icon. Still ranked behind a
- * real photo everywhere this is used (see `orderEventsForGrid`).
+ * Genre fallback art is disabled until listing photography is source-authorized.
  */
-const EVENT_FALLBACK_IMAGE: Record<LocalEventCategory, ImageSourcePropType> = {
-  music: require("../../assets/discovery/event-music.jpg"),
-  comedy: require("../../assets/discovery/event-comedy.jpg"),
-  arts: require("../../assets/discovery/event-arts.jpg"),
-  family: require("../../assets/discovery/event-family.jpg"),
-  sports: require("../../assets/discovery/event-sports.jpg"),
-  food: require("../../assets/discovery/event-food.jpg"),
-  market: require("../../assets/discovery/event-market.jpg"),
-  nightlife: require("../../assets/discovery/event-nightlife.jpg"),
-  community: require("../../assets/discovery/event-community.jpg"),
-};
-
-const ALL_EVENT_FALLBACK_IMAGES = Object.values(EVENT_FALLBACK_IMAGE);
-
 /**
- * `id` (e.g. the event's own name/venue) lets several photo-less events in
- * the same genre rotate through different fallback art instead of all
- * showing the exact same stock photo (kindred-mission.mdc: no duplicate
- * images) — still deduped against every other photo claimed in today's
- * edition, and stable across re-renders for the same event.
+ * @deprecated Listing photography requires source authorization — use
+ * `authorizedEventImageUrl` instead. Kept for legacy call sites during migration.
  */
 export function eventFallbackImage(
   category?: LocalEventCategory | null,
   id?: string | null
-): ImageSourcePropType {
-  const primary = EVENT_FALLBACK_IMAGE[category ?? "community"] ?? EVENT_FALLBACK_IMAGE.community;
-  if (!id) return primary;
-  return claimImage(id, [primary], ALL_EVENT_FALLBACK_IMAGES) ?? primary;
+): ImageSourcePropType | null {
+  void category;
+  void id;
+  return null;
 }
+
+export { authorizedEventImageUrl } from "./eventImageRights";
 
 export type LocalEventCard = {
   name: string;
@@ -93,12 +78,16 @@ export type LocalEventCard = {
   lon?: number | null;
   sourceUrl: string;
   sourceName: string;
+  /** Organizer or venue official site — never a ticket aggregator. */
+  officialWebsite?: string | null;
   /** Connector that surfaced this listing — e.g. eventbrite. */
   sourceId?: string | null;
   /** Authentic listing photograph when the provider supplies one. */
   imageUrl?: string | null;
   /** Provenance — never filled by HeroImageService / weather stock. */
   imageSource?: LocalEventImageSource | null;
+  /** Whether Kindred may display listing photography from this source. */
+  imageRights?: EventImageRights | null;
   /** Bandit’s invitation — why this is worth leaving the house. */
   banditNote?: string | null;
   /** Keyword-inferred genre, e.g. "music" or "food" — never invented. */
@@ -292,7 +281,12 @@ export function parseLocalEventsBody(
     const mapped = parsed.events
       .filter((e) => e && typeof e.name === "string" && e.name.trim().length > 0)
       .map((e) => {
-        const imageUrl = normalizeImageUrl(e.imageUrl);
+        const imageRights = parseEventImageRights(e.imageRights, e.sourceId);
+        const rawImageUrl = normalizeImageUrl(e.imageUrl);
+        const imageUrl = authorizedEventImageUrl({
+          imageUrl: rawImageUrl,
+          imageRights,
+        });
         const venue = typeof e.venue === "string" ? e.venue.trim() : "";
         const name = e.name.trim();
         const banditNote =
@@ -321,12 +315,17 @@ export function parseLocalEventsBody(
             typeof e.sourceName === "string" && e.sourceName.trim()
               ? e.sourceName.trim()
               : "Listing",
+          officialWebsite:
+            typeof e.officialWebsite === "string" && e.officialWebsite.trim()
+              ? e.officialWebsite.trim()
+              : null,
           sourceId:
             typeof e.sourceId === "string" && e.sourceId.trim()
               ? e.sourceId.trim()
               : null,
           imageUrl,
           imageSource: normalizeImageSource(e.imageSource, imageUrl),
+          imageRights,
           banditNote,
           category,
           badges: badges.length ? badges : undefined,
@@ -503,7 +502,7 @@ function scoreEventForGrid(
   if (event.city?.trim()) score += 2;
   if (isGenericEventTitle(event.name)) score -= 12;
   if (!event.venue?.trim() || event.venue.trim() === "Venue TBA") score -= 10;
-  if (event.imageUrl?.trim()) score += 1;
+  if (authorizedEventImageUrl(event)) score += 1;
   if (/\b(festival|concert|farmers? market|comedy|theater|theatre|exhibit)\b/i.test(event.name)) {
     score += 3;
   }
@@ -519,7 +518,7 @@ export function splitFeaturedEvents(events: LocalEventCard[]): {
 } {
   if (!events.length) return { featured: null, secondary: [] };
 
-  const featuredIndex = events.findIndex((e) => Boolean(e.imageUrl));
+  const featuredIndex = events.findIndex((e) => Boolean(authorizedEventImageUrl(e)));
   const index = featuredIndex >= 0 ? featuredIndex : 0;
   const featured = events[index] ?? null;
   const secondary = events.filter((_, i) => i !== index).slice(0, 2);

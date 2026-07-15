@@ -9,7 +9,7 @@
  * 2. Remove duplicates
  * 3. Normalize dates, times, prices, locations, provenance
  * 4. Prefer official listing URLs (via normalize + merge priority)
- * 5. Enrich authentic event images when providers omit photography
+ * 5. Apply per-source image rights — strip unauthorized listing photography
  * 6. Editorial summaries — Bandit notes at edition build (banditNotes.ts)
  * 7. Badges — resolved at parse time (badgeResolver.ts)
  * 8. Rank by editorial quality — persist the full qualified pool in edition order
@@ -23,7 +23,7 @@ import { gatherFromAllSources } from "./sources/registry.ts";
 import type { LocalEventSourceId } from "./sources/types.ts";
 import { mergeEventsFromSources } from "./merge.ts";
 import { normalizeEvents } from "./normalize.ts";
-import { enrichEventImages } from "./enrichImages.ts";
+import { applyEventImageRightsBatch } from "./sourceRights.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
 import { attachEventHorizon } from "./horizon.ts";
 import {
@@ -36,6 +36,8 @@ export type LocalEventsPipelineMeta = {
   mergedCount: number;
   normalizedCount: number;
   imagesEnriched: number;
+  imagesSuppressed: number;
+  imagesDisplayAuthorized: number;
   discoveredInHorizon: number;
   scoredAboveThreshold: number;
   publishedCount: number;
@@ -87,15 +89,18 @@ export async function runLocalEventsPipeline(
   // 3–4. Normalize (dates, URLs, provenance, official-source tier)
   const normalized = normalizeEvents(merged);
 
-  const beforeImages = normalized.filter((e) => Boolean(e.imageUrl?.trim())).length;
+  const beforeRights = normalized.filter((e) => Boolean(e.imageUrl?.trim())).length;
 
-  // 5. Authentic image enrichment
-  const withImages = await enrichEventImages(normalized);
-  const imagesEnriched = withImages.filter((e) => Boolean(e.imageUrl?.trim())).length - beforeImages;
+  // 5. Source image-rights — never display unlicensed listing photography
+  const withRights = applyEventImageRightsBatch(normalized);
+  const imagesDisplayAuthorized = withRights.filter((e) =>
+    Boolean(e.imageUrl?.trim())
+  ).length;
+  const imagesSuppressed = Math.max(0, beforeRights - imagesDisplayAuthorized);
 
   // 8. Rank within 30-day horizon — persist the full qualified pool in order.
   const now = options?.now ?? new Date();
-  const inHorizon = withImages
+  const inHorizon = withRights
     .slice(0, SERPAPI_CANDIDATE_CAP)
     .map((event) => attachEventHorizon(event, now))
     .filter((event) => event.horizonBucket !== "beyond");
@@ -115,8 +120,15 @@ export async function runLocalEventsPipeline(
       `National Park Service contributed ${sourceCounts.nps_park_events} official program(s).`
     );
   }
-  if (imagesEnriched > 0) {
-    editorNotes.push(`Enriched ${imagesEnriched} listing(s) with authentic venue photography.`);
+  if (imagesSuppressed > 0) {
+    editorNotes.push(
+      `Withheld ${imagesSuppressed} listing photograph(s) pending source image authorization.`
+    );
+  }
+  if (imagesDisplayAuthorized > 0) {
+    editorNotes.push(
+      `${imagesDisplayAuthorized} listing(s) carry authorized photography.`
+    );
   }
   editorNotes.push(
     `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
@@ -128,13 +140,15 @@ export async function runLocalEventsPipeline(
     candidateCount,
     mergedCount: merged.length,
     normalizedCount: normalized.length,
-    imagesEnriched: Math.max(0, imagesEnriched),
+    imagesEnriched: 0,
+    imagesSuppressed,
+    imagesDisplayAuthorized,
     discoveredInHorizon: inHorizon.length,
     scoredAboveThreshold: ranked.length,
     publishedCount: ranked.length,
     sourcesUsed,
     sourceCounts,
-    eventsWithImages: ranked.filter((e) => Boolean(e.imageUrl?.trim())).length,
+    eventsWithImages: imagesDisplayAuthorized,
     rankedPoolTitles: ranked.map((e) => e.name),
     editorNotes,
   };
@@ -173,8 +187,13 @@ async function runEventbriteOnlyPipeline(
   });
 
   const normalized = normalizeEvents(raw);
-  const withImages = await enrichEventImages(normalized);
-  const { qualified, report } = qualifyEventbriteEvents(withImages, location, now);
+  const beforeRights = normalized.filter((e) => Boolean(e.imageUrl?.trim())).length;
+  const withRights = applyEventImageRightsBatch(normalized);
+  const imagesDisplayAuthorized = withRights.filter((e) =>
+    Boolean(e.imageUrl?.trim())
+  ).length;
+  const imagesSuppressed = Math.max(0, beforeRights - imagesDisplayAuthorized);
+  const { qualified, report } = qualifyEventbriteEvents(withRights, location, now);
 
   editorNotes.push(
     `Eventbrite returned ${report.totalReturned}; ` +
@@ -189,12 +208,14 @@ async function runEventbriteOnlyPipeline(
     mergedCount: normalized.length,
     normalizedCount: normalized.length,
     imagesEnriched: 0,
+    imagesSuppressed,
+    imagesDisplayAuthorized,
     discoveredInHorizon: qualified.length,
     scoredAboveThreshold: qualified.length,
     publishedCount: qualified.length,
     sourcesUsed: ["eventbrite"],
     sourceCounts,
-    eventsWithImages: qualified.filter((e) => Boolean(e.imageUrl?.trim())).length,
+    eventsWithImages: imagesDisplayAuthorized,
     rankedPoolTitles: qualified.map((e) => e.name),
     editorNotes,
     eventbriteOnly: report,

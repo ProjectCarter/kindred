@@ -9,7 +9,7 @@ import {
 import {
   orderEventsForGrid,
   orderEventsForEdition,
-  eventFallbackImage,
+  authorizedEventImageUrl,
   HOMEPAGE_INITIAL_RENDER_COUNT,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
@@ -141,6 +141,7 @@ export function LocalEventsGrid({
                   : null;
             const overline = [badge, timeLine].filter(Boolean).join("  ·  ");
             const note = event.banditNote?.trim() || null;
+            const photoUri = authorizedEventImageUrl(event);
             const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
             const isLeft = colIndex === 0;
 
@@ -168,23 +169,18 @@ export function LocalEventsGrid({
                   open && pressed && { opacity: press.opacity },
                 ]}
               >
-                <View style={styles.photoFrame}>
-                  <Image
-                    source={
-                      event.imageUrl
-                        ? { uri: event.imageUrl }
-                        : eventFallbackImage(
-                            event.category,
-                            `${event.name}-${event.venue}-${event.date}`
-                          )
-                    }
-                    style={{ width: "100%", height: photoH }}
-                    resizeMode="cover"
-                    accessibilityLabel={event.name}
-                  />
-                </View>
+                {photoUri ? (
+                  <View style={styles.photoFrame}>
+                    <Image
+                      source={{ uri: photoUri }}
+                      style={{ width: "100%", height: photoH }}
+                      resizeMode="cover"
+                      accessibilityLabel={event.name}
+                    />
+                  </View>
+                ) : null}
 
-                <View style={styles.copy}>
+                <View style={[styles.copy, !photoUri && styles.copyNoPhoto]}>
                   {overline ? (
                     <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
                       {overline}
@@ -324,6 +320,9 @@ const styles = StyleSheet.create({
   },
   copy: {
     paddingTop: 16,
+  },
+  copyNoPhoto: {
+    paddingTop: 0,
   },
   overline: {
     fontSize: 10,

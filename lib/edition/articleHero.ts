@@ -56,12 +56,8 @@ function inferMood(section: string, headline: string, body: string): Mood {
     return "seasonal";
   }
   if (
-    /\b(president|congress|election|government|court|policy|diplomacy|war|ukraine|gaza|nato|market|bank|stock|economy|business|company|tech|politics|white house)\b/.test(
-      blob
-    ) ||
     section === "lead" ||
-    section === "top_stories" ||
-    section === "bandits_pick"
+    section === "top_stories"
   ) {
     return "civic";
   }
@@ -233,6 +229,19 @@ export function ensureArticleHero(article: KindredArticle): KindredArticle {
     return article;
   }
 
+  // Local events never get mood-based editorial archive substitutes.
+  if (
+    article.section === "discovery" ||
+    article.section === "local_events" ||
+    article.savedContentType
+  ) {
+    return article;
+  }
+
+  if (article.section === "bandits_pick") {
+    return article;
+  }
+
   const hero = resolveArticleHero({
     headline: article.headline,
     section: article.section,
@@ -260,6 +269,19 @@ export function ensureArticleHero(article: KindredArticle): KindredArticle {
 export function supportingFiguresForArticle(
   article: KindredArticle
 ): ArticleFigure[] {
+  if (article.section === "bandits_pick") {
+    return [];
+  }
+
+  // Discovery, events, and recommendations never get auto-inserted archive photos.
+  if (
+    article.section === "discovery" ||
+    article.section === "local_events" ||
+    article.savedContentType
+  ) {
+    return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
+  }
+
   if (isAuthenticHistorySection(article.section)) {
     return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
   }

@@ -55,6 +55,8 @@ export type LocalEvent = {
   imageUrl?: string | null;
   /** Provenance for the photograph — never invent stock heroes. */
   imageSource?: "provider_thumbnail" | null;
+  /** Whether Kindred may display listing photography from this source. */
+  imageRights?: import("./sourceRights.ts").EventImageRights;
   /** Bandit’s one-line invitation — why leave the house. */
   banditNote?: string | null;
   /** Keyword-inferred genre — never invented, just a plain-language guess from the title. */
@@ -1097,6 +1099,7 @@ export function buildLocalEventsBody(
         ...(enriched.sourceId ? { sourceId: enriched.sourceId } : {}),
         imageUrl: enriched.imageUrl?.trim() || null,
         imageSource: enriched.imageUrl ? enriched.imageSource ?? "provider_thumbnail" : null,
+        ...(enriched.imageRights ? { imageRights: enriched.imageRights } : {}),
         banditNote: enriched.banditNote?.trim() || null,
         category,
         startDateIso: enriched.startDateIso ?? null,
