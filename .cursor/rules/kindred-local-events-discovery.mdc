@@ -7,23 +7,33 @@ The reader goal: *"I had no idea this was happening near me."*
 
 ## Trusted source network
 
-Build connectors for official and semi-official sources — city calendars,
-parks & recreation, libraries, museums, tourism bureaus, universities, NPS,
+Build connectors for official and semi-official sources. The full network is
+registered in `supabase/functions/_shared/localEvents/sources/types.ts`.
+
+**Active connectors today:** National Park Service, Google Events (SerpAPI).
+
+**Planned connectors:** city calendars, parks & recreation, libraries, museums,
+tourism bureaus, botanical gardens, zoos, universities, farmers markets, state
+parks, community centers, fairgrounds, performing arts, concert venues, sports
+teams, convention centers, festivals, restaurant weeks, cultural organizations,
+chambers of commerce, BIDs, shopping centers, historic districts, nonprofits,
 Eventbrite, Ticketmaster, AXS, Fever, and official venue websites.
 
-Registry: `supabase/functions/_shared/localEvents/sources/types.ts`
-
-Active connectors expand over time; inactive sources are documented for future wiring.
+New connectors register in `sources/registry.ts`.
 
 ## Editorial pipeline (every edition build)
 
-1. Gather from all enabled connectors
-2. Remove duplicates (prefer official > venue > aggregator)
-3. Normalize dates, URLs, and provenance
-4. Rank by editorial quality and relevance — not raw popularity
-5. Publish events meeting the quality threshold
-
 Orchestrator: `supabase/functions/_shared/localEvents/pipeline.ts`
+
+1. **Gather** from all enabled connectors (`sources/registry.ts`)
+2. **Remove duplicates** — prefer official > venue > aggregator (`merge.ts`)
+3. **Normalize** dates, times, locations, provenance (`normalize.ts`)
+4. **Official URLs** — source tier + merge priority favor trusted listings
+5. **Authentic images** — provider photos first; Wikipedia venue art as fallback (`enrichImages.ts`)
+6. **Editorial summaries** — Bandit one-liners at edition build (`banditNotes.ts`)
+7. **Badges** — structured utility chips at parse time (`badgeResolver.ts`)
+8. **Rank + variety** — editorial score, weather-aware outdoor boost, max 2 per category (`ranking.ts`, `variety.ts`)
+9. **Publish** — quality threshold, not arbitrary caps (`editorial/publishing.ts`)
 
 ## Editorial ranking favors
 
@@ -34,16 +44,20 @@ Do not rank by popularity alone. Think like an experienced newspaper editor.
 
 ## Images
 
-Prefer authentic listing photography from providers. Never invent facts from photos.
-Genre fallbacks on the client are last resort only when the provider supplies nothing.
+Prefer authentic listing photography from providers. Wikipedia venue thumbnails
+may fill gaps — never AI-generated stock. Client genre fallbacks are last resort only.
 
 ## Implementation map
 
 | Stage | Module |
 | --- | --- |
+| Connector registry | `localEvents/sources/registry.ts` |
 | SerpAPI Google Events | `localEvents/provider.ts` |
 | NPS park programs | `localEvents/sources/npsParkEvents.ts` |
 | Merge / dedupe | `localEvents/merge.ts` |
 | Normalize | `localEvents/normalize.ts` |
+| Image enrichment | `localEvents/enrichImages.ts` |
 | Rank | `localEvents/ranking.ts` |
+| Variety | `localEvents/variety.ts` |
+| Bandit summaries | `localEvents/banditNotes.ts` |
 | Entry | `getLocalEvents()` → pipeline |

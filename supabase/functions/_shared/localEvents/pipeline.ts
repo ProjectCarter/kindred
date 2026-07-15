@@ -3,21 +3,35 @@
  *
  * Every edition build and live refresh runs this pipeline so Kindred discovers
  * the best events before anyone else — calm newspaper curation, not a directory dump.
+ *
+ * Nightly stages:
+ * 1. Gather from trusted sources
+ * 2. Remove duplicates
+ * 3. Normalize dates, times, prices, locations, provenance
+ * 4. Prefer official listing URLs (via normalize + merge priority)
+ * 5. Enrich authentic event images when providers omit photography
+ * 6. Editorial summaries — Bandit notes at edition build (banditNotes.ts)
+ * 7. Badges — resolved at parse time (badgeResolver.ts)
+ * 8. Rank by editorial quality + category variety
+ * 9. Publish events meeting the quality threshold
  */
 
 import type { WeatherIntelligence } from "../weather/providers/types.ts";
 import { SERPAPI_CANDIDATE_CAP } from "../editorial/publishing.ts";
 import type { LocalEvent, LocalEventLocation, LocalEventsFetchOptions } from "./provider.ts";
-import { fetchSerpGoogleEventCandidates } from "./provider.ts";
-import { fetchNpsParkEvents } from "./sources/npsParkEvents.ts";
+import { gatherFromAllSources } from "./sources/registry.ts";
 import type { LocalEventSourceId } from "./sources/types.ts";
 import { mergeEventsFromSources } from "./merge.ts";
 import { normalizeEvents } from "./normalize.ts";
+import { enrichEventImages } from "./enrichImages.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
+import { applyEventCategoryVariety } from "./variety.ts";
 
 export type LocalEventsPipelineMeta = {
   candidateCount: number;
   mergedCount: number;
+  normalizedCount: number;
+  imagesEnriched: number;
   publishedCount: number;
   sourcesUsed: LocalEventSourceId[];
   sourceCounts: Record<string, number>;
@@ -37,55 +51,75 @@ export async function runLocalEventsPipeline(
   const editorNotes: string[] = [];
   const sourceCounts: Record<string, number> = {};
 
-  const [serp, nps] = await Promise.all([
-    fetchSerpGoogleEventCandidates(location, options).catch((err) => {
-      console.warn("[localEvents:pipeline] serp gather failed", err);
-      editorNotes.push("Google Events gather failed — continuing with other sources.");
-      return [] as LocalEvent[];
-    }),
-    fetchNpsParkEvents(location).catch((err) => {
-      console.warn("[localEvents:pipeline] nps gather failed", err);
-      return [] as LocalEvent[];
-    }),
-  ]);
+  // 1. Gather
+  const gatherResults = await gatherFromAllSources(location, options);
+  const sourceBatches: LocalEvent[][] = [];
+  for (const result of gatherResults) {
+    if (result.events.length) {
+      sourceCounts[result.sourceId] = result.events.length;
+      sourceBatches.push(result.events);
+    }
+    if (result.error) {
+      editorNotes.push(`${result.sourceId} gather failed — continuing.`);
+    }
+  }
 
-  if (serp.length) sourceCounts.serp_google_events = serp.length;
-  if (nps.length) sourceCounts.nps_park_events = nps.length;
+  const candidateCount = sourceBatches.reduce((n, batch) => n + batch.length, 0);
 
-  const candidateCount = serp.length + nps.length;
-  const merged = mergeEventsFromSources([serp, nps]);
+  // 2. Dedupe
+  const merged = mergeEventsFromSources(sourceBatches);
+
+  // 3–4. Normalize (dates, URLs, provenance, official-source tier)
   const normalized = normalizeEvents(merged);
+
+  const beforeImages = normalized.filter((e) => Boolean(e.imageUrl?.trim())).length;
+
+  // 5. Authentic image enrichment
+  const withImages = await enrichEventImages(normalized);
+  const imagesEnriched = withImages.filter((e) => Boolean(e.imageUrl?.trim())).length - beforeImages;
+
+  // 8. Rank + variety (badges already on records; summaries at edition build)
   const ranked = rankLocalEventsForEdition(
-    normalized.slice(0, SERPAPI_CANDIDATE_CAP),
+    withImages.slice(0, SERPAPI_CANDIDATE_CAP),
     { now: options?.now, weatherIntel: options?.weatherIntel }
   );
+  const varied = applyEventCategoryVariety(ranked, {
+    now: options?.now,
+    weatherIntel: options?.weatherIntel,
+  });
 
-  const sourcesUsed = [
-    ...(serp.length ? (["serp_google_events"] as const) : []),
-    ...(nps.length ? (["nps_park_events"] as const) : []),
-  ];
+  const sourcesUsed = gatherResults
+    .filter((r) => r.events.length > 0)
+    .map((r) => r.sourceId);
 
-  if (nps.length) {
-    editorNotes.push(`National Park Service contributed ${nps.length} official program(s).`);
+  if (sourceCounts.nps_park_events) {
+    editorNotes.push(
+      `National Park Service contributed ${sourceCounts.nps_park_events} official program(s).`
+    );
+  }
+  if (imagesEnriched > 0) {
+    editorNotes.push(`Enriched ${imagesEnriched} listing(s) with authentic venue photography.`);
   }
   editorNotes.push(
-    `Gathered ${candidateCount} candidates from ${sourcesUsed.length || 0} source(s); ` +
-      `${merged.length} after dedupe; ${ranked.length} published.`
+    `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
+      `${merged.length} after dedupe; ${varied.length} published.`
   );
 
   const meta: LocalEventsPipelineMeta = {
     candidateCount,
     mergedCount: merged.length,
-    publishedCount: ranked.length,
-    sourcesUsed: [...sourcesUsed],
+    normalizedCount: normalized.length,
+    imagesEnriched: Math.max(0, imagesEnriched),
+    publishedCount: varied.length,
+    sourcesUsed,
     sourceCounts,
-    eventsWithImages: ranked.filter((e) => Boolean(e.imageUrl?.trim())).length,
+    eventsWithImages: varied.filter((e) => Boolean(e.imageUrl?.trim())).length,
     editorNotes,
   };
 
   console.log("[localEvents:pipeline] complete", meta);
 
-  return { events: ranked, meta };
+  return { events: varied, meta };
 }
 
 /** Backward-compatible entry — returns published events only. */
