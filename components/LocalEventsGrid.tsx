@@ -16,9 +16,7 @@ import {
   eventPlaceLine,
 } from "../lib/edition/eventStore";
 import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
-import { resolveListingActionsForEvent } from "../lib/edition/actionBar";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
-import { ArticleActionList } from "./ArticleActionList";
 import { BanditCharacter } from "./BanditCharacter";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import type { LocalEventsLoadStatus } from "../lib/edition/localEventsPipeline";
@@ -143,42 +141,37 @@ export function LocalEventsGrid({
                   : null;
             const overline = [category, badge, timeLine].filter(Boolean).join("  ·  ");
             const note = event.banditNote?.trim() || null;
-            const actions = resolveListingActionsForEvent(event);
             const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
             const isLeft = colIndex === 0;
 
             return (
-              <View
+              <Pressable
                 key={`${event.name}-${event.date}-${index}`}
-                style={[
+                onPress={open}
+                disabled={!open}
+                accessibilityRole={open ? "button" : "text"}
+                accessibilityLabel={[
+                  event.name,
+                  category,
+                  timeLine,
+                  venue,
+                  addressLine,
+                  note,
+                  badge,
+                  infoBadges.length
+                    ? eventInfoBadgeAccessibilitySummary(infoBadges)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(". ")}
+                style={({ pressed }) => [
                   styles.cell,
                   isLeft ? styles.cellLeft : styles.cellRight,
+                  open && pressed && { opacity: press.opacity },
                 ]}
               >
-                <Pressable
-                  onPress={open}
-                  disabled={!open}
-                  accessibilityRole={open ? "button" : "text"}
-                  accessibilityLabel={[
-                    event.name,
-                    category,
-                    timeLine,
-                    venue,
-                    addressLine,
-                    note,
-                    badge,
-                    infoBadges.length
-                      ? eventInfoBadgeAccessibilitySummary(infoBadges)
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(". ")}
-                  style={({ pressed }) => [
-                    open && pressed && { opacity: press.opacity },
-                  ]}
-                >
-                  <View style={styles.cardRule} />
-                  <View style={styles.copy}>
+                <View style={styles.cardRule} />
+                <View style={styles.copy}>
                     {overline ? (
                       <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
                         {overline}
@@ -234,13 +227,9 @@ export function LocalEventsGrid({
                       >
                         {note}
                       </Text>
-                    ) : null}
-                  </View>
-                </Pressable>
-                {actions.length > 0 ? (
-                  <ArticleActionList actions={actions} variant="listing" />
-                ) : null}
-              </View>
+                  ) : null}
+                </View>
+              </Pressable>
             );
           })}
           {row.length === 1 ? <View style={styles.cell} /> : null}

@@ -9,8 +9,6 @@ import {
   type ImageSourcePropType,
 } from "react-native";
 import { paper, press } from "../lib/edition/newspaperTheme";
-import { ArticleActionList } from "./ArticleActionList";
-import type { ActionBarAction } from "../lib/edition/actionBar";
 
 function CardPhoto({
   source,
@@ -46,7 +44,6 @@ export type TimeStoryCard = {
   byline?: string | null;
   image?: ImageSourcePropType | null;
   imageLabel?: string | null;
-  actions?: ActionBarAction[];
 };
 
 type Props = {
@@ -137,9 +134,6 @@ export function TimeStylePackage({
               <Text style={styles.byline}>{feature.byline}</Text>
             ) : null}
           </Pressable>
-          {feature.actions && feature.actions.length > 0 ? (
-            <ArticleActionList actions={feature.actions} variant="listing" />
-          ) : null}
         </View>
 
         {wide && sides[1] ? (
@@ -208,9 +202,6 @@ function SideCard({
           <Text style={styles.byline}>{story.byline}</Text>
         ) : null}
       </Pressable>
-      {story.actions && story.actions.length > 0 ? (
-        <ArticleActionList actions={story.actions} variant="listing" />
-      ) : null}
     </View>
   );
 }

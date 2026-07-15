@@ -35,6 +35,9 @@ import { runMorningEditionDecisions } from "./morningEdition/index.ts";
 import type { MorningEditionPayload } from "./morningEdition/types.ts";
 import { composeHeroOpening } from "./morningEdition/heroOpening.ts";
 import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
+import { resolveProductionMorningHero } from "./heroArtwork/production.ts";
+import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
+import { getSeason, parseEditionDate } from "./heroArtwork/select.ts";
 import {
   buildWeatherIntelligence,
   fetchWeatherForecast,
@@ -1585,6 +1588,48 @@ export async function buildEditionForUser(
   morningEdition.selectionMeta.editorNotes.push(
     "opening_20s replaced with a handcrafted, non-AI hero line (see heroOpening.ts)"
   );
+
+  let morningHero: MorningHeroExperience | null = null;
+  try {
+    const heroMonth = parseEditionDate(editionDate).getMonth() + 1;
+    morningHero = await resolveProductionMorningHero(supabaseAdmin, {
+      editionDate,
+      anthropicApiKey,
+      context: {
+        date: editionDate,
+        season: getSeason(heroMonth),
+        weatherHint:
+          weatherConditionCode != null &&
+          /rain|storm|drizzle/i.test(String(weatherConditionCode))
+            ? "rain"
+            : weather?.current?.temperature_2m != null &&
+                weather.current.temperature_2m >= 32
+              ? "hot"
+              : weather?.current?.temperature_2m != null &&
+                  weather.current.temperature_2m <= 5
+                ? "cold"
+                : "clear",
+      },
+    });
+    if (morningHero) {
+      (morningEdition as MorningEditionPayload & {
+        morningHero?: MorningHeroExperience | null;
+      }).morningHero = morningHero;
+      morningEdition.selectionMeta.usedEngines.push("hero_artwork");
+      morningEdition.selectionMeta.editorNotes.push(
+        `Daily hero artwork: ${morningHero.artworkTitle} by ${morningHero.artist}`
+      );
+    } else {
+      morningEdition.selectionMeta.editorNotes.push(
+        "hero_artwork: no verified artwork resolved for this edition date"
+      );
+    }
+  } catch (heroErr) {
+    console.warn("[buildEdition] morning hero artwork skipped", heroErr);
+    morningEdition.selectionMeta.editorNotes.push(
+      "hero_artwork: skipped — discovery or persistence unavailable"
+    );
+  }
 
   console.log("[buildEdition] morning edition", {
     engines: morningEdition.selectionMeta.usedEngines,

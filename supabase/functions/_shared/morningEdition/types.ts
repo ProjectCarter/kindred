@@ -74,6 +74,8 @@ export type MorningEditionPayload = {
     polishedWithAi: boolean;
     editorNotes: string[];
   };
+  /** Frozen daily public-domain hero — artwork image + About Today's Artwork. */
+  morningHero?: import("../heroArtwork/presentation.ts").MorningHeroExperience | null;
 };
 
 export type MorningEditionLeadInput = {

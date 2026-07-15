@@ -11,6 +11,7 @@ import type { LeadStory } from "./LeadStory";
 import type { TopStoryItem } from "./topStories";
 import type { BanditPayload } from "./bandit";
 import type { EditionIntelligence } from "./surfaceIntelligence";
+import type { MorningHeroExperience } from "./heroArtwork/types";
 
 const CACHE_KEY_PREFIX = "@kindred/edition-cache:";
 
@@ -26,6 +27,8 @@ export type CachedEditionBundle = {
   intelligence: EditionIntelligence | null;
   /** Frozen hero selection — stable for the life of this edition. */
   heroImageId?: string | null;
+  /** Frozen daily artwork hero from morning_edition.morningHero. */
+  morningHero?: MorningHeroExperience | null;
 };
 
 function cacheKey(userId: string, editionDate: string): string {

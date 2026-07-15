@@ -8,8 +8,6 @@ import {
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { HOMEPAGE_INITIAL_RENDER_COUNT, sliceForInitialRender } from "../lib/edition/editorialPublishing";
 import { BanditCharacter } from "./BanditCharacter";
-import { ArticleActionList } from "./ArticleActionList";
-import type { ActionBarAction } from "../lib/edition/actionBar";
 
 export type EditorialGridCard = {
   id: string;
@@ -20,8 +18,6 @@ export type EditorialGridCard = {
   subtitle?: string | null;
   /** Kindred's own one-line editorial voice for this card. */
   note?: string | null;
-  /** Maps, Official Website, and ticket links when available. */
-  actions?: ActionBarAction[];
 };
 
 type Props = {
@@ -124,73 +120,62 @@ export function EditorialCardGrid({
             const isLeft = colIndex === 0;
 
             return (
-              <View
+              <Pressable
                 key={card.id}
-                style={[
+                onPress={open}
+                disabled={!open}
+                accessibilityRole={open ? "button" : "text"}
+                accessibilityLabel={[
+                  card.overline,
+                  card.title,
+                  card.subtitle,
+                  card.note,
+                ]
+                  .filter(Boolean)
+                  .join(". ")}
+                style={({ pressed }) => [
                   styles.cell,
                   isLeft ? styles.cellLeft : styles.cellRight,
+                  open && pressed && { opacity: press.opacity },
                 ]}
               >
-                <Pressable
-                  onPress={open}
-                  disabled={!open}
-                  accessibilityRole={open ? "button" : "text"}
-                  accessibilityLabel={[
-                    card.overline,
-                    card.title,
-                    card.subtitle,
-                    card.note,
-                  ]
-                    .filter(Boolean)
-                    .join(". ")}
-                  style={({ pressed }) => [
-                    open && pressed && { opacity: press.opacity },
-                  ]}
-                >
-                  <View style={styles.cardRule} />
-                  <View style={styles.copy}>
-                    {card.overline ? (
-                      <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
-                        {card.overline}
-                      </Text>
-                    ) : null}
+                <View style={styles.cardRule} />
+                <View style={styles.copy}>
+                  {card.overline ? (
+                    <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
+                      {card.overline}
+                    </Text>
+                  ) : null}
 
+                  <Text
+                    style={styles.title}
+                    numberOfLines={3}
+                    maxFontSizeMultiplier={1.15}
+                  >
+                    {card.title}
+                  </Text>
+
+                  {card.subtitle ? (
                     <Text
-                      style={styles.title}
+                      style={styles.venue}
+                      numberOfLines={2}
+                      maxFontSizeMultiplier={1.1}
+                    >
+                      {card.subtitle}
+                    </Text>
+                  ) : null}
+
+                  {card.note ? (
+                    <Text
+                      style={styles.bandit}
                       numberOfLines={3}
                       maxFontSizeMultiplier={1.15}
                     >
-                      {card.title}
+                      {card.note}
                     </Text>
-
-                    {card.subtitle ? (
-                      <Text
-                        style={styles.venue}
-                        numberOfLines={2}
-                        maxFontSizeMultiplier={1.1}
-                      >
-                        {card.subtitle}
-                      </Text>
-                    ) : null}
-
-                    {card.note ? (
-                      <Text
-                        style={styles.bandit}
-                        numberOfLines={3}
-                        maxFontSizeMultiplier={1.15}
-                      >
-                        {card.note}
-                      </Text>
-                    ) : null}
-                  </View>
-                </Pressable>
-                {card.actions && card.actions.length > 0 ? (
-                  <ArticleActionList
-                    actions={card.actions}
-                    variant="listing"
-                  />
-                ) : null}
-              </View>
+                  ) : null}
+                </View>
+              </Pressable>
             );
           })}
           {row.length === 1 ? <View style={styles.cell} /> : null}

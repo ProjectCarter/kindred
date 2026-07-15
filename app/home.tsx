@@ -1050,6 +1050,7 @@ export default function HomeScreen() {
         bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
         intelligence: intel,
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+        morningHero: intel.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
       };
       cachedBundleRef.current = bundle;
       void saveCachedEdition(bundle);
@@ -1737,6 +1738,7 @@ export default function HomeScreen() {
               memoryNote={intelligence?.memoryNote}
               morningOpening={intelligence?.morningOpening}
               morningBriefing={intelligence?.morningBriefing}
+              morningHero={intelligence?.morningHero}
               leadWhyThisMatters={intelligence?.leadWhyThisMatters}
               leadWhyChosen={intelligence?.leadWhyChosen}
               leadContinuityKicker={intelligence?.leadContinuityKicker}

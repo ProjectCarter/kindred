@@ -1,3 +1,5 @@
+import type { MorningHeroExperience } from "./heroArtwork/types";
+
 /**
  * Client mirror — Morning Edition AI contracts.
  * Generation runs at edition build; every future channel reads this payload.
@@ -65,6 +67,8 @@ export type MorningEditionPayload = {
     polishedWithAi: boolean;
     editorNotes: string[];
   };
+  /** Frozen daily public-domain hero — artwork + editorial paragraph. */
+  morningHero?: MorningHeroExperience | null;
 };
 
 /** Suggested length per delivery channel. */
@@ -82,6 +86,31 @@ export const CHANNEL_DEFAULT_LENGTH: Record<
   audio: "overview_3m",
   in_app: "briefing_60s",
 };
+
+export function parseMorningHeroExperience(
+  value: unknown
+): MorningHeroExperience | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<MorningHeroExperience>;
+  if (
+    !raw.artworkId ||
+    !raw.artworkTitle ||
+    !raw.artist ||
+    !raw.aboutArtworkBody?.trim()
+  ) {
+    return null;
+  }
+  return raw as MorningHeroExperience;
+}
+
+export function morningHeroFromEdition(
+  edition: { morning_edition?: unknown; morningEdition?: unknown } | null | undefined
+): MorningHeroExperience | null {
+  const payload = parseMorningEditionPayload(
+    edition?.morning_edition ?? edition?.morningEdition
+  );
+  return parseMorningHeroExperience(payload?.morningHero);
+}
 
 export function parseMorningEditionPayload(
   value: unknown

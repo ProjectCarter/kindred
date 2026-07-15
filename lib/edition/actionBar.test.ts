@@ -105,6 +105,74 @@ function npsParkItem(): DiscoveryItem {
 }
 
 describe("Universal Action Bar", () => {
+  it("Eventbrite event without tickets_required badge still surfaces Buy Tickets on article", () => {
+    const event: LocalEventCard = {
+      name: "Live Jazz at The Nash",
+      date: "Fri, Jul 17",
+      time: "8 PM",
+      venue: "The Nash",
+      city: "Phoenix",
+      sourceUrl: "https://www.eventbrite.com/e/live-jazz-at-the-nash-123456789",
+      sourceName: "Eventbrite",
+      lat: 33.4484,
+      lon: -112.074,
+    };
+    const actions = resolveEventArticleActions(event);
+    expect(actions.map((a) => a.label)).toEqual(["Open in Maps", "Buy Tickets"]);
+    expect(actions.some((a) => a.label === "Official Website")).toBe(false);
+
+    const article = articleFromLocalEvent(event);
+    const articleActions = resolveArticleContextActions(article);
+    expect(articleActions.map((a) => a.label)).toEqual([
+      "Open in Maps",
+      "Buy Tickets",
+    ]);
+  });
+
+  it("Eventbrite event with official venue website shows all three article actions", () => {
+    const event: LocalEventCard = {
+      name: "Live Jazz at The Nash",
+      date: "Fri, Jul 17",
+      time: "8 PM",
+      venue: "The Nash",
+      city: "Phoenix",
+      sourceUrl: "https://www.eventbrite.com/e/live-jazz-at-the-nash-123456789",
+      sourceName: "Eventbrite",
+      officialWebsite: "https://www.thenash.org/events",
+      lat: 33.4484,
+      lon: -112.074,
+    };
+    const actions = resolveEventArticleActions(event);
+    expect(actions.map((a) => a.label)).toEqual([
+      "Open in Maps",
+      "Official Website",
+      "Buy Tickets",
+    ]);
+    expect(actions.find((a) => a.id === "website")?.url).toBe(
+      "https://www.thenash.org/events"
+    );
+    expect(actions.find((a) => a.id === "buy_tickets")?.url).toContain(
+      "eventbrite.com"
+    );
+  });
+
+  it("free Eventbrite event without tickets_required badge surfaces Learn More", () => {
+    const event: LocalEventCard = {
+      name: "Community Open Mic",
+      date: "Sat, Jul 18",
+      time: "6 PM",
+      venue: "Gilbert Library",
+      city: "Gilbert",
+      sourceUrl: "https://www.eventbrite.com/e/community-open-mic-987654321",
+      sourceName: "Eventbrite",
+      badges: ["free"],
+      lat: 33.3528,
+      lon: -111.789,
+    };
+    const actions = resolveEventArticleActions(event);
+    expect(actions.map((a) => a.label)).toEqual(["Open in Maps", "Learn More"]);
+  });
+
   it("paid event article surfaces Open in Maps, Official Website, then Buy Tickets", () => {
     const event: LocalEventCard = {
       ...paidEvent(),

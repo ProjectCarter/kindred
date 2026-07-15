@@ -3,7 +3,7 @@
  */
 
 export const ABOUT_ARTWORK_WORD_MIN = 80;
-export const ABOUT_ARTWORK_WORD_MAX = 150;
+export const ABOUT_ARTWORK_WORD_MAX = 125;
 
 export function countWords(text: string): number {
   return text

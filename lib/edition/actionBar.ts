@@ -137,7 +137,6 @@ export function resolveEventArticleActions(
   const seen = new Set<string>();
   const badges = eventInfoBadgesFor(event);
   const isFree = badges.includes("free");
-  const ticketsRequired = badges.includes("tickets_required");
   const { ticketUrl, websiteUrl } = resolveEventSourceUrls(event);
 
   if (hasVerifiedEventLocation(event)) {
@@ -154,12 +153,12 @@ export function resolveEventArticleActions(
   const site = websiteAction(websiteUrl, "Official Website");
   if (site) pushUniqueUrl(out, site, seen);
 
-  if (ticketsRequired && !isFree && ticketUrl) {
+  if (ticketUrl) {
     pushUniqueUrl(
       out,
       {
-        id: "buy_tickets",
-        label: "Buy Tickets",
+        id: isFree ? "learn_more" : "buy_tickets",
+        label: isFree ? "Learn More" : "Buy Tickets",
         icon: "🎟",
         kind: "url",
         url: ticketUrl,

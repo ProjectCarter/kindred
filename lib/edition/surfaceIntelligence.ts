@@ -32,9 +32,11 @@ import {
 import {
   parseMorningEditionPayload,
   requestMorningBriefing,
+  morningHeroFromEdition,
   type MorningBriefing,
   type MorningEditionPayload,
 } from "./morningEdition";
+import type { MorningHeroExperience } from "./heroArtwork/types";
 import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
@@ -56,6 +58,8 @@ export type EditionIntelligence = {
   morning: MorningEditionPayload | null;
   morningOpening: MorningBriefing | null;
   morningBriefing: MorningBriefing | null;
+  /** Daily public-domain hero artwork + About Today's Artwork paragraph. */
+  morningHero: MorningHeroExperience | null;
   banditAside: string | null;
   /** Quiet continuity line from Memory — not a new section. */
   memoryNote: string | null;
@@ -92,6 +96,7 @@ export function parseEditionIntelligence(row: {
     { morning_edition: row.morning_edition },
     "briefing_60s"
   );
+  const morningHero = morningHeroFromEdition({ morning_edition: row.morning_edition });
 
   const weekly = banditWeeklyLine(bandit);
   const seasonal = banditSeasonalLine(bandit);
@@ -160,6 +165,7 @@ export function parseEditionIntelligence(row: {
     morning,
     morningOpening,
     morningBriefing,
+    morningHero,
     banditAside,
     memoryNote,
     discoveryItems,

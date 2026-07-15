@@ -55,10 +55,10 @@ import {
   isEditionFrozen,
 } from "../lib/edition/editionFreeze";
 import { resolveArticleHero } from "../lib/edition/articleHero";
-import { resolveArticleContextActions } from "../lib/edition/actionBar";
 import { onThisDayImageFromKnowledge } from "../lib/edition/historicalImages";
 import { historyYearLabel } from "../lib/edition/historyCard";
 import { MorningArrival } from "./MorningArrival";
+import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
 import { ActivitiesSection } from "./ActivitiesSection";
@@ -99,6 +99,7 @@ type Props = {
   readerLocation?: ReaderLocation | null;
   morningOpening?: MorningBriefing | null;
   morningBriefing?: MorningBriefing | null;
+  morningHero?: MorningHeroExperience | null;
   leadWhyThisMatters?: string | null;
   leadWhyChosen?: string | null;
   leadContinuityKicker?: string | null;
@@ -200,6 +201,7 @@ export function EditionReader({
   readerLocation,
   morningOpening,
   morningBriefing,
+  morningHero,
   leadWhyThisMatters,
   leadWhyChosen,
   leadContinuityKicker,
@@ -436,24 +438,6 @@ export function EditionReader({
     });
   }, [banditsPick]);
 
-  const banditsPickListingActions = useMemo(() => {
-    if (!banditsPickArticle) return [];
-    return resolveArticleContextActions(banditsPickArticle, {
-      fallbackCity: locationCity,
-    });
-  }, [banditsPickArticle, locationCity]);
-
-  const banditPickSideActions = useMemo(
-    () =>
-      banditPickSides.map((d) => {
-        const article = localBizArticlesById.get(d.item.id);
-        return article
-          ? resolveArticleContextActions(article, { fallbackCity: locationCity })
-          : [];
-      }),
-    [banditPickSides, localBizArticlesById, locationCity]
-  );
-
   const localTopStories = topStories.filter((s) =>
     /local/i.test(s.role ?? "")
   );
@@ -573,6 +557,7 @@ export function EditionReader({
         weatherBody={weather?.body ?? null}
         banditGreeting={banditGreeting}
         welcomeMessage={welcomeMessage}
+        morningHero={morningHero}
         mastheadTrailing={mastheadTrailing}
         mastheadScrollY={mastheadScrollY}
         heroContext={{
@@ -668,14 +653,12 @@ export function EditionReader({
                 banditsPick.kind === "article" && banditsPick.story.source
                   ? `by ${banditsPick.story.source}`
                   : "— Bandit",
-              actions: banditsPickListingActions,
             }}
-            sides={banditPickSides.map((d, i) => ({
+            sides={banditPickSides.map((d) => ({
               id: d.item.id,
               kicker: "Local",
               headline: d.item.title,
               byline: d.item.place?.city ?? d.item.source?.name ?? null,
-              actions: banditPickSideActions[i] ?? [],
             }))}
             onOpen={
               onOpenArticle

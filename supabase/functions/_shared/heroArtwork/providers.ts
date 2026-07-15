@@ -66,7 +66,7 @@ export function registerPlannedHeroArtworkProviders(): void {
     if (PROVIDER_REGISTRY.has(id)) continue;
     registerHeroArtworkProvider({
       id,
-      enabled: false,
+      enabled: id === "wikimedia",
       async fetchArtworkMetadata() {
         return null;
       },
