@@ -3,6 +3,7 @@
  */
 
 import { fetchNpsParks, isNpsConfigured } from "../../nps/npsProvider.ts";
+import { KINDRED_LOCAL_RADIUS_KM } from "../../editorial/editorialStandard.ts";
 import type { LocalEvent, LocalEventLocation } from "../provider.ts";
 import { inferEventCategory } from "../provider.ts";
 import { buildEventBadgeSignals, resolveEventBadges } from "../badgeResolver.ts";
@@ -26,14 +27,19 @@ export async function fetchNpsParkEvents(
     lon: location.lon,
     state: location.state ?? undefined,
     limit: 10,
-    radiusMiles: 120,
+    radiusMiles: 25,
   });
 
   const out: LocalEvent[] = [];
-  const city = location.city?.trim() || "Nearby";
+  const fallbackCity = location.city?.trim() || "Nearby";
 
   for (const park of parks) {
+    if (park.distanceKm != null && park.distanceKm > KINDRED_LOCAL_RADIUS_KM) continue;
     if (!park.events?.length) continue;
+    const eventCity =
+      park.fullName
+        .replace(/\s+(National Park|National Monument|National Historic Site).*$/i, "")
+        .trim() || fallbackCity;
     for (const event of park.events) {
       const name = event.title?.trim();
       if (!name || name.length < 4) continue;
@@ -62,7 +68,7 @@ export async function fetchNpsParkEvents(
         name,
         startDateTime,
         venue,
-        city,
+        city: eventCity,
         sourceUrl,
         sourceName: "National Park Service",
         sourceId: "nps_park_events",
@@ -79,7 +85,8 @@ export async function fetchNpsParkEvents(
   console.log("[localEvents:nps] gathered park events", {
     parkCount: parks.length,
     eventCount: out.length,
-    city,
+    readerCity: fallbackCity,
+    radiusKm: KINDRED_LOCAL_RADIUS_KM,
   });
 
   return out;

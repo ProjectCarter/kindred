@@ -5,6 +5,7 @@
 import type { LocalEvent, LocalEventLocation, LocalEventsFetchOptions } from "../provider.ts";
 import { fetchSerpGoogleEventCandidates } from "../provider.ts";
 import { fetchNpsParkEvents } from "./npsParkEvents.ts";
+import { fetchEventbriteSearchCandidates } from "./eventbriteSearch.ts";
 import type {
   LocalEventSourceConnector,
   LocalEventSourceId,
@@ -25,6 +26,13 @@ const CONNECTORS: LocalEventSourceConnector[] = [
     tier: "aggregator",
     trustScore: 62,
     fetch: fetchSerpGoogleEventCandidates,
+  },
+  {
+    id: "eventbrite",
+    label: "Eventbrite (via Google search)",
+    tier: "aggregator",
+    trustScore: 72,
+    fetch: fetchEventbriteSearchCandidates,
   },
 ];
 

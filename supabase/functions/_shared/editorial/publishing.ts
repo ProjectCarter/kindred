@@ -29,7 +29,7 @@ export const HOMEPAGE_INITIAL_RENDER_COUNT = 8;
 export const SERPAPI_MAX_PAGES = 3;
 
 /** Raw SerpAPI rows retained before dedupe/filter — provider retrieval. */
-export const SERPAPI_CANDIDATE_CAP = 80;
+export const SERPAPI_CANDIDATE_CAP = 200;
 
 export function meetsDiscoveryPublishThreshold(score: number): boolean {
   return score >= DISCOVERY_PUBLISH_MIN_SCORE;

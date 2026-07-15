@@ -1,0 +1,90 @@
+---
+description: Unified editorial standard — 30-day horizon, 25-mile local radius, editorial ranking
+globs:
+  - lib/edition/**/*.ts
+  - lib/edition/**/*.tsx
+  - supabase/functions/_shared/discovery/**/*.ts
+  - supabase/functions/_shared/localEvents/**/*.ts
+  - supabase/functions/_shared/bandit/**/*.ts
+  - supabase/functions/_shared/editorial/**/*.ts
+alwaysApply: false
+---
+
+# Kindred Editorial Standard
+
+Kindred is a **local daily newspaper**, not a "things to do today" app. Every
+discovery desk helps readers enjoy today, plan for this weekend, and discover
+worthwhile experiences over the **coming month**.
+
+## Editorial window (30 days)
+
+Local Events, Recommendations, Activities, and Bandit's Picks primarily
+surface content relevant within the **next 30 days**:
+
+- Happening Today
+- This Weekend
+- Next Weekend
+- Coming Soon (within 30 days)
+
+Rank by **editorial value**, not chronological order alone.
+
+## Local focus (25 miles)
+
+Default search area: **25-mile radius** from the reader. Do not expand the
+radius to fill sections. **Quality over quantity.**
+
+Applies to:
+
+- **Recommendations** — coffee, restaurants, bakeries, beaches, parks, museums,
+  scenic drives, gardens
+- **Activities** — activities desk + hiking + contextual participatory venues
+- **Local Events** — already horizon-filtered at fetch/allocate time
+- **Bandit's Pick** — seasonal moments + local events within the 30-day window
+
+Exclude statewide attractions (`nps_park`, `national_park`) from local desks.
+
+## Ranking priorities
+
+When uncertain, favor (in combination, not strict order):
+
+1. Local relevance
+2. Editorial quality
+3. Timeliness (within 30 days)
+4. Distance from the reader
+5. Seasonal relevance
+6. Overall usefulness
+
+Never sort like a directory or raw search results.
+
+## Content to surface
+
+Concerts, festivals, farmers markets, live music, comedy, theater, museum
+exhibits, community celebrations, sporting events, classes and workshops,
+family activities, outdoor experiences, food and drink, seasonal attractions,
+and limited-time local experiences.
+
+## Implementation
+
+| Concern | Location |
+| --- | --- |
+| Shared constants | `editorial/editorialStandard.ts`, `lib/edition/editorialStandard.ts` |
+| 25-mile scope | `discovery/localDiscoveryScope.ts`, `lib/edition/localDiscoveryScope.ts` |
+| Event horizon | `localEvents/horizon.ts`, `localEvents/horizonAllocator.ts` |
+| Discovery scoring | `discovery/score.ts` |
+| Section partition | `lib/edition/sectionAllocator.ts` |
+| Bandit's Pick | `bandit/selectPick.ts`, `bandit/timeliness.ts` |
+
+## Local Events discovery
+
+Discovery should be **comprehensive**; ranking should be **editorial**.
+
+| Concern | Location |
+| --- | --- |
+| Multi-strategy gather | `localEvents/searchStrategies.ts` |
+| Kindred Editorial Score | `localEvents/editorialScore.ts` |
+| Rank + allocate | `localEvents/ranking.ts`, `horizonAllocator.ts` |
+| Candidate cap | `SERPAPI_CANDIDATE_CAP = 200` (retrieval only) |
+
+Experiences (concerts, festivals, markets, comedy) rank above networking and
+ordinary business listings. Discover everything; publish what passes the
+editorial test.

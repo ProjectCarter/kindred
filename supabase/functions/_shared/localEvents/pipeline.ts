@@ -25,18 +25,23 @@ import { mergeEventsFromSources } from "./merge.ts";
 import { normalizeEvents } from "./normalize.ts";
 import { enrichEventImages } from "./enrichImages.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
-import { applyEventCategoryVariety } from "./variety.ts";
+import { allocateLocalEventsByHorizon } from "./horizonAllocator.ts";
+import { attachEventHorizon } from "./horizon.ts";
 
 export type LocalEventsPipelineMeta = {
   candidateCount: number;
   mergedCount: number;
   normalizedCount: number;
   imagesEnriched: number;
+  discoveredInHorizon: number;
+  scoredAboveThreshold: number;
   publishedCount: number;
   sourcesUsed: LocalEventSourceId[];
   sourceCounts: Record<string, number>;
   eventsWithImages: number;
   editorNotes: string[];
+  /** Validation — titles in the ranked pool before horizon allocation. */
+  rankedPoolTitles?: string[];
 };
 
 export type LocalEventsPipelineOptions = LocalEventsFetchOptions & {
@@ -78,13 +83,20 @@ export async function runLocalEventsPipeline(
   const withImages = await enrichEventImages(normalized);
   const imagesEnriched = withImages.filter((e) => Boolean(e.imageUrl?.trim())).length - beforeImages;
 
-  // 8. Rank + variety (badges already on records; summaries at edition build)
-  const ranked = rankLocalEventsForEdition(
-    withImages.slice(0, SERPAPI_CANDIDATE_CAP),
-    { now: options?.now, weatherIntel: options?.weatherIntel }
-  );
-  const varied = applyEventCategoryVariety(ranked, {
-    now: options?.now,
+  // 8. Rank within 30-day horizon, then allocate a balanced editorial mix.
+  const now = options?.now ?? new Date();
+  const inHorizon = withImages
+    .slice(0, SERPAPI_CANDIDATE_CAP)
+    .map((event) => attachEventHorizon(event, now))
+    .filter((event) => event.horizonBucket !== "beyond");
+
+  const ranked = rankLocalEventsForEdition(inHorizon, {
+    now,
+    weatherIntel: options?.weatherIntel,
+    readerCity: location.city,
+  });
+  const varied = allocateLocalEventsByHorizon(ranked, {
+    now,
     weatherIntel: options?.weatherIntel,
   });
 
@@ -102,7 +114,8 @@ export async function runLocalEventsPipeline(
   }
   editorNotes.push(
     `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
-      `${merged.length} after dedupe; ${varied.length} published.`
+      `${merged.length} after dedupe; ${inHorizon.length} within 30 days; ` +
+      `${ranked.length} scored above threshold; ${varied.length} published.`
   );
 
   const meta: LocalEventsPipelineMeta = {
@@ -110,10 +123,13 @@ export async function runLocalEventsPipeline(
     mergedCount: merged.length,
     normalizedCount: normalized.length,
     imagesEnriched: Math.max(0, imagesEnriched),
+    discoveredInHorizon: inHorizon.length,
+    scoredAboveThreshold: ranked.length,
     publishedCount: varied.length,
     sourcesUsed,
     sourceCounts,
     eventsWithImages: varied.filter((e) => Boolean(e.imageUrl?.trim())).length,
+    rankedPoolTitles: ranked.map((e) => e.name),
     editorNotes,
   };
 

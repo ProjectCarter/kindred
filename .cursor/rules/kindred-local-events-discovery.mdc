@@ -21,6 +21,15 @@ Eventbrite, Ticketmaster, AXS, Fever, and official venue websites.
 
 New connectors register in `sources/registry.ts`.
 
+## Editorial horizon
+
+Local Events covers the **next 30 days** — not just today. The desk aims for a
+balanced mix: Happening Today, This Weekend, Next Weekend, and Coming Soon.
+
+Orchestrator: `supabase/functions/_shared/localEvents/pipeline.ts`
+Horizon buckets: `localEvents/horizon.ts`
+Balanced allocation: `localEvents/horizonAllocator.ts`
+
 ## Editorial pipeline (every edition build)
 
 Orchestrator: `supabase/functions/_shared/localEvents/pipeline.ts`
@@ -32,7 +41,7 @@ Orchestrator: `supabase/functions/_shared/localEvents/pipeline.ts`
 5. **Authentic images** — provider photos first; Wikipedia venue art as fallback (`enrichImages.ts`)
 6. **Editorial summaries** — Bandit one-liners at edition build (`banditNotes.ts`)
 7. **Badges** — structured utility chips at parse time (`badgeResolver.ts`)
-8. **Rank + variety** — editorial score, weather-aware outdoor boost, max 2 per category (`ranking.ts`, `variety.ts`)
+8. **Rank + horizon mix** — editorial score across 30 days, balanced buckets, max 2 per category (`ranking.ts`, `horizonAllocator.ts`)
 9. **Publish** — quality threshold, not arbitrary caps (`editorial/publishing.ts`)
 
 ## Editorial ranking favors

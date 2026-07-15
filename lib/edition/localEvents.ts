@@ -7,9 +7,14 @@ import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
   LOCAL_EVENT_PUBLISH_MIN_SCORE,
   meetsLocalEventPublishThreshold,
-  sliceForInitialRender,
 } from "./editorialPublishing";
 import { isGenericEventTitle } from "./venueQuality";
+import {
+  allocateEventsForGrid,
+  parseEventStartDate,
+  resolveCardHorizon,
+  type EventHorizonBucket,
+} from "./eventHorizon";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -98,6 +103,10 @@ export type LocalEventCard = {
   category?: LocalEventCategory;
   /** Utility badges — structured metadata from the events provider. */
   badges?: EventInfoBadgeId[];
+  /** ISO start date when the edition stored one. */
+  startDateIso?: string | null;
+  /** Editorial horizon bucket — Today / This Weekend / etc. */
+  horizonBucket?: EventHorizonBucket | null;
 };
 
 export type LocalEventsBody = {
@@ -295,6 +304,17 @@ export function parseLocalEventsBody(
           banditNote,
           category,
           badges: badges.length ? badges : undefined,
+          startDateIso:
+            typeof e.startDateIso === "string" && e.startDateIso.trim()
+              ? e.startDateIso.trim()
+              : null,
+          horizonBucket:
+            typeof e.horizonBucket === "string" &&
+            ["today", "this_weekend", "next_weekend", "coming_soon"].includes(
+              e.horizonBucket
+            )
+              ? (e.horizonBucket as EventHorizonBucket)
+              : null,
         };
       });
 
@@ -322,27 +342,51 @@ export function parseLocalEventsBody(
 }
 
 /**
- * Rank every published local event — continuous editorial order, no category quotas.
+ * Rank every published local event — editorial value across the 30-day horizon.
  */
 export function orderEventsForEdition(events: LocalEventCard[]): LocalEventCard[] {
   const now = new Date();
   return events
-    .map((event) => ({ event, score: scoreEventForGrid(event, now) }))
-    .filter((row) => meetsLocalEventPublishThreshold(row.score))
-    .sort((a, b) => b.score - a.score)
+    .map((event) => ({
+      event,
+      bucket: resolveCardHorizon(event, now),
+      score: scoreEventForGrid(event, now),
+    }))
+    .filter(
+      (row) =>
+        row.bucket !== "beyond" && meetsLocalEventPublishThreshold(row.score)
+    )
+    .sort((a, b) => {
+      const bucketOrder: EventHorizonBucket[] = [
+        "today",
+        "this_weekend",
+        "next_weekend",
+        "coming_soon",
+        "beyond",
+      ];
+      const bucketDelta =
+        bucketOrder.indexOf(a.bucket) - bucketOrder.indexOf(b.bucket);
+      if (bucketDelta !== 0) return bucketDelta;
+      return b.score - a.score;
+    })
     .map((row) => row.event);
 }
 
 /**
- * Homepage grids pass `initialRenderCount` (default HOMEPAGE_INITIAL_RENDER_COUNT)
- * for first paint only — the stored edition retains every qualifying event.
+ * Homepage grid — balanced mix across the forward-looking buckets.
  */
 export function orderEventsForGrid(
   events: LocalEventCard[],
   initialRenderCount: number = HOMEPAGE_INITIAL_RENDER_COUNT
 ): LocalEventCard[] {
+  const now = new Date();
   const published = orderEventsForEdition(events);
-  return sliceForInitialRender(published, initialRenderCount);
+  return allocateEventsForGrid(
+    published,
+    initialRenderCount,
+    (event, bucket) => scoreEventForGrid(event, now, bucket),
+    now
+  );
 }
 
 /** @deprecated Use HOMEPAGE_INITIAL_RENDER_COUNT — rendering only */
@@ -350,11 +394,31 @@ export const LOCAL_EVENTS_GRID_LIMIT = HOMEPAGE_INITIAL_RENDER_COUNT;
 
 export { LOCAL_EVENT_PUBLISH_MIN_SCORE, HOMEPAGE_INITIAL_RENDER_COUNT };
 
-function scoreEventForGrid(event: LocalEventCard, now: Date): number {
+function scoreEventForGrid(
+  event: LocalEventCard,
+  now: Date,
+  horizonBucket?: EventHorizonBucket
+): number {
+  const bucket = horizonBucket ?? resolveCardHorizon(event, now);
   const schedule = `${event.date} ${event.time}`.trim().toLowerCase();
   let score = 0;
 
-  if (!schedule || schedule === "date tba" || schedule === "time tba") {
+  const parsed = parseEventStartDate(schedule, event.startDateIso, now);
+  if (parsed) {
+    const daysOut = Math.round(
+      (parsed.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
+        (24 * 60 * 60 * 1000)
+    );
+    if (daysOut < 0) score -= 20;
+    else if (daysOut === 0) score += 22;
+    else if (daysOut === 1) score += 18;
+    else if (daysOut <= 3) score += 14;
+    else if (daysOut <= 7) score += 11;
+    else if (daysOut <= 14) score += 8;
+    else if (daysOut <= 21) score += 5;
+    else if (daysOut <= 30) score += 3;
+    else score -= 20;
+  } else if (!schedule || schedule === "date tba" || schedule === "time tba") {
     score -= 8;
   } else if (/\btoday\b/.test(schedule)) {
     score += 22;
@@ -366,12 +430,32 @@ function scoreEventForGrid(event: LocalEventCard, now: Date): number {
     score += 6;
   }
 
+  switch (bucket) {
+    case "today":
+      score += 4;
+      break;
+    case "this_weekend":
+      score += 3;
+      break;
+    case "next_weekend":
+      score += 2;
+      break;
+    case "coming_soon":
+      score += 1;
+      break;
+    default:
+      break;
+  }
+
   if (event.sourceUrl?.trim()) score += 6;
   if (event.venue?.trim() && event.venue.trim() !== "Venue TBA") score += 4;
   if (event.city?.trim()) score += 2;
   if (isGenericEventTitle(event.name)) score -= 12;
   if (!event.venue?.trim() || event.venue.trim() === "Venue TBA") score -= 10;
   if (event.imageUrl?.trim()) score += 1;
+  if (/\b(festival|concert|farmers? market|comedy|theater|theatre|exhibit)\b/i.test(event.name)) {
+    score += 3;
+  }
   return score;
 }
 

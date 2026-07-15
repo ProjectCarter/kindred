@@ -5,8 +5,20 @@
 import {
   getLocalEvents,
   probeLocalEventsPipeline,
+  type LocalEvent,
   type LocalEventLocation,
 } from "../_shared/localEvents/provider.ts";
+import { runLocalEventsPipeline } from "../_shared/localEvents/pipeline.ts";
+import { fetchEventbriteSearchCandidates } from "../_shared/localEvents/sources/eventbriteSearch.ts";
+import { attachEventHorizon } from "../_shared/localEvents/horizon.ts";
+import {
+  computeKindredEventEditorialScore,
+} from "../_shared/localEvents/editorialScore.ts";
+import {
+  computeEventConfidence,
+  shouldPublishEditorialConfidence,
+} from "../_shared/editorial/confidence.ts";
+import { LOCAL_EVENT_PUBLISH_MIN_SCORE } from "../_shared/editorial/publishing.ts";
 import { refreshEventsSection } from "../_shared/liveRefresh.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { isUsHolidayOrEve } from "../_shared/calendar/holidays.ts";
@@ -53,13 +65,71 @@ Deno.serve(async (req) => {
     const isBusyDay =
       dow === 0 || dow === 6 || isUsHolidayOrEve(dateObj);
 
-    const [probe, productionEvents] = await Promise.all([
+    const [probe, productionEvents, pipeline, eventbriteRaw] = await Promise.all([
       probeLocalEventsPipeline(location, {
         isBusyDay,
         htichips: body.htichips,
       }),
-      getLocalEvents(location, { isBusyDay }),
+      getLocalEvents(location, { isBusyDay, now: dateObj }),
+      runLocalEventsPipeline(location, { isBusyDay, now: dateObj }),
+      fetchEventbriteSearchCandidates(location),
     ]);
+
+    const summarize = (events: LocalEvent[]) =>
+      events.map((e) => ({
+        name: e.name,
+        startDateTime: e.startDateTime,
+        startDateIso: e.startDateIso ?? null,
+        venue: e.venue,
+        city: e.city,
+        category: e.category ?? null,
+        horizonBucket: e.horizonBucket ?? null,
+        editorialScore: e.editorialScore?.total ?? null,
+        sourceName: e.sourceName,
+      }));
+
+    const diagnoseEvent = (event: LocalEvent) => {
+      const withHorizon = attachEventHorizon(event, dateObj);
+      const score = computeKindredEventEditorialScore(withHorizon, {
+        now: dateObj,
+        horizonBucket: withHorizon.horizonBucket,
+        readerCity: location.city,
+      });
+      const confidence = computeEventConfidence(withHorizon);
+      const exclusionReasons: string[] = [];
+
+      if (withHorizon.horizonBucket === "beyond") {
+        exclusionReasons.push("date_beyond_30_day_horizon");
+      }
+      if (score.total < LOCAL_EVENT_PUBLISH_MIN_SCORE) {
+        exclusionReasons.push(
+          `editorial_score_below_threshold (${score.total} < ${LOCAL_EVENT_PUBLISH_MIN_SCORE})`
+        );
+      }
+      if (!shouldPublishEditorialConfidence(confidence)) {
+        exclusionReasons.push(`confidence_gate_${confidence.action}`);
+      }
+
+      const rankedMatch = (pipeline.meta.rankedPoolTitles ?? []).some(
+        (title) => title.toLowerCase() === withHorizon.name.toLowerCase()
+      );
+      const publishedMatch = productionEvents.some(
+        (e) => e.name.toLowerCase() === withHorizon.name.toLowerCase()
+      );
+
+      if (rankedMatch && !publishedMatch) {
+        exclusionReasons.push("ranking_allocation_category_or_bucket_cap");
+      }
+
+      return {
+        ...summarize([withHorizon])[0],
+        editorialScore: score.total,
+        confidenceAction: confidence.action,
+        qualified: rankedMatch,
+        published: publishedMatch,
+        exclusionReasons,
+      };
+    };
 
     let backfill: { ok: boolean; changed: boolean; count: number; error?: string } | null =
       null;
@@ -82,7 +152,14 @@ Deno.serve(async (req) => {
       editionDate,
       isBusyDay,
       probe,
+      pipeline: pipeline.meta,
       productionEventCount: productionEvents.length,
+      publishedEvents: summarize(productionEvents),
+      discoveredEvents: summarize(pipeline.events),
+      rankedPool: pipeline.meta.rankedPoolTitles ?? [],
+      eventbriteDiscovered: summarize(eventbriteRaw),
+      eventbriteWithDates: eventbriteRaw.filter((e) => e.startDateIso).length,
+      eventbriteDiagnostics: eventbriteRaw.map(diagnoseEvent),
       backfill,
     });
   } catch (err) {

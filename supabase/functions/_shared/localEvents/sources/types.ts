@@ -82,7 +82,7 @@ export const TRUSTED_EVENT_SOURCE_NETWORK: TrustedEventSource[] = [
   { id: "historic_district", label: "Historic districts", tier: "official", trustScore: 77, active: false },
   { id: "nonprofit", label: "Local nonprofit organizations", tier: "official", trustScore: 76, active: false },
   { id: "venue_website", label: "Official venue websites", tier: "venue", trustScore: 88, active: false },
-  { id: "eventbrite", label: "Eventbrite", tier: "aggregator", trustScore: 72, active: false },
+  { id: "eventbrite", label: "Eventbrite", tier: "aggregator", trustScore: 72, active: true },
   { id: "ticketmaster", label: "Ticketmaster", tier: "aggregator", trustScore: 70, active: false },
   { id: "axs", label: "AXS", tier: "aggregator", trustScore: 68, active: false },
   { id: "fever", label: "Fever", tier: "aggregator", trustScore: 65, active: false },

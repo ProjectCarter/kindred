@@ -17,6 +17,8 @@ import {
   SERPAPI_CANDIDATE_CAP,
   SERPAPI_MAX_PAGES,
 } from "../editorial/publishing.ts";
+import { attachEventHorizon } from "./horizon.ts";
+import { buildEditorialDiscoveryStrategies } from "./searchStrategies.ts";
 
 export type LocalEventLocation = {
   lat: number;
@@ -41,6 +43,10 @@ export type LocalEventCategory =
 export type LocalEvent = {
   name: string;
   startDateTime: string;
+  /** Parsed ISO date (YYYY-MM-DD) when the provider supplies or we can infer one. */
+  startDateIso?: string | null;
+  /** Editorial time bucket for the 30-day horizon — set during ranking. */
+  horizonBucket?: import("./horizon.ts").EventHorizonBucket | null;
   venue: string;
   city: string;
   sourceUrl: string;
@@ -59,6 +65,11 @@ export type LocalEvent = {
   sourceId?: string;
   /** Trust tier for merge priority and ranking. */
   sourceTier?: "official" | "venue" | "aggregator";
+  /** Provider venue rating when available — popularity signal only. */
+  venueRating?: number | null;
+  venueReviewCount?: number | null;
+  /** Internal editorial score breakdown — optional, not required on client. */
+  editorialScore?: import("./editorialScore.ts").KindredEventEditorialScore;
   /** Server-only parse context for badge re-resolution — never serialized. */
   badgeSignals?: EventBadgeSignals;
 };
@@ -113,8 +124,27 @@ export function inferEventCategory(
   ) {
     return "food";
   }
-  if (/\b(market|craft fair|flea market|pop-?up shop|bazaar|vendor)\b/.test(hay)) {
+  if (/\b(car show|auto show|cruise night|car meet|classic car)\b/.test(hay)) {
+    return "community";
+  }
+  if (/\b(strongman|wrestling|mma|boxing|powerlifting)\b/.test(hay)) {
+    return "sports";
+  }
+  if (/\b(night market|street fair|block party|food truck festival)\b/.test(hay)) {
     return "market";
+  }
+  if (/\b(charity|fundraiser|benefit run|walk for)\b/.test(hay)) {
+    return "community";
+  }
+  if (
+    /\b(holiday|christmas|halloween|fourth of july|memorial day|labor day|tree lighting)\b/.test(
+      hay
+    )
+  ) {
+    return "community";
+  }
+  if (/\b(workshop|class(es)?|seminar|lecture)\b/.test(hay)) {
+    return "arts";
   }
   if (/\b(club\b|nightlife|happy hour|late night)\b/.test(hay)) {
     return "nightlife";
@@ -327,7 +357,7 @@ export async function probeLocalEventsPipeline(
     apiKeyPresent: Boolean(apiKey),
     cityQuery,
     location,
-    dateRange: "htichips=date:week",
+    dateRange: "htichips=date:month",
     pages: [],
     rawEventsTotal: 0,
     parse: {
@@ -455,10 +485,19 @@ const SERP_EMPTY_RETRIES = 2;
 type EventsPageStrategy = {
   cityQuery: string;
   htichips: string | null;
+  searchQuery?: string;
+  strategyId?: string;
+  maxPages?: number;
 };
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeStartDateIso(raw?: string | null): string | null {
+  if (!raw?.trim()) return null;
+  const match = raw.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? null;
 }
 
 function buildPageStrategies(
@@ -466,13 +505,14 @@ function buildPageStrategies(
   location: LocalEventLocation
 ): EventsPageStrategy[] {
   const strategies: EventsPageStrategy[] = [
+    { cityQuery, htichips: "date:month" },
     { cityQuery, htichips: "date:week" },
   ];
   const state = location.state?.trim();
   if (state && !cityQuery.toLowerCase().includes(state.toLowerCase())) {
     strategies.push({
       cityQuery: `${cityQuery}, ${state}`,
-      htichips: "date:week",
+      htichips: "date:month",
     });
   }
   strategies.push({ cityQuery, htichips: null });
@@ -492,7 +532,7 @@ async function fetchEventsPageOnce(
 }> {
   const params = new URLSearchParams({
     engine: "google_events",
-    q: `Events in ${strategy.cityQuery}`,
+    q: strategy.searchQuery ?? `Events in ${strategy.cityQuery}`,
     api_key: apiKey,
     hl: "en",
     gl: "us",
@@ -732,6 +772,7 @@ function parseCandidatesWithStats(
       event.date?.when?.trim() ||
       event.date?.start_date?.trim() ||
       "Time TBA";
+    const startDateIso = normalizeStartDateIso(event.date?.start_date);
 
     const venue =
       event.venue?.name?.trim() ||
@@ -803,6 +844,7 @@ function parseCandidatesWithStats(
     candidates.push({
       name,
       startDateTime,
+      startDateIso,
       venue,
       city: displayCity,
       sourceUrl,
@@ -814,6 +856,8 @@ function parseCandidatesWithStats(
       category,
       badges: badges.length ? badges : undefined,
       badgeSignals,
+      venueRating: event.venue?.rating ?? null,
+      venueReviewCount: event.venue?.reviews ?? null,
     });
 
     if (candidates.length >= CANDIDATE_CAP) break;
@@ -856,43 +900,75 @@ async function fetchLocalEventsFromSerpApi(
     return [];
   }
 
-  const firstPage = await fetchEventsPageWithRecovery(
-    cityQuery,
-    apiKey,
-    0,
-    location
-  );
-  let rawEvents = firstPage.rawEvents;
-  const activeStrategy = firstPage.strategy;
-  let candidates = dedupeEvents(parseCandidates(rawEvents, cityQuery));
-
-  // A quiet town's first page can easily fall short of the target — only
-  // pay for a second page when we actually need more material.
-  let pagesFetched = 1;
-  const targetCandidates = targetCandidateCount(options?.isBusyDay);
-  while (
-    candidates.length < targetCandidates &&
-    rawEvents.length >= RESULTS_PER_PAGE &&
-    pagesFetched < MAX_PAGES &&
-    activeStrategy
-  ) {
-    const nextPage = await fetchEventsPage(
+  const discoveryStrategies = buildEditorialDiscoveryStrategies(location).map(
+    (strategy) => ({
       cityQuery,
-      apiKey,
-      pagesFetched * RESULTS_PER_PAGE,
-      location,
-      activeStrategy
+      htichips: strategy.htichips,
+      searchQuery: strategy.searchQuery,
+      strategyId: strategy.id,
+      maxPages: strategy.maxPages,
+    })
+  );
+
+  const strategyResults: Array<{ id: string; count: number }> = [];
+  let candidates: LocalEvent[] = [];
+
+  // Run strategies in small batches to balance breadth vs API cost.
+  const BATCH_SIZE = 4;
+  for (let i = 0; i < discoveryStrategies.length; i += BATCH_SIZE) {
+    const batch = discoveryStrategies.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async (strategy) => {
+        const firstPage = await fetchEventsPageWithRecovery(
+          cityQuery,
+          apiKey,
+          0,
+          location,
+          strategy
+        );
+        let strategyCandidates = parseCandidates(firstPage.rawEvents, cityQuery);
+        const activeStrategy = firstPage.strategy ?? strategy;
+        const maxPages = strategy.maxPages ?? 1;
+
+        let pagesFetched = 1;
+        let rawEvents = firstPage.rawEvents;
+        while (
+          pagesFetched < maxPages &&
+          rawEvents.length >= RESULTS_PER_PAGE &&
+          pagesFetched < MAX_PAGES
+        ) {
+          const nextPage = await fetchEventsPage(
+            cityQuery,
+            apiKey,
+            pagesFetched * RESULTS_PER_PAGE,
+            location,
+            activeStrategy
+          );
+          pagesFetched += 1;
+          if (!nextPage.length) break;
+          rawEvents = nextPage;
+          strategyCandidates = dedupeEvents([
+            ...strategyCandidates,
+            ...parseCandidates(nextPage, cityQuery),
+          ]);
+        }
+
+        return {
+          id: strategy.strategyId ?? "unknown",
+          count: strategyCandidates.length,
+          candidates: strategyCandidates,
+        };
+      })
     );
-    pagesFetched += 1;
-    if (!nextPage.length) break;
-    rawEvents = nextPage;
-    candidates = dedupeEvents([
-      ...candidates,
-      ...parseCandidates(nextPage, cityQuery),
-    ]);
+
+    for (const result of batchResults) {
+      strategyResults.push({ id: result.id, count: result.count });
+      candidates = dedupeEvents([...candidates, ...result.candidates]);
+      if (candidates.length >= CANDIDATE_CAP) break;
+    }
+    if (candidates.length >= CANDIDATE_CAP) break;
   }
 
-  // Return candidates — cross-source merge and final rank happen in pipeline.ts.
   console.log("[localEvents] serp gather complete", {
     provider: "SerpApi Google Events",
     cityQuery,
@@ -900,18 +976,9 @@ async function fetchLocalEventsFromSerpApi(
     region: location.region ?? null,
     lat: location.lat,
     lon: location.lon,
-    dateRange: activeStrategy?.htichips
-      ? `htichips=${activeStrategy.htichips}`
-      : "htichips=none",
-    searchRadius: "city_query_inclusive",
-    serpCityQuery: activeStrategy?.cityQuery ?? cityQuery,
-    recoveryUsed: Boolean(
-      activeStrategy &&
-        (activeStrategy.cityQuery !== cityQuery ||
-          activeStrategy.htichips !== "date:week")
-    ),
-    pagesFetched,
-    targetCandidates,
+    searchRadius: "city_query_inclusive_metro",
+    strategiesRun: strategyResults.length,
+    strategyCounts: strategyResults,
     candidateCap: CANDIDATE_CAP,
     candidateCount: candidates.length,
     eventsWithImages: candidates.filter((e) => Boolean(e.imageUrl)).length,
@@ -984,42 +1051,45 @@ export function splitEventSchedule(startDateTime: string): {
 export function buildLocalEventsBody(events: LocalEvent[]): string {
   return JSON.stringify({
     events: events.map((e) => {
-      const { date, time } = splitEventSchedule(e.startDateTime);
-      const category = e.category ?? inferEventCategory(e.name, e.venue);
+      const enriched = attachEventHorizon(e);
+      const { date, time } = splitEventSchedule(enriched.startDateTime);
+      const category = enriched.category ?? inferEventCategory(enriched.name, enriched.venue);
       const badges =
-        e.badges ??
-        (e.badgeSignals
+        enriched.badges ??
+        (enriched.badgeSignals
           ? resolveEventBadges({
-              ...e.badgeSignals,
+              ...enriched.badgeSignals,
               aiHints: {
-                ...e.badgeSignals.aiHints,
-                ...(e.banditNote
-                  ? extractAiHintsFromBanditNote(e.banditNote)
+                ...enriched.badgeSignals.aiHints,
+                ...(enriched.banditNote
+                  ? extractAiHintsFromBanditNote(enriched.banditNote)
                   : {}),
               },
             })
           : resolveEventBadges(
               buildEventBadgeSignals({
-                name: e.name,
-                venue: e.venue,
+                name: enriched.name,
+                venue: enriched.venue,
                 date,
                 time,
                 category,
-                banditNote: e.banditNote ?? null,
+                banditNote: enriched.banditNote ?? null,
               })
             ));
       return {
-        name: e.name,
+        name: enriched.name,
         date,
         time,
-        venue: e.venue,
-        city: e.city,
-        sourceUrl: e.sourceUrl,
-        sourceName: e.sourceName,
-        imageUrl: e.imageUrl?.trim() || null,
-        imageSource: e.imageUrl ? e.imageSource ?? "provider_thumbnail" : null,
-        banditNote: e.banditNote?.trim() || null,
+        venue: enriched.venue,
+        city: enriched.city,
+        sourceUrl: enriched.sourceUrl,
+        sourceName: enriched.sourceName,
+        imageUrl: enriched.imageUrl?.trim() || null,
+        imageSource: enriched.imageUrl ? enriched.imageSource ?? "provider_thumbnail" : null,
+        banditNote: enriched.banditNote?.trim() || null,
         category,
+        startDateIso: enriched.startDateIso ?? null,
+        horizonBucket: enriched.horizonBucket ?? null,
         ...(badges.length ? { badges } : {}),
       };
     }),
