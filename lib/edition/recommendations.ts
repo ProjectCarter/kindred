@@ -68,7 +68,7 @@ export function recommendationCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category] ?? category.replace(/_/g, " ");
 }
 
-function recommendationImageFor(
+export function recommendationImageFor(
   item: RankedDiscoveryItem["item"]
 ): ImageSourcePropType | null {
   const pool = CATEGORY_PHOTOS[item.category] ?? FALLBACK_PHOTOS;
