@@ -1,16 +1,14 @@
 import {
-  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import {
   orderEventsForGrid,
   orderEventsForEdition,
-  authorizedEventImageUrl,
   HOMEPAGE_INITIAL_RENDER_COUNT,
+  eventCategoryLabel,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
 import {
@@ -42,8 +40,7 @@ type Props = {
 
 /**
  * Local Events — Monocle-inspired editorial grid.
- * Equal two-column modules, photography-led, thin rules, magazine air.
- * Sharp corners only — no shadows, pills, or button chrome.
+ * Equal two-column modules, typography-first, thin rules, magazine air.
  */
 export function LocalEventsGrid({
   events,
@@ -53,12 +50,6 @@ export function LocalEventsGrid({
   showBanditWhenEmpty = false,
   loadStatus = "ready",
 }: Props) {
-  const { width } = useWindowDimensions();
-  /** Page column inside home’s 28px folio padding. */
-  const pageW = width - 56;
-  const halfGap = 12;
-  const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
-  const photoH = Math.round(colInner * 1.2);
   /** See All passes the full persisted list — keep server editorial order. */
   const usePersistedOrder =
     events.length > 0 && initialRenderCount >= events.length;
@@ -130,18 +121,26 @@ export function LocalEventsGrid({
         >
           {row.map((event, colIndex) => {
             const index = rowIndex * 2 + colIndex;
+            const category = eventCategoryLabel(event.category);
             const badge = deriveEventBadge(event);
             const infoBadges = eventInfoBadgesFor(event);
-            const venue = event.venue?.trim() || eventPlaceLine(event);
+            const venue = event.venue?.trim() || null;
+            const addressLine =
+              event.city?.trim() &&
+              venue &&
+              !venue.toLowerCase().includes(event.city.trim().toLowerCase())
+                ? event.city.trim()
+                : event.city?.trim() && !venue
+                  ? event.city.trim()
+                  : null;
             const timeLine =
               event.time && event.time !== "Time TBA"
                 ? event.time
                 : event.date !== "Date TBA"
                   ? event.date
                   : null;
-            const overline = [badge, timeLine].filter(Boolean).join("  ·  ");
+            const overline = [category, badge, timeLine].filter(Boolean).join("  ·  ");
             const note = event.banditNote?.trim() || null;
-            const photoUri = authorizedEventImageUrl(event);
             const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
             const isLeft = colIndex === 0;
 
@@ -153,8 +152,10 @@ export function LocalEventsGrid({
                 accessibilityRole={open ? "button" : "text"}
                 accessibilityLabel={[
                   event.name,
+                  category,
                   timeLine,
                   venue,
+                  addressLine,
                   note,
                   badge,
                   infoBadges.length
@@ -169,18 +170,8 @@ export function LocalEventsGrid({
                   open && pressed && { opacity: press.opacity },
                 ]}
               >
-                {photoUri ? (
-                  <View style={styles.photoFrame}>
-                    <Image
-                      source={{ uri: photoUri }}
-                      style={{ width: "100%", height: photoH }}
-                      resizeMode="cover"
-                      accessibilityLabel={event.name}
-                    />
-                  </View>
-                ) : null}
-
-                <View style={[styles.copy, !photoUri && styles.copyNoPhoto]}>
+                <View style={styles.cardRule} />
+                <View style={styles.copy}>
                   {overline ? (
                     <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
                       {overline}
@@ -207,6 +198,24 @@ export function LocalEventsGrid({
                       maxFontSizeMultiplier={1.1}
                     >
                       {venue}
+                    </Text>
+                  ) : null}
+
+                  {addressLine ? (
+                    <Text
+                      style={styles.address}
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={1.1}
+                    >
+                      {addressLine}
+                    </Text>
+                  ) : !venue ? (
+                    <Text
+                      style={styles.venue}
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={1.1}
+                    >
+                      {eventPlaceLine(event)}
                     </Text>
                   ) : null}
 
@@ -313,15 +322,13 @@ const styles = StyleSheet.create({
   cellRight: {
     paddingLeft: 12,
   },
-  photoFrame: {
-    overflow: "hidden",
-    backgroundColor: paper.creamDeep,
-    width: "100%",
+  cardRule: {
+    height: 2,
+    backgroundColor: paper.terracotta,
+    opacity: 0.35,
+    marginBottom: 14,
   },
   copy: {
-    paddingTop: 16,
-  },
-  copyNoPhoto: {
     paddingTop: 0,
   },
   overline: {
@@ -349,6 +356,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     letterSpacing: 0.15,
     color: paper.inkMuted,
+    marginBottom: 4,
+  },
+  address: {
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 0.1,
+    color: paper.inkFaint,
     marginBottom: 12,
   },
   bandit: {

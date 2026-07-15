@@ -1,13 +1,11 @@
 import { useMemo } from "react";
 import {
-  Image,
   Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -17,7 +15,6 @@ import {
   eventPlaceLine,
   getStashedEvent,
 } from "../../lib/edition/eventStore";
-import { authorizedEventImageUrl } from "../../lib/edition/localEvents";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
@@ -25,7 +22,7 @@ import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen"
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
- * Full Local Event page — photography first, logistics clear, external listing available.
+ * Full Local Event page — typography-first listing, logistics clear.
  */
 export default function EventDetailScreen() {
   const { id, backLabel } = useLocalSearchParams<{
@@ -33,7 +30,6 @@ export default function EventDetailScreen() {
     backLabel?: string;
   }>();
   const router = useRouter();
-  const { width } = useWindowDimensions();
 
   const eventId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
   const event = useMemo(
@@ -61,7 +57,6 @@ export default function EventDetailScreen() {
   const badge = event ? deriveEventBadge(event) : null;
   const infoBadges = event ? eventInfoBadgesFor(event) : [];
   const place = event ? eventPlaceLine(event) : "";
-  const photoH = Math.round(Math.min(width * 0.85, 420));
 
   if (!event) {
     return (
@@ -74,8 +69,6 @@ export default function EventDetailScreen() {
       </SafeAreaView>
     );
   }
-
-  const photoUri = authorizedEventImageUrl(event);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -94,16 +87,9 @@ export default function EventDetailScreen() {
           <Text style={styles.back}>{back}</Text>
         </Pressable>
 
-        {photoUri ? (
-          <Image
-            source={{ uri: photoUri }}
-            style={{ width, height: photoH, marginLeft: -24 }}
-            resizeMode="cover"
-            accessibilityLabel={event.name}
-          />
-        ) : null}
+        <View style={styles.leadRule} />
 
-        <View style={[styles.body, !photoUri && styles.bodyNoPhoto]}>
+        <View style={styles.body}>
           {badge ? (
             <Text style={styles.badge} maxFontSizeMultiplier={1.2}>
               {badge}
@@ -182,12 +168,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 24,
   },
+  leadRule: {
+    height: 2,
+    backgroundColor: paper.terracotta,
+    opacity: 0.35,
+    marginHorizontal: 24,
+    marginBottom: 8,
+  },
   body: {
     paddingHorizontal: 24,
-    paddingTop: 28,
-  },
-  bodyNoPhoto: {
-    paddingTop: 8,
+    paddingTop: 20,
   },
   badge: {
     alignSelf: "flex-start",

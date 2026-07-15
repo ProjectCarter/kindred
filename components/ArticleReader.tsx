@@ -25,6 +25,7 @@ import {
   formatArticlePublishedAt,
   isKindredBriefing,
 } from "../lib/edition/article";
+import { isV1TextOnlyListing } from "../lib/edition/v1ImagePolicy";
 import {
   getArticleCompanion,
   type ArticleCompanion,
@@ -128,6 +129,7 @@ export function ArticleReader({
   const restoredScroll = useRef(false);
 
   const briefing = isKindredBriefing(article);
+  const textOnlyListing = isV1TextOnlyListing(article);
 
   const handleBack = useCallback(() => {
     updateArticleSessionScroll(article.id, scrollYRef.current);
@@ -707,35 +709,41 @@ export function ArticleReader({
             />
           </View>
 
-          {/* 1. Full-width hero */}
-          <HeroFigure
-            article={article}
-            windowWidth={windowWidth}
-            heroFailed={heroFailed}
-            heroReady={heroReady}
-            heroOpacity={heroOpacity}
-            editorialFallback={editorialFallback}
-            onReady={() => setHeroReady(true)}
-            onWireError={() => {
-              const heroUri = article.heroImage?.uri?.trim();
-              if (!heroUri) {
-                setHeroReady(true);
-                return;
-              }
-              if (
-                article.section === "bandits_pick" ||
-                article.section === "discovery" ||
-                article.section === "local_events" ||
-                article.savedContentType
-              ) {
-                setHeroFailed(true);
-                setEditorialFallback(null);
-                setHeroReady(true);
-                return;
-              }
-              swapInEditorialHero();
-            }}
-          />
+          {/* 1. Hero — omitted for V1 text-only listing desks */}
+          {textOnlyListing ? (
+            <View style={styles.textOnlyLead}>
+              <View style={styles.textOnlyRule} />
+            </View>
+          ) : (
+            <HeroFigure
+              article={article}
+              windowWidth={windowWidth}
+              heroFailed={heroFailed}
+              heroReady={heroReady}
+              heroOpacity={heroOpacity}
+              editorialFallback={editorialFallback}
+              onReady={() => setHeroReady(true)}
+              onWireError={() => {
+                const heroUri = article.heroImage?.uri?.trim();
+                if (!heroUri) {
+                  setHeroReady(true);
+                  return;
+                }
+                if (
+                  article.section === "bandits_pick" ||
+                  article.section === "discovery" ||
+                  article.section === "local_events" ||
+                  article.savedContentType
+                ) {
+                  setHeroFailed(true);
+                  setEditorialFallback(null);
+                  setHeroReady(true);
+                  return;
+                }
+                swapInEditorialHero();
+              }}
+            />
+          )}
 
           <View style={[styles.column, { width: readingWidth }]}>
             {/* 1b. Pin (save) + Like (private taste signal) + Share — first interaction under the hero */}
@@ -839,7 +847,7 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {article.section !== "bandits_pick" && articleContextActions.length > 0 ? (
+            {articleContextActions.length > 0 ? (
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
@@ -962,10 +970,6 @@ export function ArticleReader({
                   {article.closingBanditNote}
                 </Text>
               </View>
-            ) : null}
-
-            {article.section === "bandits_pick" && articleContextActions.length > 0 ? (
-              <ArticleActionList actions={articleContextActions} />
             ) : null}
 
             <View style={styles.colophon}>
@@ -1544,6 +1548,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
     marginHorizontal: reader.gutter,
+  },
+  textOnlyLead: {
+    width: "100%",
+    paddingHorizontal: reader.gutter,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  textOnlyRule: {
+    height: 2,
+    backgroundColor: paper.terracotta,
+    opacity: 0.35,
+    alignSelf: "stretch",
   },
   inlineFigure: {
     marginTop: 8,

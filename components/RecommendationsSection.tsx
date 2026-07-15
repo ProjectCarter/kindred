@@ -55,8 +55,6 @@ export function RecommendationsSection({
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} recommendations`}
       emptyCopy="Nothing new to recommend nearby this month — check back tomorrow."
-      fallbackIcon="mappin.and.ellipse"
-      fallbackIconIonicon="location-outline"
       onOpenCard={
         onOpenItem
           ? (card) => {

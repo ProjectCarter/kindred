@@ -1,22 +1,16 @@
 import {
-  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
-  type ImageSourcePropType,
 } from "react-native";
-import { SymbolView, type SFSymbol } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { HOMEPAGE_INITIAL_RENDER_COUNT, sliceForInitialRender } from "../lib/edition/editorialPublishing";
 import { BanditCharacter } from "./BanditCharacter";
 
 export type EditorialGridCard = {
   id: string;
-  /** Bundled category photography — Activities/Recommendations never carry a provider photo. */
-  image?: ImageSourcePropType | null;
   /** Small caps meta line above the title (category, distance, price tier…). */
   overline?: string | null;
   title: string;
@@ -39,8 +33,6 @@ type Props = {
   /** e.g. (n) => `See all ${n} activities` */
   seeAllLabel?: (total: number) => string;
   emptyCopy?: string;
-  fallbackIcon?: SFSymbol;
-  fallbackIconIonicon?: keyof typeof Ionicons.glyphMap;
   /**
    * Shows Bandit (resting, no newspaper — "nothing more to deliver") beside
    * the empty message. Reserved for the dedicated "See all" list screens so
@@ -50,12 +42,9 @@ type Props = {
 };
 
 /**
- * Shared editorial grid — the same equal two-column, photography-led
- * module as Local Events, generalized so Activities and Recommendations
- * share its exact layout, spacing, and "See More" rhythm. Local Events
- * itself keeps its own component (event-specific badges/venue parsing);
- * this is the pattern the other two desks reuse, kept visually identical
- * on purpose so the front page reads as one paper, not three feeds.
+ * Shared editorial grid — equal two-column, typography-first listings for
+ * Activities and Recommendations. Same rhythm as Local Events: thin rules,
+ * magazine air, no listing photography.
  */
 export function EditorialCardGrid({
   kicker,
@@ -66,16 +55,9 @@ export function EditorialCardGrid({
   onSeeAll,
   seeAllLabel,
   emptyCopy = "Nothing new to surface here today — check back tomorrow.",
-  fallbackIcon = "square.grid.2x2",
-  fallbackIconIonicon = "grid-outline",
   showBanditWhenEmpty = false,
 }: Props) {
   const { width } = useWindowDimensions();
-  /** Page column inside home’s 28px folio padding. */
-  const pageW = width - 56;
-  const halfGap = 12;
-  const colInner = Math.floor((pageW - halfGap * 2 - StyleSheet.hairlineWidth) / 2);
-  const photoH = Math.round(colInner * 1.2);
   const completeCards = cards.filter((card) => Boolean(card.title?.trim()));
   const renderCount =
     initialRenderCount ??
@@ -157,35 +139,7 @@ export function EditorialCardGrid({
                   open && pressed && { opacity: press.opacity },
                 ]}
               >
-                <View style={styles.photoFrame}>
-                  {card.image ? (
-                    <Image
-                      source={card.image}
-                      style={{ width: "100%", height: photoH }}
-                      resizeMode="cover"
-                      accessibilityLabel={card.title}
-                    />
-                  ) : (
-                    <View style={[styles.photoFallback, { height: photoH }]}>
-                      <SymbolView
-                        name={fallbackIcon}
-                        size={20}
-                        weight="light"
-                        tintColor={paper.inkFaint}
-                        accessibilityElementsHidden
-                        importantForAccessibility="no"
-                        fallback={
-                          <Ionicons
-                            name={fallbackIconIonicon}
-                            size={20}
-                            color={paper.inkFaint}
-                          />
-                        }
-                      />
-                    </View>
-                  )}
-                </View>
-
+                <View style={styles.cardRule} />
                 <View style={styles.copy}>
                   {card.overline ? (
                     <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
@@ -204,7 +158,7 @@ export function EditorialCardGrid({
                   {card.subtitle ? (
                     <Text
                       style={styles.venue}
-                      numberOfLines={1}
+                      numberOfLines={2}
                       maxFontSizeMultiplier={1.1}
                     >
                       {card.subtitle}
@@ -214,7 +168,7 @@ export function EditorialCardGrid({
                   {card.note ? (
                     <Text
                       style={styles.bandit}
-                      numberOfLines={2}
+                      numberOfLines={3}
                       maxFontSizeMultiplier={1.15}
                     >
                       {card.note}
@@ -317,19 +271,14 @@ const styles = StyleSheet.create({
   cellRight: {
     paddingLeft: 12,
   },
-  photoFrame: {
-    overflow: "hidden",
-    backgroundColor: paper.creamDeep,
-    width: "100%",
-  },
-  photoFallback: {
-    width: "100%",
-    backgroundColor: paper.creamDeep,
-    alignItems: "center",
-    justifyContent: "center",
+  cardRule: {
+    height: 2,
+    backgroundColor: paper.terracotta,
+    opacity: 0.35,
+    marginBottom: 14,
   },
   copy: {
-    paddingTop: 16,
+    paddingTop: 0,
   },
   overline: {
     fontSize: 10,

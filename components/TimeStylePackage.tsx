@@ -8,34 +8,7 @@ import {
   useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import { paper, press } from "../lib/edition/newspaperTheme";
-
-/** Polished stand-in for the rare case a card truly has no photo. */
-function PhotoFallback({
-  width,
-  height,
-}: {
-  width: number;
-  height: number;
-}) {
-  return (
-    <View style={[styles.fallback, { width, height }]}>
-      <SymbolView
-        name="photo"
-        size={18}
-        weight="light"
-        tintColor={paper.inkFaint}
-        accessibilityElementsHidden
-        importantForAccessibility="no"
-        fallback={
-          <Ionicons name="image-outline" size={18} color={paper.inkFaint} />
-        }
-      />
-    </View>
-  );
-}
 
 function CardPhoto({
   source,
@@ -50,7 +23,7 @@ function CardPhoto({
 }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
-    return <PhotoFallback width={width} height={Math.round(height * 0.4)} />;
+    return <View style={[styles.textLeadRule, { width }]} />;
   }
   return (
     <Image
@@ -143,10 +116,7 @@ export function TimeStylePackage({
               label={feature.imageLabel || feature.headline}
             />
           ) : (
-            <PhotoFallback
-              width={featureW}
-              height={Math.round(featureH * 0.4)}
-            />
+            <View style={[styles.textLeadRule, { width: featureW }]} />
           )}
           {feature.kicker ? (
             <Text style={styles.cardKicker}>{feature.kicker}</Text>
@@ -223,7 +193,7 @@ function SideCard({
           accessibilityLabel={story.imageLabel || story.headline}
         />
       ) : (
-        <PhotoFallback width={width} height={Math.round(photoH * 0.55)} />
+        <View style={[styles.textLeadRule, { width }]} />
       )}
       {story.kicker ? (
         <Text style={styles.cardKicker}>{story.kicker}</Text>
@@ -276,10 +246,11 @@ const styles = StyleSheet.create({
     gap: 14,
     marginTop: 28,
   },
-  fallback: {
-    backgroundColor: paper.creamDeep,
-    alignItems: "center",
-    justifyContent: "center",
+  textLeadRule: {
+    height: 2,
+    backgroundColor: paper.terracotta,
+    opacity: 0.35,
+    marginBottom: 4,
   },
   cardKicker: {
     marginTop: 10,

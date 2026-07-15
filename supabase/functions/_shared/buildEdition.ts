@@ -64,6 +64,7 @@ import {
   type LocalEvent,
 } from "./localEvents/provider.ts";
 import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDiscovery.ts";
+import { V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT } from "./editorial/v1ImagePolicy.ts";
 import { pruneDiscoveryPayloadByConfidence } from "./editorial/confidencePayload.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlaces } from "./places/index.ts";
@@ -979,24 +980,28 @@ export async function buildEditionForUser(
   });
 
   let discoveryWithImages: DiscoveryPayload = discovery;
-  try {
-    discoveryWithImages = await enrichDiscoveryImages(supabaseAdmin, discovery, {
-      banditPickItemId: banditsPickStory?.discoveryItem?.id ?? null,
-      seedIfSparse: false,
-    });
-    if (banditsPickStory?.discoveryItem?.id) {
-      const enrichedItem = findDiscoveryItemById(
-        discoveryWithImages,
-        banditsPickStory.discoveryItem.id
-      );
-      if (enrichedItem?.editorialImage) {
-        banditsPickStory.discoveryItem.editorialImage =
-          enrichedItem.editorialImage;
+  if (V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT) {
+    console.log("[buildEdition] V1 — skipping discovery image enrichment");
+  } else {
+    try {
+      discoveryWithImages = await enrichDiscoveryImages(supabaseAdmin, discovery, {
+        banditPickItemId: banditsPickStory?.discoveryItem?.id ?? null,
+        seedIfSparse: false,
+      });
+      if (banditsPickStory?.discoveryItem?.id) {
+        const enrichedItem = findDiscoveryItemById(
+          discoveryWithImages,
+          banditsPickStory.discoveryItem.id
+        );
+        if (enrichedItem?.editorialImage) {
+          banditsPickStory.discoveryItem.editorialImage =
+            enrichedItem.editorialImage;
+        }
       }
+      console.log("[buildEdition] discovery images enriched");
+    } catch (imageErr) {
+      console.warn("[buildEdition] discovery image enrichment failed", imageErr);
     }
-    console.log("[buildEdition] discovery images enriched");
-  } catch (imageErr) {
-    console.warn("[buildEdition] discovery image enrichment failed", imageErr);
   }
 
   try {

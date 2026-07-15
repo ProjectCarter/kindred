@@ -48,7 +48,7 @@ import {
   resolveReaderLocation,
   type ReaderLocation,
 } from "../lib/edition/localDiscoveryScope";
-import { resetImageRegistry, claimRemoteImage } from "../lib/edition/imageRegistry";
+import { resetImageRegistry } from "../lib/edition/imageRegistry";
 import {
   freezeEdition,
   getFrozenDiscovery,
@@ -57,8 +57,6 @@ import {
 import { resolveArticleHero } from "../lib/edition/articleHero";
 import { onThisDayImageFromKnowledge } from "../lib/edition/historicalImages";
 import { historyYearLabel } from "../lib/edition/historyCard";
-import { experienceImageFor } from "../lib/edition/experiences";
-import { activityImageFor } from "../lib/edition/activities";
 import { MorningArrival } from "./MorningArrival";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
@@ -128,11 +126,18 @@ type Props = {
   localEventsStatus?: LocalEventsLoadStatus;
 };
 
+const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
+  article: "From Bandit",
+  event: "Happening Soon",
+  activity: "Something To Do",
+  hidden_gem: "Hidden Gem",
+  place: "Worth Finding",
+  seasonal: "Right Now",
+};
+
 /**
- * Every TimeStylePackage card needs a photo — a wire photo when the story
- * has one, otherwise a curated editorial fallback matched to its subject.
- * Never the blank cream box: a headline without a real photo still deserves
- * a real image, not an empty rectangle.
+ * Wire photo when the story has one, otherwise a curated editorial fallback.
+ * Used for authorized news desks — not listing sections.
  */
 function wireOrFallbackImage(input: {
   imageUrl?: string | null;
@@ -150,89 +155,6 @@ function wireOrFallbackImage(input: {
     source: input.source ?? null,
   });
   return (hero.source ?? require("../assets/heroes/hero-default-morning.jpg")) as ImageSourcePropType;
-}
-
-const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
-  article: "From Bandit",
-  event: "Happening Soon",
-  activity: "Something To Do",
-  hidden_gem: "Hidden Gem",
-  place: "Worth Finding",
-  seasonal: "Right Now",
-};
-
-const SEASONAL_IMAGE_BY_MONTH: ImageSourcePropType[] = [
-  require("../assets/heroes/hero-winter-snowfall.jpg"), // Jan
-  require("../assets/heroes/hero-winter-snowfall.jpg"), // Feb
-  require("../assets/heroes/hero-spring-flowers.jpg"), // Mar
-  require("../assets/heroes/hero-spring-flowers.jpg"), // Apr
-  require("../assets/heroes/hero-spring-flowers.jpg"), // May
-  require("../assets/heroes/hero-summer-sunrise.jpg"), // Jun
-  require("../assets/heroes/hero-summer-sunrise.jpg"), // Jul
-  require("../assets/heroes/hero-summer-sunrise.jpg"), // Aug
-  require("../assets/heroes/hero-autumn-leaves.jpg"), // Sep
-  require("../assets/heroes/hero-autumn-leaves.jpg"), // Oct
-  require("../assets/heroes/hero-autumn-leaves.jpg"), // Nov
-  require("../assets/heroes/hero-winter-snowfall.jpg"), // Dec
-];
-
-/**
- * Bandit's Pick is not always an article — give each kind its own honest
- * photograph instead of stretching the wire-photo fallback (built for
- * news headlines) over an event, a place, or a seasonal moment.
- */
-function banditsPickImage(
-  pick: BanditsPickData,
-  editionDate?: string | null
-): ImageSourcePropType | null {
-  const { kind, story } = pick;
-  const realPhoto = story.imageUrl?.trim();
-  if (realPhoto) return { uri: realPhoto };
-
-  if (story.discoveryItem?.editorialImage?.url?.trim()) {
-    const remote = claimRemoteImage(
-      story.id,
-      story.discoveryItem.editorialImage.url.trim(),
-      story.discoveryItem.editorialImage.libraryId
-    );
-    if (remote) return remote;
-  }
-
-  if (kind === "article") {
-    return wireOrFallbackImage({
-      imageUrl: story.imageUrl,
-      headline: story.headline,
-      section: "bandits_pick",
-      summary: story.summary,
-      source: story.source,
-    });
-  }
-
-  if (kind === "activity" && story.discoveryItem) {
-    return activityImageFor(story.discoveryItem);
-  }
-
-  if (kind === "seasonal") {
-    const month = editionDate?.match(/^\d{4}-(\d{2})/)?.[1];
-    const index = month ? Number(month) - 1 : new Date().getMonth();
-    return (
-      SEASONAL_IMAGE_BY_MONTH[index] ??
-      require("../assets/heroes/hero-default-morning.jpg")
-    );
-  }
-
-  // event / place / hidden_gem without a real listing photo
-  return experienceImageFor(
-    story.discoveryItem?.category ?? "experiences",
-    story.id,
-    story.discoveryItem ?? undefined
-  );
-}
-
-function localBizSideImages(
-  items: RankedDiscoveryItem[]
-): Array<ImageSourcePropType | null> {
-  return items.map((d) => experienceImageFor(d.item.category, d.item.id, d.item));
 }
 
 /**
@@ -492,7 +414,6 @@ export function EditionReader({
     ["coffee", "restaurants"].includes(d.item.category)
   );
   const banditPickSides = localBiz.slice(0, 2);
-  const banditPickSideImages = localBizSideImages(banditPickSides);
   const localBizArticlesById = useMemo(
     () => discoveryArticlesById(localBiz),
     [localBiz]
@@ -728,14 +649,12 @@ export function EditionReader({
                 banditsPick.kind === "article" && banditsPick.story.source
                   ? `by ${banditsPick.story.source}`
                   : "— Bandit",
-              image: banditsPickImage(banditsPick, editionDate),
             }}
-            sides={banditPickSides.map((d, i) => ({
+            sides={banditPickSides.map((d) => ({
               id: d.item.id,
               kicker: "Local",
               headline: d.item.title,
               byline: d.item.place?.city ?? d.item.source?.name ?? null,
-              image: banditPickSideImages[i],
             }))}
             onOpen={
               onOpenArticle

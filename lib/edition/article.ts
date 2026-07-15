@@ -15,7 +15,6 @@ import {
   type EditorialModule,
 } from "./contentSystem";
 import type { LocalEventCard } from "./localEvents";
-import { authorizedEventImageUrl } from "./eventImageRights";
 import type { ClippingContentType } from "./clippingTypes";
 import { resolveEventEndsAt } from "./eventExpiry";
 import {
@@ -27,16 +26,12 @@ import {
   getCuratedDiscoveryArticle,
   matchVerifiedLocalEvent,
 } from "./discoveryArticles";
-import { attributionFromEditorialImage } from "./imageAttribution";
 import {
   actionContextFromBanditsPick,
   actionContextFromDiscoveryItem,
   actionContextFromLocalEvent,
 } from "./actionBar";
 import { enrichBanditsPickStory } from "./banditEditorial";
-import { resolveBanditsPickHero } from "./banditsPickHero";
-import { activityImageFor } from "./activities";
-import { recommendationImageFor } from "./recommendations";
 import { sanitizeAddressForDisplay } from "./verifiedLocation";
 import type { ImageSourcePropType } from "react-native";
 
@@ -294,17 +289,6 @@ export function articleFromBanditsPick(
     contentType: "recommendation",
   });
 
-  const resolvedHero = resolveBanditsPickHero({
-    id: enriched.id,
-    kind: options?.kind ?? "seasonal",
-    headline: enriched.headline,
-    imageUrl: enriched.imageUrl,
-    imageCaption: enriched.imageCaption,
-    heroMomentId: enriched.heroMomentId,
-    discoveryItem: enriched.discoveryItem ?? pick.discoveryItem ?? null,
-    editionDate: options?.editionDate ?? null,
-  });
-
   const modules =
     enriched.modules?.length && enriched.modules.some((m) => m.body?.trim())
       ? enriched.modules
@@ -317,7 +301,7 @@ export function articleFromBanditsPick(
     figures: [],
     closingBanditNote: enriched.closingNote?.trim() || null,
     nearbyEditorial: enriched.nearby?.length ? enriched.nearby : null,
-    heroImage: resolvedHero,
+    heroImage: null,
     actionContext: actionContextFromBanditsPick({
       url: enriched.url,
       mapsQuery: enriched.mapsQuery,
@@ -517,69 +501,11 @@ export function sectionOpensArticleReader(sectionType: string): boolean {
   );
 }
 
-/** Card photo from enrichment — keep reader hero aligned with the grid. */
-function withDiscoveryEditorialHero(
-  article: KindredArticle,
-  item: DiscoveryItem
-): KindredArticle {
-  const url = item.editorialImage?.url?.trim();
-  if (!url) return article;
-
-  const attribution = attributionFromEditorialImage(item.editorialImage);
-  const credit =
-    attribution?.attributionText?.trim() ||
-    (attribution?.photographerName
-      ? `Photo by ${attribution.photographerName}`
-      : null) ||
-    (attribution?.source === "pexels"
-      ? "Pexels"
-      : attribution?.source === "pixabay"
-        ? "Pixabay"
-        : "Kindred editorial photography");
-
-  return {
-    ...article,
-    heroImage: {
-      uri: url,
-      caption: item.title,
-      credit,
-      kind: "wire",
-    },
-  };
-}
-
-/** Same bundled photograph the homepage card uses — no unrelated archive fallbacks. */
-function withDiscoveryCardAlignedHero(
-  article: KindredArticle,
-  item: DiscoveryItem
-): KindredArticle {
-  if (article.heroImage?.uri?.trim() || article.heroImage?.source) {
-    return article;
-  }
-  const bundled =
-    item.category === "activities"
-      ? activityImageFor(item)
-      : recommendationImageFor(item);
-  if (!bundled) return article;
-  return {
-    ...article,
-    heroImage: {
-      source: bundled,
-      caption: item.title,
-      credit: "Kindred editorial photography",
-      kind: "editorial",
-    },
-  };
-}
-
 function finalizeDiscoveryArticle(
   article: KindredArticle,
   item: DiscoveryItem
 ): KindredArticle {
-  return attachDiscoveryActionContext(
-    withDiscoveryCardAlignedHero(withDiscoveryEditorialHero(article, item), item),
-    item
-  );
+  return attachDiscoveryActionContext(article, item);
 }
 
 function discoverySavedLocation(item: DiscoveryItem): string | null {
@@ -820,8 +746,7 @@ export function articleFromNotebookItem(
       dek: composed.dek,
       source: verifiedEvent.sourceName?.trim() || "Local listing",
       sourceUrl: verifiedEvent.sourceUrl || item.url || null,
-      // Authorized provider photo only — never stock or unlicensed listing art.
-      imageUrl: authorizedEventImageUrl(verifiedEvent),
+      imageUrl: null,
       imageCaption: verifiedEvent.name,
       banditNote: verifiedEvent.banditNote?.trim() || null,
       discoveryCategory: item.category,
@@ -932,7 +857,7 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
       dek: place || null,
       source: event.sourceName?.trim() || "Local listing",
       sourceUrl: event.sourceUrl || null,
-      imageUrl: authorizedEventImageUrl(event),
+      imageUrl: null,
       imageCaption: event.name,
       banditNote,
       contentType: isFestival ? "festival" : "local_event",

@@ -8,10 +8,8 @@
  * lives — see sectionAllocator.ts.)
  */
 
-import type { ImageSourcePropType } from "react-native";
-import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
+import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
-import { resolveDiscoveryItemImage } from "./resolveItemImage";
 import { resolveVenueClassification } from "./venueClassification";
 import {
   compareByLocalProximity,
@@ -40,43 +38,8 @@ const CATEGORY_LABEL: Record<string, string> = {
   gardens: "Garden",
 };
 
-const CATEGORY_PHOTOS: Record<string, ImageSourcePropType[]> = {
-  coffee: [require("../../assets/heroes/hero-default-morning.jpg")],
-  restaurants: [require("../../assets/discovery/recommendation-restaurant.jpg")],
-  bakeries: [require("../../assets/discovery/recommendation-bakery.jpg")],
-  beaches: [require("../../assets/heroes/hero-beach-morning.jpg")],
-  parks: [
-    require("../../assets/heroes/hero-spring-flowers.jpg"),
-    require("../../assets/heroes/hero-summer-sunrise.jpg"),
-  ],
-  museums: [require("../../assets/heroes/hero-city-sunrise.jpg")],
-  scenic_drives: [
-    require("../../assets/heroes/hero-summer-sunrise.jpg"),
-    require("../../assets/heroes/hero-mountain-morning.jpg"),
-  ],
-  gardens: [require("../../assets/discovery/recommendation-garden.jpg")],
-};
-
-const FALLBACK_PHOTOS: ImageSourcePropType[] = [
-  require("../../assets/heroes/hero-default-morning.jpg"),
-  require("../../assets/heroes/hero-summer-sunrise.jpg"),
-  require("../../assets/heroes/hero-autumn-leaves.jpg"),
-  require("../../assets/heroes/hero-spring-flowers.jpg"),
-];
-
 export function recommendationCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category] ?? category.replace(/_/g, " ");
-}
-
-export function recommendationImageFor(
-  item: RankedDiscoveryItem["item"]
-): ImageSourcePropType | null {
-  const pool = CATEGORY_PHOTOS[item.category] ?? FALLBACK_PHOTOS;
-  return resolveDiscoveryItemImage({
-    id: item.id,
-    item,
-    bundledPool: pool,
-  });
 }
 
 function isRecommendationItem(d: RankedDiscoveryItem): boolean {
@@ -132,7 +95,6 @@ export function selectRecommendationCards(
 
   return ranked.map((d) => ({
     id: d.item.id,
-    image: recommendationImageFor(d.item),
     overline: recommendationOverline(d.item),
     title: d.item.title.trim(),
     subtitle: recommendationLocationLine(d.item, options?.city),

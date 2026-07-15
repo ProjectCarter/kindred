@@ -55,8 +55,6 @@ export function ActivitiesSection({
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} activities`}
       emptyCopy="Nothing new to try nearby this month — check back tomorrow."
-      fallbackIcon="figure.run"
-      fallbackIconIonicon="walk-outline"
       onOpenCard={
         onOpenItem
           ? (card) => {

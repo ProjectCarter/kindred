@@ -62,8 +62,6 @@ export default function ActivitiesScreen() {
           kicker="Activities"
           cards={cards}
           initialRenderCount={Math.max(cards.length, 1)}
-          fallbackIcon="figure.run"
-          fallbackIconIonicon="walk-outline"
           emptyCopy="Nothing new to try nearby this month — check back tomorrow."
           showBanditWhenEmpty
           onOpenCard={(card) => {

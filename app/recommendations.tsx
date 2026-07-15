@@ -62,8 +62,6 @@ export default function RecommendationsScreen() {
           kicker="Recommendations"
           cards={cards}
           initialRenderCount={Math.max(cards.length, 1)}
-          fallbackIcon="mappin.and.ellipse"
-          fallbackIconIonicon="location-outline"
           emptyCopy="Nothing new to recommend nearby this month — check back tomorrow."
           showBanditWhenEmpty
           onOpenCard={(card) => {
