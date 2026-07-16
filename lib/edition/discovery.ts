@@ -142,10 +142,15 @@ export type DiscoveryPayload = {
 export function parseDiscoveryPayload(value: unknown): DiscoveryPayload | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<DiscoveryPayload>;
-  if (raw.version !== 1 || !raw.surfaces || !Array.isArray(raw.picks)) {
+  // Surfaces drive Activities / Recommendations. `picks` is a flat index —
+  // tolerate a missing array so a partial row still paints discovery desks.
+  if (raw.version !== 1 || !raw.surfaces || typeof raw.surfaces !== "object") {
     return null;
   }
-  return raw as DiscoveryPayload;
+  return {
+    ...(raw as DiscoveryPayload),
+    picks: Array.isArray(raw.picks) ? raw.picks : [],
+  };
 }
 
 export function discoveryItemsForSurface(

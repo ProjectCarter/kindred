@@ -14,10 +14,14 @@ export function markStartup(name: string): void {
   }
 }
 
-export function logStartupSummary(context?: string): void {
+export function logStartupSummary(
+  context?: string,
+  options?: { editionComplete?: boolean }
+): void {
   const elapsedMs = startupElapsedMs();
   const label = context ? ` (${context})` : "";
   const overBudget = elapsedMs > 5000;
+  const incomplete = options?.editionComplete === false;
 
   if (__DEV__ && marks.length > 0) {
     console.log(`[perf:startup] timeline${label}`, marks);
@@ -28,6 +32,11 @@ export function logStartupSummary(context?: string): void {
     console.warn(
       `[perf:startup] OVER BUDGET${label}: ${elapsedMs}ms (max 5000ms)`,
       __DEV__ ? marks : undefined
+    );
+  } else if (incomplete) {
+    // Fast first paint of a partial paper is not Phase One success.
+    console.warn(
+      `[perf:startup] FAST BUT INCOMPLETE${label}: ${elapsedMs}ms — full edition missing desks`
     );
   } else if (__DEV__) {
     console.log(`[perf:startup] within budget${label}: ${elapsedMs}ms`);

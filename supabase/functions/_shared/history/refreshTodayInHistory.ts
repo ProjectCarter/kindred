@@ -62,7 +62,7 @@ export async function refreshTodayInHistoryForEdition(
     nowYear: Number(input.editionDate.slice(0, 4)) || new Date().getFullYear(),
   });
 
-  if (!historySelection?.image?.url || !historySelection.event) {
+  if (!historySelection?.event) {
     return { ok: false, changed: false, error: "no_selection" };
   }
 
@@ -107,10 +107,12 @@ export async function refreshTodayInHistoryForEdition(
   const groundingData = buildTodayInHistoryGrounding(
     onThisDay,
     knowledgeWithGrounding.providerGrounding?.onThisDay,
-    {
-      image: historySelection.image,
-      editorNotes: historySelection.editorNotes,
-    }
+    historySelection.image?.url
+      ? {
+          image: historySelection.image,
+          editorNotes: historySelection.editorNotes,
+        }
+      : undefined
   );
 
   const instruction =

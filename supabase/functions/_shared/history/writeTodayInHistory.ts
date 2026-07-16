@@ -34,6 +34,37 @@ function wordCount(text: string): number {
   return text.replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).length;
 }
 
+function thinHistoryFallback(
+  year: number,
+  eventText: string
+): { headline: string; body: string } {
+  const headline = formatTodayInHistoryHeadline(year, eventText, null);
+  const event = eventText.trim().replace(/\s+/g, " ");
+  const opener = event.length
+    ? `In ${year}, ${event.charAt(0).toLowerCase()}${event.slice(1)}`
+    : `In ${year}, the world turned on an event worth remembering.`;
+  const body = [
+    opener.endsWith(".") ? opener : `${opener}.`,
+    "Kindred keeps these anniversaries on the front page because they explain how we got here — a calm minute of context before the rest of the day pulls you forward.",
+    "More verified background may arrive in later editions; this note stays within what the historical record confirms for the date.",
+  ].join("\n\n");
+  return { headline, body };
+}
+
+async function readAnthropicJson(response: Response): Promise<Record<string, unknown>> {
+  const raw = await response.text();
+  if (!raw.trim()) return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    console.warn("[buildEdition] writeTodayInHistorySection non-JSON response", {
+      httpStatus: response.status,
+      sample: raw.slice(0, 200),
+    });
+    return {};
+  }
+}
+
 export async function writeTodayInHistorySection(
   input: WriteTodayInHistoryInput
 ): Promise<{ headline: string; body: string }> {
@@ -71,18 +102,42 @@ export async function writeTodayInHistorySection(
     }),
   });
 
-  const data = await response.json();
-  const text = data.content?.[0]?.text ?? "";
+  const data = await readAnthropicJson(response);
+  const content = Array.isArray(data.content) ? data.content : [];
+  const text =
+    typeof content[0] === "object" &&
+    content[0] &&
+    "text" in content[0] &&
+    typeof content[0].text === "string"
+      ? content[0].text
+      : "";
   const rawParsed = text
     ? parseSectionJson(text)
     : { headline: "", body: "" };
 
-  const body = stripLeadingSalutation(rawParsed.body);
-  const headline = formatTodayInHistoryHeadline(
+  let body = stripLeadingSalutation(rawParsed.body);
+  let headline = formatTodayInHistoryHeadline(
     input.year,
     input.eventText,
     rawParsed.headline
   );
+
+  if (!body.trim() || wordCount(body) < 40) {
+    const fallback = thinHistoryFallback(input.year, input.eventText);
+    headline = fallback.headline;
+    body = fallback.body;
+    console.warn("[buildEdition] writeTodayInHistorySection thin fallback", {
+      httpStatus: response.status,
+      ok: response.ok,
+      apiErrorMessage:
+        typeof data?.error === "object" &&
+        data.error &&
+        "message" in data.error &&
+        typeof data.error.message === "string"
+          ? data.error.message
+          : null,
+    });
+  }
 
   const words = wordCount(body);
   console.log("[buildEdition] writeTodayInHistorySection", {
@@ -92,8 +147,20 @@ export async function writeTodayInHistorySection(
     parseOk: Boolean(headline && body),
     wordCount: words,
     targetWords: "300-700",
-    apiErrorType: data?.error?.type ?? null,
-    apiErrorMessage: data?.error?.message ?? null,
+    apiErrorType:
+      typeof data?.error === "object" &&
+      data.error &&
+      "type" in data.error &&
+      typeof data.error.type === "string"
+        ? data.error.type
+        : null,
+    apiErrorMessage:
+      typeof data?.error === "object" &&
+      data.error &&
+      "message" in data.error &&
+      typeof data.error.message === "string"
+        ? data.error.message
+        : null,
   });
 
   return { headline, body };

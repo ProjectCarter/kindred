@@ -225,9 +225,75 @@ async function syncProfile(prefs: LocationPrefs, active: KindredPlace | null) {
   }
 }
 
+/**
+ * If local prefs were wiped but the profile still has a home/current city,
+ * restore them so cold-launch tests and reinstalls don't force onboarding
+ * or drop discovery desks that depend on reader coordinates.
+ */
+async function hydratePrefsFromProfile(
+  prefs: LocationPrefs
+): Promise<LocationPrefs> {
+  if (prefs.home || prefs.current || prefs.travel) return prefs;
+  if (!isSupabaseConfigured) return prefs;
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return prefs;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("home_location, location, travel")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error || !data) return prefs;
+
+    const home =
+      placeFromUnknown(data.home_location) ?? placeFromUnknown(data.location);
+    const current = placeFromUnknown(data.location);
+    const travelRaw =
+      data.travel && typeof data.travel === "object"
+        ? (data.travel as Record<string, unknown>)
+        : null;
+    const travel =
+      travelRaw?.away === true
+        ? placeFromUnknown({
+            city: travelRaw.city,
+            region: travelRaw.region,
+            state: travelRaw.state,
+            lat: travelRaw.lat,
+            lon: travelRaw.lon,
+          })
+        : null;
+
+    if (!home && !current && !travel) return prefs;
+
+    const next: LocationPrefs = {
+      mode: travel ? "travel" : home ? "home" : "current",
+      home: home ?? current,
+      travel,
+      current: current ?? home,
+      currentUpdatedAt: current ? Date.now() : prefs.currentUpdatedAt,
+      firstRunCompleted: true,
+    };
+    await writePrefs(next);
+    if (__DEV__) {
+      console.log("[location] hydrated prefs from profile", {
+        mode: next.mode,
+        city: (next.home ?? next.current ?? next.travel)?.city ?? null,
+      });
+    }
+    return next;
+  } catch {
+    return prefs;
+  }
+}
+
 async function loadPrefs(): Promise<LocationPrefs> {
   const base = await readPrefsRaw();
-  return migrateLegacyCache(base);
+  const migrated = await migrateLegacyCache(base);
+  return hydratePrefsFromProfile(migrated);
 }
 
 /** Payload for generate-edition / buildEdition. */

@@ -53,7 +53,19 @@ export function freezeEdition(params: {
     return;
   }
 
-  // Same edition — never overwrite a frozen discovery pool mid-read.
+  // Same edition — never replace a populated discovery pool mid-read, but do
+  // allow filling in when the first freeze raced ahead of the network payload
+  // (null/empty → full). Otherwise Activities/Recommendations stay blank.
+  if (frozenDiscovery == null && params.discovery) {
+    frozenDiscovery = params.discovery;
+  }
+  if (
+    (frozenDiscoveryItems == null || frozenDiscoveryItems.length === 0) &&
+    params.discoveryItems &&
+    params.discoveryItems.length > 0
+  ) {
+    frozenDiscoveryItems = params.discoveryItems;
+  }
   if (frozenHeroImageId == null && params.heroImageId) {
     frozenHeroImageId = params.heroImageId;
   }

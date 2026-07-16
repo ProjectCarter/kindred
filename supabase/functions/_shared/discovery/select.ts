@@ -167,6 +167,13 @@ export function selectDiscoverySurface(
     selected = publishDiscoveryItems(ordered, minScore);
   }
 
+  if (!selected.length && ordered.length > 0) {
+    selected = ordered
+      .filter((r) => r.score >= minScore)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12);
+  }
+
   return {
     surface,
     headline: SURFACE_HEADLINES[surface],

@@ -116,6 +116,18 @@ import {
   updateHomeScroll,
 } from "../lib/edition/homeSession";
 import { markStartup, logStartupSummary } from "../lib/perf/startupTiming";
+import {
+  assessEditionCompleteness,
+  logEditionCompleteness,
+} from "../lib/perf/editionCompleteness";
+import {
+  isPersistedEditionComplete,
+  traceParsedIntelligence,
+  traceReactState,
+  traceSupabaseEditionRow,
+  traceSupabaseEditionSections,
+} from "../lib/perf/coldLaunchTrace";
+import { parseDiscoveryPayload } from "../lib/edition/discovery";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -623,10 +635,10 @@ export default function HomeScreen() {
     });
 
     // Only serve finished papers — partial/failed rows must not render as today's edition.
-    const editionReady =
+    const statusReady =
       !!edition && (edition as { status?: string }).status === "ready";
 
-    if (!editionReady) {
+    if (!statusReady) {
       if (__DEV__) {
         console.warn("[home] loadEdition: no ready edition", {
           reason: editionError
@@ -665,9 +677,51 @@ export default function HomeScreen() {
       .eq("edition_id", edition.id)
       .order("position", { ascending: true });
 
+    if (sectionsError) {
+      throw new Error(sectionsError.message);
+    }
+
     const loaded = (sectionRows as EditionSection[] | null) ?? [];
 
     markStartup("home_sections_query_done");
+
+    traceSupabaseEditionRow(edition);
+    traceSupabaseEditionSections(loaded);
+
+    let discoveryRaw = (edition as { discovery?: unknown }).discovery;
+    const persistedComplete = isPersistedEditionComplete(
+      { ...edition, discovery: discoveryRaw },
+      loaded
+    );
+
+    if (!persistedComplete.complete) {
+      console.warn("[coldLaunch:trace] ready edition incomplete in Supabase", {
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        sectionCount: loaded.length,
+        sectionTypes: loaded.map((s) => s.section_type),
+        reasons: persistedComplete.reasons,
+        discoveryParsed: Boolean(parseDiscoveryPayload(discoveryRaw)),
+      });
+      const [adjacent, jobResult] = await Promise.all([
+        fetchAdjacentEditions(user.id, todayStr),
+        supabase
+          .from("generation_jobs")
+          .select("status, last_error")
+          .eq("user_id", user.id)
+          .eq("edition_date", todayStr)
+          .maybeSingle(),
+      ]);
+      return {
+        kind: "not_ready" as const,
+        user,
+        adjacent,
+        jobResult,
+        editionError: null,
+        incompleteReady: true,
+        incompleteReasons: persistedComplete.reasons,
+      };
+    }
 
     __DEV__ && console.log("[home] loadEdition: edition_sections query", {
       editionId: edition.id,
@@ -677,23 +731,15 @@ export default function HomeScreen() {
       sectionCount: loaded.length,
       sectionIds: loaded.map((s) => s.id),
       sectionTypes: loaded.map((s) => s.section_type),
-      error: sectionsError
-        ? {
-            message: sectionsError.message,
-            code: sectionsError.code,
-            details: sectionsError.details,
-            hint: sectionsError.hint,
-          }
-        : null,
+      discoveryPresent: Boolean(parseDiscoveryPayload(discoveryRaw)),
       httpStatus: sectionsStatus ?? null,
     });
 
     return {
       kind: "ready" as const,
       user,
-      edition,
+      edition: { ...edition, discovery: discoveryRaw },
       loaded,
-      sectionsError,
     };
     };
 
@@ -768,6 +814,14 @@ export default function HomeScreen() {
     }
 
     if (payload.kind === "not_ready") {
+      if ((payload as { incompleteReady?: boolean }).incompleteReady) {
+        console.warn(
+          "[coldLaunch:trace] Supabase marked this edition ready but the persisted payload is incomplete — refusing to paint a partial newspaper",
+          {
+            reasons: (payload as { incompleteReasons?: string[] }).incompleteReasons ?? [],
+          }
+        );
+      }
       if (!cachedBundleRef.current && !editionFrozenRef.current) {
         setSections([]);
         setEditionDate(null);
@@ -909,7 +963,41 @@ export default function HomeScreen() {
       setSections(nextSections);
       setEditionDate(edition.edition_date);
       setEditionId(edition.id);
-      persistSectionsToCache(nextSections);
+      // Network row is authoritative for narrative desks — cache hydrate must
+      // not leave discovery/intelligence frozen at an incomplete snapshot.
+      setLeadStory(lead);
+      setTopStories(
+        topStoriesFromEditorialContext(
+          (edition as { editorial_context?: unknown }).editorial_context
+        )
+      );
+      setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
+      setIntelligence(intel);
+      freezeEdition({
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        discovery: intel.discovery ?? null,
+        discoveryItems: intel.discoveryItems ?? null,
+        heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+      });
+      editionFrozenRef.current = true;
+      const bundle: CachedEditionBundle = {
+        userId: user.id,
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        cachedAt: Date.now(),
+        sections: nextSections,
+        leadStory: lead,
+        topStories: topStoriesFromEditorialContext(
+          (edition as { editorial_context?: unknown }).editorial_context
+        ),
+        bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
+        intelligence: intel,
+        heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+        morningHero: intel.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
+      };
+      cachedBundleRef.current = bundle;
+      void saveCachedEdition(bundle);
     } else {
       setSections(loaded);
       nextSections = loaded;
@@ -933,6 +1021,47 @@ export default function HomeScreen() {
       editionFrozenRef.current = true;
     }
 
+    traceParsedIntelligence(
+      patchEventsOnly || syncAfterCache
+        ? cachedBundleRef.current?.intelligence ?? intel
+        : intel,
+      patchEventsOnly || syncAfterCache
+        ? cachedBundleRef.current?.leadStory ?? lead
+        : lead,
+      patchEventsOnly || syncAfterCache
+        ? cachedBundleRef.current?.bandit ??
+            parseBanditPayload((edition as { bandit?: unknown }).bandit)
+        : parseBanditPayload((edition as { bandit?: unknown }).bandit),
+      active.place
+        ? { lat: active.place.lat, lon: active.place.lon }
+        : null
+    );
+
+    traceReactState({
+      sections: nextSections,
+      intelligence:
+        patchEventsOnly || syncAfterCache
+          ? cachedBundleRef.current?.intelligence ?? intel
+          : intel,
+      leadStory:
+        patchEventsOnly || syncAfterCache
+          ? cachedBundleRef.current?.leadStory ?? lead
+          : lead,
+      bandit:
+        patchEventsOnly || syncAfterCache
+          ? cachedBundleRef.current?.bandit ??
+              parseBanditPayload((edition as { bandit?: unknown }).bandit)
+          : parseBanditPayload((edition as { bandit?: unknown }).bandit),
+      readerLocation: active.place
+        ? { lat: active.place.lat, lon: active.place.lon }
+        : null,
+      applyPath: patchEventsOnly
+        ? "patchEventsOnly"
+        : syncAfterCache
+          ? "syncAfterCache"
+          : "full",
+    });
+
     if (__DEV__) {
       logLocalEventsPipeline(
         "loadEdition sections applied",
@@ -946,11 +1075,41 @@ export default function HomeScreen() {
     }
 
     // First paint — text is readable; everything below runs in the background.
+    // Phase One success requires a complete already-generated edition, not
+    // merely a fast Hero + Local Events shell.
+    const onScreenIntel =
+      patchEventsOnly || syncAfterCache
+        ? cachedBundleRef.current?.intelligence ?? intel
+        : intel;
+    const onScreenBandit =
+      patchEventsOnly || syncAfterCache
+        ? cachedBundleRef.current?.bandit ??
+          parseBanditPayload((edition as { bandit?: unknown }).bandit)
+        : parseBanditPayload((edition as { bandit?: unknown }).bandit);
+    const onScreenLead =
+      patchEventsOnly || syncAfterCache
+        ? cachedBundleRef.current?.leadStory ?? lead
+        : lead;
+    const completeness = assessEditionCompleteness({
+      sections: nextSections,
+      intelligence: onScreenIntel,
+      bandit: onScreenBandit,
+      leadStory: onScreenLead,
+      readerLocation: active.place
+        ? { lat: active.place.lat, lon: active.place.lon }
+        : null,
+    });
+    logEditionCompleteness(
+      cachedBundleRef.current ? "repeat_launch" : "cold_launch",
+      completeness
+    );
+
     setLoading(false);
     setRefreshing(false);
     markStartup("home_first_paint");
     logStartupSummary(
-      cachedBundleRef.current ? "repeat_launch" : "cold_launch"
+      cachedBundleRef.current ? "repeat_launch" : "cold_launch",
+      { editionComplete: completeness.complete }
     );
 
     void (async () => {

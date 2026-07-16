@@ -52,7 +52,6 @@ import { resetImageRegistry } from "../lib/edition/imageRegistry";
 import {
   freezeEdition,
   getFrozenDiscovery,
-  isEditionFrozen,
 } from "../lib/edition/editionFreeze";
 import { resolveArticleHero } from "../lib/edition/articleHero";
 import { onThisDayImageFromKnowledge } from "../lib/edition/historicalImages";
@@ -67,6 +66,7 @@ import { BanditsNotebook } from "./BanditsNotebook";
 import { TodayInHistorySection } from "./TodayInHistorySection";
 import { FolioReveal } from "./FolioReveal";
 import { EditionClose } from "./EditionClose";
+import { traceEditionReaderRender } from "../lib/perf/coldLaunchTrace";
 import { BanditCharacter } from "./BanditCharacter";
 
 type Props = {
@@ -288,16 +288,16 @@ export function EditionReader({
   // Freeze the discovery pool on first render of this edition — Activities,
   // Recommendations, and Bandit's Pick sides all derive from this snapshot
   // so live-refresh discovery patches never reshuffle the printed paper.
+  // freezeEdition allows null→full fill-in if the first pass raced ahead of
+  // the network payload; it never replaces a populated pool mid-read.
   useMemo(() => {
     if (!editionId || !editionDate) return;
-    if (!isEditionFrozen({ editionId, editionDate })) {
-      freezeEdition({
-        editionId,
-        editionDate,
-        discovery,
-        discoveryItems,
-      });
-    }
+    freezeEdition({
+      editionId,
+      editionDate,
+      discovery,
+      discoveryItems,
+    });
   }, [editionId, editionDate, discovery, discoveryItems]);
 
   const frozenDiscovery = getFrozenDiscovery();
@@ -390,6 +390,28 @@ export function EditionReader({
       resolvedReaderLocation,
     ]
   );
+
+  useMemo(() => {
+    if (!editionId) return;
+    traceEditionReaderRender({
+      sections,
+      discovery: stableDiscovery ?? null,
+      discoveryItems: stableDiscoveryItems ?? [],
+      banditsPickPresent: Boolean(banditsPick),
+      leadStory: leadStory ?? null,
+      morningHeroPresent: Boolean(morningHero),
+      readerLocation: resolvedReaderLocation,
+    });
+  }, [
+    editionId,
+    sections,
+    stableDiscovery,
+    stableDiscoveryItems,
+    banditsPick,
+    leadStory,
+    morningHero,
+    resolvedReaderLocation,
+  ]);
 
   const activityArticlesById = useMemo(
     () => discoveryArticlesById(fullSectionAllocation.activities, "activity"),

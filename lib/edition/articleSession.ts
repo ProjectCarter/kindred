@@ -94,7 +94,23 @@ export function clearArticleSession(id: string): void {
   void AsyncStorage.removeItem(storageKey(id)).catch(() => {});
 }
 
-/** TEMP(Phase One perf): wipe reader handoff memory for cold-launch simulation. */
-export function clearAllArticleSessions(): void {
+/** TEMP(Phase One perf): wipe reader handoff memory + persisted sessions. */
+export async function clearAllArticleSessionsAsync(): Promise<string[]> {
+  const removed: string[] = [];
   memory.clear();
+  try {
+    const raw = await AsyncStorage.getItem(INDEX_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(ids)) {
+      for (const id of ids) {
+        if (typeof id === "string") removed.push(storageKey(id));
+      }
+    }
+    removed.push(INDEX_KEY);
+    const unique = [...new Set(removed)];
+    if (unique.length > 0) await AsyncStorage.multiRemove(unique);
+    return unique;
+  } catch {
+    return removed;
+  }
 }

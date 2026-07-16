@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { clearAppCachesForColdLaunch } from "../lib/perf/clearAppCachesForColdLaunch";
+import { friendlyCacheKeyLabel } from "../lib/storage/kindredAsyncStorageKeys";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
@@ -300,9 +301,10 @@ export default function LocationSettingsScreen() {
           <View style={styles.devBlock}>
             <Text style={styles.statusLabel}>Developer</Text>
             <Text style={styles.devHint}>
-              Clears edition cache, scroll position, location prefs, and other
-              newspaper data — you stay signed in. Force-quit and reopen to
-              measure a cold launch.
+              Clears the local newspaper cache and temporary scroll/recovery
+              state only — home city, location mode, and temperature stay.
+              You stay signed in. Force-quit and reopen to measure a cold
+              network launch of today’s already-generated edition.
             </Text>
             <Pressable
               style={({ pressed }) => [
@@ -314,8 +316,18 @@ export default function LocationSettingsScreen() {
               onPress={() =>
                 void withBusy(async () => {
                   const result = await clearAppCachesForColdLaunch();
+                  const labels = [
+                    ...new Set(
+                      result.removedKeys.map((key) => friendlyCacheKeyLabel(key))
+                    ),
+                    ...result.memoryCachesCleared,
+                  ];
+                  const keyList =
+                    labels.length > 0
+                      ? `\n\n${labels.map((label) => `• ${label}`).join("\n")}`
+                      : "";
                   setMessage(
-                    `Cleared ${result.removedKeyCount} cache key(s). Force-quit Kindred, then reopen to test a cold launch.`
+                    `Cleared ${result.removedKeyCount} AsyncStorage key(s) and ${result.memoryCachesCleared.length} in-memory cache(s).${keyList}\n\nForce-quit Kindred, then reopen to test a cold launch.`
                   );
                 })
               }

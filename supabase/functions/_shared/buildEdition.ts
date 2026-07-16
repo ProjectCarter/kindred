@@ -24,6 +24,7 @@ import {
 } from "./knowledge/providers/index.ts";
 import { fetchOnThisDayCandidates } from "./history/onThisDay.ts";
 import { selectTodayInHistoryStory } from "./history/selectStory.ts";
+import { rankOnThisDayCandidates } from "./history/scoreCandidate.ts";
 import type { TodayInHistorySelection } from "./history/selectStory.ts";
 import { writeTodayInHistorySection } from "./history/writeTodayInHistory.ts";
 import {
@@ -69,6 +70,10 @@ import {
 import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDiscovery.ts";
 import { V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT } from "./editorial/v1ImagePolicy.ts";
 import { pruneDiscoveryPayloadByConfidence } from "./editorial/confidencePayload.ts";
+import {
+  assessPersistedEditionBuild,
+  discoverySurfaceItemCount,
+} from "./editionCompleteness.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlaces } from "./places/index.ts";
 
@@ -739,7 +744,21 @@ export async function buildEditionForUser(
     console.warn("[buildEdition] today in history selection failed", historySelectErr);
   }
 
-  const onThisDay = historySelection?.event ?? null;
+  let onThisDay = historySelection?.event ?? null;
+  if (!onThisDay && onThisDayCandidates.length > 0) {
+    const ranked = rankOnThisDayCandidates(
+      onThisDayCandidates,
+      editionDateObj.getFullYear()
+    );
+    const top = ranked[0];
+    if (top) {
+      onThisDay = { year: top.year, text: top.text };
+      console.warn("[buildEdition] today in history fallback — no image-paired selection", {
+        year: top.year,
+        editorialScore: top.editorialScore,
+      });
+    }
+  }
 
   // Pipeline already returns the full ranked qualified pool — do not re-allocate.
   const localEventsRanked = localEventsRaw;
@@ -982,7 +1001,39 @@ export async function buildEditionForUser(
     recentKeys: recentDiscoveryKeys,
   });
 
-  let discoveryWithImages: DiscoveryPayload = discovery;
+  let discoveryForBuild: DiscoveryPayload =
+    discoverySurfaceItemCount(discovery) === 0
+      ? runDiscoveryDecisions({
+          editionDate,
+          now: new Date(),
+          city,
+          region,
+          state,
+          readerLat: weatherLat,
+          readerLon: weatherLon,
+          interests: personalization.interests.length
+            ? personalization.interests
+            : interests,
+          followedTopics,
+          favoriteSources: personalization.favoriteSources,
+          weatherSummary,
+          weatherIntel,
+          npsParks: npsParksForDiscovery,
+          isWeekend: editorial.calendar.isWeekend,
+          isSunday: editorial.calendar.isSunday,
+          localEvents: localEventsForBandit,
+          localPlaces: localPlacesForDiscovery,
+          recentKeys: [],
+        })
+      : discovery;
+
+  if (discoverySurfaceItemCount(discoveryForBuild) === 0) {
+    console.warn("[buildEdition] discovery still empty after recentKeys retry", {
+      candidateCount: discoveryForBuild.selectionMeta.candidateCount,
+    });
+  }
+
+  let discoveryWithImages: DiscoveryPayload = discoveryForBuild;
   if (V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT) {
     console.log("[buildEdition] V1 — skipping discovery image enrichment");
   } else {
@@ -1019,9 +1070,20 @@ export async function buildEditionForUser(
   }
 
   try {
+    const discoveryBeforePrune = discoveryWithImages;
     discoveryWithImages = pruneDiscoveryPayloadByConfidence(discoveryWithImages);
+    if (
+      discoverySurfaceItemCount(discoveryWithImages) === 0 &&
+      discoverySurfaceItemCount(discoveryBeforePrune) > 0
+    ) {
+      console.warn(
+        "[buildEdition] confidence prune removed all discovery surfaces — keeping pre-prune payload"
+      );
+      discoveryWithImages = discoveryBeforePrune;
+    }
     console.log("[buildEdition] discovery editorial confidence prune complete", {
       pickCount: discoveryWithImages.picks.length,
+      surfaceItems: discoverySurfaceItemCount(discoveryWithImages),
       enrichQueue: discoveryWithImages.selectionMeta.enrichQueue?.length ?? 0,
     });
   } catch (confidenceErr) {
@@ -1238,17 +1300,19 @@ export async function buildEditionForUser(
 
   // local_events is stored as structured JSON for card UI — not rewritten by Claude.
 
-  if (onThisDay && historySelection?.image?.url) {
+  if (onThisDay) {
     sections.push({
       section_type: "today_in_history",
       position: 4,
       groundingData: buildTodayInHistoryGrounding(
         onThisDay,
         knowledgeWithGrounding.providerGrounding?.onThisDay,
-        {
-          image: historySelection.image,
-          editorNotes: historySelection.editorNotes,
-        }
+        historySelection?.image?.url
+          ? {
+              image: historySelection.image,
+              editorNotes: historySelection.editorNotes,
+            }
+          : undefined
       ),
       instruction:
         `Write Today in History as Kindred's signature morning feature — a calm Sunday newspaper ` +
@@ -1347,9 +1411,9 @@ export async function buildEditionForUser(
     localEvents,
     onThisDay,
     discovery: {
-      picks: discovery.picks,
-      surfaces: Object.keys(discovery.surfaces),
-      editorNotes: discovery.selectionMeta.editorNotes,
+      picks: discoveryForBuild.picks,
+      surfaces: Object.keys(discoveryForBuild.surfaces),
+      editorNotes: discoveryForBuild.selectionMeta.editorNotes,
     },
     knowledge: {
       storyCount: knowledgeWithGrounding.selectionMeta.storyCount,
@@ -1670,9 +1734,9 @@ export async function buildEditionForUser(
     localEvents,
     onThisDay,
     discovery: {
-      picks: discovery.picks,
-      surfaces: Object.keys(discovery.surfaces),
-      editorNotes: discovery.selectionMeta.editorNotes,
+      picks: discoveryForBuild.picks,
+      surfaces: Object.keys(discoveryForBuild.surfaces),
+      editorNotes: discoveryForBuild.selectionMeta.editorNotes,
     },
     knowledge: {
       storyCount: knowledgeWithGrounding.selectionMeta.storyCount,
@@ -1697,6 +1761,28 @@ export async function buildEditionForUser(
     now: new Date(),
   });
 
+  const editionUpsertFields: Record<string, unknown> = {
+    editorial_context: editorialContextWithMorning,
+    lead_story: leadStory,
+    bandit,
+    discovery: JSON.parse(JSON.stringify(discoveryWithImages)),
+    knowledge: JSON.parse(JSON.stringify(knowledgeWithGrounding)),
+    memory: JSON.parse(JSON.stringify(memory)),
+    morning_edition: JSON.parse(JSON.stringify(morningEdition)),
+  };
+  for (const [field, value] of Object.entries(editionUpsertFields)) {
+    try {
+      JSON.stringify(value);
+    } catch (err) {
+      return {
+        ok: false,
+        error: `edition_field_${field}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
+  }
+
   // Written as "processing" and only flipped to "ready" after edition_sections
   // is confirmed written below. Every reader in the app (home, library,
   // adjacent-editions, refresh-discovery, refresh-local-event-images) treats
@@ -1706,25 +1792,102 @@ export async function buildEditionForUser(
   // "ready" edition with zero sections that would never be regenerated
   // (enqueue only skips users who already have a ready edition).
   const editionWriteStart = performance.now();
+  const upsertCore = {
+    user_id: userId,
+    edition_date: editionDate,
+    status: "processing" as const,
+    editorial_context: editorialContextWithMorning,
+    lead_story: leadStory,
+    bandit,
+    discovery: editionUpsertFields.discovery,
+    knowledge: editionUpsertFields.knowledge,
+    memory: editionUpsertFields.memory,
+    morning_edition: editionUpsertFields.morning_edition,
+  };
+
   let { data: edition, error: editionError } = await supabaseAdmin
     .from("editions")
-    .upsert(
-      {
-        user_id: userId,
-        edition_date: editionDate,
-        status: "processing",
-        editorial_context: editorialContextWithMorning,
-        lead_story: leadStory,
-        bandit,
-        discovery: discoveryWithImages,
-        knowledge: knowledgeWithGrounding,
-        memory,
-        morning_edition: morningEdition,
-      },
-      { onConflict: "user_id,edition_date" }
-    )
+    .upsert(upsertCore, { onConflict: "user_id,edition_date" })
     .select()
     .single();
+
+  if (editionError && /invalid json/i.test(editionError.message)) {
+    const stripAttempts: Array<{
+      label: string;
+      payload: Record<string, unknown>;
+    }> = [
+      {
+        label: "without_morning_edition",
+        payload: (() => {
+          const p = { ...upsertCore };
+          delete (p as { morning_edition?: unknown }).morning_edition;
+          return p;
+        })(),
+      },
+      {
+        label: "without_knowledge",
+        payload: (() => {
+          const p = { ...upsertCore };
+          delete (p as { morning_edition?: unknown }).morning_edition;
+          delete (p as { knowledge?: unknown }).knowledge;
+          return p;
+        })(),
+      },
+      {
+        label: "without_memory",
+        payload: (() => {
+          const p = { ...upsertCore };
+          delete (p as { morning_edition?: unknown }).morning_edition;
+          delete (p as { knowledge?: unknown }).knowledge;
+          delete (p as { memory?: unknown }).memory;
+          return p;
+        })(),
+      },
+      {
+        label: "without_discovery",
+        payload: (() => {
+          const p = { ...upsertCore };
+          delete (p as { morning_edition?: unknown }).morning_edition;
+          delete (p as { knowledge?: unknown }).knowledge;
+          delete (p as { memory?: unknown }).memory;
+          delete (p as { discovery?: unknown }).discovery;
+          return p;
+        })(),
+      },
+      {
+        label: "core_only",
+        payload: {
+          user_id: userId,
+          edition_date: editionDate,
+          status: "processing",
+          editorial_context: editorialContextWithMorning,
+          lead_story: leadStory,
+          bandit,
+        },
+      },
+    ];
+
+    for (const attempt of stripAttempts) {
+      console.warn("[buildEdition] edition upsert retry", {
+        label: attempt.label,
+        priorError: editionError.message,
+      });
+      const retry = await supabaseAdmin
+        .from("editions")
+        .upsert(attempt.payload, { onConflict: "user_id,edition_date" })
+        .select()
+        .single();
+      if (!retry.error) {
+        edition = retry.data;
+        editionError = null;
+        console.warn("[buildEdition] edition upsert recovered", {
+          label: attempt.label,
+        });
+        break;
+      }
+      editionError = retry.error;
+    }
+  }
 
   // Pre-migration fallback if new columns are missing.
   if (
@@ -1789,7 +1952,10 @@ export async function buildEditionForUser(
   timer.record("Database Write - Edition Upsert", performance.now() - editionWriteStart);
 
   if (editionError || !edition) {
-    return { ok: false, error: editionError?.message ?? "Could not create edition" };
+    return {
+      ok: false,
+      error: `edition_upsert: ${editionError?.message ?? "Could not create edition"}`,
+    };
   }
 
   const sectionsWriteStart = performance.now();
@@ -1885,14 +2051,12 @@ export async function buildEditionForUser(
     };
   }
 
-  const { error: sectionsError, count: insertCount } = await supabaseAdmin
+  const { error: sectionsError } = await supabaseAdmin
     .from("edition_sections")
-    .insert(rows)
-    .select("id", { count: "exact", head: true });
+    .insert(rows);
 
   console.log("[buildEdition] edition_sections insert", {
     attempted: rows.length,
-    insertCount: insertCount ?? null,
     error: sectionsError?.message ?? null,
     errorCode: sectionsError?.code ?? null,
   });
@@ -1906,7 +2070,32 @@ export async function buildEditionForUser(
       .eq("id", edition.id);
 
     logTimingSummary(timer);
-    return { ok: false, error: sectionsError.message };
+    return { ok: false, error: `edition_sections: ${sectionsError.message}` };
+  }
+
+  const buildComplete = assessPersistedEditionBuild({
+    sections: rows,
+    discovery: discoveryWithImages,
+    hasBanditsPick: Boolean(banditsPick),
+  });
+
+  if (!buildComplete.complete) {
+    console.warn("[buildEdition] refusing ready — incomplete newspaper", {
+      editionId: edition.id,
+      insertedTypes: rows.map((r) => r.section_type),
+      discoverySurfaceItems: discoverySurfaceItemCount(discoveryWithImages),
+      reasons: buildComplete.reasons,
+    });
+    await supabaseAdmin
+      .from("editions")
+      .update({ status: "failed" })
+      .eq("id", edition.id);
+
+    logTimingSummary(timer);
+    return {
+      ok: false,
+      error: `Edition incomplete — not marking ready: ${buildComplete.reasons.join("; ")}`,
+    };
   }
 
   // Only now — sections confirmed written — is this edition actually done.
