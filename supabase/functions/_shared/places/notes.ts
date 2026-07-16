@@ -13,6 +13,7 @@ import {
   buildEditorialIntelligencePromptBlock,
   containsGenericAiPhrase,
 } from "../editorial/editorialIntelligence.ts";
+import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
 
 const CATEGORY_LABEL: Record<PlacesCategory, string> = {
   coffee: "coffee shop",
@@ -46,7 +47,8 @@ const CATEGORY_LABEL: Record<PlacesCategory, string> = {
 export async function writeEditorialNotesForPlaces(
   places: NormalizedPlace[],
   category: PlacesCategory,
-  city: string
+  city: string,
+  options?: { editionDate?: string | null }
 ): Promise<NormalizedPlace[]> {
   if (!places.length) return places;
 
@@ -66,6 +68,11 @@ export async function writeEditorialNotesForPlaces(
         return `${i + 1}. ${bits.join(" — ")}`;
       })
       .join("\n");
+
+    const varietySeed = buildVarietySeed(
+      options?.editionDate,
+      `${city}:${category}`
+    );
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -88,6 +95,7 @@ export async function writeEditorialNotesForPlaces(
           "If little is known beyond the name, write an honest, understated line rather than embellishing. " +
           "No exclamation points. No hashtags. No 'must-visit' clichés. Vary openings across the list. " +
           `${buildEditorialIntelligencePromptBlock()} ` +
+          `${buildEditionVarietyPromptBlock(varietySeed)} ` +
           "Respond ONLY with JSON: " +
           '{"notes":["..."]} with one string per place in the same order.',
         messages: [

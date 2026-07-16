@@ -1,6 +1,7 @@
 import type { Router } from "expo-router";
 import type { LocalEventCard } from "./localEvents";
 import { articleFromLocalEvent } from "./article";
+import { localEditionDate } from "./dates";
 import { openKindredArticle } from "./openArticle";
 
 /**
@@ -10,9 +11,11 @@ import { openKindredArticle } from "./openArticle";
 export function openKindredEvent(
   router: Pick<Router, "push">,
   event: LocalEventCard,
-  options: { backLabel?: string; editionId?: string | null } = {}
+  options: { backLabel?: string; editionId?: string | null; editionDate?: string | null } = {}
 ): void {
-  const article = articleFromLocalEvent(event);
+  const article = articleFromLocalEvent(event, {
+    editionDate: options.editionDate ?? localEditionDate(),
+  });
   openKindredArticle(router, article, {
     backLabel: options.backLabel,
     editionId: options.editionId ?? null,

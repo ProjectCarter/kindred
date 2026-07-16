@@ -3,10 +3,8 @@
  * never in the morning paper.
  */
 
-import {
-  observationClosingForPlace,
-  containsGenericAiPhrase,
-} from "./editorialIntelligence";
+import { containsGenericAiPhrase } from "./editorialIntelligence";
+import { buildVarietySeed, closingLineForVariety } from "./editionVariety";
 
 /** Patterns that break the newspaper illusion — never publish to readers. */
 export const ENGINE_LANGUAGE_PATTERN =
@@ -115,6 +113,12 @@ export function sceneLineForPlace(
   return `Worth a visit when you want something local and specific${area}, not another evening spent deciding where to go.`;
 }
 
-export function closingLineForPlace(title: string, city: string, seed = title): string {
-  return observationClosingForPlace(title, seed || city || title);
+export function closingLineForPlace(
+  title: string,
+  city: string,
+  seed = title,
+  editionDate?: string | null
+): string {
+  const varietySeed = buildVarietySeed(editionDate, seed || city || title);
+  return closingLineForVariety(title, varietySeed);
 }

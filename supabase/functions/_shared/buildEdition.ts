@@ -918,7 +918,7 @@ export async function buildEditionForUser(
         ])
     ),
     timer.timed("Local Events - Bandit Notes (AI)", () =>
-      enrichEventsWithBanditNotes(localEventsForBandit)
+      enrichEventsWithBanditNotes(localEventsForBandit, { editionDate })
     ),
   ]);
   const [editedLead, editedPick, ...editedTopStories] = editedBatch;

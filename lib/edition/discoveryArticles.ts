@@ -38,6 +38,12 @@ import {
   sceneLineForPlace,
 } from "./editorialVoice";
 import { containsGenericAiPhrase } from "./editorialIntelligence";
+import {
+  applyEditionVarietyToBody,
+  buildVarietySeed,
+  orderDiscoverySlots,
+  type DiscoveryVarietySlot,
+} from "./editionVariety";
 
 export type CuratedDiscoveryArticle = {
   /** Editorial subheading for the reader — distinct from the homepage card dek. */
@@ -549,6 +555,7 @@ export function composeCategorySeedArticle(input: {
   category: DiscoveryCategory | string | null | undefined;
   seedKey: string;
   venueCategories?: string[] | null;
+  editionDate?: string | null;
 }): { dek: string; body: string[]; fieldAnswers: EditorialFieldAnswers } | null {
   const essay = getCategoryDiscoveryArticle(input.category, input.seedKey, {
     venueCategories: input.venueCategories,
@@ -578,7 +585,10 @@ export function composeCategorySeedArticle(input: {
 
   if (body.length === 0) return null;
 
-  return { dek, body, fieldAnswers };
+  const varietySeed = buildVarietySeed(input.editionDate, input.seedKey || input.title);
+  const variedBody = applyEditionVarietyToBody(body, varietySeed);
+
+  return { dek, body: variedBody, fieldAnswers };
 }
 
 /**
@@ -802,6 +812,7 @@ export function composePlaceDiscoveryArticle(input: {
   sourceName?: string | null;
   category?: DiscoveryCategory | string | null;
   seedKey: string;
+  editionDate?: string | null;
   knowledgeGrounding?: KnowledgeLookupResult | null;
 }): {
   dek: string;
@@ -865,7 +876,9 @@ export function composePlaceDiscoveryArticle(input: {
     practicalTips = brief.tips;
   }
 
-  const closing = closingLineForPlace(title, city, input.seedKey);
+  const varietySeed = buildVarietySeed(input.editionDate, input.seedKey || title);
+
+  const closing = closingLineForPlace(title, city, input.seedKey, input.editionDate);
 
   const atmosphereParagraph =
     (typeof essay?.fieldAnswers?.atmosphere === "string" &&
@@ -887,21 +900,25 @@ export function composePlaceDiscoveryArticle(input: {
         ? essay.fieldAnswers.highlights.trim()
         : null;
 
-  const rawBody = dedupeDiscoveryBody([
-    opening,
-    atmosphereParagraph && atmosphereParagraph !== opening ? atmosphereParagraph : null,
-    whyVisit !== opening ? whyVisit : null,
-    highlightsParagraph,
-    brief.who,
-    brief.howLong,
-    brief.difficulty,
-    brief.equipment,
-    brief.bestSeason,
-    practicalTips,
-    brief.photoTip,
-    ...(wikipediaBackground ? [wikipediaBackground] : []),
-    closing,
-  ].filter((p): p is string => Boolean(p)));
+  const slots: DiscoveryVarietySlot[] = [
+    { role: "opening", text: opening },
+    ...(atmosphereParagraph && atmosphereParagraph !== opening
+      ? [{ role: "atmosphere" as const, text: atmosphereParagraph }]
+      : []),
+    ...(whyVisit !== opening ? [{ role: "why" as const, text: whyVisit }] : []),
+    ...(highlightsParagraph ? [{ role: "highlights" as const, text: highlightsParagraph }] : []),
+    { role: "who", text: brief.who },
+    { role: "howLong", text: brief.howLong },
+    ...(brief.difficulty ? [{ role: "difficulty" as const, text: brief.difficulty }] : []),
+    ...(brief.equipment ? [{ role: "equipment" as const, text: brief.equipment }] : []),
+    ...(brief.bestSeason ? [{ role: "season" as const, text: brief.bestSeason }] : []),
+    { role: "tips", text: practicalTips },
+    ...(brief.photoTip ? [{ role: "photo" as const, text: brief.photoTip }] : []),
+    ...(wikipediaBackground ? [{ role: "history" as const, text: wikipediaBackground }] : []),
+    { role: "closing", text: closing },
+  ];
+
+  const rawBody = dedupeDiscoveryBody(orderDiscoverySlots(slots, varietySeed));
 
   const body = sanitizeEditorialParagraphs(verified.categoryId, rawBody);
 
@@ -982,7 +999,8 @@ export type VerifiedEventDiscoveryArticle = {
  * claimed unless it's already present in that verified data.
  */
 export function composeVerifiedEventDiscoveryArticle(
-  event: LocalEventCard
+  event: LocalEventCard,
+  options?: { editionDate?: string | null }
 ): VerifiedEventDiscoveryArticle {
   const place = [event.venue, event.city].filter(Boolean).join(", ");
   const whenParts = [event.date, event.time].filter(
@@ -991,7 +1009,7 @@ export function composeVerifiedEventDiscoveryArticle(
   const whenLine = whenParts.join(" · ") || null;
   const hay = `${event.name} ${event.venue}`.toLowerCase();
   const isFestival = /festival|fair|parade|carnival/.test(hay);
-  const body = composeEventArticleFromVerifiedData(event);
+  const body = composeEventArticleFromVerifiedData(event, options);
 
   return {
     dek: place || event.name.trim(),

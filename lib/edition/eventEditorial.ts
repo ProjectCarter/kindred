@@ -7,6 +7,10 @@ import type { LocalEventCard, LocalEventCategory } from "./localEvents";
 import { eventCategoryLabel } from "./localEvents";
 import { containsEngineLanguage } from "./editorialVoice";
 import { containsGenericAiPhrase } from "./editorialIntelligence";
+import {
+  applyEditionVarietyToBody,
+  buildVarietySeed,
+} from "./editionVariety";
 import type { EventInfoBadgeId } from "./eventBadges";
 import { passesEventGoldenTest } from "./eventStorytelling";
 
@@ -125,8 +129,10 @@ function listingFact(event: LocalEventCard): string | null {
  * Uses frozen editorialBody from edition build when present and valid.
  */
 export function composeEventArticleFromVerifiedData(
-  event: LocalEventCard
+  event: LocalEventCard,
+  options?: { editionDate?: string | null }
 ): string[] {
+  const varietySeed = buildVarietySeed(options?.editionDate, event.name.trim());
   const frozen = sanitizeEventEditorialParagraphs(event.editorialBody ?? []);
   if (
     frozen.length >= 2 &&
@@ -137,7 +143,7 @@ export function composeEventArticleFromVerifiedData(
       editorialBody: frozen,
     })
   ) {
-    return frozen;
+    return applyEditionVarietyToBody(frozen, varietySeed);
   }
 
   const name = event.name.trim();
@@ -180,7 +186,10 @@ export function composeEventArticleFromVerifiedData(
   const listing = listingFact(event);
   if (listing && !paragraphs.some((p) => p === listing)) paragraphs.push(listing);
 
-  return sanitizeEventEditorialParagraphs(paragraphs);
+  return applyEditionVarietyToBody(
+    sanitizeEventEditorialParagraphs(paragraphs),
+    varietySeed
+  );
 }
 
 export function validateBanditNote(note: string | null | undefined): string | null {

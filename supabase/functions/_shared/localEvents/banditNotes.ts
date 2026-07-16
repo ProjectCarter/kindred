@@ -12,6 +12,7 @@ import {
   sanitizeEventEditorialParagraphs,
   validateBanditNote,
 } from "./eventEditorial.ts";
+import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
 import { passesEventGoldenTest } from "./eventStorytelling.ts";
 import {
   extractAiHintsFromBanditNote,
@@ -65,8 +66,13 @@ function preserveExistingEditorial(event: LocalEvent): LocalEvent {
   return withRefreshedBadges(event, existingNote, editorialBody);
 }
 
+export type EnrichEventsEditorialOptions = {
+  editionDate?: string | null;
+};
+
 export async function enrichEventsWithBanditNotes(
-  events: LocalEvent[]
+  events: LocalEvent[],
+  options?: EnrichEventsEditorialOptions
 ): Promise<LocalEvent[]> {
   if (!events.length) return events;
 
@@ -78,7 +84,11 @@ export async function enrichEventsWithBanditNotes(
 
   try {
     const brief = events
-      .map((event, index) => buildVerifiedEventBrief(event, index))
+      .map((event, index) => {
+        const verified = buildVerifiedEventBrief(event, index);
+        const varietySeed = buildVarietySeed(options?.editionDate, event.name);
+        return `${verified}\n\n${buildEditionVarietyPromptBlock(varietySeed)}`;
+      })
       .join("\n\n");
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {

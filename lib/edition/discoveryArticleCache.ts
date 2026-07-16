@@ -8,11 +8,12 @@ import type { RankedDiscoveryItem } from "./discovery";
  */
 export function discoveryArticlesById(
   items: RankedDiscoveryItem[],
-  savedContentType?: ClippingContentType
+  savedContentType?: ClippingContentType,
+  editionDate?: string | null
 ): Map<string, KindredArticle> {
   const map = new Map<string, KindredArticle>();
   for (const item of items) {
-    const article = articleFromDiscoveryItem(item);
+    const article = articleFromDiscoveryItem(item, { editionDate });
     map.set(
       item.item.id,
       savedContentType ? { ...article, savedContentType } : article

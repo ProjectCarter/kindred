@@ -6,6 +6,7 @@ import { NEWSPAPER_STYLE_RULES, stripLeadingSalutation } from "../editorialStyle
 import {
   buildEditorialIntelligencePromptBlock,
 } from "../editorial/editorialIntelligence.ts";
+import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
 import {
   validateHistoryArticle,
   wordCount,
@@ -18,6 +19,8 @@ export type WriteTodayInHistoryInput = {
   year: number;
   eventText: string;
   anthropicApiKey: string;
+  /** Edition date or other stable seed — rotates structure across days. */
+  varietySeed?: string | null;
 };
 
 const HISTORY_SYSTEM_PROMPT =
@@ -104,6 +107,10 @@ async function callHistoryWriter(
   input: WriteTodayInHistoryInput,
   extraInstruction?: string
 ): Promise<{ response: Response; data: Record<string, unknown>; text: string }> {
+  const varietySeed = buildVarietySeed(
+    input.varietySeed ?? null,
+    `${input.year}:${input.eventText.slice(0, 80)}`
+  );
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -121,6 +128,7 @@ async function callHistoryWriter(
           content:
             `Grounding data:\n${input.groundingData}\n\n` +
             `Instruction: ${input.instruction}${extraInstruction ? `\n\n${extraInstruction}` : ""}\n\n` +
+            `${buildEditionVarietyPromptBlock(varietySeed)}\n\n` +
             `Headline format (required): \"${input.year} — Compelling editorial title\" — ` +
             `never \"Today in History\" alone. ` +
             `Body length: 450–900 words across exactly 6 paragraphs.`,

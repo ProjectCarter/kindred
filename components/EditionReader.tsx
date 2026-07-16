@@ -434,45 +434,49 @@ function EditionReaderInner({
   ]);
 
   const activityArticlesById = useMemo(
-    () => discoveryArticlesById(fullSectionAllocation.activities, "activity"),
-    [fullSectionAllocation.activities]
+    () => discoveryArticlesById(fullSectionAllocation.activities, "activity", editionDate),
+    [fullSectionAllocation.activities, editionDate]
   );
 
   const recommendationArticlesById = useMemo(
     () =>
       discoveryArticlesById(
         fullSectionAllocation.recommendations,
-        "recommendation"
+        "recommendation",
+        editionDate
       ),
-    [fullSectionAllocation.recommendations]
+    [fullSectionAllocation.recommendations, editionDate]
   );
 
   const notebookArticlesById = useMemo(() => {
     const map = new Map<string, KindredArticle>();
     for (const item of sectionAllocation.notebook) {
-      map.set(item.item.id, articleFromNotebookItem(item, events));
+      map.set(item.item.id, articleFromNotebookItem(item, events, { editionDate }));
     }
     return map;
-  }, [sectionAllocation.notebook, events]);
+  }, [sectionAllocation.notebook, events, editionDate]);
 
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
   );
   const banditPickSides = localBiz.slice(0, 2);
   const localBizArticlesById = useMemo(
-    () => discoveryArticlesById(localBiz),
-    [localBiz]
+    () => discoveryArticlesById(localBiz, undefined, editionDate),
+    [localBiz, editionDate]
   );
 
   const banditsPickArticle = useMemo(() => {
     if (!banditsPick) return null;
     if (banditsPick.kind !== "article" && banditsPick.story.discoveryItem) {
-      return articleFromDiscoveryItem({
-        item: banditsPick.story.discoveryItem,
-        score: 0,
-        reasons: [],
-        surfaces: [],
-      });
+      return articleFromDiscoveryItem(
+        {
+          item: banditsPick.story.discoveryItem,
+          score: 0,
+          reasons: [],
+          surfaces: [],
+        },
+        { editionDate }
+      );
     }
     return articleFromBanditsPick(
       {
@@ -481,7 +485,7 @@ function EditionReaderInner({
       },
       { kind: banditsPick.kind }
     );
-  }, [banditsPick]);
+  }, [banditsPick, editionDate]);
 
   const localTopStories = topStories.filter((s) =>
     /local/i.test(s.role ?? "")

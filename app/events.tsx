@@ -8,6 +8,7 @@ import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { getTodaysEvents } from "../lib/edition/eventsListStore";
 import { articleFromLocalEvent } from "../lib/edition/article";
+import { localEditionDate } from "../lib/edition/dates";
 import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
@@ -22,10 +23,11 @@ export default function EventsScreen() {
   );
   const events = useMemo(() => getTodaysEvents(), []);
   const eventArticlesById = useMemo(() => {
+    const editionDate = localEditionDate();
     const map = new Map<string, ReturnType<typeof articleFromLocalEvent>>();
     for (const event of events) {
       const key = `${event.name}:${event.date}`;
-      map.set(key, articleFromLocalEvent(event));
+      map.set(key, articleFromLocalEvent(event, { editionDate }));
     }
     return map;
   }, [events]);
@@ -83,7 +85,7 @@ export default function EventsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.sky,
+    backgroundColor: paper.page,
   },
   content: {
     paddingHorizontal: 24,

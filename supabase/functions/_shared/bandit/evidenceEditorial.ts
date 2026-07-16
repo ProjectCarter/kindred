@@ -6,6 +6,10 @@
 import type { DiscoveryRankingContext } from "../discovery/types.ts";
 import type { BanditSeasonalEditorial } from "./editorialContent.ts";
 import { containsGenericAiPhrase } from "../editorial/editorialIntelligence.ts";
+import {
+  applyEditionVarietyToBody,
+  buildVarietySeed,
+} from "../editorial/editionVariety.ts";
 import type {
   ExperienceEvidenceBundle,
   ExperienceEvidenceItem,
@@ -55,7 +59,8 @@ function nearbyFromEvidence(bundle: ExperienceEvidenceBundle): NearbyEditorialPi
 
 function composeExperienceLedEditorial(
   base: BanditSeasonalEditorial,
-  evidence: ExperienceEvidenceBundle
+  evidence: ExperienceEvidenceBundle,
+  ctx: DiscoveryRankingContext
 ): BanditSeasonalEditorial & { nearby: NearbyEditorialPick[] } {
   const { primary, area } = evidence;
   const anchorList = anchors(evidence);
@@ -123,7 +128,10 @@ function composeExperienceLedEditorial(
   return {
     headline: base.headline,
     cardExcerpt: cardExcerpt.slice(0, 280),
-    body,
+    body: applyEditionVarietyToBody(
+      body,
+      buildVarietySeed(ctx.editionDate, `${base.headline}:${primary.name}`)
+    ),
     modules,
     closingNote: base.closingNote,
     mapsQuery,
@@ -135,7 +143,7 @@ function composeExperienceLedEditorial(
 function composeVenueLedEditorial(
   base: BanditSeasonalEditorial,
   evidence: ExperienceEvidenceBundle,
-  _ctx: DiscoveryRankingContext
+  ctx: DiscoveryRankingContext
 ): BanditSeasonalEditorial & { nearby: NearbyEditorialPick[] } {
   const { primary, area, items } = evidence;
   const where = whereLine(primary, area);
@@ -198,7 +206,10 @@ function composeVenueLedEditorial(
   return {
     headline: base.headline,
     cardExcerpt: cardExcerpt.slice(0, 280),
-    body,
+    body: applyEditionVarietyToBody(
+      body,
+      buildVarietySeed(ctx.editionDate, `${base.headline}:${primary.name}`)
+    ),
     modules,
     closingNote: base.closingNote,
     mapsQuery,
@@ -216,7 +227,7 @@ export function composeEvidenceBackedSeasonalEditorial(
   ctx: DiscoveryRankingContext
 ): BanditSeasonalEditorial & { nearby: NearbyEditorialPick[] } {
   if (evidence.experienceLed) {
-    return composeExperienceLedEditorial(base, evidence);
+    return composeExperienceLedEditorial(base, evidence, ctx);
   }
   return composeVenueLedEditorial(base, evidence, ctx);
 }

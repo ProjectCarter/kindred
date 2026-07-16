@@ -6,6 +6,11 @@ import {
 } from "./discovery";
 import type { KnowledgeFacet, KnowledgePayload } from "./knowledge";
 import { onThisDayImageFromKnowledge } from "./historicalImages";
+import {
+  isStoryOfSection,
+  parseStoryOfSourceNote,
+  storyOfImageFromSourceNote,
+} from "./storyOf";
 import { dedupeProse, isNearDuplicateProse } from "./contentQuality";
 import { getGoldStandardArticle } from "./goldStandard/algalBloomArticle";
 import {
@@ -17,6 +22,9 @@ import {
 import type { LocalEventCard } from "./localEvents";
 import type { ClippingContentType } from "./clippingTypes";
 import { resolveEventEndsAt } from "./eventExpiry";
+import {
+  composeEventArticleFromVerifiedData,
+} from "./eventEditorial";
 import {
   composeCategorySeedArticle,
   composeFallbackDiscoveryBody,
@@ -34,21 +42,9 @@ import {
 import { enrichBanditsPickStory } from "./banditEditorial";
 import { sanitizeAddressForDisplay } from "./verifiedLocation";
 import type { ImageSourcePropType } from "react-native";
-
-/**
- * Deterministically pick from a short list of equivalent phrasings so the
- * same template doesn't read identically across many articles in one
- * session — e.g. every local event sharing one "context" sentence.
- * Same seed always picks the same option (stable across re-renders).
- */
-function pickVariant(seed: string, options: string[]): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-  }
-  const index = Math.abs(hash) % options.length;
-  return options[index];
-}
+import { resolveDiscoveryCategoryIcon, resolveEventCategoryIcon, resolveBanditsPickCategoryIcon } from "./categoryIcon";
+import { resolveVenueClassification } from "./venueClassification";
+import { inferActivitySubtype } from "./activities";
 
 /**
  * Canonical article model for Kindred’s native reader.
@@ -60,6 +56,8 @@ export type KindredArticle = {
   /** Section key for future routing analytics — e.g. lead, top_stories, sports. */
   section: string;
   headline: string;
+  /** Single editorial category emoji — consistent on cards and in the reader. */
+  categoryIcon?: string | null;
   /** Short dek / standfirst under the headline. */
   dek?: string | null;
   byline?: string | null;
@@ -296,6 +294,13 @@ export function articleFromBanditsPick(
 
   return {
     ...base,
+    categoryIcon: resolveBanditsPickCategoryIcon({
+      kind: options?.kind ?? "place",
+      headline: enriched.headline,
+      summary: enriched.summary,
+      category: pick.discoveryItem?.category ?? null,
+      discoveryItem: pick.discoveryItem ?? null,
+    }),
     body: enriched.body?.length ? enriched.body : base.body,
     modules,
     figures: [],
@@ -445,15 +450,20 @@ export function articleFromEditionSection(
   },
   options?: {
     historicalImage?: import("./knowledgeGrounding").HistoricalImageAsset | null;
+    dek?: string | null;
   }
 ): KindredArticle {
   const historical = options?.historicalImage;
+  const storyNote = isStoryOfSection(section.section_type)
+    ? parseStoryOfSourceNote(section.source_note)
+    : null;
   const article = articleFromSectionItem({
     id: section.id,
     section: section.section_type,
     headline: section.headline,
     body: section.body,
-    source: section.source_note?.trim() || "Kindred",
+    dek: options?.dek ?? storyNote?.subtitle ?? null,
+    source: storyNote ? "Kindred Editorial" : section.source_note?.trim() || "Kindred",
     sourceUrl: null,
     imageUrl: historical?.url ?? null,
     imageCaption: historical?.caption ?? section.headline,
@@ -485,7 +495,9 @@ export function articleFromEditionSectionWithKnowledge(
     historicalImage:
       section.section_type === "today_in_history"
         ? onThisDayImageFromKnowledge(knowledge)
-        : null,
+        : isStoryOfSection(section.section_type)
+          ? storyOfImageFromSourceNote(section.source_note)
+          : null,
   });
 }
 
@@ -505,7 +517,35 @@ function finalizeDiscoveryArticle(
   article: KindredArticle,
   item: DiscoveryItem
 ): KindredArticle {
-  return attachDiscoveryActionContext(article, item);
+  const surface = discoveryActionSurface(item);
+  const context = surface === "activity" ? "activity" : "recommendation";
+  const venue = resolveVenueClassification({
+    title: item.title,
+    venueCategories: item.venueCategories,
+    discoveryCategory: item.category,
+    dek: item.dek,
+    address: item.address,
+  });
+  return attachDiscoveryActionContext(
+    {
+      ...article,
+      categoryIcon: resolveDiscoveryCategoryIcon(
+        {
+          title: item.title,
+          dek: item.dek,
+          category: item.category,
+          venueCategories: item.venueCategories,
+          tags: item.tags,
+          editorialCategoryId:
+            venue.confidence !== "low" ? venue.categoryId : null,
+          activitySubtype:
+            item.category === "activities" ? inferActivitySubtype(item) : null,
+        },
+        context
+      ),
+    },
+    item
+  );
 }
 
 function discoverySavedLocation(item: DiscoveryItem): string | null {
@@ -536,9 +576,11 @@ function attachDiscoveryActionContext(
   };
 }
 export function articleFromDiscoveryItem(
-  ranked: RankedDiscoveryItem
+  ranked: RankedDiscoveryItem,
+  options?: { editionDate?: string | null }
 ): KindredArticle {
   const item = ranked.item;
+  const editionDate = options?.editionDate ?? null;
   const why = formatDiscoveryWhy(ranked);
   const savedLocation = discoverySavedLocation(item);
 
@@ -583,6 +625,7 @@ export function articleFromDiscoveryItem(
       sourceName: item.source?.name ?? null,
       category: item.category,
       seedKey: item.id,
+      editionDate,
       knowledgeGrounding: item.knowledgeGrounding ?? null,
     });
     return finalizeDiscoveryArticle(
@@ -615,6 +658,7 @@ export function articleFromDiscoveryItem(
     dek: item.dek,
     category: item.category,
     seedKey: item.id,
+    editionDate,
   });
   if (categoryArticle) {
     return finalizeDiscoveryArticle(
@@ -686,9 +730,11 @@ export function articleFromDiscoveryItem(
  */
 export function articleFromNotebookItem(
   ranked: RankedDiscoveryItem,
-  localEvents?: LocalEventCard[] | null
+  localEvents?: LocalEventCard[] | null,
+  options?: { editionDate?: string | null }
 ): KindredArticle {
   const item = ranked.item;
+  const editionDate = options?.editionDate ?? null;
   const why = formatDiscoveryWhy(ranked);
 
   const curated = getCuratedDiscoveryArticle(item.id);
@@ -719,6 +765,7 @@ export function articleFromNotebookItem(
       sourceName: item.source?.name ?? null,
       category: item.category,
       seedKey: item.id,
+      editionDate,
       knowledgeGrounding: item.knowledgeGrounding ?? null,
     });
     return articleFromSectionItem({
@@ -737,7 +784,7 @@ export function articleFromNotebookItem(
 
   const verifiedEvent = matchVerifiedLocalEvent(item, localEvents);
   if (verifiedEvent) {
-    const composed = composeVerifiedEventDiscoveryArticle(verifiedEvent);
+    const composed = composeVerifiedEventDiscoveryArticle(verifiedEvent, { editionDate });
     return articleFromSectionItem({
       id: item.id,
       section: "discovery",
@@ -763,6 +810,7 @@ export function articleFromNotebookItem(
     dek: item.dek,
     category: item.category,
     seedKey: item.id,
+    editionDate,
   });
   if (categoryArticle) {
     return articleFromSectionItem({
@@ -804,10 +852,13 @@ export function articleFromNotebookItem(
 }
 
 /**
- * Local event / festival → KindredArticle with the matching desk template.
- * Story first (Bandit’s invitation); logistics as magazine modules.
+ * Local event / festival → KindredArticle with verified editorial copy only.
+ * Editorial law: docs/editorial/EVENT_EDITORIAL_STANDARD.md
  */
-export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
+export function articleFromLocalEvent(
+  event: LocalEventCard,
+  options?: { editionDate?: string | null }
+): KindredArticle {
   const venue =
     event.venue?.trim() && event.venue.trim() !== "Venue TBA"
       ? event.venue.trim()
@@ -822,31 +873,7 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
   const hay = `${event.name} ${event.venue}`.toLowerCase();
   const isFestival = /festival|fair|parade|carnival/.test(hay);
   const banditNote = event.banditNote?.trim() || null;
-
-  // Story first, built only from what Kindred actually knows — the
-  // Bandit note (grounded, never invented) opens the scene; the rest is
-  // an honest, category-true case for going, never a fabricated detail.
-  const hook =
-    banditNote ||
-    (place
-      ? `Something is on tonight at ${place} worth rearranging an evening for.`
-      : "A local moment worth leaving the house for.");
-  const context = isFestival
-    ? pickVariant(event.name, [
-        "Festivals like this are where a town actually shows up for itself — worth the crowd, the parking search, and the hour spent finding a good spot to stand.",
-        "A festival is one of the few times a whole town turns up in the same place at once — worth the crowd and the walk to find parking.",
-      ])
-    : pickVariant(event.name, [
-        "The best local evenings rarely make anyone's must-see list. They just quietly turn out better than staying in would have.",
-        "Nothing about this needs to be a big production — just an evening worth showing up for.",
-        "This is the kind of plan that looks unremarkable on paper and turns out to be exactly the right amount of evening.",
-      ]);
-  const closing = pickVariant(`${event.name}:${event.date}`, [
-    "The rest is worth discovering in person — that is usually where the good part starts.",
-    "Everything beyond the basics is best found by going.",
-    "Show up with a little curiosity; that is often enough.",
-  ]);
-  const story = [hook, context, closing];
+  const story = composeEventArticleFromVerifiedData(event, options);
 
   return {
     ...articleFromSectionItem({
@@ -865,14 +892,19 @@ export function articleFromLocalEvent(event: LocalEventCard): KindredArticle {
       fieldAnswers: {
         when: whenLine,
         where: place || null,
-        what_to_expect: isFestival
-          ? "Expect crowds, food and craft stalls, and a full program of activity — arrive early for the calmer version of it."
-          : "A single scheduled happening — arrive a little before start time to find parking and a good spot.",
+        what_to_expect: story[1] ?? story[0] ?? null,
         tips: event.sourceUrl
           ? "Confirm hours and tickets on the listing before you go — schedules shift close to the date."
-          : "Details can shift close to the date — worth a quick check before you leave.",
+          : null,
       },
     }),
+    categoryIcon:
+      event.categoryIcon ??
+      resolveEventCategoryIcon({
+        name: event.name,
+        venue: event.venue,
+        category: event.category,
+      }),
     savedContentType: "event",
     savedLocation: place || null,
     savedEventTime: whenLine || null,
@@ -915,6 +947,9 @@ export function isKindredBriefing(article: KindredArticle): boolean {
     .filter(Boolean).length;
   if (article.section === "today_in_history") {
     return words < 250;
+  }
+  if (article.section === "your_city" || article.section === "story_of") {
+    return words < 500;
   }
   return words < 350;
 }
