@@ -13,6 +13,8 @@ import {
 import { runDiscoveryDecisions } from "../_shared/discovery/index.ts";
 import { isUsHolidayOrEve } from "../_shared/calendar/holidays.ts";
 import { getLocalPlaces } from "../_shared/places/index.ts";
+import { tryPersistDiscoveryUpdate } from "../_shared/editionCompleteness.ts";
+import { resolveEventTimezone } from "../_shared/localEvents/eventTimezone.ts";
 
 type ClientLocation = {
   city?: string;
@@ -106,8 +108,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const interests: string[] = profile?.interests ?? [];
 
+    const eventTimezone = resolveEventTimezone(location);
     const [localEvents, localPlaces] = await Promise.all([
-      getLocalEvents(location, { isBusyDay }),
+      getLocalEvents(location, {
+        isBusyDay,
+        now: new Date(),
+        editionDate: date,
+        timezone: eventTimezone,
+      }),
       // Shared per-metro cache — almost never actually calls Foursquare.
       getLocalPlaces(admin, location),
     ]);
@@ -118,6 +126,8 @@ Deno.serve(async (req) => {
       city: location.city,
       region: location.region ?? null,
       state: location.state ?? null,
+      readerLat: location.lat,
+      readerLon: location.lon,
       interests,
       followedTopics: [],
       favoriteSources: [],
@@ -154,19 +164,37 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { error: updateError } = await admin
-      .from("editions")
-      .update({ discovery })
-      .eq("id", edition.id);
+    const persist = await tryPersistDiscoveryUpdate(admin, {
+      editionId: edition.id,
+      candidateDiscovery: discovery,
+      logPrefix: "[refresh-discovery]",
+    });
 
-    if (updateError) {
-      return Response.json({ error: updateError.message }, { status: 500 });
+    if (!persist.ok) {
+      return Response.json({ error: persist.error ?? "update failed" }, { status: 500 });
+    }
+
+    if (persist.rejected) {
+      return Response.json({
+        ok: true,
+        editionId: edition.id,
+        editionDate: date,
+        discoveryUpdated: false,
+        rejectedIncomplete: true,
+        isWeekend,
+        isBusyDay,
+        localPlacesCount: localPlaces.length,
+        surfaces: Object.keys(discovery.surfaces),
+        selectedCount: discovery.selectionMeta.selectedCount,
+        candidateCount: discovery.selectionMeta.candidateCount,
+      });
     }
 
     return Response.json({
       ok: true,
       editionId: edition.id,
       editionDate: date,
+      discoveryUpdated: persist.changed,
       isWeekend,
       isBusyDay,
       localPlacesCount: localPlaces.length,

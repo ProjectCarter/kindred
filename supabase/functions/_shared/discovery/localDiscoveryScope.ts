@@ -91,7 +91,7 @@ export function distanceKmFromReader(
 
 export function passesLocalDiscoveryRadius(
   ranked: RankedDiscoveryItem,
-  ctx: DiscoveryRankingContext
+  ctx: Pick<DiscoveryRankingContext, "readerLat" | "readerLon">
 ): boolean {
   const item = ranked.item;
   if (!LOCAL_DISCOVERY_CATEGORIES.has(item.category)) return true;
@@ -114,7 +114,7 @@ export const surfaceUsesRecommendationRadius = surfaceUsesLocalDiscoveryRadius;
 /** Every item in the Activities section stays within the local newspaper radius. */
 export function passesActivitiesSectionRadius(
   ranked: RankedDiscoveryItem,
-  ctx: DiscoveryRankingContext
+  ctx: Pick<DiscoveryRankingContext, "readerLat" | "readerLon">
 ): boolean {
   const item = ranked.item;
   if (isStatewideAttraction(item)) return false;

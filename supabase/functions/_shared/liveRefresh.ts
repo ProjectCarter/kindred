@@ -22,10 +22,15 @@ import {
   type LocalEvent,
   type LocalEventLocation,
 } from "./localEvents/provider.ts";
+import { resolveEventTimezone } from "./localEvents/eventTimezone.ts";
+import { assertEventsVerifiedForPublication } from "./localEvents/eventDateVerification.ts";
 import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlaces } from "./places/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
+import {
+  tryPersistDiscoveryUpdate,
+} from "./editionCompleteness.ts";
 
 export type LiveRefreshLocation = LocalEventLocation;
 
@@ -61,8 +66,12 @@ export async function refreshEventsSection(
   input: LiveRefreshInput
 ): Promise<{ ok: boolean; changed: boolean; count: number; error?: string }> {
   try {
+    const eventTimezone = resolveEventTimezone(input.location);
     const fetched: LocalEvent[] = await getLocalEvents(input.location, {
       isBusyDay: isBusyDayFor(input.editionDate),
+      now: new Date(),
+      editionDate: input.editionDate,
+      timezone: eventTimezone,
     });
 
     if (fetched.length === 0) {
@@ -70,7 +79,19 @@ export async function refreshEventsSection(
       return { ok: true, changed: false, count: 0 };
     }
 
-    const events = await enrichEventsWithBanditNotes(fetched);
+    const events = assertEventsVerifiedForPublication(
+      await enrichEventsWithBanditNotes(fetched),
+      {
+        now: new Date(),
+        location: input.location,
+        eventTimezone,
+        editionDate: input.editionDate,
+      }
+    );
+
+    if (events.length === 0) {
+      return { ok: true, changed: false, count: 0 };
+    }
     const { isEventbriteOnlyMode } = await import("./localEvents/eventbriteOnlyMode.ts");
     const body = buildLocalEventsBody(events, {
       eventbriteOnly: isEventbriteOnlyMode(),
@@ -154,8 +175,14 @@ export async function refreshDiscoveryData(
     const isWeekend = isSaturday || isSunday;
     const isBusyDay = isWeekend || isUsHolidayOrEve(dateObj);
 
+    const eventTimezone = resolveEventTimezone(input.location);
     const [localEvents, localPlaces] = await Promise.all([
-      getLocalEvents(input.location, { isBusyDay }),
+      getLocalEvents(input.location, {
+        isBusyDay,
+        now: new Date(),
+        editionDate: input.editionDate,
+        timezone: eventTimezone,
+      }),
       getLocalPlaces(admin, input.location),
     ]);
 
@@ -165,6 +192,8 @@ export async function refreshDiscoveryData(
       city: input.location.city,
       region: input.location.region ?? null,
       state: input.location.state ?? null,
+      readerLat: input.location.lat,
+      readerLon: input.location.lon,
       interests: input.interests ?? [],
       followedTopics: [],
       favoriteSources: [],
@@ -182,31 +211,17 @@ export async function refreshDiscoveryData(
       recentKeys: [],
     });
 
-    const { data: current, error: currentError } = await admin
-      .from("editions")
-      .select("discovery")
-      .eq("id", input.editionId)
-      .maybeSingle();
-    if (currentError) {
-      return { ok: false, changed: false, error: currentError.message };
-    }
-
-    const unchanged =
-      JSON.stringify(current?.discovery ?? null) === JSON.stringify(discovery);
-    if (unchanged) {
-      return { ok: true, changed: false };
-    }
-
-    const { error: updateError } = await admin
-      .from("editions")
-      .update({ discovery })
-      .eq("id", input.editionId);
-    if (updateError) {
-      return { ok: false, changed: false, error: updateError.message };
-    }
-    return { ok: true, changed: true };
+    return tryPersistDiscoveryUpdate(admin, {
+      editionId: input.editionId,
+      candidateDiscovery: discovery,
+      logPrefix: "[liveRefresh]",
+    });
   } catch (err) {
-    return { ok: false, changed: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      changed: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

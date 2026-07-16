@@ -71,7 +71,7 @@ import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDis
 import { V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT } from "./editorial/v1ImagePolicy.ts";
 import { pruneDiscoveryPayloadByConfidence } from "./editorial/confidencePayload.ts";
 import {
-  assessPersistedEditionBuild,
+  assessPersistedEditionRow,
   discoverySurfaceItemCount,
 } from "./editionCompleteness.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
@@ -2072,14 +2072,10 @@ export async function buildEditionForUser(
     return { ok: false, error: `edition_sections: ${sectionsError.message}` };
   }
 
-  const buildComplete = assessPersistedEditionBuild({
-    sections: rows,
-    discovery: discoveryWithImages,
-    hasBanditsPick: Boolean(banditsPick),
-  });
+  const buildComplete = await assessPersistedEditionRow(supabaseAdmin, edition.id);
 
   if (!buildComplete.complete) {
-    console.warn("[buildEdition] refusing ready — incomplete newspaper", {
+    console.warn("[buildEdition] refusing ready — persisted row incomplete", {
       editionId: edition.id,
       insertedTypes: rows.map((r) => r.section_type),
       discoverySurfaceItems: discoverySurfaceItemCount(discoveryWithImages),
