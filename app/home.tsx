@@ -118,7 +118,7 @@ import {
   updateHomeScroll,
 } from "../lib/edition/homeSession";
 import { markStartup, logStartupSummary } from "../lib/perf/startupTiming";
-import { recordAuthGetSession } from "../lib/perf/startupMetrics";
+import { getLaunchSessionOrFetch } from "../lib/auth/launchSession";
 import {
   assessEditionCompleteness,
   logEditionCompleteness,
@@ -192,6 +192,8 @@ export default function HomeScreen() {
   const resetScrollOnLoadRef = useRef(false);
   const editionIdRef = useRef<string | null>(null);
   const activeLocationRef = useRef<ActiveLocation | null>(null);
+  /** Mount effect resolves location once — skip duplicate read on first focus. */
+  const initialFocusLocationHandledRef = useRef(false);
 
   editionIdRef.current = editionId;
   activeLocationRef.current = activeLocation;
@@ -536,8 +538,7 @@ export default function HomeScreen() {
     const {
       data: { session },
       error: sessionError,
-    } = await supabase.auth.getSession();
-    recordAuthGetSession();
+    } = await getLaunchSessionOrFetch();
     const user = session?.user ?? null;
 
     if (__DEV__) {
@@ -581,40 +582,54 @@ export default function HomeScreen() {
       .eq("edition_date", todayStr)
       .maybeSingle();
 
+    let prefetchedSectionsPromise: ReturnType<
+      typeof supabase.from
+    > | null = null;
+
+    const cachePromise = shouldHydrateCache
+      ? loadCachedEdition(user.id, todayStr).then((cached) => {
+          if (cached && mountedRef.current && gen === loadGen.current) {
+            applyCachedBundle(cached);
+            setLoading(false);
+            markStartup("home_cache_paint");
+            void maybeRecoverTodayInHistory({
+              userId: user.id,
+              editionId: cached.editionId,
+              editionDate: cached.editionDate,
+              sections: cached.sections,
+              intelligence: cached.intelligence,
+            }).then((recovered) => {
+              if (!mountedRef.current || gen !== loadGen.current) return;
+              if (
+                recovered.sections !== cached.sections ||
+                recovered.intelligence !== cached.intelligence
+              ) {
+                setSections(recovered.sections);
+                setIntelligence(recovered.intelligence);
+              }
+            });
+            if (__DEV__) {
+              console.log("[home] loadEdition: hydrated from cache", {
+                editionId: cached.editionId,
+                sectionCount: cached.sections.length,
+              });
+            }
+          }
+          if (cached?.editionId) {
+            prefetchedSectionsPromise = supabase
+              .from("edition_sections")
+              .select("id, section_type, position, headline, body, source_note")
+              .eq("edition_id", cached.editionId)
+              .order("position", { ascending: true });
+          }
+          return cached;
+        })
+      : Promise.resolve(null);
+
     const [cached, editionResult] = await Promise.all([
-      shouldHydrateCache
-        ? loadCachedEdition(user.id, todayStr)
-        : Promise.resolve(null),
+      cachePromise,
       editionQuery,
     ]);
-
-    if (cached && mountedRef.current && gen === loadGen.current) {
-      applyCachedBundle(cached);
-      setLoading(false);
-      markStartup("home_cache_paint");
-      void maybeRecoverTodayInHistory({
-        userId: user.id,
-        editionId: cached.editionId,
-        editionDate: cached.editionDate,
-        sections: cached.sections,
-        intelligence: cached.intelligence,
-      }).then((recovered) => {
-        if (!mountedRef.current || gen !== loadGen.current) return;
-        if (
-          recovered.sections !== cached.sections ||
-          recovered.intelligence !== cached.intelligence
-        ) {
-          setSections(recovered.sections);
-          setIntelligence(recovered.intelligence);
-        }
-      });
-      if (__DEV__) {
-        console.log("[home] loadEdition: hydrated from cache", {
-          editionId: cached.editionId,
-          sectionCount: cached.sections.length,
-        });
-      }
-    }
 
     const {
       data: edition,
@@ -674,21 +689,34 @@ export default function HomeScreen() {
       };
     }
 
-    const {
-      data: sectionRows,
-      error: sectionsError,
-      status: sectionsStatus,
-    } = await supabase
-      .from("edition_sections")
-      .select("id, section_type, position, headline, body, source_note")
-      .eq("edition_id", edition.id)
-      .order("position", { ascending: true });
+    const canUsePrefetchedSections =
+      cached?.editionId === edition.id && prefetchedSectionsPromise != null;
 
-    if (sectionsError) {
-      throw new Error(sectionsError.message);
+    let sectionRows: EditionSection[] | null = null;
+    let sectionsError: { message: string } | null = null;
+
+    if (canUsePrefetchedSections && prefetchedSectionsPromise) {
+      const prefetched = await prefetchedSectionsPromise;
+      if (prefetched.error) {
+        sectionsError = prefetched.error;
+      } else {
+        sectionRows = (prefetched.data as EditionSection[] | null) ?? null;
+      }
     }
 
-    const loaded = (sectionRows as EditionSection[] | null) ?? [];
+    if (!canUsePrefetchedSections || sectionsError) {
+      const sectionsResult = await supabase
+        .from("edition_sections")
+        .select("id, section_type, position, headline, body, source_note")
+        .eq("edition_id", edition.id)
+        .order("position", { ascending: true });
+      if (sectionsResult.error) {
+        throw new Error(sectionsResult.error.message);
+      }
+      sectionRows = (sectionsResult.data as EditionSection[] | null) ?? null;
+    }
+
+    const loaded = sectionRows ?? [];
 
     markStartup("home_sections_query_done");
 
@@ -856,8 +884,12 @@ export default function HomeScreen() {
     const { user, edition, loaded } = payload;
 
     // Use cached prefs for city check — never block first paint on GPS refresh.
-    const active = await resolveActivePlace({ refreshIfStale: false });
-    if (mountedRef.current) setActiveLocation(active);
+    const active =
+      activeLocationRef.current ??
+      (await resolveActivePlace({ refreshIfStale: false }));
+    if (mountedRef.current && !activeLocationRef.current) {
+      setActiveLocation(active);
+    }
 
     const lead = parseLeadStory((edition as { lead_story?: unknown }).lead_story);
     const intel = parseEditionIntelligence({
@@ -1285,8 +1317,52 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const pollBackgroundJobProgress = useCallback(async () => {
+    if (!isSupabaseConfigured || generatingRef.current) return;
+
+    const {
+      data: { session },
+    } = await getLaunchSessionOrFetch();
+    const user = session?.user ?? null;
+    if (!user) return;
+
+    const todayStr = localEditionDate();
+    const [editionResult, jobResult] = await Promise.all([
+      supabase
+        .from("editions")
+        .select("status")
+        .eq("user_id", user.id)
+        .eq("edition_date", todayStr)
+        .maybeSingle(),
+      supabase
+        .from("generation_jobs")
+        .select("status, last_error")
+        .eq("user_id", user.id)
+        .eq("edition_date", todayStr)
+        .maybeSingle(),
+    ]);
+
+    if (!mountedRef.current) return;
+
+    if (editionResult.data?.status === "ready") {
+      void loadEdition({ quiet: true });
+      return;
+    }
+
+    if (jobResult.data) {
+      setBackgroundJob({
+        status: jobResult.data.status,
+        lastError: jobResult.data.last_error,
+      });
+    }
+  }, [loadEdition]);
+
   useFocusEffect(
     useCallback(() => {
+      if (!initialFocusLocationHandledRef.current) {
+        initialFocusLocationHandledRef.current = true;
+        return;
+      }
       void (async () => {
         const active = await resolveActivePlace({ refreshIfStale: false });
         if (!mountedRef.current) return;
@@ -1376,11 +1452,11 @@ export default function HomeScreen() {
     if (!jobActive) return;
     const interval = setInterval(() => {
       if (mountedRef.current && !generatingRef.current) {
-        void loadEdition();
+        void pollBackgroundJobProgress();
       }
     }, 15_000);
     return () => clearInterval(interval);
-  }, [backgroundJob, loadEdition]);
+  }, [backgroundJob, pollBackgroundJobProgress]);
 
   // Resume: quietly refresh paper + stale GPS when mode is current.
   useEffect(() => {

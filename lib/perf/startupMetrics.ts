@@ -21,6 +21,7 @@ export type StartupMetricsSnapshot = {
   edgeFunctionFetchCount: number;
   otherFetchCount: number;
   authGetSessionCount: number;
+  authLaunchSessionCacheHitCount: number;
   loadPrefsCallCount: number;
   loadPrefsCacheHitCount: number;
   /** home_fetch_start → home_first_paint or home_cache_paint */
@@ -42,6 +43,7 @@ let supabaseFetchCount = 0;
 let edgeFunctionFetchCount = 0;
 let otherFetchCount = 0;
 let authGetSessionCount = 0;
+let authLaunchSessionCacheHitCount = 0;
 let loadPrefsCallCount = 0;
 let loadPrefsCacheHitCount = 0;
 
@@ -57,6 +59,7 @@ export function resetStartupMetricsForTests(): void {
   edgeFunctionFetchCount = 0;
   otherFetchCount = 0;
   authGetSessionCount = 0;
+  authLaunchSessionCacheHitCount = 0;
   loadPrefsCallCount = 0;
   loadPrefsCacheHitCount = 0;
   cacheHit = false;
@@ -91,6 +94,11 @@ export function recordStartupMark(name: string, elapsedMs: number): void {
 export function recordAuthGetSession(): void {
   if (!__DEV__) return;
   authGetSessionCount += 1;
+}
+
+export function recordLaunchSessionCacheHit(): void {
+  if (!__DEV__) return;
+  authLaunchSessionCacheHitCount += 1;
 }
 
 export function recordLoadPrefsInvocation(cached: boolean): void {
@@ -165,6 +173,7 @@ export function buildStartupMetricsSnapshot(): StartupMetricsSnapshot {
     edgeFunctionFetchCount,
     otherFetchCount,
     authGetSessionCount,
+    authLaunchSessionCacheHitCount,
     loadPrefsCallCount,
     loadPrefsCacheHitCount,
     editionLoadMs,

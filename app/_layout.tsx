@@ -12,6 +12,10 @@ import { paper } from "../lib/edition/newspaperTheme";
 import { markStartup } from "../lib/perf/startupTiming";
 import { beginStartupMetricsProbe, recordAuthGetSession } from "../lib/perf/startupMetrics";
 import { installStartupFetchProbe } from "../lib/perf/installStartupFetchProbe";
+import {
+  invalidateLaunchSession,
+  primeLaunchSession,
+} from "../lib/auth/launchSession";
 
 installStartupFetchProbe();
 beginStartupMetricsProbe();
@@ -115,6 +119,7 @@ export default function RootLayout() {
 
         const { data, error } = await supabase.auth.getSession();
         recordAuthGetSession();
+        primeLaunchSession(data.session ?? null, error ?? null);
         markStartup("layout_session_ready");
         if (cancelled) return;
         if (error && __DEV__) {
@@ -153,6 +158,7 @@ export default function RootLayout() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
         if (cancelled) return;
+        primeLaunchSession(newSession);
         setSession(newSession);
         if (newSession?.user?.id) {
           void refreshInterests(newSession.user.id);
@@ -164,6 +170,7 @@ export default function RootLayout() {
 
     return () => {
       cancelled = true;
+      invalidateLaunchSession();
       linkSub.remove();
       listener.subscription.unsubscribe();
     };
