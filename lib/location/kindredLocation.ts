@@ -11,6 +11,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import { supabase, isSupabaseConfigured } from "../supabase";
 import { filterSuggestedCities, SUGGESTED_CITIES } from "./cities";
+import { recordLoadPrefsInvocation } from "../perf/startupMetrics";
 import type {
   ActiveLocation,
   KindredPlace,
@@ -31,6 +32,13 @@ const DEFAULT_PREFS: LocationPrefs = {
   currentUpdatedAt: null,
   firstRunCompleted: false,
 };
+
+/** Coalesce concurrent loadPrefs during launch — invalidated on write. */
+let launchPrefsPromise: Promise<LocationPrefs> | null = null;
+
+export function invalidateLaunchPrefsCache(): void {
+  launchPrefsPromise = null;
+}
 
 function isUsableCity(city: string | null | undefined): boolean {
   if (!city) return false;
@@ -134,6 +142,7 @@ async function readPrefsRaw(): Promise<LocationPrefs> {
 }
 
 async function writePrefs(prefs: LocationPrefs): Promise<void> {
+  invalidateLaunchPrefsCache();
   try {
     await AsyncStorage.setItem(LOCATION_PREFS_KEY, JSON.stringify(prefs));
   } catch {
@@ -291,9 +300,24 @@ async function hydratePrefsFromProfile(
 }
 
 async function loadPrefs(): Promise<LocationPrefs> {
-  const base = await readPrefsRaw();
-  const migrated = await migrateLegacyCache(base);
-  return hydratePrefsFromProfile(migrated);
+  if (launchPrefsPromise) {
+    recordLoadPrefsInvocation(true);
+    return launchPrefsPromise;
+  }
+
+  recordLoadPrefsInvocation(false);
+  launchPrefsPromise = (async () => {
+    const base = await readPrefsRaw();
+    const migrated = await migrateLegacyCache(base);
+    return hydratePrefsFromProfile(migrated);
+  })();
+
+  try {
+    return await launchPrefsPromise;
+  } catch (err) {
+    invalidateLaunchPrefsCache();
+    throw err;
+  }
 }
 
 /** Payload for generate-edition / buildEdition. */

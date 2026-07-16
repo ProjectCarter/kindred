@@ -10,6 +10,11 @@ import { PaperLoading } from "../components/PaperLoading";
 import { AppErrorBoundary } from "../components/AppErrorBoundary";
 import { paper } from "../lib/edition/newspaperTheme";
 import { markStartup } from "../lib/perf/startupTiming";
+import { beginStartupMetricsProbe, recordAuthGetSession } from "../lib/perf/startupMetrics";
+import { installStartupFetchProbe } from "../lib/perf/installStartupFetchProbe";
+
+installStartupFetchProbe();
+beginStartupMetricsProbe();
 
 function getAuthCodeFromUrl(url: string): string | null {
   try {
@@ -109,6 +114,7 @@ export default function RootLayout() {
         if (cancelled) return;
 
         const { data, error } = await supabase.auth.getSession();
+        recordAuthGetSession();
         markStartup("layout_session_ready");
         if (cancelled) return;
         if (error && __DEV__) {

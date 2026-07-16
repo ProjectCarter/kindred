@@ -118,6 +118,7 @@ import {
   updateHomeScroll,
 } from "../lib/edition/homeSession";
 import { markStartup, logStartupSummary } from "../lib/perf/startupTiming";
+import { recordAuthGetSession } from "../lib/perf/startupMetrics";
 import {
   assessEditionCompleteness,
   logEditionCompleteness,
@@ -536,6 +537,7 @@ export default function HomeScreen() {
       data: { session },
       error: sessionError,
     } = await supabase.auth.getSession();
+    recordAuthGetSession();
     const user = session?.user ?? null;
 
     if (__DEV__) {
