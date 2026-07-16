@@ -100,6 +100,8 @@ type Props = {
   morningOpening?: MorningBriefing | null;
   morningBriefing?: MorningBriefing | null;
   morningHero?: MorningHeroExperience | null;
+  /** Future: navigate to full Today's Masterpiece reader. */
+  onOpenMasterpiece?: () => void;
   leadWhyThisMatters?: string | null;
   leadWhyChosen?: string | null;
   leadContinuityKicker?: string | null;
@@ -202,6 +204,7 @@ export function EditionReader({
   morningOpening,
   morningBriefing,
   morningHero,
+  onOpenMasterpiece,
   leadWhyThisMatters,
   leadWhyChosen,
   leadContinuityKicker,
@@ -580,6 +583,7 @@ export function EditionReader({
         banditGreeting={banditGreeting}
         welcomeMessage={welcomeMessage}
         morningHero={morningHero}
+        onOpenMasterpiece={onOpenMasterpiece}
         mastheadTrailing={mastheadTrailing}
         mastheadScrollY={mastheadScrollY}
         heroContext={{

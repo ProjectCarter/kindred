@@ -1,4 +1,5 @@
 import type { MorningHeroExperience } from "./heroArtwork/types";
+import { normalizeMorningHeroExperience } from "./heroArtwork/normalize";
 
 /**
  * Client mirror — Morning Edition AI contracts.
@@ -91,16 +92,9 @@ export function parseMorningHeroExperience(
   value: unknown
 ): MorningHeroExperience | null {
   if (!value || typeof value !== "object") return null;
-  const raw = value as Partial<MorningHeroExperience>;
-  if (
-    !raw.artworkId ||
-    !raw.artworkTitle ||
-    !raw.artist ||
-    !raw.aboutArtworkBody?.trim()
-  ) {
-    return null;
-  }
-  return raw as MorningHeroExperience;
+  return normalizeMorningHeroExperience(
+    value as Partial<MorningHeroExperience> & { attributionText?: string | null }
+  );
 }
 
 export function morningHeroFromEdition(

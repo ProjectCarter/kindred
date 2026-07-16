@@ -1,12 +1,29 @@
 import type { HeroArtworkCollectionId } from "./collections.ts";
-import { buildAttributionText } from "./licensing.ts";
-import { selectBanditMorningNote, type BanditNoteContext } from "./banditNote.ts";
-import { validateAboutArtworkBody } from "./editorial.ts";
+import { countWords, validateAboutArtworkBody } from "./editorial.ts";
+import {
+  isMasterpieceDetailComplete,
+  splitStoryParagraphs,
+  type MasterpieceDetailFields,
+} from "./detailEditorial.ts";
 import type { HeroArtworkRecord } from "./types.ts";
 
+/** Full detail article — frozen at ingest, rendered only when the reader taps. */
+export type MasterpieceDetail = {
+  longStoryBody: string;
+  longStoryParagraphs: string[];
+  artistBiography: string;
+  lookCloserItems: string[];
+  didYouKnow: string;
+  museumName: string;
+  museumLocation: string;
+  officialMuseumUrl: string | null;
+  officialArtworkUrl: string | null;
+  sourceReferences: string[];
+};
+
 /**
- * The complete morning hero experience — artwork, editorial context, Bandit's welcome.
- * Frozen per edition date; refresh must never change this payload.
+ * Frozen morning hero teaser — homepage fields only.
+ * Edition build must never generate, research, or validate hero content.
  */
 export type MorningHeroExperience = {
   editionDate: string;
@@ -16,60 +33,110 @@ export type MorningHeroExperience = {
   year: string | null;
   sourceInstitution: string;
   sourceUrl: string;
-  imageUrl: string | null;
-  hostedUrl: string | null;
-  attributionText: string;
-  collections: HeroArtworkCollectionId[];
-  aboutArtworkHeading: "About Today's Artwork";
+  license: string;
+  licenseUrl: string | null;
+  /** Mobile-optimized hosted asset only — never museum full resolution. */
+  hostedUrl: string;
+  imageUrl: string;
+  imageWidth: number;
+  imageHeight: number;
+  aspectRatio: number;
+  /** Full credit line — pre-authored at ingest. */
+  creditLine: string;
+  /** 2–4 sentence homepage summary — pre-authored at ingest. */
   aboutArtworkBody: string;
   aboutWordCount: number;
-  banditMorningNote: string;
+  collections: HeroArtworkCollectionId[];
+  /** Full detail article — omitted from homepage render path. */
+  detail?: MasterpieceDetail | null;
 };
 
-export function buildMorningHeroExperience(
-  artwork: HeroArtworkRecord,
-  editionDate: string,
-  banditContext: BanditNoteContext = {}
-): MorningHeroExperience | null {
-  const about = validateAboutArtworkBody(artwork.aboutArtworkBody);
-  if (!about.valid || !artwork.aboutArtworkBody?.trim()) {
-    return null;
-  }
+export function detailFromRecord(
+  artwork: HeroArtworkRecord
+): MasterpieceDetail | null {
+  const fields: MasterpieceDetailFields = {
+    longStoryBody: artwork.longStoryBody,
+    artistBiography: artwork.artistBiography,
+    lookCloserItems: artwork.lookCloserItems,
+    didYouKnow: artwork.didYouKnow,
+    museumName: artwork.museumName,
+    museumLocation: artwork.museumLocation,
+    officialMuseumUrl: artwork.officialMuseumUrl,
+    officialArtworkUrl: artwork.officialArtworkUrl,
+    sourceReferences: artwork.sourceReferences,
+    detailEditorialStatus: artwork.detailEditorialStatus,
+  };
 
-  const attribution =
-    artwork.attributionText?.trim() ??
-    buildAttributionText({
-      artworkTitle: artwork.artworkTitle,
-      artist: artwork.artist,
-      year: artwork.year,
-      sourceInstitution: artwork.sourceInstitution,
-      sourceUrl: artwork.sourceUrl,
-    });
+  if (!isMasterpieceDetailComplete(fields)) return null;
+
+  const paragraphs = splitStoryParagraphs(artwork.longStoryBody!);
+  return {
+    longStoryBody: artwork.longStoryBody!.trim(),
+    longStoryParagraphs: paragraphs,
+    artistBiography: artwork.artistBiography!.trim(),
+    lookCloserItems: artwork.lookCloserItems.map((item) => item.trim()),
+    didYouKnow: artwork.didYouKnow!.trim(),
+    museumName: artwork.museumName!.trim(),
+    museumLocation: artwork.museumLocation!.trim(),
+    officialMuseumUrl: artwork.officialMuseumUrl?.trim() || null,
+    officialArtworkUrl: artwork.officialArtworkUrl?.trim() || null,
+    sourceReferences: (artwork.sourceReferences ?? []).map((ref) => ref.trim()),
+  };
+}
+
+export function isCompleteLibraryRecord(
+  artwork: HeroArtworkRecord
+): boolean {
+  if (!artwork.hostedUrl?.trim() || !artwork.storagePath?.trim()) return false;
+  if (!artwork.imageWidth || !artwork.imageHeight || !artwork.aspectRatio) {
+    return false;
+  }
+  if (!artwork.artworkTitle?.trim() || !artwork.artist?.trim()) return false;
+  if (!artwork.sourceInstitution?.trim() || !artwork.sourceUrl?.trim()) {
+    return false;
+  }
+  if (!artwork.license?.trim() || !artwork.attributionText?.trim()) {
+    return false;
+  }
+  const about = validateAboutArtworkBody(artwork.aboutArtworkBody);
+  if (!about.valid) return false;
+
+  return detailFromRecord(artwork) != null;
+}
+
+/** Copy existing library fields into the frozen edition payload — no side effects. */
+export function copyMorningHeroFromRecord(
+  artwork: HeroArtworkRecord,
+  editionDate: string
+): MorningHeroExperience | null {
+  if (!isCompleteLibraryRecord(artwork)) return null;
+
+  const about = validateAboutArtworkBody(artwork.aboutArtworkBody);
+  const detail = detailFromRecord(artwork);
+  if (!about.valid || !artwork.aboutArtworkBody?.trim() || !detail) return null;
 
   return {
     editionDate,
     artworkId: artwork.id,
-    artworkTitle: artwork.artworkTitle,
-    artist: artwork.artist,
+    artworkTitle: artwork.artworkTitle.trim(),
+    artist: artwork.artist.trim(),
     year: artwork.year,
-    sourceInstitution: artwork.sourceInstitution,
-    sourceUrl: artwork.sourceUrl,
-    imageUrl: artwork.imageUrl,
-    hostedUrl: artwork.hostedUrl,
-    attributionText: attribution,
-    collections: artwork.collections,
-    aboutArtworkHeading: "About Today's Artwork",
+    sourceInstitution: artwork.sourceInstitution.trim(),
+    sourceUrl: artwork.sourceUrl.trim(),
+    license: artwork.license,
+    licenseUrl: artwork.licenseUrl,
+    hostedUrl: artwork.hostedUrl!.trim(),
+    imageUrl: artwork.hostedUrl!.trim(),
+    imageWidth: artwork.imageWidth!,
+    imageHeight: artwork.imageHeight!,
+    aspectRatio: artwork.aspectRatio!,
+    creditLine: artwork.attributionText!.trim(),
     aboutArtworkBody: artwork.aboutArtworkBody.trim(),
     aboutWordCount: about.wordCount,
-    banditMorningNote: selectBanditMorningNote(artwork, {
-      ...banditContext,
-      editionDate,
-    }),
+    collections: artwork.collections,
+    detail,
   };
 }
 
-export function presentationFromSnapshot(
-  snapshot: MorningHeroExperience
-): MorningHeroExperience {
-  return snapshot;
-}
+/** @deprecated Use copyMorningHeroFromRecord — kept for tests importing the old name. */
+export const buildMorningHeroExperience = copyMorningHeroFromRecord;

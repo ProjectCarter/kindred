@@ -1,7 +1,7 @@
 import { NEWSPAPER_STYLE_RULES } from "../editorialStyle.ts";
 import {
-  ABOUT_ARTWORK_WORD_MIN,
-  ABOUT_ARTWORK_WORD_MAX,
+  ABOUT_ARTWORK_SENTENCE_MIN,
+  ABOUT_ARTWORK_SENTENCE_MAX,
   countWords,
   validateAboutArtworkBody,
 } from "./editorial.ts";
@@ -76,7 +76,7 @@ export async function writeAboutArtworkBody(
             (input.groundingText
               ? `Reference notes:\n${input.groundingText}\n`
               : "") +
-            `\nWrite ${ABOUT_ARTWORK_WORD_MIN}–${ABOUT_ARTWORK_WORD_MAX} words covering:\n` +
+            `\nWrite exactly ${ABOUT_ARTWORK_SENTENCE_MIN}–${ABOUT_ARTWORK_SENTENCE_MAX} complete sentences (plain prose, no markdown) covering:\n` +
             "1) what the artwork is\n" +
             "2) why it became historically important\n" +
             "3) one interesting fact\n" +

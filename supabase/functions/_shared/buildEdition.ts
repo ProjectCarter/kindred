@@ -1658,7 +1658,6 @@ export async function buildEditionForUser(
     const heroMonth = parseEditionDate(editionDate).getMonth() + 1;
     morningHero = await resolveProductionMorningHero(supabaseAdmin, {
       editionDate,
-      anthropicApiKey,
       context: {
         date: editionDate,
         season: getSeason(heroMonth),
@@ -1685,7 +1684,7 @@ export async function buildEditionForUser(
       );
     } else {
       morningEdition.selectionMeta.editorNotes.push(
-        "hero_artwork: no verified artwork resolved for this edition date"
+        "hero_artwork: library empty or no hosted artwork eligible for selection"
       );
     }
   } catch (heroErr) {

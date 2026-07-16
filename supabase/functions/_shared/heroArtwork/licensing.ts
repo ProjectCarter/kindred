@@ -117,6 +117,11 @@ export function assertHeroArtworkSelectable(artwork: HeroArtworkRecord): void {
 }
 
 export function isHeroArtworkRecordSelectable(artwork: HeroArtworkRecord): boolean {
+  if (!artwork.hostedUrl?.trim() || !artwork.storagePath?.trim()) return false;
+  if (!artwork.imageWidth || !artwork.imageHeight || !artwork.aspectRatio) {
+    return false;
+  }
+  if (!artwork.attributionText?.trim()) return false;
   return isHeroArtworkLicenseSafe({
     license: artwork.license,
     publicDomainStatus: artwork.publicDomainStatus,

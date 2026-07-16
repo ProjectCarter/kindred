@@ -1,8 +1,9 @@
 import type { HeroArtworkAsset, MorningHeroExperience } from "./types";
 import { formatHeroArtworkCredit } from "./licensing";
 import { validateAboutArtworkBody } from "./editorial";
-import { selectBanditMorningNote } from "./banditNote";
+import { normalizeMorningHeroExperience } from "./normalize";
 
+/** Client-side mirror — copies a local asset into the edition hero shape. */
 export function buildMorningHeroExperience(
   asset: HeroArtworkAsset,
   editionDate: string
@@ -10,9 +11,10 @@ export function buildMorningHeroExperience(
   const about = validateAboutArtworkBody(asset.aboutArtworkBody);
   if (!about.valid || !asset.aboutArtworkBody?.trim()) return null;
 
-  const uri = asset.imageSource?.uri ?? null;
+  const uri = asset.imageSource?.uri?.trim();
+  if (!uri) return null;
 
-  return {
+  return normalizeMorningHeroExperience({
     editionDate,
     artworkId: asset.id,
     artworkTitle: asset.artworkTitle,
@@ -20,13 +22,13 @@ export function buildMorningHeroExperience(
     year: asset.year,
     sourceInstitution: asset.sourceInstitution,
     sourceUrl: asset.sourceUrl,
-    imageUrl: uri,
+    license: asset.license,
+    licenseUrl: asset.licenseUrl,
     hostedUrl: uri,
-    attributionText: formatHeroArtworkCredit(asset),
-    collections: asset.collections,
-    aboutArtworkHeading: "About Today's Artwork",
+    imageUrl: uri,
+    creditLine: formatHeroArtworkCredit(asset),
     aboutArtworkBody: asset.aboutArtworkBody.trim(),
     aboutWordCount: about.wordCount,
-    banditMorningNote: selectBanditMorningNote(asset, { editionDate }),
-  };
+    collections: asset.collections,
+  });
 }

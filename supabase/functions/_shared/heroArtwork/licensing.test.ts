@@ -22,9 +22,12 @@ const verifiedArtwork: HeroArtworkRecord = {
   year: "1919",
   sourceInstitution: "Metropolitan Museum of Art",
   sourceUrl: "https://www.metmuseum.org/art/collection/search/123",
-  imageUrl: null,
-  hostedUrl: null,
-  storagePath: null,
+  imageUrl: "https://example.com/water-lilies.jpg",
+  hostedUrl: "https://zdqjeocdsbdzecawumdp.supabase.co/storage/v1/object/public/kindred-hero-artwork/met/test.jpg",
+  storagePath: "met/test.jpg",
+  imageWidth: 1400,
+  imageHeight: 933,
+  aspectRatio: 1.501609,
   orientation: "landscape",
   dominantColors: ["green", "blue"],
   collections: ["impressionism", "museum_open_access"],
@@ -37,7 +40,8 @@ const verifiedArtwork: HeroArtworkRecord = {
   publicDomainStatus: "verified",
   verificationSource: "Met Open Access Policy",
   commercialUseConfirmed: true,
-  attributionText: null,
+  attributionText:
+    "Painting by Claude Monet • Public Domain via Metropolitan Museum of Art",
   attributionRequired: true,
   verifiedAt: "2026-07-14T00:00:00.000Z",
   verifiedBy: "curator",
@@ -45,6 +49,17 @@ const verifiedArtwork: HeroArtworkRecord = {
   sourceProviderArtworkId: "123",
   aboutArtworkBody: SAMPLE_ABOUT,
   aboutWordCount: 82,
+  longStoryBody: null,
+  longStoryParagraphCount: null,
+  artistBiography: null,
+  lookCloserItems: [],
+  didYouKnow: null,
+  museumName: null,
+  museumLocation: null,
+  officialMuseumUrl: null,
+  officialArtworkUrl: null,
+  sourceReferences: [],
+  detailEditorialStatus: "pending",
   curatorEditorialStatus: "approved",
   banditMorningNote: null,
   featured: true,
@@ -57,6 +72,20 @@ const verifiedArtwork: HeroArtworkRecord = {
 Deno.test("verified public domain artwork is selectable", () => {
   assertEquals(isHeroArtworkLicenseSafe(verifiedArtwork), true);
   assertEquals(isHeroArtworkRecordSelectable(verifiedArtwork), true);
+});
+
+Deno.test("unhosted artwork is not edition-ready", () => {
+  assertEquals(
+    isHeroArtworkRecordSelectable({
+      ...verifiedArtwork,
+      hostedUrl: null,
+      storagePath: null,
+      imageWidth: null,
+      imageHeight: null,
+      aspectRatio: null,
+    }),
+    false
+  );
 });
 
 Deno.test("pending verification is rejected", () => {

@@ -23,6 +23,9 @@ import {
   setFrozenHeroImageId,
 } from "../lib/edition/editionFreeze";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
+import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
+import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
+import { TodaysMasterpiece } from "./TodaysMasterpiece";
 import { morningSalutation } from "../lib/edition/morningRitual";
 import {
   KindredFullMasthead,
@@ -44,8 +47,10 @@ type Props = {
   banditGreeting?: string | null;
   /** Optional AI greeting / welcome line. */
   welcomeMessage?: string | null;
-  /** Daily public-domain artwork hero — preferred over editorial photography. */
+  /** Daily public-domain artwork — Today's Masterpiece when hosted. */
   morningHero?: MorningHeroExperience | null;
+  /** Future: open full artwork reader (history, biography, sharing). */
+  onOpenMasterpiece?: () => void;
   heroContext?: HeroImageContext | null;
   mastheadTrailing?: ReactNode;
   mastheadScrollY?: Animated.Value;
@@ -63,13 +68,19 @@ export function MorningArrival({
   banditGreeting,
   welcomeMessage,
   morningHero,
+  onOpenMasterpiece,
   heroContext,
   mastheadTrailing,
   mastheadScrollY,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions();
   const bleedWidth = windowWidth;
-  const heroHeight = Math.round(Math.min(windowWidth * 0.92, 420));
+  const heroHeight = heroFrameHeight(
+    bleedWidth,
+    morningHero?.imageWidth,
+    morningHero?.imageHeight,
+    morningHero?.aspectRatio
+  );
 
   const dateLabel = resolveDisplayDate(editionDate);
   const placeLabel = formatPlace(locationCity);
@@ -96,9 +107,13 @@ export function MorningArrival({
     );
   }, []);
 
-  // Editorial photography fallback — only when no artwork hero is available.
   useEffect(() => {
-    if (morningHero?.imageUrl || morningHero?.hostedUrl) return;
+    preloadMorningHeroImage(morningHero);
+  }, [morningHero?.hostedUrl, morningHero?.artworkId]);
+
+  // Editorial photography fallback — only when no hosted artwork hero exists.
+  useEffect(() => {
+    if (morningHero?.hostedUrl) return;
     let cancelled = false;
     const editionKey = heroContext?.date ?? editionDate ?? null;
 
@@ -140,11 +155,11 @@ export function MorningArrival({
 
   useEffect(() => {
     setArtworkFailed(false);
-  }, [morningHero?.artworkId, morningHero?.imageUrl, morningHero?.hostedUrl]);
+  }, [morningHero?.artworkId, morningHero?.hostedUrl]);
 
   const artworkUri =
-    !artworkFailed && (morningHero?.hostedUrl?.trim() || morningHero?.imageUrl?.trim())
-      ? (morningHero.hostedUrl?.trim() || morningHero.imageUrl?.trim() || null)
+    !artworkFailed && morningHero?.hostedUrl?.trim()
+      ? morningHero.hostedUrl.trim()
       : null;
   const showArtworkHero = Boolean(artworkUri && morningHero);
   const showPhotoHero = !showArtworkHero && Boolean(hero);
@@ -222,17 +237,6 @@ export function MorningArrival({
     photoOp,
   ]);
 
-  const artworkMeta = morningHero
-    ? [
-        morningHero.artworkTitle,
-        morningHero.artist,
-        morningHero.year,
-        morningHero.sourceInstitution,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
-
   const placeWeather = [placeLabel, weatherLine].filter(Boolean).join("  ·  ");
 
   return (
@@ -261,33 +265,17 @@ export function MorningArrival({
         />
       </Animated.View>
 
-      {/* Signature Kindred hero — artwork preferred; photography as fallback */}
+      {/* Today's Masterpiece — pre-frozen library artwork; photography fallback below */}
       <View style={styles.heroBleed}>
-        {showArtworkHero && artworkUri ? (
+        {showArtworkHero && artworkUri && morningHero ? (
           <Animated.View style={{ opacity: photoOp }}>
-            <View style={[styles.heroFrame, shadow.photo]}>
-              <Image
-                source={{ uri: artworkUri }}
-                style={{ width: bleedWidth, height: heroHeight }}
-                resizeMode="cover"
-                accessibilityLabel={
-                  morningHero?.artworkTitle
-                    ? `${morningHero.artworkTitle} by ${morningHero.artist}`
-                    : "Today's artwork"
-                }
-                onError={() => setArtworkFailed(true)}
-              />
-            </View>
-            {artworkMeta ? (
-              <Text style={styles.artworkMeta} maxFontSizeMultiplier={1.15}>
-                {artworkMeta}
-              </Text>
-            ) : null}
-            {morningHero?.aboutArtworkBody ? (
-              <Text style={styles.artworkAbout} maxFontSizeMultiplier={1.2}>
-                {morningHero.aboutArtworkBody}
-              </Text>
-            ) : null}
+            <TodaysMasterpiece
+              morningHero={morningHero}
+              imageUri={artworkUri}
+              containerWidth={bleedWidth}
+              onOpenMasterpiece={onOpenMasterpiece}
+              onImageError={() => setArtworkFailed(true)}
+            />
           </Animated.View>
         ) : showPhotoHero && hero ? (
           <Animated.View style={{ opacity: photoOp }}>
@@ -385,30 +373,11 @@ const styles = StyleSheet.create({
   },
   heroBleed: {
     marginHorizontal: -FOLIO_GUTTER,
-    marginBottom: 22,
+    marginBottom: 6,
   },
   heroFrame: {
     overflow: "hidden",
     backgroundColor: paper.creamDeep,
-  },
-  artworkMeta: {
-    marginTop: 14,
-    paddingHorizontal: FOLIO_GUTTER,
-    fontFamily: "Georgia",
-    fontSize: 12,
-    lineHeight: 18,
-    letterSpacing: 0.2,
-    color: paper.inkFaint,
-    fontStyle: "italic",
-  },
-  artworkAbout: {
-    marginTop: 12,
-    paddingHorizontal: FOLIO_GUTTER,
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 26,
-    color: paper.inkBody,
-    maxWidth: 560,
   },
   heroFallback: {
     backgroundColor: paper.chrome,

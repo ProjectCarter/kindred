@@ -2,7 +2,8 @@ import { searchWikimediaCommons } from "../images/wikimedia.ts";
 import type { StockSearchCandidate } from "../images/types.ts";
 import type { HeroArtworkCollectionId, HeroArtworkRecord } from "./types.ts";
 import { getCollection } from "./collections.ts";
-import { buildAttributionText, normalizeLicense } from "./licensing.ts";
+import { buildMasterpieceCreditLine } from "./attribution.ts";
+import { normalizeLicense } from "./licensing.ts";
 import { countWords } from "./editorial.ts";
 import { getSeason, parseEditionDate } from "./select.ts";
 import type { HeroArtworkProviderDraft } from "./providers.ts";
@@ -73,6 +74,8 @@ export function wikimediaCandidateToDraft(
   const internalId = `kindred:hero:wikimedia:${providerId}`;
   const wordCount = countWords(aboutArtworkBody);
 
+  const collections = inferCollections(collectionId, candidate.tags ?? []);
+
   return {
     internalId,
     artworkTitle,
@@ -85,7 +88,7 @@ export function wikimediaCandidateToDraft(
     storagePath: null,
     orientation: candidate.orientation ?? "landscape",
     dominantColors: [],
-    collections: inferCollections(collectionId, candidate.tags ?? []),
+    collections,
     moodTags: [],
     tags: candidate.tags ?? [],
     seasons: collection.seasonalAffinity.length
@@ -97,15 +100,15 @@ export function wikimediaCandidateToDraft(
     publicDomainStatus: "verified",
     verificationSource: "Wikimedia Commons API",
     commercialUseConfirmed: true,
-    attributionText:
-      candidate.attributionText?.trim() ??
-      buildAttributionText({
-        artworkTitle,
-        artist,
-        year,
-        sourceInstitution: "Wikimedia Commons",
-        sourceUrl: candidate.sourcePageUrl,
-      }),
+    attributionText: buildMasterpieceCreditLine({
+      artist,
+      license,
+      sourceInstitution: "Wikimedia Commons",
+      sourceProvider: "wikimedia",
+      mediumHint: candidate.altDescription,
+      collections,
+      tags: candidate.tags ?? [],
+    }),
     attributionRequired: true,
     verifiedAt: new Date().toISOString(),
     verifiedBy: "kindred:auto-discovery",
@@ -113,6 +116,17 @@ export function wikimediaCandidateToDraft(
     sourceProviderArtworkId: providerId,
     aboutArtworkBody,
     aboutWordCount: wordCount,
+    longStoryBody: null,
+    longStoryParagraphCount: null,
+    artistBiography: null,
+    lookCloserItems: [],
+    didYouKnow: null,
+    museumName: null,
+    museumLocation: null,
+    officialMuseumUrl: null,
+    officialArtworkUrl: null,
+    sourceReferences: [],
+    detailEditorialStatus: "pending",
     curatorEditorialStatus: "approved",
     banditMorningNote: null,
     featured: false,

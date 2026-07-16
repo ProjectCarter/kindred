@@ -1,9 +1,11 @@
 /**
- * Editorial standards for "About Today's Artwork" — timeless, educational, never marketing.
+ * Editorial standards for hero artwork — 2–4 polished sentences, never marketing.
  */
 
-export const ABOUT_ARTWORK_WORD_MIN = 80;
-export const ABOUT_ARTWORK_WORD_MAX = 125;
+export const ABOUT_ARTWORK_SENTENCE_MIN = 2;
+export const ABOUT_ARTWORK_SENTENCE_MAX = 4;
+export const ABOUT_ARTWORK_WORD_MIN = 35;
+export const ABOUT_ARTWORK_WORD_MAX = 130;
 
 export function countWords(text: string): number {
   return text
@@ -12,21 +14,49 @@ export function countWords(text: string): number {
     .filter(Boolean).length;
 }
 
+export function countSentences(text: string): number {
+  return text
+    .trim()
+    .split(/[.!?]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 8).length;
+}
+
 export function validateAboutArtworkBody(body: string | null | undefined): {
   valid: boolean;
   wordCount: number;
+  sentenceCount: number;
   reason?: string;
 } {
   const trimmed = body?.trim() ?? "";
   if (!trimmed) {
-    return { valid: false, wordCount: 0, reason: "missing" };
+    return { valid: false, wordCount: 0, sentenceCount: 0, reason: "missing" };
   }
 
   const wordCount = countWords(trimmed);
+  const sentenceCount = countSentences(trimmed);
+
+  if (sentenceCount < ABOUT_ARTWORK_SENTENCE_MIN) {
+    return {
+      valid: false,
+      wordCount,
+      sentenceCount,
+      reason: `too_few_sentences:${sentenceCount}`,
+    };
+  }
+  if (sentenceCount > ABOUT_ARTWORK_SENTENCE_MAX) {
+    return {
+      valid: false,
+      wordCount,
+      sentenceCount,
+      reason: `too_many_sentences:${sentenceCount}`,
+    };
+  }
   if (wordCount < ABOUT_ARTWORK_WORD_MIN) {
     return {
       valid: false,
       wordCount,
+      sentenceCount,
       reason: `too_short:${wordCount}`,
     };
   }
@@ -34,36 +64,33 @@ export function validateAboutArtworkBody(body: string | null | undefined): {
     return {
       valid: false,
       wordCount,
+      sentenceCount,
       reason: `too_long:${wordCount}`,
     };
   }
 
-  // Guard against marketing tone and encyclopedia pastiche — light heuristics only.
   if (/\b(buy now|limited time|don't miss|click here|best deal)\b/i.test(trimmed)) {
-    return { valid: false, wordCount, reason: "marketing_tone" };
+    return { valid: false, wordCount, sentenceCount, reason: "marketing_tone" };
   }
   if (/\baccording to wikipedia\b/i.test(trimmed)) {
-    return { valid: false, wordCount, reason: "encyclopedia_pastiche" };
+    return {
+      valid: false,
+      wordCount,
+      sentenceCount,
+      reason: "encyclopedia_pastiche",
+    };
   }
 
-  return { valid: true, wordCount };
+  return { valid: true, wordCount, sentenceCount };
 }
 
 export type AboutArtworkGuidelines = {
-  /** Who created it — name, period, medium when known. */
   who: string;
-  /** Why it matters in art history. */
   historicalImportance: string;
-  /** Why it became famous or widely recognized. */
   fame: string;
-  /** One interesting contextual detail — era, patron, technique, reception. */
   context: string;
 };
 
-/**
- * Structure for curator-authored or future editorial generation.
- * Does not generate copy — defines the shape of excellent "About" writing.
- */
 export function aboutArtworkOutline(guidelines: AboutArtworkGuidelines): string[] {
   return [
     guidelines.who,

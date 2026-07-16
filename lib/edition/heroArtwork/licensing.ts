@@ -41,8 +41,32 @@ export function isHeroArtworkAssetSelectable(asset: LicenseCheckInput): boolean 
   return about.valid;
 }
 
+export function formatLicenseLabel(license: string): string {
+  const key = license.trim().toLowerCase().replace(/\s+/g, "_");
+  if (key === "public_domain" || key === "museum_open_access") return "Public Domain";
+  if (key === "cc0") return "CC0";
+  if (key === "government_work") return "U.S. Government Work";
+  return "Open License";
+}
+
+/** @deprecated Use renderMasterpieceCreditLine — credit lines are stored at ingest. */
+export function formatMasterpieceAttribution(input: {
+  license: string;
+  sourceInstitution: string;
+}): string {
+  const institution = input.sourceInstitution?.trim() || "Open collection";
+  return `${formatLicenseLabel(input.license)} • ${institution}`;
+}
+
+/** Returns pre-stored credit only — never composes at runtime. */
+export function formatHeroCreditLine(input: {
+  creditLine?: string | null;
+  attributionText?: string | null;
+}): string {
+  return input.creditLine?.trim() || input.attributionText?.trim() || "";
+}
+
+/** Returns pre-stored credit only — never composes at runtime. */
 export function formatHeroArtworkCredit(asset: HeroArtworkAsset): string {
-  if (asset.attributionText?.trim()) return asset.attributionText.trim();
-  const year = asset.year?.trim() ? ` (${asset.year.trim()})` : "";
-  return `${asset.artworkTitle}${year}, ${asset.artist}. ${asset.sourceInstitution}.`;
+  return asset.attributionText?.trim() || "";
 }

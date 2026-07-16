@@ -23,6 +23,7 @@ import {
 import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { openKindredEvent } from "../lib/edition/openEvent";
+import { openMasterpiece } from "../lib/edition/openMasterpiece";
 import { setActiveEditionId } from "../lib/edition/editionContext";
 import { articleFromEditionSectionWithKnowledge } from "../lib/edition/article";
 import { saveClipping, removeClipping } from "../lib/edition/clippings";
@@ -39,6 +40,7 @@ import {
   parseBanditPayload,
   type BanditPayload,
 } from "../lib/edition/bandit";
+import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
 import {
   companionForArticle,
   parseEditionIntelligence,
@@ -367,6 +369,9 @@ export default function HomeScreen() {
     });
     if (bundle.heroImageId) setFrozenHeroImageId(bundle.heroImageId);
     editionFrozenRef.current = true;
+    preloadMorningHeroImage(
+      bundle.morningHero ?? bundle.intelligence?.morningHero ?? null
+    );
     const cachedEventCount = countValidEventsInSections(bundle.sections);
     setLocalEventsStatus(cachedEventCount > 0 ? "ready" : "loading");
   }
@@ -981,6 +986,7 @@ export default function HomeScreen() {
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
       });
       editionFrozenRef.current = true;
+      preloadMorningHeroImage(intel.morningHero);
       const bundle: CachedEditionBundle = {
         userId: user.id,
         editionId: edition.id,
@@ -1923,6 +1929,15 @@ export default function HomeScreen() {
               morningOpening={intelligence?.morningOpening}
               morningBriefing={intelligence?.morningBriefing}
               morningHero={intelligence?.morningHero}
+              onOpenMasterpiece={() => {
+                const hero = intelligence?.morningHero;
+                if (!hero) return;
+                persistHomeScrollNow();
+                openMasterpiece(router, hero, {
+                  editionId,
+                  backLabel: "← Today's paper",
+                });
+              }}
               leadWhyThisMatters={intelligence?.leadWhyThisMatters}
               leadWhyChosen={intelligence?.leadWhyChosen}
               leadContinuityKicker={intelligence?.leadContinuityKicker}

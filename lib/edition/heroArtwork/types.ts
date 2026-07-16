@@ -93,6 +93,19 @@ export type ScoredHeroArtwork = {
   reasons: string[];
 };
 
+export type MasterpieceDetail = {
+  longStoryBody: string;
+  longStoryParagraphs: string[];
+  artistBiography: string;
+  lookCloserItems: string[];
+  didYouKnow: string;
+  museumName: string;
+  museumLocation: string;
+  officialMuseumUrl: string | null;
+  officialArtworkUrl: string | null;
+  sourceReferences: string[];
+};
+
 export type MorningHeroExperience = {
   editionDate: string;
   artworkId: string;
@@ -101,14 +114,27 @@ export type MorningHeroExperience = {
   year: string | null;
   sourceInstitution: string;
   sourceUrl: string;
-  imageUrl: string | null;
-  hostedUrl: string | null;
-  attributionText: string;
+  license: string;
+  licenseUrl?: string | null;
+  /** Mobile-optimized hosted asset — never museum full resolution. */
+  hostedUrl: string;
+  imageUrl: string;
+  imageWidth: number;
+  imageHeight: number;
+  aspectRatio: number;
+  /** Pre-authored full credit line. */
+  creditLine: string;
+  /** Legacy alias — older editions may only have attributionText. */
+  attributionText?: string;
   collections: HeroArtworkCollectionId[];
-  aboutArtworkHeading: "About Today's Artwork";
+  /** 2–4 sentence homepage summary — pre-authored at ingest. */
   aboutArtworkBody: string;
   aboutWordCount: number;
-  banditMorningNote: string;
+  /** Full detail article — loaded on tap only; never rendered on homepage. */
+  detail?: MasterpieceDetail | null;
+  /** Legacy fields — ignored by current hero UI. */
+  aboutArtworkHeading?: "About Today's Artwork";
+  banditMorningNote?: string;
 };
 
 export type { HeroArtworkCollectionId };
