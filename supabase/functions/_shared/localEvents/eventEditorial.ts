@@ -9,6 +9,16 @@ import {
   endingReadsLikeSummary,
   hasMemorableTakeaway,
 } from "../editorial/editorialIntelligence.ts";
+import { filterHumanDetailParagraphs, buildHumanDetailsPromptBlock } from "../editorial/humanDetails.ts";
+import {
+  buildLastingImpressionPromptBlock,
+  validateLastingImpressionClosing,
+} from "../editorial/lastingImpression.ts";
+import {
+  buildSourceConfidencePromptBlock,
+  filterSourceConfidenceParagraphs,
+  validateSourceConfidenceBody,
+} from "../editorial/sourceConfidence.ts";
 import type { LocalEvent } from "./provider.ts";
 import {
   STORY_TYPE_GUIDANCE,
@@ -71,9 +81,12 @@ export function containsBannedEventCopy(text: string | null | undefined): boolea
 }
 
 export function sanitizeEventEditorialParagraphs(paragraphs: string[]): string[] {
-  return paragraphs
-    .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter((p) => p.length >= 20 && !containsBannedEventCopy(p));
+  const humanDetailFiltered = filterHumanDetailParagraphs(
+    paragraphs
+      .map((p) => p.replace(/\s+/g, " ").trim())
+      .filter((p) => p.length >= 20 && !containsBannedEventCopy(p))
+  );
+  return filterSourceConfidenceParagraphs(humanDetailFiltered, { desk: "events" });
 }
 
 export function validateBanditNote(note: string | null | undefined): string | null {
@@ -160,7 +173,13 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "\"Perfect way to spend\", \"Hidden gem\", \"Something for everyone\", \"Join us for\", \"An event is happening\"\n" +
   "- No rotating templates, canned introductions, or filler\n" +
   "- Name the venue, format, activity, or detail that makes this event distinct\n\n" +
-  buildEditorialIntelligencePromptBlock();
+  buildEditorialIntelligencePromptBlock() +
+  "\n\n" +
+  buildHumanDetailsPromptBlock("events") +
+  "\n\n" +
+  buildLastingImpressionPromptBlock("events") +
+  "\n\n" +
+  buildSourceConfidencePromptBlock("events");
 
 export type GeneratedEventEditorial = {
   banditNote: string | null;
@@ -210,9 +229,19 @@ export function parseGeneratedEventEditorial(
 
   const bodyText = candidate.editorialBody?.join("\n\n") ?? "";
   const lastParagraph = candidate.editorialBody?.at(-1) ?? "";
+  const priorParagraphs = candidate.editorialBody?.slice(0, -1) ?? [];
+  const lastingImpression = validateLastingImpressionClosing(lastParagraph, {
+    priorParagraphs,
+  });
+  const sourceConfidence = validateSourceConfidenceBody(
+    candidate.editorialBody ?? [],
+    { desk: "events" }
+  );
   if (
     !hasMemorableTakeaway(bodyText) ||
-    endingReadsLikeSummary(lastParagraph)
+    endingReadsLikeSummary(lastParagraph) ||
+    !lastingImpression.passes ||
+    !sourceConfidence.passes
   ) {
     return { banditNote: null, editorialBody: null };
   }

@@ -10,6 +10,8 @@ import {
   hasMemorableTakeaway,
 } from "./editorialIntelligence.ts";
 import { validateLastingThought } from "./memorableWriting.ts";
+import { validateLastingImpressionBody } from "./lastingImpression.ts";
+import { validateSourceConfidenceBody } from "./sourceConfidence.ts";
 import { validateUniqueConclusion, extractLastParagraph } from "./uniqueConclusions.ts";
 
 /** Phase 3 intelligence framework — smarter articles, not longer ones. */
@@ -88,6 +90,21 @@ export function validateHistoryArticle(
   }
   if (!hasMemorableTakeaway(body)) {
     reasons.push("no_memorable_takeaway");
+  }
+
+  const lastingImpression = validateLastingImpressionBody(paragraphs, {
+    subjectTokens,
+  });
+  if (!lastingImpression.passes) {
+    reasons.push(`lasting_impression:${lastingImpression.reason ?? "fail"}`);
+  }
+
+  const sourceConfidence = validateSourceConfidenceBody(paragraphs, {
+    desk: "history",
+    verifiedHaystack: `${year} ${eventText}`,
+  });
+  if (!sourceConfidence.passes) {
+    reasons.push(`source_confidence:${sourceConfidence.reason ?? "fail"}`);
   }
 
   return {

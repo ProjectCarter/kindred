@@ -13,6 +13,13 @@ import {
   buildEditorialIntelligencePromptBlock,
   containsGenericAiPhrase,
 } from "../editorial/editorialIntelligence.ts";
+import { buildHumanDetailsPromptBlock, humanDetailsDeskForPlacesCategory } from "../editorial/humanDetails.ts";
+import { buildLastingImpressionPromptBlock } from "../editorial/lastingImpression.ts";
+import {
+  buildSourceConfidencePromptBlock,
+  sourceConfidenceDeskForPlacesCategory,
+  validateSourceConfidenceText,
+} from "../editorial/sourceConfidence.ts";
 import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
 
 const CATEGORY_LABEL: Record<PlacesCategory, string> = {
@@ -95,6 +102,9 @@ export async function writeEditorialNotesForPlaces(
           "If little is known beyond the name, write an honest, understated line rather than embellishing. " +
           "No exclamation points. No hashtags. No 'must-visit' clichés. Vary openings across the list. " +
           `${buildEditorialIntelligencePromptBlock()} ` +
+          `${buildHumanDetailsPromptBlock(humanDetailsDeskForPlacesCategory(category))} ` +
+          `${buildLastingImpressionPromptBlock(humanDetailsDeskForPlacesCategory(category))} ` +
+          `${buildSourceConfidencePromptBlock(sourceConfidenceDeskForPlacesCategory(category))} ` +
           `${buildEditionVarietyPromptBlock(varietySeed)} ` +
           "Respond ONLY with JSON: " +
           '{"notes":["..."]} with one string per place in the same order.',
@@ -119,7 +129,7 @@ export async function writeEditorialNotesForPlaces(
 
     return places.map((p, i) => ({
       ...p,
-      note: sanitizePlaceNote(notes[i]) || fallbackNote(p, category),
+      note: sanitizePlaceNote(notes[i], category) || fallbackNote(p, category),
     }));
   } catch (err) {
     console.error("[places:notes] failure", {
@@ -156,10 +166,15 @@ function parseNotesJson(text: string, expected: number): string[] {
   return Array.from({ length: expected }, () => "");
 }
 
-function sanitizePlaceNote(note: string | undefined): string | null {
+function sanitizePlaceNote(note: string | undefined, category: PlacesCategory): string | null {
   const trimmed = note?.trim() ?? "";
   if (!trimmed || trimmed.length < 12) return null;
   if (containsGenericAiPhrase(trimmed)) return null;
+  if (!validateSourceConfidenceText(trimmed, {
+    desk: sourceConfidenceDeskForPlacesCategory(category),
+  }).passes) {
+    return null;
+  }
   return trimmed;
 }
 

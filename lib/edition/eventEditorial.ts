@@ -8,6 +8,17 @@ import { eventCategoryLabel } from "./localEvents";
 import { containsEngineLanguage } from "./editorialVoice";
 import { containsGenericAiPhrase } from "./editorialIntelligence";
 import {
+  filterHumanDetailParagraphs,
+  humanDetailObservationForEventCategory,
+} from "./humanDetails";
+import {
+  ensureLastingImpressionClosing,
+  lastingImpressionClosingForEvent,
+} from "./lastingImpression";
+import {
+  filterSourceConfidenceParagraphs,
+} from "./sourceConfidence";
+import {
   applyEditionVarietyToBody,
   buildVarietySeed,
 } from "./editionVariety";
@@ -57,14 +68,17 @@ export function containsBannedEventCopy(text: string | null | undefined): boolea
 }
 
 export function sanitizeEventEditorialParagraphs(paragraphs: string[]): string[] {
-  return paragraphs
-    .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter(
-      (p) =>
-        p.length >= 20 &&
-        !containsEngineLanguage(p) &&
-        !containsBannedEventCopy(p)
-    );
+  const humanDetailFiltered = filterHumanDetailParagraphs(
+    paragraphs
+      .map((p) => p.replace(/\s+/g, " ").trim())
+      .filter(
+        (p) =>
+          p.length >= 20 &&
+          !containsEngineLanguage(p) &&
+          !containsBannedEventCopy(p)
+      )
+  );
+  return filterSourceConfidenceParagraphs(humanDetailFiltered, { desk: "events" });
 }
 
 function eventPlaceLine(event: Pick<LocalEventCard, "venue" | "city">): string {
@@ -143,7 +157,17 @@ export function composeEventArticleFromVerifiedData(
       editorialBody: frozen,
     })
   ) {
-    return applyEditionVarietyToBody(frozen, varietySeed);
+    return applyEditionVarietyToBody(
+      ensureLastingImpressionClosing(
+        frozen,
+        lastingImpressionClosingForEvent(
+          event.name.trim(),
+          options?.editionDate ?? event.name.trim(),
+          event.category ?? null
+        )
+      ),
+      varietySeed
+    );
   }
 
   const name = event.name.trim();
@@ -171,6 +195,15 @@ export function composeEventArticleFromVerifiedData(
     paragraphs.push(note);
   }
 
+  const humanDetail = humanDetailObservationForEventCategory(event.category);
+  if (
+    humanDetail &&
+    !paragraphs.some((p) => p === humanDetail || p.includes(humanDetail)) &&
+    !paragraphs.some((p) => humanDetail.includes(p))
+  ) {
+    paragraphs.push(humanDetail);
+  }
+
   for (const fact of verifiedBadgeFacts(event.badges)) {
     if (!paragraphs.some((p) => p === fact)) paragraphs.push(fact);
   }
@@ -187,7 +220,14 @@ export function composeEventArticleFromVerifiedData(
   if (listing && !paragraphs.some((p) => p === listing)) paragraphs.push(listing);
 
   return applyEditionVarietyToBody(
-    sanitizeEventEditorialParagraphs(paragraphs),
+    ensureLastingImpressionClosing(
+      sanitizeEventEditorialParagraphs(paragraphs),
+      lastingImpressionClosingForEvent(
+        name,
+        options?.editionDate ?? name,
+        event.category ?? null
+      )
+    ),
     varietySeed
   );
 }

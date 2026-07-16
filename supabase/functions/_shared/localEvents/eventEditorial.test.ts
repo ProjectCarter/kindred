@@ -92,6 +92,21 @@ Deno.test("parseGeneratedEventEditorial rejects generic AI phrases and weak take
   assertEquals(generic.editorialBody, null);
 });
 
+Deno.test("parseGeneratedEventEditorial rejects unsupported source confidence claims", () => {
+  const parsed = parseGeneratedEventEditorial(
+    {
+      banditNote: "Queen Creek Olive Mill hosts a watercolor workshop on Saturday.",
+      editorialBody: [
+        "Queen Creek Olive Mill hosts a watercolor workshop on Saturday morning.",
+        "Locals love this spot and it is always packed on weekends.",
+      ],
+    },
+    sampleEvent()
+  );
+  assertEquals(parsed.banditNote, null);
+  assertEquals(parsed.editorialBody, null);
+});
+
 Deno.test("parseGeneratedEventEditorial rejects banned editorial body paragraphs", () => {
   const parsed = parseGeneratedEventEditorial(
     {

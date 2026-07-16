@@ -6,6 +6,12 @@
 import type { DiscoveryRankingContext } from "../discovery/types.ts";
 import type { BanditSeasonalEditorial } from "./editorialContent.ts";
 import { containsGenericAiPhrase } from "../editorial/editorialIntelligence.ts";
+import { filterHumanDetailParagraphs } from "../editorial/humanDetails.ts";
+import {
+  ensureLastingImpressionClosing,
+  selectLastingImpressionClosing,
+} from "../editorial/lastingImpression.ts";
+import { filterSourceConfidenceParagraphs } from "../editorial/sourceConfidence.ts";
 import {
   applyEditionVarietyToBody,
   buildVarietySeed,
@@ -91,6 +97,12 @@ function composeExperienceLedEditorial(
       : null,
   ].filter((p): p is string => Boolean(p));
 
+  const closingFallback = selectLastingImpressionClosing(
+    ctx.editionDate ?? base.headline,
+    primary.name
+  );
+  const bodyWithClosing = ensureLastingImpressionClosing(body, closingFallback);
+
   const modules = [
     {
       id: "what",
@@ -129,7 +141,10 @@ function composeExperienceLedEditorial(
     headline: base.headline,
     cardExcerpt: cardExcerpt.slice(0, 280),
     body: applyEditionVarietyToBody(
-      body,
+      filterSourceConfidenceParagraphs(
+        filterHumanDetailParagraphs(bodyWithClosing),
+        { desk: "bandits_pick" }
+      ),
       buildVarietySeed(ctx.editionDate, `${base.headline}:${primary.name}`)
     ),
     modules,
@@ -171,6 +186,12 @@ function composeVenueLedEditorial(
       : null,
   ].filter((p): p is string => Boolean(p));
 
+  const closingFallback = selectLastingImpressionClosing(
+    ctx.editionDate ?? base.headline,
+    primary.name
+  );
+  const bodyWithClosing = ensureLastingImpressionClosing(body, closingFallback);
+
   const modules = [
     {
       id: "what",
@@ -207,7 +228,10 @@ function composeVenueLedEditorial(
     headline: base.headline,
     cardExcerpt: cardExcerpt.slice(0, 280),
     body: applyEditionVarietyToBody(
-      body,
+      filterSourceConfidenceParagraphs(
+        filterHumanDetailParagraphs(bodyWithClosing),
+        { desk: "bandits_pick" }
+      ),
       buildVarietySeed(ctx.editionDate, `${base.headline}:${primary.name}`)
     ),
     modules,

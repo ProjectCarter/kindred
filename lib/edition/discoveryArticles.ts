@@ -39,6 +39,14 @@ import {
 } from "./editorialVoice";
 import { containsGenericAiPhrase } from "./editorialIntelligence";
 import {
+  hasHumanDetailSignal,
+  humanDetailObservationForCategory,
+} from "./humanDetails";
+import {
+  filterSourceConfidenceParagraphs,
+  sourceConfidenceDeskForPlacesCategory,
+} from "./sourceConfidence";
+import {
   applyEditionVarietyToBody,
   buildVarietySeed,
   orderDiscoverySlots,
@@ -848,6 +856,11 @@ export function composePlaceDiscoveryArticle(input: {
 
   const scene = sceneLineForPlace(title, typeLabel, city);
 
+  const humanDetail =
+    hasHumanDetailSignal(note) || hasHumanDetailSignal(scene)
+      ? null
+      : humanDetailObservationForCategory(typeLabel, city);
+
   const whyVisit =
     note &&
     !containsEngineLanguage(note) &&
@@ -878,7 +891,13 @@ export function composePlaceDiscoveryArticle(input: {
 
   const varietySeed = buildVarietySeed(input.editionDate, input.seedKey || title);
 
-  const closing = closingLineForPlace(title, city, input.seedKey, input.editionDate);
+  const closing = closingLineForPlace(
+    title,
+    city,
+    input.seedKey,
+    input.editionDate,
+    typeLabel
+  );
 
   const atmosphereParagraph =
     (typeof essay?.fieldAnswers?.atmosphere === "string" &&
@@ -887,6 +906,7 @@ export function composePlaceDiscoveryArticle(input: {
       ? essay.fieldAnswers.atmosphere.trim()
       : null) ||
     brief.atmosphere ||
+    humanDetail ||
     null;
 
   const highlightsParagraph =
@@ -920,7 +940,15 @@ export function composePlaceDiscoveryArticle(input: {
 
   const rawBody = dedupeDiscoveryBody(orderDiscoverySlots(slots, varietySeed));
 
-  const body = sanitizeEditorialParagraphs(verified.categoryId, rawBody);
+  const body = filterSourceConfidenceParagraphs(
+    sanitizeEditorialParagraphs(verified.categoryId, rawBody),
+    {
+      desk: sourceConfidenceDeskForPlacesCategory(String(input.category ?? "")),
+      verifiedHaystack: [title, address, note, typeLabel, ...(input.venueCategories ?? [])]
+        .filter(Boolean)
+        .join(" "),
+    }
+  );
 
   const safeFieldAnswers: EditorialFieldAnswers = {
     why_go: whyVisit,

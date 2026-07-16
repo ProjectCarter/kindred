@@ -6,6 +6,9 @@ import { NEWSPAPER_STYLE_RULES, stripLeadingSalutation } from "../editorialStyle
 import {
   buildEditorialIntelligencePromptBlock,
 } from "../editorial/editorialIntelligence.ts";
+import { buildHumanDetailsPromptBlock } from "../editorial/humanDetails.ts";
+import { buildLastingImpressionPromptBlock } from "../editorial/lastingImpression.ts";
+import { buildSourceConfidencePromptBlock } from "../editorial/sourceConfidence.ts";
 import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
 import {
   validateHistoryArticle,
@@ -45,6 +48,9 @@ const HISTORY_SYSTEM_PROMPT =
   "a verified fact, overlooked detail, or specific connection to today. Never end with generic lines like " +
   "'this remains important today' or 'continues to inspire.' " +
   `${buildEditorialIntelligencePromptBlock()} ` +
+  `${buildHumanDetailsPromptBlock("history")} ` +
+  `${buildLastingImpressionPromptBlock("history")} ` +
+  `${buildSourceConfidencePromptBlock("history")} ` +
   `${NEWSPAPER_STYLE_RULES} ` +
   "Respond ONLY with valid JSON: {\"headline\": string, \"body\": string}. " +
   "The body must be 450–900 words across exactly 6 paragraphs. No markdown.";

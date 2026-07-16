@@ -4,7 +4,17 @@
  */
 
 import { containsGenericAiPhrase } from "./editorialIntelligence";
+import {
+  containsFabricatedHumanDetail,
+  containsGenericPlaceObservation,
+  humanDetailObservationForCategory,
+} from "./humanDetails";
 import { buildVarietySeed, closingLineForVariety } from "./editionVariety";
+import {
+  lastingImpressionClosingForPlace,
+  validateLastingImpressionClosing,
+} from "./lastingImpression";
+import { validateSourceConfidenceText } from "./sourceConfidence";
 
 /** Patterns that break the newspaper illusion — never publish to readers. */
 export const ENGINE_LANGUAGE_PATTERN =
@@ -19,7 +29,15 @@ export function containsEngineLanguage(text: string | null | undefined): boolean
 export function sanitizeReaderParagraphs(paragraphs: string[]): string[] {
   return paragraphs
     .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter((p) => p.length >= 12 && !containsEngineLanguage(p) && !containsGenericAiPhrase(p));
+    .filter(
+      (p) =>
+        p.length >= 12 &&
+        !containsEngineLanguage(p) &&
+        !containsGenericAiPhrase(p) &&
+        !containsGenericPlaceObservation(p) &&
+        !containsFabricatedHumanDetail(p) &&
+        validateSourceConfidenceText(p).passes
+    );
 }
 
 export function isNearDuplicateCopy(a: string, b: string): boolean {
@@ -110,6 +128,9 @@ export function sceneLineForPlace(
     return `Go when you have an hour to spare${area} — weekday mornings tend to be the calmest window.`;
   }
 
+  const humanDetail = humanDetailObservationForCategory(typeLabel, city);
+  if (humanDetail) return humanDetail;
+
   return `Worth a visit when you want something local and specific${area}, not another evening spent deciding where to go.`;
 }
 
@@ -117,8 +138,12 @@ export function closingLineForPlace(
   title: string,
   city: string,
   seed = title,
-  editionDate?: string | null
+  editionDate?: string | null,
+  typeLabel?: string | null
 ): string {
   const varietySeed = buildVarietySeed(editionDate, seed || city || title);
+  const lasting = lastingImpressionClosingForPlace(title, varietySeed, typeLabel);
+  const validation = validateLastingImpressionClosing(lasting);
+  if (validation.passes) return lasting;
   return closingLineForVariety(title, varietySeed);
 }
