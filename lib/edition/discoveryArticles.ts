@@ -23,6 +23,7 @@ import {
   sanitizeEditorialParagraphs,
   validateEditorialArticle,
 } from "./editorialCategory";
+import { composeEventArticleFromVerifiedData } from "./eventEditorial";
 import {
   discoveryBackgroundFromGrounding,
   type KnowledgeLookupResult,
@@ -608,7 +609,7 @@ export function composeFallbackDiscoveryBody(input: {
 
   if (paragraphs.length === 1) {
     paragraphs.push(
-      "Worth knowing about before the day fills in — the listing has the latest detail."
+      "The listing has the latest hours and details — worth a quick check before you head out."
     );
   }
 
@@ -664,6 +665,11 @@ function editorialBriefForVenueType(typeLabel: string): {
   who: string;
   howLong: string;
   tips: string;
+  difficulty?: string;
+  equipment?: string;
+  bestSeason?: string;
+  atmosphere?: string;
+  photoTip?: string;
 } {
   const t = typeLabel.toLowerCase();
   if (/dog park/.test(t)) {
@@ -671,6 +677,11 @@ function editorialBriefForVenueType(typeLabel: string): {
       who: "Dog owners who want a real off-leash outing — and anyone who enjoys watching a park actually being used.",
       howLong: "Plan for 45–90 minutes, depending on how social your dog is.",
       tips: "Bring water, waste bags, and shade if it's warm. Mid-morning is usually calmer than late afternoon.",
+      difficulty: "Easy — flat paths and open fields; no special fitness required.",
+      equipment: "Leash for arrival and departure; water bowl if the park doesn't provide one.",
+      bestSeason: "Spring and fall mornings are the most comfortable; summer visits belong early.",
+      atmosphere: "Off-leash energy, owners chatting at the fence line, and the particular happiness of a tired dog on the drive home.",
+      photoTip: "Action shots work best in the first hour — later light is kinder on faces than on fur in motion.",
     };
   }
   if (/escape room/.test(t)) {
@@ -748,12 +759,26 @@ function editorialBriefForVenueType(typeLabel: string): {
       who: "Anyone who needs an hour outside without a complicated plan.",
       howLong: "Plan for 45–90 minutes of unhurried time — longer if you're staying for sunset.",
       tips: "Sunscreen, water, and comfortable shoes. Weekday mornings are the quietest window.",
+      difficulty: /hiking|trail/.test(t)
+        ? "Moderate unless the listing notes a paved path — check distance before you commit."
+        : "Easy to moderate — mostly walking, no special training required.",
+      equipment: /hiking|trail/.test(t)
+        ? "Sturdy shoes, water, and a light layer — trails cool down faster than parking lots."
+        : "Comfortable shoes and water; a hat helps on open paths.",
+      bestSeason: /beach/.test(t)
+        ? "Late spring through early fall for warm water; winter walks have their own quiet charm."
+        : "Spring and fall for color and comfort; summer belongs to early morning or golden hour.",
+      atmosphere: /beach/.test(t)
+        ? "Salt air, shifting light, and the particular patience required to enjoy a beach without rushing it."
+        : "Birdsong, filtered light, and the rare feeling of time moving slower than your phone.",
+      photoTip: "Golden hour flatters trails and water alike — midday sun is honest but unforgiving.",
     };
   }
   return {
     who: "Anyone who wants a local option that feels specific to the neighborhood — not another interchangeable stop.",
     howLong: "Plan for about an hour — enough to actually see the place, not just drive by.",
     tips: "Confirm hours before you go; local spots can shift schedules without much notice.",
+    atmosphere: "The room or street has its own rhythm — worth noticing in the first five minutes before you order or sit down.",
   };
 }
 
@@ -841,12 +866,38 @@ export function composePlaceDiscoveryArticle(input: {
 
   const closing = closingLineForPlace(title, city);
 
+  const atmosphereParagraph =
+    (typeof essay?.fieldAnswers?.atmosphere === "string" &&
+      essay.fieldAnswers.atmosphere.trim() &&
+      !editorialCopyConflicts(verified.categoryId, essay.fieldAnswers.atmosphere)
+      ? essay.fieldAnswers.atmosphere.trim()
+      : null) ||
+    brief.atmosphere ||
+    null;
+
+  const highlightsParagraph =
+    typeof essay?.fieldAnswers?.signature === "string" &&
+    essay.fieldAnswers.signature.trim() &&
+    !editorialCopyConflicts(verified.categoryId, essay.fieldAnswers.signature)
+      ? `What regulars notice first: ${essay.fieldAnswers.signature.trim()}`
+      : typeof essay?.fieldAnswers?.highlights === "string" &&
+          essay.fieldAnswers.highlights.trim() &&
+          !editorialCopyConflicts(verified.categoryId, essay.fieldAnswers.highlights)
+        ? essay.fieldAnswers.highlights.trim()
+        : null;
+
   const rawBody = dedupeDiscoveryBody([
     opening,
+    atmosphereParagraph && atmosphereParagraph !== opening ? atmosphereParagraph : null,
     whyVisit !== opening ? whyVisit : null,
+    highlightsParagraph,
     brief.who,
     brief.howLong,
+    brief.difficulty,
+    brief.equipment,
+    brief.bestSeason,
     practicalTips,
+    brief.photoTip,
     ...(wikipediaBackground ? [wikipediaBackground] : []),
     closing,
   ].filter((p): p is string => Boolean(p)));
@@ -859,6 +910,11 @@ export function composePlaceDiscoveryArticle(input: {
     how_long: brief.howLong,
     tips: practicalTips,
   };
+  if (brief.difficulty) safeFieldAnswers.difficulty = brief.difficulty;
+  if (brief.equipment) safeFieldAnswers.equipment = brief.equipment;
+  if (brief.bestSeason) safeFieldAnswers.best_season = brief.bestSeason;
+  if (atmosphereParagraph) safeFieldAnswers.atmosphere = atmosphereParagraph;
+  if (brief.photoTip) safeFieldAnswers.photo_tip = brief.photoTip;
   if (wikipediaBackground) {
     safeFieldAnswers.background = wikipediaBackground;
   }
@@ -932,54 +988,21 @@ export function composeVerifiedEventDiscoveryArticle(
     (p) => p && !/TBA/i.test(p)
   );
   const whenLine = whenParts.join(" · ") || null;
-  const banditNote = event.banditNote?.trim() || null;
   const hay = `${event.name} ${event.venue}`.toLowerCase();
   const isFestival = /festival|fair|parade|carnival/.test(hay);
-
-  const opening =
-    banditNote && !containsEngineLanguage(banditNote)
-      ? banditNote
-      : `${event.name.trim()} is on${whenLine ? `, ${whenLine}` : ""}${
-          place ? ` at ${place}` : ""
-        }.`;
-
-  const whyItMatters = isFestival
-    ? "Festivals like this are where a town actually shows up for itself — worth catching while it is still on the calendar."
-    : "A local happening worth knowing about while it is still upcoming — the sort of evening that is easy to postpone and usually more fun once you go.";
-
-  const whatToExpect = whenLine
-    ? `It runs ${whenLine}${place ? ` at ${place}` : ""}. Check the listing below for the latest on hours, tickets, or any last-minute changes.`
-    : `The timing is still coming together — check the listing below before you build the whole evening around it.`;
-
-  const who =
-    "Good for anyone who likes discovering what is on nearby while there is still time to plan around it.";
-
-  const goodToKnow = event.sourceUrl
-    ? "Schedules for local happenings can shift close to the date — the source listing is the most current word on hours and any cost."
-    : "Schedules for local happenings can shift close to the date — a quick check before you leave is worth it.";
-
-  const body = sanitizeReaderParagraphs([
-    whyItMatters,
-    whatToExpect,
-    who,
-    goodToKnow,
-  ]);
+  const body = composeEventArticleFromVerifiedData(event);
 
   return {
     dek: place || event.name.trim(),
-    body: dedupeDiscoveryBody(
-      banditNote && !isNearDuplicateCopy(banditNote, place)
-        ? [banditNote, ...body]
-        : body
-    ),
+    body,
     contentType: isFestival ? "festival" : "local_event",
     fieldAnswers: {
       when: whenLine,
       where: place || null,
-      what_to_expect: banditNote,
+      what_to_expect: body[1] ?? body[0] ?? null,
       tips: event.sourceUrl
         ? "Check the listing for the latest hours and any cost before you go."
-        : "Details can shift close to the date — a quick check beforehand is worth it.",
+        : null,
     },
   };
 }

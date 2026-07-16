@@ -1316,10 +1316,12 @@ export async function buildEditionForUser(
       ),
       instruction:
         `Write Today in History as Kindred's signature morning feature — a calm Sunday newspaper ` +
-        `story someone would read over coffee for two or three minutes. ` +
-        `Write 300–700 words across 2–4 paragraphs (separated by blank lines). ` +
-        `Cover: what happened, why it mattered, historical context, lasting impact, and one or two ` +
-        `memorable details that make the story stick. ` +
+        `story someone would read over coffee for three or four minutes. ` +
+        `Write 450–900 words across exactly 6 paragraphs (separated by blank lines). ` +
+        `Cover in order: a specific hook, historical context, what happened, why it mattered then, ` +
+        `long-term impact, and a unique lasting legacy — plus one or two memorable verified details ` +
+        `woven through the piece. Vary paragraph length. End with a conclusion that could belong only ` +
+        `to this event and year. ` +
         `Headline format: "${onThisDay.year} — Compelling editorial title" (never "Today in History" alone). ` +
         `Tone: thoughtful, timeless, curious — never encyclopedic, never copied verbatim. ` +
         `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
@@ -1465,6 +1467,16 @@ export async function buildEditionForUser(
         id: banditsPickStory.id,
         headline,
         summary,
+        body: banditsPickStory.body?.length ? banditsPickStory.body : undefined,
+        modules: banditsPickStory.modules?.length
+          ? banditsPickStory.modules
+          : undefined,
+        closingNote: banditsPickStory.closingNote?.trim() || undefined,
+        mapsQuery: banditsPickStory.mapsQuery?.trim() || undefined,
+        actionLabel: banditsPickStory.actionLabel?.trim() || undefined,
+        nearby: banditsPickStory.nearby?.length ? banditsPickStory.nearby : undefined,
+        heroMomentId: banditsPickStory.heroMomentId ?? undefined,
+        imageCaption: banditsPickStory.imageCaption ?? undefined,
         source: banditsPickStory.source,
         url: banditsPickStory.url,
         publishedAt: banditsPickStory.publishedAt,

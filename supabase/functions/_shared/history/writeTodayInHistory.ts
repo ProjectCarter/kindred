@@ -3,6 +3,10 @@
  */
 
 import { NEWSPAPER_STYLE_RULES, stripLeadingSalutation } from "../editorialStyle.ts";
+import {
+  validateHistoryArticle,
+  wordCount,
+} from "../editorial/articleQuality.ts";
 import { formatTodayInHistoryHeadline } from "./headline.ts";
 
 export type WriteTodayInHistoryInput = {
@@ -12,6 +16,30 @@ export type WriteTodayInHistoryInput = {
   eventText: string;
   anthropicApiKey: string;
 };
+
+const HISTORY_SYSTEM_PROMPT =
+  "You are Kindred's history editor, writing the signature Today in History feature " +
+  "for a calm Sunday morning newspaper. " +
+  "You write ONLY from the grounding data given — never invent a fact, date, name, or quote. " +
+  "Tone: thoughtful, timeless, curious, and enjoyable — never encyclopedic, never copied verbatim. " +
+  "Never open with \"Good morning\" or \"On this day\". " +
+  "Never use exclamation points. " +
+  "Structure (6 paragraphs, separated by blank lines \\n\\n):\n" +
+  "1. A specific opening hook tied to this date and event — not a generic history preamble\n" +
+  "2. Historical context — what the world or region was like around this moment\n" +
+  "3. What happened — the verified facts, told as narrative\n" +
+  "4. Why it mattered then — stakes, surprise, or human detail from grounding\n" +
+  "5. Long-term impact — how it changed something concrete (law, city, habit, border, industry)\n" +
+  "6. Lasting legacy — ONE memorable closing thought unique to this event (Swap Test + Lasting Thought)\n" +
+  "Vary paragraph length. Smooth transitions — never repeat the same opener twice. " +
+  "CONCLUSION (Swap Test): The final paragraph must belong only to this event and year — " +
+  "never a reusable Kindred wrap-up, never 'explains how we got here,' never generic statements about history. " +
+  "LASTING THOUGHT: Leave the reader with one memorable idea they will remember an hour later — " +
+  "a verified fact, overlooked detail, or specific connection to today. Never end with generic lines like " +
+  "'this remains important today' or 'continues to inspire.' " +
+  `${NEWSPAPER_STYLE_RULES} ` +
+  "Respond ONLY with valid JSON: {\"headline\": string, \"body\": string}. " +
+  "The body must be 450–900 words across exactly 6 paragraphs. No markdown.";
 
 function parseSectionJson(text: string): { headline: string; body: string } {
   const trimmed = text.trim();
@@ -30,10 +58,6 @@ function parseSectionJson(text: string): { headline: string; body: string } {
   }
 }
 
-function wordCount(text: string): number {
-  return text.replace(/\s+/g, " ").trim().split(/\s+/).filter(Boolean).length;
-}
-
 function thinHistoryFallback(
   year: number,
   eventText: string
@@ -41,12 +65,18 @@ function thinHistoryFallback(
   const headline = formatTodayInHistoryHeadline(year, eventText, null);
   const event = eventText.trim().replace(/\s+/g, " ");
   const opener = event.length
-    ? `In ${year}, ${event.charAt(0).toLowerCase()}${event.slice(1)}`
-    : `In ${year}, the world turned on an event worth remembering.`;
+    ? `In ${year}, ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")}.`
+    : `In ${year}, the calendar turned on something the papers would still be explaining decades later.`;
   const body = [
-    opener.endsWith(".") ? opener : `${opener}.`,
-    "Kindred keeps these anniversaries on the front page because they explain how we got here — a calm minute of context before the rest of the day pulls you forward.",
-    "More verified background may arrive in later editions; this note stays within what the historical record confirms for the date.",
+    opener,
+    `${year} sat inside a wider moment — institutions, borders, and daily habits were all shifting in ways people at the time could feel but not always name.`,
+    event.length
+      ? `The verified record points to ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")} — a detail worth holding onto because anniversaries compress a long story into one readable morning.`,
+    `At the time, the stakes were immediate: who held power, who lost it, and which ordinary routines suddenly looked different by dinner.`,
+    `The aftershocks did not stay in ${year}. Laws, maps, industries, and arguments we treat as modern often trace back to mornings like this one.`,
+    event.length
+      ? `What began with ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")} still surfaces in places you might not expect — worth noticing once before the rest of the day pulls you forward.`
+      : `${year} left marks that still organize how cities, courts, and classrooms explain themselves — a thread worth following forward from this anniversary.`,
   ].join("\n\n");
   return { headline, body };
 }
@@ -65,9 +95,10 @@ async function readAnthropicJson(response: Response): Promise<Record<string, unk
   }
 }
 
-export async function writeTodayInHistorySection(
-  input: WriteTodayInHistoryInput
-): Promise<{ headline: string; body: string }> {
+async function callHistoryWriter(
+  input: WriteTodayInHistoryInput,
+  extraInstruction?: string
+): Promise<{ response: Response; data: Record<string, unknown>; text: string }> {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -77,26 +108,17 @@ export async function writeTodayInHistorySection(
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 1500,
-      system:
-        "You are Kindred's history editor, writing the signature Today in History feature " +
-        "for a calm Sunday morning newspaper. " +
-        "You write ONLY from the grounding data given — never invent a fact, date, name, or quote. " +
-        "Tone: thoughtful, timeless, curious, and enjoyable — never encyclopedic, never copied verbatim. " +
-        "Never open with \"Good morning\" or \"On this day\". " +
-        "Never use exclamation points. " +
-        `${NEWSPAPER_STYLE_RULES} ` +
-        "Respond ONLY with valid JSON: {\"headline\": string, \"body\": string}. " +
-        "The body must be 2–4 paragraphs separated by blank lines (\\n\\n). No markdown.",
+      max_tokens: 2500,
+      system: HISTORY_SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
           content:
             `Grounding data:\n${input.groundingData}\n\n` +
-            `Instruction: ${input.instruction}\n\n` +
+            `Instruction: ${input.instruction}${extraInstruction ? `\n\n${extraInstruction}` : ""}\n\n` +
             `Headline format (required): \"${input.year} — Compelling editorial title\" — ` +
             `never \"Today in History\" alone. ` +
-            `Body length: 300–700 words across 2–4 paragraphs.`,
+            `Body length: 450–900 words across exactly 6 paragraphs.`,
         },
       ],
     }),
@@ -111,10 +133,16 @@ export async function writeTodayInHistorySection(
     typeof content[0].text === "string"
       ? content[0].text
       : "";
-  const rawParsed = text
-    ? parseSectionJson(text)
-    : { headline: "", body: "" };
 
+  return { response, data, text };
+}
+
+export async function writeTodayInHistorySection(
+  input: WriteTodayInHistoryInput
+): Promise<{ headline: string; body: string }> {
+  let { response, data, text } = await callHistoryWriter(input);
+
+  let rawParsed = text ? parseSectionJson(text) : { headline: "", body: "" };
   let body = stripLeadingSalutation(rawParsed.body);
   let headline = formatTodayInHistoryHeadline(
     input.year,
@@ -122,38 +150,59 @@ export async function writeTodayInHistorySection(
     rawParsed.headline
   );
 
+  let quality = validateHistoryArticle(body, input.year, input.eventText);
+
   if (!body.trim() || wordCount(body) < 40) {
     const fallback = thinHistoryFallback(input.year, input.eventText);
     headline = fallback.headline;
     body = fallback.body;
+    quality = validateHistoryArticle(body, input.year, input.eventText);
     console.warn("[buildEdition] writeTodayInHistorySection thin fallback", {
       httpStatus: response.status,
       ok: response.ok,
-      apiErrorMessage:
-        typeof data?.error === "object" &&
-        data.error &&
-        "message" in data.error &&
-        typeof data.error.message === "string"
-          ? data.error.message
-          : null,
+    });
+  } else if (!quality.passes) {
+    console.warn("[buildEdition] writeTodayInHistorySection quality retry", {
+      reasons: quality.reasons,
+      paragraphCount: quality.paragraphCount,
+      words: quality.words,
+    });
+    const retry = await callHistoryWriter(
+      input,
+      `Previous draft failed editorial quality (${quality.reasons.join(", ")}). ` +
+        "Rewrite with exactly 6 paragraphs, 450+ words, a unique final paragraph tied to this event, " +
+        "and a memorable verified closing detail."
+    );
+    response = retry.response;
+    data = retry.data;
+    text = retry.text;
+    rawParsed = text ? parseSectionJson(text) : { headline: "", body: "" };
+    body = stripLeadingSalutation(rawParsed.body);
+    headline = formatTodayInHistoryHeadline(
+      input.year,
+      input.eventText,
+      rawParsed.headline
+    );
+    quality = validateHistoryArticle(body, input.year, input.eventText);
+  }
+
+  if (!quality.passes && wordCount(body) >= 40) {
+    console.warn("[buildEdition] writeTodayInHistorySection publishing with quality notes", {
+      reasons: quality.reasons,
+      paragraphCount: quality.paragraphCount,
+      words: quality.words,
     });
   }
 
-  const words = wordCount(body);
   console.log("[buildEdition] writeTodayInHistorySection", {
     httpStatus: response.status,
     ok: response.ok,
     hasContent: Boolean(text),
     parseOk: Boolean(headline && body),
-    wordCount: words,
-    targetWords: "300-700",
-    apiErrorType:
-      typeof data?.error === "object" &&
-      data.error &&
-      "type" in data.error &&
-      typeof data.error.type === "string"
-        ? data.error.type
-        : null,
+    wordCount: quality.words,
+    paragraphCount: quality.paragraphCount,
+    qualityPass: quality.passes,
+    targetWords: "450-900",
     apiErrorMessage:
       typeof data?.error === "object" &&
       data.error &&
