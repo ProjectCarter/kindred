@@ -11,6 +11,10 @@ import {
 } from "../_shared/localEvents/provider.ts";
 import { runLocalEventsPipeline } from "../_shared/localEvents/pipeline.ts";
 import { fetchEventbriteSearchCandidates } from "../_shared/localEvents/sources/eventbriteSearch.ts";
+import {
+  fetchTicketmasterSearchCandidates,
+  probeTicketmasterConnection,
+} from "../_shared/localEvents/sources/ticketmasterSearch.ts";
 import { attachEventHorizon } from "../_shared/localEvents/horizon.ts";
 import {
   computeKindredEventEditorialScore,
@@ -66,7 +70,8 @@ Deno.serve(async (req) => {
     const isBusyDay =
       dow === 0 || dow === 6 || isUsHolidayOrEve(dateObj);
 
-    const [probe, productionEvents, pipeline, eventbriteRaw] = await Promise.all([
+    const [probe, productionEvents, pipeline, eventbriteRaw, ticketmasterProbe, ticketmasterRaw] =
+      await Promise.all([
       probeLocalEventsPipeline(location, {
         isBusyDay,
         htichips: body.htichips,
@@ -74,6 +79,8 @@ Deno.serve(async (req) => {
       getLocalEvents(location, { isBusyDay, now: dateObj }),
       runLocalEventsPipeline(location, { isBusyDay, now: dateObj }),
       fetchEventbriteSearchCandidates(location),
+      probeTicketmasterConnection(location),
+      fetchTicketmasterSearchCandidates(location, { now: dateObj }),
     ]);
 
     const summarize = (events: LocalEvent[]) =>
@@ -199,6 +206,12 @@ Deno.serve(async (req) => {
       eventbriteDiscovered: summarize(eventbriteRaw),
       eventbriteWithDates: eventbriteRaw.filter((e) => e.startDateIso).length,
       eventbriteDiagnostics: eventbriteRaw.map(diagnoseEvent),
+      ticketmasterConnection: ticketmasterProbe,
+      ticketmasterDiscovered: summarize(ticketmasterRaw),
+      ticketmasterSportsCount: ticketmasterRaw.filter((e) => e.category === "sports")
+        .length,
+      ticketmasterSummary: pipeline.meta.ticketmaster ?? null,
+      duplicatesRemoved: pipeline.meta.duplicatesRemoved ?? null,
       persistenceValidation,
       backfill,
     });

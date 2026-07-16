@@ -44,3 +44,23 @@ Deno.test("mergeEventsFromSources keeps distinct events at same venue", () => {
   const merged = mergeEventsFromSources([[a, b]]);
   assertEquals(merged.length, 2);
 });
+
+Deno.test("mergeEventsFromSources dedupes Ticketmaster and Eventbrite duplicates", () => {
+  const eventbrite = event({
+    name: "Phoenix Suns vs. Los Angeles Lakers",
+    sourceId: "eventbrite",
+    sourceName: "Eventbrite",
+    sourceUrl: "https://www.eventbrite.com/e/suns-lakers-123",
+  });
+  const ticketmaster = event({
+    name: "Phoenix Suns vs. Los Angeles Lakers",
+    sourceId: "ticketmaster",
+    sourceName: "Ticketmaster",
+    sourceUrl: "https://www.ticketmaster.com/phoenix-suns-vs-los-angeles-lakers-tickets/123",
+    category: "sports",
+  });
+
+  const merged = mergeEventsFromSources([[eventbrite], [ticketmaster]]);
+  assertEquals(merged.length, 1);
+  assertEquals(merged[0]!.sourceId, "eventbrite");
+});

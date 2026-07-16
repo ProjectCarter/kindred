@@ -90,9 +90,10 @@ function formatTime24h(time: string): string | null {
 function formatSchedule(startDate: string | null, startTime: string | null): {
   startDateIso: string | null;
   startDateTime: string;
+  startTimeIso: string | null;
 } {
   if (!startDate?.trim()) {
-    return { startDateIso: null, startDateTime: "See listing" };
+    return { startDateIso: null, startDateTime: "See listing", startTimeIso: null };
   }
 
   const iso = startDate.trim().slice(0, 10);
@@ -107,6 +108,7 @@ function formatSchedule(startDate: string | null, startTime: string | null): {
   return {
     startDateIso: iso,
     startDateTime: timeLabel ? `${dateLabel} · ${timeLabel}` : dateLabel,
+    startTimeIso: startTime?.trim() ?? null,
   };
 }
 
@@ -125,6 +127,7 @@ function parseServerDataEvents(html: string): Array<{
   venue: string;
   startDateIso: string | null;
   startDateTime: string;
+  startTimeIso: string | null;
   url: string;
   imageUrl: string | null;
   lat: number | null;
@@ -143,10 +146,12 @@ function parseServerDataEvents(html: string): Array<{
     venue: string;
     startDateIso: string | null;
     startDateTime: string;
+    startTimeIso: string | null;
     url: string;
     imageUrl: string | null;
     lat: number | null;
     lon: number | null;
+    officialWebsite: string | null;
   }> = [];
 
   for (const row of results) {
@@ -184,6 +189,7 @@ function parseServerDataEvents(html: string): Array<{
       venue,
       startDateIso: schedule.startDateIso,
       startDateTime: schedule.startDateTime,
+      startTimeIso: schedule.startTimeIso,
       url,
       imageUrl: row.image?.url?.replace(/&amp;/g, "&") ?? null,
       lat: Number.isFinite(lat) ? lat : null,
@@ -225,6 +231,7 @@ function parseListingCards(html: string): ReturnType<typeof parseServerDataEvent
       venue: city,
       startDateIso: schedule.startDateIso,
       startDateTime: schedule.startDateTime,
+      startTimeIso: schedule.startTimeIso,
       url,
       imageUrl: imageMatch?.[1]?.replace(/&amp;/g, "&") ?? null,
       lat: null,
@@ -298,12 +305,15 @@ export async function fetchEventbriteSearchCandidates(
         name: card.name,
         startDateTime: card.startDateTime,
         startDateIso: card.startDateIso,
+        startTimeIso: card.startTimeIso,
         venue: card.venue,
         city: card.city,
         sourceUrl: card.url,
         sourceName: "Eventbrite",
         sourceId: "eventbrite",
         sourceTier: "aggregator",
+        dateSourceType: "official_ticketing_page",
+        dateSourceUrl: card.url,
         ...(card.officialWebsite ? { officialWebsite: card.officialWebsite } : {}),
         imageUrl: card.imageUrl,
         imageSource: card.imageUrl ? "provider_thumbnail" : null,

@@ -9,12 +9,26 @@ import { inferEventCategory } from "../provider.ts";
 import { buildEventBadgeSignals, resolveEventBadges } from "../badgeResolver.ts";
 import { normalizeOfficialWebsite } from "../officialWebsite.ts";
 
-function formatNpsSchedule(begin: string | null, end: string | null): string {
+function formatNpsSchedule(begin: string | null, end: string | null): {
+  startDateTime: string;
+  startDateIso: string | null;
+  endDateIso: string | null;
+} {
   const start = begin?.trim();
   const finish = end?.trim();
-  if (start && finish && start !== finish) return `${start} – ${finish}`;
-  if (start) return start;
-  return "This week";
+  const startDateIso = start?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
+  const endDateIso = finish?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
+  if (start && finish && start !== finish) {
+    return {
+      startDateTime: `${start} – ${finish}`,
+      startDateIso,
+      endDateIso,
+    };
+  }
+  if (start) {
+    return { startDateTime: start, startDateIso, endDateIso: startDateIso };
+  }
+  return { startDateTime: "This week", startDateIso: null, endDateIso: null };
 }
 
 export async function fetchNpsParkEvents(
@@ -46,14 +60,14 @@ export async function fetchNpsParkEvents(
       if (!name || name.length < 4) continue;
 
       const venue = park.fullName;
-      const startDateTime = formatNpsSchedule(event.beginDate, event.endDate);
+      const schedule = formatNpsSchedule(event.beginDate, event.endDate);
       const sourceUrl = event.url?.trim() || park.url;
       const officialWebsite = normalizeOfficialWebsite(sourceUrl);
       const category = inferEventCategory(name, venue);
       const badgeSignals = buildEventBadgeSignals({
         name,
         venue,
-        date: startDateTime,
+        date: schedule.startDateTime,
         time: "See listing",
         category,
         description: event.description ?? null,
@@ -68,13 +82,17 @@ export async function fetchNpsParkEvents(
 
       out.push({
         name,
-        startDateTime,
+        startDateTime: schedule.startDateTime,
+        startDateIso: schedule.startDateIso,
+        endDateIso: schedule.endDateIso,
         venue,
         city: eventCity,
         sourceUrl,
         sourceName: "National Park Service",
         sourceId: "nps_park_events",
         sourceTier: "official",
+        dateSourceType: "official_organizer_page",
+        dateSourceUrl: sourceUrl,
         ...(officialWebsite ? { officialWebsite } : {}),
         imageUrl: park.imageUrl,
         imageSource: park.imageUrl ? "provider_thumbnail" : null,

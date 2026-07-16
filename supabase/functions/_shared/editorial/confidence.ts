@@ -504,12 +504,14 @@ export function computeEventConfidence(
     score += pushSignal(signals, "missing_venue", "Missing verified venue", -30);
   }
   if (event.sourceTier === "aggregator" && !event.imageUrl?.trim()) {
-    score += pushSignal(
-      signals,
-      "weak_source",
-      "Weak aggregator listing",
-      -20
-    );
+    if (event.dateSourceType !== "official_ticketing_page") {
+      score += pushSignal(
+        signals,
+        "weak_source",
+        "Weak aggregator listing",
+        -20
+      );
+    }
   }
   if (!event.sourceUrl?.trim()) {
     score += pushSignal(

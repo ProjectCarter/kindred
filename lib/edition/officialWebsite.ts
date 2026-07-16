@@ -5,7 +5,7 @@
 import type { DiscoveryItem } from "./discovery";
 
 const TICKET_PROVIDER_PATTERN =
-  /\b(ticketmaster|eventbrite|axs|dice\.fm|seatgeek|stubhub|universe\.com|tickets\.com|showclix|meetup\.com\/events)\b/i;
+  /\b(ticketmaster|ticketweb|eventbrite|axs|dice\.fm|seatgeek|stubhub|universe\.com|tickets\.com|showclix|meetup\.com\/events)\b/i;
 
 const THIRD_PARTY_LISTING_PATTERN =
   /\b(foursquare\.com|yelp\.com|tripadvisor\.com|google\.com\/maps)\b/i;

@@ -46,7 +46,25 @@ function pickPreferred(existing: LocalEvent, incoming: LocalEvent): LocalEvent {
   const officialWebsite =
     winner.officialWebsite?.trim() || loser.officialWebsite?.trim() || null;
 
-  return officialWebsite ? { ...winner, officialWebsite } : winner;
+  const existingIso = existing.startDateIso?.trim() || null;
+  const incomingIso = incoming.startDateIso?.trim() || null;
+  let dateSourceConflict =
+    Boolean(existingIso && incomingIso && existingIso !== incomingIso);
+
+  // Trust verified Ticketmaster API schedules over secondary aggregator scrapes.
+  if (
+    winner.dateSourceType === "official_ticketing_page" &&
+    winner.startDateIso?.trim()
+  ) {
+    dateSourceConflict = false;
+  }
+
+  const merged: LocalEvent = {
+    ...winner,
+    ...(officialWebsite ? { officialWebsite } : {}),
+    ...(dateSourceConflict ? { dateSourceConflict: true } : {}),
+  };
+  return merged;
 }
 
 /**

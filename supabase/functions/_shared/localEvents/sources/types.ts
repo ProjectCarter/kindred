@@ -125,7 +125,7 @@ export const TRUSTED_EVENT_SOURCE_NETWORK: TrustedEventSource[] = [
   { id: "nonprofit", label: "Local nonprofit organizations", tier: "official", trustScore: 76, active: false, rights: OFFICIAL_SOURCE_RIGHTS },
   { id: "venue_website", label: "Official venue websites", tier: "venue", trustScore: 88, active: false, rights: VENUE_SOURCE_RIGHTS },
   { id: "eventbrite", label: "Eventbrite", tier: "aggregator", trustScore: 72, active: true, rights: AGGREGATOR_SOURCE_RIGHTS },
-  { id: "ticketmaster", label: "Ticketmaster", tier: "aggregator", trustScore: 70, active: false, rights: AGGREGATOR_SOURCE_RIGHTS },
+  { id: "ticketmaster", label: "Ticketmaster", tier: "aggregator", trustScore: 70, active: true, rights: AGGREGATOR_SOURCE_RIGHTS },
   { id: "axs", label: "AXS", tier: "aggregator", trustScore: 68, active: false, rights: AGGREGATOR_SOURCE_RIGHTS },
   { id: "fever", label: "Fever", tier: "aggregator", trustScore: 65, active: false, rights: AGGREGATOR_SOURCE_RIGHTS },
   { id: "serp_google_events", label: "Google Events (via SerpAPI)", tier: "aggregator", trustScore: 62, active: true, rights: AGGREGATOR_SOURCE_RIGHTS },

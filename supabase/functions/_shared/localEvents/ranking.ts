@@ -15,6 +15,7 @@ import {
   type KindredEventEditorialScore,
 } from "./editorialScore.ts";
 import type { EventHorizonBucket } from "./horizon.ts";
+import { isEventDateVerified } from "./eventDateVerification.ts";
 
 export {
   computeKindredEventEditorialScore,
@@ -97,6 +98,7 @@ export function rankLocalEventsForEdition(
     )
     .filter(
       (row) =>
+        isEventDateVerified(row.event) &&
         row.score.total >= LOCAL_EVENT_PUBLISH_MIN_SCORE &&
         shouldPublishEditorialConfidence(computeEventConfidence(row.event))
     )

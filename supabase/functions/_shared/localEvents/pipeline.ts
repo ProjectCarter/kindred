@@ -21,11 +21,20 @@ import { SERPAPI_CANDIDATE_CAP } from "../editorial/publishing.ts";
 import type { LocalEvent, LocalEventLocation, LocalEventsFetchOptions } from "./provider.ts";
 import { gatherFromAllSources } from "./sources/registry.ts";
 import type { LocalEventSourceId } from "./sources/types.ts";
+import type { TicketmasterGatherDiagnostics } from "./sources/ticketmasterSearch.ts";
+import {
+  getLastTicketmasterConnection,
+  isTicketmasterConfigured,
+} from "./sources/ticketmasterSearch.ts";
 import { mergeEventsFromSources } from "./merge.ts";
 import { normalizeEvents } from "./normalize.ts";
 import { applyEventImageRightsBatch } from "./sourceRights.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
 import { attachEventHorizon } from "./horizon.ts";
+import {
+  filterVerifiedEventsForEdition,
+  assertEventsVerifiedForPublication,
+} from "./eventDateVerification.ts";
 import {
   isEventbriteOnlyMode,
   qualifyEventbriteEvents,
@@ -41,6 +50,12 @@ export type LocalEventsPipelineMeta = {
   discoveredInHorizon: number;
   scoredAboveThreshold: number;
   publishedCount: number;
+  rejectedByDateVerification: number;
+  dateVerificationRejections?: Array<{
+    name: string;
+    sourceUrl: string;
+    reason: string;
+  }>;
   sourcesUsed: LocalEventSourceId[];
   sourceCounts: Record<string, number>;
   eventsWithImages: number;
@@ -49,6 +64,10 @@ export type LocalEventsPipelineMeta = {
   rankedPoolTitles?: string[];
   /** TEMPORARY — Eventbrite-only test diagnostics. */
   eventbriteOnly?: import("./eventbriteOnlyMode.ts").EventbriteQualificationReport;
+  /** Ticketmaster Discovery API diagnostics for edition build logs. */
+  ticketmaster?: TicketmasterGatherDiagnostics;
+  /** Candidates removed during cross-source dedupe. */
+  duplicatesRemoved?: number;
 };
 
 export type LocalEventsPipelineOptions = LocalEventsFetchOptions & {
@@ -82,9 +101,21 @@ export async function runLocalEventsPipeline(
   }
 
   const candidateCount = sourceBatches.reduce((n, batch) => n + batch.length, 0);
+  const ticketmasterRetrieved = sourceCounts.ticketmaster ?? 0;
+  let ticketmasterDiagnostics: TicketmasterGatherDiagnostics | undefined;
+  if (isTicketmasterConfigured()) {
+    const connection = getLastTicketmasterConnection();
+    ticketmasterDiagnostics = {
+      connected: connection?.ok ?? false,
+      connectionMessage: connection?.message ?? "Ticketmaster connection not probed",
+      retrieved: ticketmasterRetrieved,
+      rateLimited: connection?.rateLimited,
+    };
+  }
 
   // 2. Dedupe
   const merged = mergeEventsFromSources(sourceBatches);
+  const duplicatesRemoved = Math.max(0, candidateCount - merged.length);
 
   // 3–4. Normalize (dates, URLs, provenance, official-source tier)
   const normalized = normalizeEvents(merged);
@@ -98,14 +129,21 @@ export async function runLocalEventsPipeline(
   ).length;
   const imagesSuppressed = Math.max(0, beforeRights - imagesDisplayAuthorized);
 
-  // 8. Rank within 30-day horizon — persist the full qualified pool in order.
+  // 8. Strict date verification — reject past, ambiguous, or unverified schedules.
   const now = options?.now ?? new Date();
   const inHorizon = withRights
     .slice(0, SERPAPI_CANDIDATE_CAP)
     .map((event) => attachEventHorizon(event, now))
     .filter((event) => event.horizonBucket !== "beyond");
 
-  const ranked = rankLocalEventsForEdition(inHorizon, {
+  const dateVerified = filterVerifiedEventsForEdition(inHorizon, {
+    now,
+    location,
+    eventTimezone: options?.timezone,
+    editionDate: options?.editionDate,
+  });
+
+  const ranked = rankLocalEventsForEdition(dateVerified.verified, {
     now,
     weatherIntel: options?.weatherIntel,
     readerCity: location.city,
@@ -130,9 +168,26 @@ export async function runLocalEventsPipeline(
       `${imagesDisplayAuthorized} listing(s) carry authorized photography.`
     );
   }
+  if (ticketmasterDiagnostics) {
+    editorNotes.push(
+      `Ticketmaster returned ${ticketmasterDiagnostics.retrieved} listing(s)` +
+        (ticketmasterDiagnostics.connected ? " (connected)." : ` (${ticketmasterDiagnostics.connectionMessage}).`)
+    );
+    console.log("[localEvents:ticketmaster] summary", {
+      connectionStatus: ticketmasterDiagnostics.connected
+        ? "connected"
+        : "failed",
+      eventsRetrieved: ticketmasterDiagnostics.retrieved,
+      mergedTotal: merged.length,
+      duplicatesRemoved,
+      message: ticketmasterDiagnostics.connectionMessage,
+      rateLimited: ticketmasterDiagnostics.rateLimited ?? false,
+    });
+  }
   editorNotes.push(
     `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
       `${merged.length} after dedupe; ${inHorizon.length} within 30 days; ` +
+      `${dateVerified.rejected.length} rejected by date verification; ` +
       `${ranked.length} scored above threshold; ${ranked.length} persisted.`
   );
 
@@ -144,6 +199,12 @@ export async function runLocalEventsPipeline(
     imagesSuppressed,
     imagesDisplayAuthorized,
     discoveredInHorizon: inHorizon.length,
+    rejectedByDateVerification: dateVerified.rejected.length,
+    dateVerificationRejections: dateVerified.rejected.slice(0, 12).map((row) => ({
+      name: row.name,
+      sourceUrl: row.sourceUrl,
+      reason: row.reason,
+    })),
     scoredAboveThreshold: ranked.length,
     publishedCount: ranked.length,
     sourcesUsed,
@@ -151,6 +212,8 @@ export async function runLocalEventsPipeline(
     eventsWithImages: imagesDisplayAuthorized,
     rankedPoolTitles: ranked.map((e) => e.name),
     editorNotes,
+    ticketmaster: ticketmasterDiagnostics,
+    duplicatesRemoved,
   };
 
   console.log("[localEvents:pipeline] complete", meta);
@@ -194,13 +257,21 @@ async function runEventbriteOnlyPipeline(
   ).length;
   const imagesSuppressed = Math.max(0, beforeRights - imagesDisplayAuthorized);
   const { qualified, report } = qualifyEventbriteEvents(withRights, location, now);
+  const dateVerified = filterVerifiedEventsForEdition(qualified, {
+    now,
+    location,
+    eventTimezone: options?.timezone,
+    editionDate: options?.editionDate,
+  });
+  const verified = dateVerified.verified;
 
   editorNotes.push(
     `Eventbrite returned ${report.totalReturned}; ` +
       `${report.rejectedDate} rejected for date; ` +
       `${report.rejectedDistance} rejected for distance; ` +
       `${report.rejectedMissing} rejected for missing data; ` +
-      `${report.persisted} persisted.`
+      `${dateVerified.rejected.length} rejected by date verification; ` +
+      `${verified.length} persisted.`
   );
 
   const meta: LocalEventsPipelineMeta = {
@@ -211,19 +282,25 @@ async function runEventbriteOnlyPipeline(
     imagesSuppressed,
     imagesDisplayAuthorized,
     discoveredInHorizon: qualified.length,
-    scoredAboveThreshold: qualified.length,
-    publishedCount: qualified.length,
+    rejectedByDateVerification: dateVerified.rejected.length,
+    dateVerificationRejections: dateVerified.rejected.slice(0, 12).map((row) => ({
+      name: row.name,
+      sourceUrl: row.sourceUrl,
+      reason: row.reason,
+    })),
+    scoredAboveThreshold: verified.length,
+    publishedCount: verified.length,
     sourcesUsed: ["eventbrite"],
     sourceCounts,
     eventsWithImages: imagesDisplayAuthorized,
-    rankedPoolTitles: qualified.map((e) => e.name),
+    rankedPoolTitles: verified.map((e) => e.name),
     editorNotes,
     eventbriteOnly: report,
   };
 
   console.log("[localEvents:eventbriteOnly] complete", meta);
 
-  return { events: qualified, meta };
+  return { events: verified, meta };
 }
 
 /** Backward-compatible entry — returns the full ranked qualified pool. */

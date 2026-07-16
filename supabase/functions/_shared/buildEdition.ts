@@ -51,6 +51,7 @@ import {
   isNpsConfigured,
   topNpsPlanningNote,
 } from "./nps/index.ts";
+import { isTicketmasterConfigured } from "./localEvents/sources/ticketmasterSearch.ts";
 import {
   formatTempC,
   formatWeatherSummary,
@@ -67,6 +68,8 @@ import {
   getLocalEvents,
   type LocalEvent,
 } from "./localEvents/provider.ts";
+import { resolveEventTimezone } from "./localEvents/eventTimezone.ts";
+import { assertEventsVerifiedForPublication } from "./localEvents/eventDateVerification.ts";
 import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDiscovery.ts";
 import { V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT } from "./editorial/v1ImagePolicy.ts";
 import { pruneDiscoveryPayloadByConfidence } from "./editorial/confidencePayload.ts";
@@ -525,6 +528,7 @@ export async function buildEditionForUser(
     FOURSQUARE_API_KEY: Boolean(Deno.env.get("FOURSQUARE_API_KEY")),
     OPENWEATHER_API_KEY: isOpenWeatherConfigured(),
     NPS_API_KEY: isNpsConfigured(),
+    TICKETMASTER_API_KEY: isTicketmasterConfigured(),
   });
 
   if (!newsApiKey || !anthropicApiKey) {
@@ -667,6 +671,8 @@ export async function buildEditionForUser(
     editionDayOfWeek === 6 ||
     isUsHolidayOrEve(editionDateObj);
 
+  const eventTimezone = resolveEventTimezone(eventsLocation);
+
   const [weatherForecast, onThisDayCandidates, localEventsRaw, localPlaces, editorial] =
     await Promise.all([
     timer.timed("Weather", () =>
@@ -676,7 +682,12 @@ export async function buildEditionForUser(
       fetchOnThisDayCandidates(editionDate)
     ),
     timer.timed("Local Events", () =>
-      getLocalEvents(eventsLocation, { isBusyDay, now: editionDateObj })
+      getLocalEvents(eventsLocation, {
+        isBusyDay,
+        now: new Date(),
+        editionDate,
+        timezone: eventTimezone,
+      })
     ),
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
@@ -1999,20 +2010,32 @@ export async function buildEditionForUser(
     .filter((r) => r.headline && r.body);
 
   if (localEvents.length > 0) {
-    const localEventsBody = buildLocalEventsBody(localEvents);
+    const publishableEvents = assertEventsVerifiedForPublication(localEvents, {
+      now: new Date(),
+      location: eventsLocation,
+      eventTimezone,
+      editionDate,
+    });
+
+    if (publishableEvents.length === 0) {
+      console.log("[buildEdition] local events publish gate removed entire section", {
+        beforeGate: localEvents.length,
+      });
+    } else {
+    const localEventsBody = buildLocalEventsBody(publishableEvents);
     const persistedCount = (() => {
       try {
         const parsed = JSON.parse(localEventsBody) as { events?: unknown[] };
         return Array.isArray(parsed.events) ? parsed.events.length : 0;
       } catch {
-        return localEvents.length;
+        return publishableEvents.length;
       }
     })();
     console.log("[buildEdition] local events persisted", {
-      qualified: localEvents.length,
+      qualified: publishableEvents.length,
       persistedInBody: persistedCount,
-      topEvent: localEvents[0]?.name?.slice(0, 48) ?? null,
-      topScore: localEvents[0]?.editorialScore?.total ?? null,
+      topEvent: publishableEvents[0]?.name?.slice(0, 48) ?? null,
+      topScore: publishableEvents[0]?.editorialScore?.total ?? null,
     });
     rows.push({
       edition_id: edition.id,
@@ -2022,6 +2045,7 @@ export async function buildEditionForUser(
       body: localEventsBody,
       source_note: "Curated from trusted local event sources",
     });
+    }
   }
 
   if (heroWeatherTag) {

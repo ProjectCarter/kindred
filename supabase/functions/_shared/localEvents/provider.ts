@@ -46,6 +46,22 @@ export type LocalEvent = {
   startDateTime: string;
   /** Parsed ISO date (YYYY-MM-DD) when the provider supplies or we can infer one. */
   startDateIso?: string | null;
+  /** Provider ISO end date (YYYY-MM-DD) when available. */
+  endDateIso?: string | null;
+  /** Provider start time (HH:mm) when available — never a publication timestamp. */
+  startTimeIso?: string | null;
+  /** Provider end time (HH:mm) when available. */
+  endTimeIso?: string | null;
+  /** IANA timezone for schedule verification — resolved from location when absent. */
+  eventTimezone?: string | null;
+  /** How the schedule date was sourced — drives verification priority. */
+  dateSourceType?: import("./eventDateVerification.ts").EventDateSourceType;
+  /** URL where the verified schedule was read. */
+  dateSourceUrl?: string | null;
+  /** Set when merged sources disagree on the event date. */
+  dateSourceConflict?: boolean;
+  /** Strict date verification metadata — required for edition publication. */
+  dateVerification?: import("./eventDateVerification.ts").EventDateVerification;
   /** Editorial time bucket for the 30-day horizon — set during ranking. */
   horizonBucket?: import("./horizon.ts").EventHorizonBucket | null;
   venue: string;
@@ -60,8 +76,10 @@ export type LocalEvent = {
   imageSource?: "provider_thumbnail" | null;
   /** Whether Kindred may display listing photography from this source. */
   imageRights?: import("./sourceRights.ts").EventImageRights;
-  /** Bandit’s one-line invitation — why leave the house. */
+  /** Bandit's one-line invitation — why leave the house. */
   banditNote?: string | null;
+  /** Verified editorial article paragraphs — composed at edition build. */
+  editorialBody?: string[] | null;
   /** Keyword-inferred genre — never invented, just a plain-language guess from the title. */
   category?: LocalEventCategory;
   /** Utility badges inferred from listing signals — structured, not decorative. */
@@ -98,7 +116,7 @@ export function inferEventCategory(
     return "comedy";
   }
   if (
-    /\b(game|match|tournament|marathon|5k|10k|race|triathlon|football|basketball|baseball|softball|soccer|hockey|golf|tennis|pickleball|fitness|yoga|workout|bootcamp)\b/.test(
+    /\b(game|match|tournament|marathon|5k|10k|race|triathlon|football|basketball|baseball|softball|soccer|hockey|golf|tennis|pickleball|fitness|yoga|workout|bootcamp|mlb|nfl|nba|nhl|mls|wnba|ncaa| vs | v\. )\b/.test(
       hay
     )
   ) {
@@ -173,6 +191,12 @@ export type LocalEventsFetchOptions = {
   htichips?: string | null;
   /** TEMPORARY — force Eventbrite-only gather + basic qualification. */
   eventbriteOnly?: boolean;
+  /** Wall clock for expiration checks — defaults to `new Date()`. */
+  now?: Date;
+  /** Edition calendar day (YYYY-MM-DD) for recurring occurrence resolution. */
+  editionDate?: string | null;
+  /** IANA timezone for event schedule verification. */
+  timezone?: string | null;
 };
 
 export type LocalEventsPipelineProbe = {
@@ -860,6 +884,8 @@ function parseCandidatesWithStats(
       name,
       startDateTime,
       startDateIso,
+      dateSourceType: "trusted_secondary_listing",
+      dateSourceUrl: sourceUrl,
       venue,
       city: displayCity,
       sourceUrl,
@@ -1113,6 +1139,9 @@ export function buildLocalEventsBody(
         imageSource: enriched.imageUrl ? enriched.imageSource ?? "provider_thumbnail" : null,
         ...(enriched.imageRights ? { imageRights: enriched.imageRights } : {}),
         banditNote: enriched.banditNote?.trim() || null,
+        ...(enriched.editorialBody?.length
+          ? { editorialBody: enriched.editorialBody }
+          : {}),
         category,
         startDateIso: enriched.startDateIso ?? null,
         horizonBucket: enriched.horizonBucket ?? null,
@@ -1125,6 +1154,9 @@ export function buildLocalEventsBody(
             }
           : {}),
         ...(badges.length ? { badges } : {}),
+        ...(enriched.dateVerification
+          ? { dateVerification: enriched.dateVerification }
+          : {}),
       };
     }),
   });

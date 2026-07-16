@@ -6,6 +6,7 @@ import type { LocalEvent, LocalEventLocation, LocalEventsFetchOptions } from "..
 import { fetchSerpGoogleEventCandidates } from "../provider.ts";
 import { fetchNpsParkEvents } from "./npsParkEvents.ts";
 import { fetchEventbriteSearchCandidates } from "./eventbriteSearch.ts";
+import { fetchTicketmasterSearchCandidates } from "./ticketmasterSearch.ts";
 import { isEventbriteOnlyMode } from "../eventbriteOnlyMode.ts";
 import type {
   LocalEventSourceConnector,
@@ -34,6 +35,13 @@ const CONNECTORS: LocalEventSourceConnector[] = [
     tier: "aggregator",
     trustScore: 72,
     fetch: fetchEventbriteSearchCandidates,
+  },
+  {
+    id: "ticketmaster",
+    label: "Ticketmaster Discovery API",
+    tier: "aggregator",
+    trustScore: 70,
+    fetch: fetchTicketmasterSearchCandidates,
   },
 ];
 
