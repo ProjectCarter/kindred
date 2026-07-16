@@ -12,6 +12,13 @@ import type { TopStoryItem } from "./topStories";
 import type { BanditPayload } from "./bandit";
 import type { EditionIntelligence } from "./surfaceIntelligence";
 import type { MorningHeroExperience } from "./heroArtwork/types";
+import { parseMorningHeroExperience } from "./morningEdition";
+import {
+  recordEditionCacheDiskHit,
+  recordEditionCacheMemoryHit,
+  recordEditionCacheMiss,
+  recordEditionCacheParse,
+} from "../perf/startupMetrics";
 
 const CACHE_KEY_PREFIX = "@kindred/edition-cache:";
 
@@ -35,29 +42,98 @@ function cacheKey(userId: string, editionDate: string): string {
   return `${CACHE_KEY_PREFIX}${userId}:${editionDate}`;
 }
 
+function memoryKey(userId: string, editionDate: string): string {
+  return `${userId}:${editionDate}`;
+}
+
+/** In-process warm cache — instant on warm relaunch within the same JS session. */
+const memoryBundles = new Map<string, CachedEditionBundle>();
+
+/** Coalesce concurrent disk reads for the same edition key. */
+const inflightLoads = new Map<string, Promise<CachedEditionBundle | null>>();
+
+function normalizeCachedBundle(
+  parsed: CachedEditionBundle,
+  userId: string,
+  editionDate: string
+): CachedEditionBundle | null {
+  if (
+    !parsed ||
+    parsed.userId !== userId ||
+    parsed.editionDate !== editionDate ||
+    !Array.isArray(parsed.sections)
+  ) {
+    return null;
+  }
+  if (parsed.morningHero) {
+    parsed.morningHero =
+      parseMorningHeroExperience(parsed.morningHero) ?? parsed.morningHero;
+  }
+  if (parsed.intelligence?.morningHero) {
+    parsed.intelligence = {
+      ...parsed.intelligence,
+      morningHero:
+        parseMorningHeroExperience(parsed.intelligence.morningHero) ??
+        parsed.intelligence.morningHero,
+    };
+  }
+  return parsed;
+}
+
+/** Synchronous warm-cache read — no AsyncStorage, no JSON parse. */
+export function peekMemoryCachedEdition(
+  userId: string,
+  editionDate: string
+): CachedEditionBundle | null {
+  return memoryBundles.get(memoryKey(userId, editionDate)) ?? null;
+}
+
 export async function loadCachedEdition(
   userId: string,
   editionDate: string
 ): Promise<CachedEditionBundle | null> {
-  try {
-    const raw = await AsyncStorage.getItem(cacheKey(userId, editionDate));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedEditionBundle;
-    if (
-      !parsed ||
-      parsed.userId !== userId ||
-      parsed.editionDate !== editionDate ||
-      !Array.isArray(parsed.sections)
-    ) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
+  const warm = peekMemoryCachedEdition(userId, editionDate);
+  if (warm) {
+    recordEditionCacheMemoryHit();
+    return warm;
   }
+
+  const key = cacheKey(userId, editionDate);
+  const inflight = inflightLoads.get(key);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    try {
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) {
+        recordEditionCacheMiss();
+        return null;
+      }
+      recordEditionCacheParse();
+      recordEditionCacheDiskHit();
+      const parsed = normalizeCachedBundle(
+        JSON.parse(raw) as CachedEditionBundle,
+        userId,
+        editionDate
+      );
+      if (parsed) {
+        memoryBundles.set(memoryKey(userId, editionDate), parsed);
+      }
+      return parsed;
+    } catch {
+      recordEditionCacheMiss();
+      return null;
+    } finally {
+      inflightLoads.delete(key);
+    }
+  })();
+
+  inflightLoads.set(key, promise);
+  return promise;
 }
 
 export async function saveCachedEdition(bundle: CachedEditionBundle): Promise<void> {
+  memoryBundles.set(memoryKey(bundle.userId, bundle.editionDate), bundle);
   try {
     await AsyncStorage.setItem(
       cacheKey(bundle.userId, bundle.editionDate),
@@ -72,9 +148,16 @@ export async function clearCachedEdition(
   userId: string,
   editionDate: string
 ): Promise<void> {
+  memoryBundles.delete(memoryKey(userId, editionDate));
   try {
     await AsyncStorage.removeItem(cacheKey(userId, editionDate));
   } catch {
     // Best-effort.
   }
+}
+
+/** Dev / tests — reset warm cache between runs. */
+export function clearMemoryEditionCacheForTests(): void {
+  memoryBundles.clear();
+  inflightLoads.clear();
 }

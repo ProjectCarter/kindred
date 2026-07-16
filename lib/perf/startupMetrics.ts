@@ -12,9 +12,17 @@ export type StartupMetricsSnapshot = {
   totalElapsedMs: number;
   /** First meaningful homepage content — cache paint or first full paint. */
   ttfmcMs: number | null;
-  ttfmcSource: "home_cache_paint" | "home_first_paint" | null;
+  ttfmcSource:
+    | "home_instant_cache_paint"
+    | "home_cache_paint"
+    | "home_first_paint"
+    | null;
   launchKind: StartupLaunchKind;
   cacheHit: boolean;
+  editionCacheMemoryHitCount: number;
+  editionCacheDiskHitCount: number;
+  editionCacheMissCount: number;
+  editionCacheParseCount: number;
   /** Supabase REST / realtime HTTP during startup window. */
   supabaseFetchCount: number;
   /** Edge Function HTTP (/functions/v1/) during startup window. */
@@ -46,6 +54,10 @@ let authGetSessionCount = 0;
 let authLaunchSessionCacheHitCount = 0;
 let loadPrefsCallCount = 0;
 let loadPrefsCacheHitCount = 0;
+let editionCacheMemoryHitCount = 0;
+let editionCacheDiskHitCount = 0;
+let editionCacheMissCount = 0;
+let editionCacheParseCount = 0;
 
 let cacheHit = false;
 let launchKind: StartupLaunchKind = "unknown";
@@ -62,6 +74,10 @@ export function resetStartupMetricsForTests(): void {
   authLaunchSessionCacheHitCount = 0;
   loadPrefsCallCount = 0;
   loadPrefsCacheHitCount = 0;
+  editionCacheMemoryHitCount = 0;
+  editionCacheDiskHitCount = 0;
+  editionCacheMissCount = 0;
+  editionCacheParseCount = 0;
   cacheHit = false;
   launchKind = "unknown";
   editionFetchStartMs = null;
@@ -86,9 +102,29 @@ export function recordStartupMark(name: string, elapsedMs: number): void {
   if (name === "home_fetch_start") {
     editionFetchStartMs = elapsedMs;
   }
-  if (name === "home_cache_paint") {
+  if (name === "home_cache_paint" || name === "home_instant_cache_paint") {
     cacheHit = true;
   }
+}
+
+export function recordEditionCacheMemoryHit(): void {
+  if (!__DEV__) return;
+  editionCacheMemoryHitCount += 1;
+}
+
+export function recordEditionCacheDiskHit(): void {
+  if (!__DEV__) return;
+  editionCacheDiskHitCount += 1;
+}
+
+export function recordEditionCacheMiss(): void {
+  if (!__DEV__) return;
+  editionCacheMissCount += 1;
+}
+
+export function recordEditionCacheParse(): void {
+  if (!__DEV__) return;
+  editionCacheParseCount += 1;
 }
 
 export function recordAuthGetSession(): void {
@@ -133,6 +169,7 @@ function markMs(name: string): number | null {
 
 export function buildStartupMetricsSnapshot(): StartupMetricsSnapshot {
   const cachePaint = markMs("home_cache_paint");
+  const instantCachePaint = markMs("home_instant_cache_paint");
   const firstPaint = markMs("home_first_paint");
   const fetchStart = markMs("home_fetch_start");
   const editionsDone = markMs("home_editions_query_done");
@@ -140,12 +177,26 @@ export function buildStartupMetricsSnapshot(): StartupMetricsSnapshot {
 
   let ttfmcMs: number | null = null;
   let ttfmcSource: StartupMetricsSnapshot["ttfmcSource"] = null;
-  if (cachePaint != null && (firstPaint == null || cachePaint <= firstPaint)) {
-    ttfmcMs = cachePaint;
-    ttfmcSource = "home_cache_paint";
-  } else if (firstPaint != null) {
-    ttfmcMs = firstPaint;
-    ttfmcSource = "home_first_paint";
+  const ttfmcCandidates: Array<{
+    ms: number;
+    source: NonNullable<StartupMetricsSnapshot["ttfmcSource"]>;
+  }> = [];
+  if (instantCachePaint != null) {
+    ttfmcCandidates.push({
+      ms: instantCachePaint,
+      source: "home_instant_cache_paint",
+    });
+  }
+  if (cachePaint != null) {
+    ttfmcCandidates.push({ ms: cachePaint, source: "home_cache_paint" });
+  }
+  if (firstPaint != null) {
+    ttfmcCandidates.push({ ms: firstPaint, source: "home_first_paint" });
+  }
+  ttfmcCandidates.sort((a, b) => a.ms - b.ms);
+  if (ttfmcCandidates.length > 0) {
+    ttfmcMs = ttfmcCandidates[0].ms;
+    ttfmcSource = ttfmcCandidates[0].source;
   }
 
   let editionLoadMs: number | null = null;
@@ -169,6 +220,10 @@ export function buildStartupMetricsSnapshot(): StartupMetricsSnapshot {
     ttfmcSource,
     launchKind,
     cacheHit,
+    editionCacheMemoryHitCount,
+    editionCacheDiskHitCount,
+    editionCacheMissCount,
+    editionCacheParseCount,
     supabaseFetchCount,
     edgeFunctionFetchCount,
     otherFetchCount,

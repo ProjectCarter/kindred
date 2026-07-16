@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import {
   Image,
   Text,
@@ -27,6 +27,11 @@ import {
   articleFromNotebookItem,
   sectionOpensArticleReader,
 } from "../lib/edition/article";
+import {
+  isStoryOfSection,
+  parseStoryOfSourceNote,
+  storyOfImageFromSourceNote,
+} from "../lib/edition/storyOf";
 import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
 import {
   articleFromTopStory,
@@ -64,6 +69,7 @@ import { ActivitiesSection } from "./ActivitiesSection";
 import { RecommendationsSection } from "./RecommendationsSection";
 import { BanditsNotebook } from "./BanditsNotebook";
 import { TodayInHistorySection } from "./TodayInHistorySection";
+import { StoryOfSection, storyOfSubtitleFromSection } from "./StoryOfSection";
 import { FolioReveal } from "./FolioReveal";
 import { EditionClose } from "./EditionClose";
 import { traceEditionReaderRender } from "../lib/perf/coldLaunchTrace";
@@ -180,7 +186,7 @@ function folioTeaser(body: string): { dek: string; clamped: boolean } {
   };
 }
 
-export function EditionReader({
+function EditionReaderInner({
   sections,
   editionId,
   editionDate,
@@ -257,6 +263,15 @@ export function EditionReader({
 
   const lookingAhead = remaining.find((s) => s.section_type === "looking_ahead");
   const history = remaining.find((s) => s.section_type === "today_in_history");
+  const storyOf = remaining.find((s) => isStoryOfSection(s.section_type));
+  const storyOfImage = useMemo(
+    () => (storyOf ? storyOfImageFromSourceNote(storyOf.source_note) : null),
+    [storyOf?.source_note]
+  );
+  const storyOfSubtitle = useMemo(
+    () => (storyOf ? storyOfSubtitleFromSection(storyOf) : null),
+    [storyOf]
+  );
   const historyImage = useMemo(
     () => onThisDayImageFromKnowledge(knowledge),
     [knowledge]
@@ -270,6 +285,8 @@ export function EditionReader({
     (s) =>
       s.section_type !== "looking_ahead" &&
       s.section_type !== "today_in_history" &&
+      s.section_type !== "story_of" &&
+      s.section_type !== "your_city" &&
       s.section_type !== "top_stories"
   );
 
@@ -457,10 +474,13 @@ export function EditionReader({
         surfaces: [],
       });
     }
-    return articleFromBanditsPick({
-      ...banditsPick.story,
-      discoveryItem: banditsPick.story.discoveryItem ?? null,
-    });
+    return articleFromBanditsPick(
+      {
+        ...banditsPick.story,
+        discoveryItem: banditsPick.story.discoveryItem ?? null,
+      },
+      { kind: banditsPick.kind }
+    );
   }, [banditsPick]);
 
   const localTopStories = topStories.filter((s) =>
@@ -476,6 +496,12 @@ export function EditionReader({
     if (section.section_type === "today_in_history") {
       return articleFromEditionSection(section, {
         historicalImage: onThisDayImageFromKnowledge(knowledge),
+      });
+    }
+    if (isStoryOfSection(section.section_type)) {
+      return articleFromEditionSection(section, {
+        historicalImage: storyOfImageFromSourceNote(section.source_note),
+        dek: parseStoryOfSourceNote(section.source_note)?.subtitle ?? null,
       });
     }
     return articleFromEditionSection(section);
@@ -649,6 +675,37 @@ export function EditionReader({
         />
       </FolioReveal>
 
+      {storyOf ? (
+        <FolioReveal index={folioCursor++}>
+          <StoryOfSection
+            section={storyOf}
+            cityName={locationCity}
+            image={storyOfImage}
+            subtitle={storyOfSubtitle}
+            onOpen={
+              onOpenArticle
+                ? () => onOpenArticle(articleForSection(storyOf))
+                : undefined
+            }
+          />
+        </FolioReveal>
+      ) : null}
+
+      {history ? (
+        <FolioReveal index={folioCursor++}>
+          <TodayInHistorySection
+            section={history}
+            historicalYear={historyYear}
+            image={historyImage}
+            onOpen={
+              onOpenArticle
+                ? () => onOpenArticle(articleForSection(history))
+                : undefined
+            }
+          />
+        </FolioReveal>
+      ) : null}
+
       {banditsPick ? (
         <FolioReveal index={folioCursor++}>
           {banditsPick.intro?.trim() ? (
@@ -674,6 +731,7 @@ export function EditionReader({
               id: banditsPick.story.id,
               kicker: BANDITS_PICK_KICKER[banditsPick.kind],
               headline: banditsPick.story.headline,
+              categoryIcon: banditsPickArticle?.categoryIcon ?? null,
               dek: banditsPick.story.summary,
               byline:
                 banditsPick.kind === "article" && banditsPick.story.source
@@ -684,6 +742,7 @@ export function EditionReader({
               id: d.item.id,
               kicker: "Local",
               headline: d.item.title,
+              categoryIcon: localBizArticlesById.get(d.item.id)?.categoryIcon ?? null,
               byline: d.item.place?.city ?? d.item.source?.name ?? null,
             }))}
             onOpen={
@@ -696,21 +755,6 @@ export function EditionReader({
                     const article = localBizArticlesById.get(id);
                     if (article) onOpenArticle(article);
                   }
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
-
-      {history ? (
-        <FolioReveal index={folioCursor++}>
-          <TodayInHistorySection
-            section={history}
-            historicalYear={historyYear}
-            image={historyImage}
-            onOpen={
-              onOpenArticle
-                ? () => onOpenArticle(articleForSection(history))
                 : undefined
             }
           />
@@ -898,6 +942,28 @@ export function EditionReader({
   );
 }
 
+function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
+  return (
+    prev.editionId === next.editionId &&
+    prev.editionDate === next.editionDate &&
+    prev.sections === next.sections &&
+    prev.leadStory === next.leadStory &&
+    prev.discovery === next.discovery &&
+    prev.discoveryItems === next.discoveryItems &&
+    prev.banditsPick === next.banditsPick &&
+    prev.knowledge === next.knowledge &&
+    prev.morningHero === next.morningHero &&
+    prev.morningOpening === next.morningOpening &&
+    prev.morningBriefing === next.morningBriefing &&
+    prev.localEventsStatus === next.localEventsStatus &&
+    prev.clippedSectionIds === next.clippedSectionIds &&
+    prev.readerLocation === next.readerLocation &&
+    prev.topStories === next.topStories &&
+    prev.heroImageUri === next.heroImageUri
+  );
+}
+
+export const EditionReader = memo(EditionReaderInner, editionReaderPropsAreEqual);
 
 const styles = StyleSheet.create({
   folio: {

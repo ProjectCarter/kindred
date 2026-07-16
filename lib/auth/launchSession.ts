@@ -31,6 +31,12 @@ export function invalidateLaunchSession(): void {
   launchSession = null;
 }
 
+export function getPrimedLaunchUserId(): string | null {
+  if (!launchSession) return null;
+  if (Date.now() - launchSession.at >= LAUNCH_SESSION_TTL_MS) return null;
+  return launchSession.session?.user?.id ?? null;
+}
+
 export async function getLaunchSessionOrFetch(): Promise<{
   data: { session: Session | null };
   error: AuthError | null;

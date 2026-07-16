@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Text,
   View,
@@ -71,9 +71,14 @@ import {
 } from "../lib/edition/editionFreeze";
 import {
   loadCachedEdition,
+  peekMemoryCachedEdition,
   saveCachedEdition,
   type CachedEditionBundle,
 } from "../lib/edition/editionCache";
+import {
+  isCachedEditionPaintable,
+  networkSectionsMatchCache,
+} from "../lib/edition/instantEdition";
 import { loadWithRetry } from "../lib/edition/loadWithRetry";
 import {
   countValidEventsInSections,
@@ -118,7 +123,7 @@ import {
   updateHomeScroll,
 } from "../lib/edition/homeSession";
 import { markStartup, logStartupSummary } from "../lib/perf/startupTiming";
-import { getLaunchSessionOrFetch } from "../lib/auth/launchSession";
+import { getLaunchSessionOrFetch, getPrimedLaunchUserId } from "../lib/auth/launchSession";
 import {
   assessEditionCompleteness,
   logEditionCompleteness,
@@ -178,6 +183,9 @@ export default function HomeScreen() {
   const autoRegenKey = useRef<string | null>(null);
   /** True once today's ready edition has been painted — blocks disruptive reloads. */
   const editionFrozenRef = useRef(false);
+  /** Cached bundle painted before network — skip duplicate hydrate/parse. */
+  const instantHydratedRef = useRef(false);
+  const startupSummaryLoggedRef = useRef(false);
   /** Cached bundle used when the network is slow or unavailable. */
   const cachedBundleRef = useRef<CachedEditionBundle | null>(null);
 
@@ -353,6 +361,67 @@ export default function HomeScreen() {
     month: "long",
     day: "numeric",
   });
+
+  function logFirstPaintIfNeeded(
+    context: string,
+    editionComplete?: boolean
+  ): void {
+    if (startupSummaryLoggedRef.current) return;
+    startupSummaryLoggedRef.current = true;
+    logStartupSummary(context, { editionComplete });
+  }
+
+  function tryApplyInstantCache(
+    bundle: CachedEditionBundle,
+    source: "memory" | "disk"
+  ): boolean {
+    if (
+      instantHydratedRef.current ||
+      editionIdRef.current ||
+      !mountedRef.current
+    ) {
+      return false;
+    }
+    const todayStr = localEditionDate();
+    if (!isCachedEditionPaintable(bundle, todayStr)) return false;
+
+    instantHydratedRef.current = true;
+    applyCachedBundle(bundle);
+    setLoading(false);
+    markStartup(
+      source === "memory" ? "home_instant_cache_paint" : "home_cache_paint"
+    );
+
+    const completeness = assessEditionCompleteness({
+      sections: bundle.sections,
+      intelligence: bundle.intelligence,
+      bandit: bundle.bandit,
+      leadStory: bundle.leadStory,
+      readerLocation: null,
+    });
+    logFirstPaintIfNeeded("repeat_launch", completeness.complete);
+    return true;
+  }
+
+  // Paint from local cache before the network path — layout already primed auth.
+  useLayoutEffect(() => {
+    const userId = getPrimedLaunchUserId();
+    if (!userId) return;
+
+    const todayStr = localEditionDate();
+    const memory = peekMemoryCachedEdition(userId, todayStr);
+    if (memory && tryApplyInstantCache(memory, "memory")) return;
+
+    void loadCachedEdition(userId, todayStr).then((cached) => {
+      if (!cached || !mountedRef.current) return;
+      tryApplyInstantCache(cached, "disk");
+    });
+  }, []);
+
+  useEffect(() => {
+    if (loading || !editionId) return;
+    markStartup("home_interactive");
+  }, [loading, editionId]);
 
   function applyCachedBundle(bundle: CachedEditionBundle): void {
     cachedBundleRef.current = bundle;
@@ -588,10 +657,24 @@ export default function HomeScreen() {
 
     const cachePromise = shouldHydrateCache
       ? loadCachedEdition(user.id, todayStr).then((cached) => {
-          if (cached && mountedRef.current && gen === loadGen.current) {
+          if (
+            cached &&
+            mountedRef.current &&
+            gen === loadGen.current &&
+            !instantHydratedRef.current
+          ) {
+            instantHydratedRef.current = true;
             applyCachedBundle(cached);
             setLoading(false);
             markStartup("home_cache_paint");
+            const completeness = assessEditionCompleteness({
+              sections: cached.sections,
+              intelligence: cached.intelligence,
+              bandit: cached.bandit,
+              leadStory: cached.leadStory,
+              readerLocation: null,
+            });
+            logFirstPaintIfNeeded("repeat_launch", completeness.complete);
             void maybeRecoverTodayInHistory({
               userId: user.id,
               editionId: cached.editionId,
@@ -767,7 +850,6 @@ export default function HomeScreen() {
       sectionIds: loaded.map((s) => s.id),
       sectionTypes: loaded.map((s) => s.section_type),
       discoveryPresent: Boolean(parseDiscoveryPayload(discoveryRaw)),
-      httpStatus: sectionsStatus ?? null,
     });
 
     return {
@@ -985,6 +1067,9 @@ export default function HomeScreen() {
     const narrativeFrozen = frozenNow && editionFrozenRef.current;
     const patchEventsOnly = eventsOnly || (quiet && narrativeFrozen);
     const syncAfterCache = narrativeFrozen && !isRefresh && !eventsOnly;
+    const cacheMatchesNetwork =
+      syncAfterCache &&
+      networkSectionsMatchCache(cachedBundleRef.current, edition.id, loaded);
 
     let nextSections = loaded;
 
@@ -994,6 +1079,11 @@ export default function HomeScreen() {
         loaded
       );
       setSections(nextSections);
+    } else if (syncAfterCache && cacheMatchesNetwork) {
+      nextSections = cachedBundleRef.current?.sections ?? loaded;
+      if (__DEV__) {
+        console.log("[home] loadEdition: network verified cache — no UI churn");
+      }
     } else if (syncAfterCache) {
       nextSections = mergeFrozenSections(
         cachedBundleRef.current?.sections ?? loaded,
@@ -1146,11 +1236,17 @@ export default function HomeScreen() {
 
     setLoading(false);
     setRefreshing(false);
-    markStartup("home_first_paint");
-    logStartupSummary(
-      cachedBundleRef.current ? "repeat_launch" : "cold_launch",
-      { editionComplete: completeness.complete }
-    );
+    if (!startupSummaryLoggedRef.current) {
+      markStartup("home_first_paint");
+      logFirstPaintIfNeeded(
+        instantHydratedRef.current || cachedBundleRef.current
+          ? "repeat_launch"
+          : "cold_launch",
+        completeness.complete
+      );
+    } else if (__DEV__) {
+      markStartup("home_network_verified");
+    }
 
     void (async () => {
       if (!mountedRef.current || gen !== loadGen.current) return;
