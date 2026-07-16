@@ -37,6 +37,7 @@ import {
   sanitizeReaderParagraphs,
   sceneLineForPlace,
 } from "./editorialVoice";
+import { containsGenericAiPhrase } from "./editorialIntelligence";
 
 export type CuratedDiscoveryArticle = {
   /** Editorial subheading for the reader — distinct from the homepage card dek. */
@@ -864,7 +865,7 @@ export function composePlaceDiscoveryArticle(input: {
     practicalTips = brief.tips;
   }
 
-  const closing = closingLineForPlace(title, city);
+  const closing = closingLineForPlace(title, city, input.seedKey);
 
   const atmosphereParagraph =
     (typeof essay?.fieldAnswers?.atmosphere === "string" &&
@@ -1031,17 +1032,19 @@ export function composeGenericDynamicDiscoveryArticle(input: {
   const why = input.why?.trim() || "";
   const categoryLabel = input.category.replace(/_/g, " ");
 
-  const opening = dek && !containsEngineLanguage(dek) ? dek : `${title} — an idea worth a look today.`;
+  const opening = dek && !containsEngineLanguage(dek) && !containsGenericAiPhrase(dek)
+    ? dek
+    : `${title} — worth a closer look when you have an hour to spare.`;
 
   const worthConsidering =
-    why && !containsEngineLanguage(why) && !isNearDuplicateCopy(why, dek)
+    why && !containsEngineLanguage(why) && !containsGenericAiPhrase(why) && !isNearDuplicateCopy(why, dek)
       ? why
       : `Worth considering if the idea appeals — a nudge in a direction, not a full itinerary.`;
 
-  const whatToExpect = `This is the kind of ${categoryLabel} experience worth seeking out nearby — treat it as inspiration, then find the version of it closest to you.`;
+  const whatToExpect = `This is a ${categoryLabel} idea worth seeking out nearby — treat it as inspiration, then find the version closest to you.`;
 
   const who =
-    "Good for anyone who likes a suggestion with room to explore, rather than a fixed plan.";
+    "Best when you want a suggestion with room to explore, rather than a fixed plan.";
 
   const goodToKnow = input.city
     ? `Start near ${input.city} and see what is open when you are — hours and seasons change.`

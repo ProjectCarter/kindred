@@ -9,6 +9,10 @@
  */
 
 import type { NormalizedPlace, PlacesCategory } from "./types.ts";
+import {
+  buildEditorialIntelligencePromptBlock,
+  containsGenericAiPhrase,
+} from "../editorial/editorialIntelligence.ts";
 
 const CATEGORY_LABEL: Record<PlacesCategory, string> = {
   coffee: "coffee shop",
@@ -83,6 +87,7 @@ export async function writeEditorialNotesForPlaces(
           "If it's a small, independent, or local-feeling place, let that come through. " +
           "If little is known beyond the name, write an honest, understated line rather than embellishing. " +
           "No exclamation points. No hashtags. No 'must-visit' clichés. Vary openings across the list. " +
+          `${buildEditorialIntelligencePromptBlock()} ` +
           "Respond ONLY with JSON: " +
           '{"notes":["..."]} with one string per place in the same order.',
         messages: [
@@ -106,7 +111,7 @@ export async function writeEditorialNotesForPlaces(
 
     return places.map((p, i) => ({
       ...p,
-      note: notes[i]?.trim() || fallbackNote(p, category),
+      note: sanitizePlaceNote(notes[i]) || fallbackNote(p, category),
     }));
   } catch (err) {
     console.error("[places:notes] failure", {
@@ -141,6 +146,13 @@ function parseNotesJson(text: string, expected: number): string[] {
     }
   }
   return Array.from({ length: expected }, () => "");
+}
+
+function sanitizePlaceNote(note: string | undefined): string | null {
+  const trimmed = note?.trim() ?? "";
+  if (!trimmed || trimmed.length < 12) return null;
+  if (containsGenericAiPhrase(trimmed)) return null;
+  return trimmed;
 }
 
 function fallbackNote(place: NormalizedPlace, category: PlacesCategory): string {

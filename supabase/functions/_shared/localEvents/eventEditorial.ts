@@ -3,6 +3,12 @@
  * Keep banned patterns and brief format in sync with the client module.
  */
 
+import {
+  buildEditorialIntelligencePromptBlock,
+  containsGenericAiPhrase,
+  endingReadsLikeSummary,
+  hasMemorableTakeaway,
+} from "../editorial/editorialIntelligence.ts";
 import type { LocalEvent } from "./provider.ts";
 import {
   STORY_TYPE_GUIDANCE,
@@ -58,7 +64,10 @@ export const BANNED_EVENT_EDITORIAL_PATTERNS: RegExp[] = [
 export function containsBannedEventCopy(text: string | null | undefined): boolean {
   const raw = text?.trim();
   if (!raw) return false;
-  return BANNED_EVENT_EDITORIAL_PATTERNS.some((pattern) => pattern.test(raw));
+  return (
+    BANNED_EVENT_EDITORIAL_PATTERNS.some((pattern) => pattern.test(raw)) ||
+    containsGenericAiPhrase(raw)
+  );
 }
 
 export function sanitizeEventEditorialParagraphs(paragraphs: string[]): string[] {
@@ -150,7 +159,8 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "\"Looking for something different\", \"Don't miss\", \"Mark your calendar\", \"Gather your friends\", " +
   "\"Perfect way to spend\", \"Hidden gem\", \"Something for everyone\", \"Join us for\", \"An event is happening\"\n" +
   "- No rotating templates, canned introductions, or filler\n" +
-  "- Name the venue, format, activity, or detail that makes this event distinct";
+  "- Name the venue, format, activity, or detail that makes this event distinct\n\n" +
+  buildEditorialIntelligencePromptBlock();
 
 export type GeneratedEventEditorial = {
   banditNote: string | null;
@@ -194,6 +204,15 @@ export function parseGeneratedEventEditorial(
       banditNote: candidate.banditNote,
       editorialBody: candidate.editorialBody,
     })
+  ) {
+    return { banditNote: null, editorialBody: null };
+  }
+
+  const bodyText = candidate.editorialBody?.join("\n\n") ?? "";
+  const lastParagraph = candidate.editorialBody?.at(-1) ?? "";
+  if (
+    !hasMemorableTakeaway(bodyText) ||
+    endingReadsLikeSummary(lastParagraph)
   ) {
     return { banditNote: null, editorialBody: null };
   }

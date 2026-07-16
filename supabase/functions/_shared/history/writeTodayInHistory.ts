@@ -4,6 +4,9 @@
 
 import { NEWSPAPER_STYLE_RULES, stripLeadingSalutation } from "../editorialStyle.ts";
 import {
+  buildEditorialIntelligencePromptBlock,
+} from "../editorial/editorialIntelligence.ts";
+import {
   validateHistoryArticle,
   wordCount,
 } from "../editorial/articleQuality.ts";
@@ -30,13 +33,15 @@ const HISTORY_SYSTEM_PROMPT =
   "3. What happened — the verified facts, told as narrative\n" +
   "4. Why it mattered then — stakes, surprise, or human detail from grounding\n" +
   "5. Long-term impact — how it changed something concrete (law, city, habit, border, industry)\n" +
-  "6. Lasting legacy — ONE memorable closing thought unique to this event (Swap Test + Lasting Thought)\n" +
+  "6. Lasting legacy — ONE memorable closing observation unique to this event (Swap Test + Lasting Thought)\n" +
   "Vary paragraph length. Smooth transitions — never repeat the same opener twice. " +
   "CONCLUSION (Swap Test): The final paragraph must belong only to this event and year — " +
-  "never a reusable Kindred wrap-up, never 'explains how we got here,' never generic statements about history. " +
+  "an observation, never a summary recap. Never a reusable Kindred wrap-up, never 'explains how we got here,' " +
+  "never generic statements about history. " +
   "LASTING THOUGHT: Leave the reader with one memorable idea they will remember an hour later — " +
   "a verified fact, overlooked detail, or specific connection to today. Never end with generic lines like " +
   "'this remains important today' or 'continues to inspire.' " +
+  `${buildEditorialIntelligencePromptBlock()} ` +
   `${NEWSPAPER_STYLE_RULES} ` +
   "Respond ONLY with valid JSON: {\"headline\": string, \"body\": string}. " +
   "The body must be 450–900 words across exactly 6 paragraphs. No markdown.";
@@ -170,8 +175,8 @@ export async function writeTodayInHistorySection(
     const retry = await callHistoryWriter(
       input,
       `Previous draft failed editorial quality (${quality.reasons.join(", ")}). ` +
-        "Rewrite with exactly 6 paragraphs, 450+ words, a unique final paragraph tied to this event, " +
-        "and a memorable verified closing detail."
+        "Rewrite with exactly 6 paragraphs, 450+ words, a unique final observation tied to this event, " +
+        "at least one memorable verified takeaway, and no generic AI phrases."
     );
     response = retry.response;
     data = retry.data;

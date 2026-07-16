@@ -3,6 +3,11 @@
  * never in the morning paper.
  */
 
+import {
+  observationClosingForPlace,
+  containsGenericAiPhrase,
+} from "./editorialIntelligence";
+
 /** Patterns that break the newspaper illusion — never publish to readers. */
 export const ENGINE_LANGUAGE_PATTERN =
   /\b(verified listing|category guess|confidence score|source confidence|category detection|selected because|kindred flagged|kindred selected|algorithmic suggestion|algorithmic recommendation|ai verified|foursquare verified|evidence gate|experience verified|verified near|verified through|not a category|category suggestion|category recommendation|confirmed listing|quiet desk recommendation|fits your place|editorial quality|hand-selected|we could confirm|grounded in what|not a line-by-line review|kindred doesn'?t have|kindred can (actually )?verify|worth a look before the day fills|today'?s notebook on editorial judgment|trending list|mood board version|earned a place in today'?s paper|from today'?s paper)\b/i;
@@ -12,11 +17,11 @@ export function containsEngineLanguage(text: string | null | undefined): boolean
   return ENGINE_LANGUAGE_PATTERN.test(text.trim());
 }
 
-/** Strip or drop paragraphs that read like internal reasoning. */
+/** Strip or drop paragraphs that read like internal reasoning or generic AI filler. */
 export function sanitizeReaderParagraphs(paragraphs: string[]): string[] {
   return paragraphs
     .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter((p) => p.length >= 12 && !containsEngineLanguage(p));
+    .filter((p) => p.length >= 12 && !containsEngineLanguage(p) && !containsGenericAiPhrase(p));
 }
 
 export function isNearDuplicateCopy(a: string, b: string): boolean {
@@ -89,10 +94,10 @@ export function sceneLineForPlace(
   const area = city ? ` around ${city}` : "";
 
   if (/bowling/.test(t)) {
-    return `Whether you are escaping the afternoon heat or meeting friends for a rematch, it is an easy place to spend an hour without overthinking the plan.`;
+    return `Late afternoon works well when you want lanes, shoe rental, and an easy group night without much planning.`;
   }
   if (/esports|gaming/.test(t)) {
-    return `Whether you are escaping the afternoon heat or meeting friends for a few hours of gaming, it is an easy place to settle in and stay awhile.`;
+    return `Late afternoon or evening — settle in for a few focused hours when you want high-end setups without a full itinerary.`;
   }
   if (/escape room/.test(t)) {
     return `Good for groups that like a little pressure, a clear goal, and a story to retell afterward.`;
@@ -110,9 +115,6 @@ export function sceneLineForPlace(
   return `Worth a visit when you want something local and specific${area}, not another evening spent deciding where to go.`;
 }
 
-export function closingLineForPlace(title: string, city: string): string {
-  if (city) {
-    return `${title} is one of those ${city} places that is easier to postpone than to visit — and usually more fun once you finally go.`;
-  }
-  return `${title} is worth finding out for yourself — the kind of place you are glad you did not keep putting off.`;
+export function closingLineForPlace(title: string, city: string, seed = title): string {
+  return observationClosingForPlace(title, seed || city || title);
 }

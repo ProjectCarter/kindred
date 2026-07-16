@@ -6,6 +6,7 @@
 import type { LocalEventCard, LocalEventCategory } from "./localEvents";
 import { eventCategoryLabel } from "./localEvents";
 import { containsEngineLanguage } from "./editorialVoice";
+import { containsGenericAiPhrase } from "./editorialIntelligence";
 import type { EventInfoBadgeId } from "./eventBadges";
 import { passesEventGoldenTest } from "./eventStorytelling";
 
@@ -45,7 +46,10 @@ export const BANNED_EVENT_EDITORIAL_PATTERNS: RegExp[] = [
 export function containsBannedEventCopy(text: string | null | undefined): boolean {
   const raw = text?.trim();
   if (!raw) return false;
-  return BANNED_EVENT_EDITORIAL_PATTERNS.some((pattern) => pattern.test(raw));
+  return (
+    BANNED_EVENT_EDITORIAL_PATTERNS.some((pattern) => pattern.test(raw)) ||
+    containsGenericAiPhrase(raw)
+  );
 }
 
 export function sanitizeEventEditorialParagraphs(paragraphs: string[]): string[] {

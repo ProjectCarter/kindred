@@ -1,19 +1,19 @@
 /**
- * Phase 2 — Editorial Quality Engine
+ * Phase 2–3 — Editorial Quality Engine
  * Shared prose gates and editor questions (server-side writers).
  */
 
+import {
+  buildEditorialIntelligencePromptBlock,
+  containsGenericAiPhrase,
+  endingReadsLikeSummary,
+  hasMemorableTakeaway,
+} from "./editorialIntelligence.ts";
 import { validateLastingThought } from "./memorableWriting.ts";
 import { validateUniqueConclusion, extractLastParagraph } from "./uniqueConclusions.ts";
 
-/** Questions every desk should answer when verified facts allow. */
-export const EDITORIAL_QUESTIONS_FRAMEWORK =
-  "Naturally answer when facts allow (never invent to fill gaps):\n" +
-  "• Why does this matter?\n" +
-  "• Who would enjoy this?\n" +
-  "• What makes it unique?\n" +
-  "• When is the best time to go?\n" +
-  "• What should someone know before visiting?";
+/** Phase 3 intelligence framework — smarter articles, not longer ones. */
+export const EDITORIAL_QUESTIONS_FRAMEWORK = buildEditorialIntelligencePromptBlock();
 
 export function splitBodyParagraphs(body: string): string[] {
   return body
@@ -78,6 +78,16 @@ export function validateHistoryArticle(
   });
   if (!conclusion.passes) {
     reasons.push(`conclusion:${conclusion.reason ?? "fail"}`);
+  }
+
+  if (containsGenericAiPhrase(body)) {
+    reasons.push("generic_ai_phrase");
+  }
+  if (endingReadsLikeSummary(extractLastParagraph(body))) {
+    reasons.push("summary_ending");
+  }
+  if (!hasMemorableTakeaway(body)) {
+    reasons.push("no_memorable_takeaway");
   }
 
   return {

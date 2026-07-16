@@ -5,6 +5,7 @@
 
 import type { DiscoveryRankingContext } from "../discovery/types.ts";
 import type { BanditSeasonalEditorial } from "./editorialContent.ts";
+import { containsGenericAiPhrase } from "../editorial/editorialIntelligence.ts";
 import type {
   ExperienceEvidenceBundle,
   ExperienceEvidenceItem,
@@ -62,16 +63,28 @@ function composeExperienceLedEditorial(
 
   const cardExcerpt = `${primary.description} That is what is genuinely special near ${area} this week.`;
 
+  const bestTime =
+    base.modules.find((m) => m.id === "best_time")?.body ??
+    base.modules.find((m) => m.id === "why_now")?.body ??
+    null;
+  const goodToKnow =
+    base.modules.find((m) => m.id === "good_to_know")?.body ?? null;
+
   const body: string[] = [
     `${primary.name} is the experience worth planning around near ${area} right now. ${primary.description}`,
     `The timing matters: ${base.cardExcerpt} This is not background seasonality — it is something you can actually step outside and notice this week.`,
     anchorNames
       ? `Where locals catch it: ${anchorNames}. ${anchorList[0]?.description ?? ""}`.trim()
       : `Look for open viewpoints, neighborhood parks, and quiet outdoor spots near ${area} — the experience does not require a ticket, just the right evening.`,
+    bestTime ? `When to go: ${bestTime}` : null,
+    goodToKnow ? `Before you head out: ${goodToKnow}` : null,
     anchorList.some((a) => a.url)
       ? `Check listings for the best viewpoints or events before you go — conditions change night to night.`
       : `Go when the light is right — early evening tends to be the honest window for this kind of week.`,
-  ];
+    base.closingNote && !containsGenericAiPhrase(base.closingNote)
+      ? base.closingNote
+      : null,
+  ].filter((p): p is string => Boolean(p));
 
   const modules = [
     {
@@ -130,16 +143,25 @@ function composeVenueLedEditorial(
 
   const cardExcerpt = `${where} is worth putting on this week's list near ${area}. ${primary.description}`;
 
+  const bestTime =
+    base.modules.find((m) => m.id === "best_time")?.body ??
+    base.modules.find((m) => m.id === "why_now")?.body ??
+    null;
+
   const body: string[] = [
     `${where} is how locals actually experience ${base.headline.toLowerCase()} near ${area}. ${primary.description}`,
     `The timing matters: ${base.cardExcerpt} That is why it belongs on this week's calendar.`,
     also
       ? `Also on the short list: ${also}.`
-      : `This is the kind of stop a lifelong local would recognize as real.`,
+      : `Pair it with a slow walk nearby — the stop earns more when the rest of the afternoon stays unhurried.`,
+    bestTime ? `When to go: ${bestTime}` : null,
     primary.url
       ? `Check the listing for today's hours before you go — seasonal windows move fast.`
       : `Confirm hours and conditions before you head out — seasonal windows move fast.`,
-  ];
+    base.closingNote && !containsGenericAiPhrase(base.closingNote)
+      ? base.closingNote
+      : null,
+  ].filter((p): p is string => Boolean(p));
 
   const modules = [
     {
