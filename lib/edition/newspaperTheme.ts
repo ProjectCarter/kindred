@@ -36,6 +36,26 @@ export const paper = {
   success: "#6E8B6A",
 } as const;
 
+/**
+ * Kindred Gold — discovery, craftsmanship, and editorial warmth.
+ * Use sparingly: masterpiece frame, Bandit's bandana, dividers, saved state, loading accents.
+ */
+export const kindredGold = {
+  primary: "#B88A3B",
+  light: "#C4953F",
+  deep: "#A9782D",
+  wash: "#B88A3B18",
+  rule: "#B88A3B44",
+} as const;
+
+/** Today's Masterpiece — museum mat + thin gold frame signature. */
+export const masterpiece = {
+  frameBorderWidth: 3.5,
+  frameRadius: 11,
+  matPadding: 16,
+  matColor: paper.page,
+} as const;
+
 /** Soft print-like elevation — pages floating on morning air. */
 export const shadow = {
   photo: {
@@ -64,8 +84,8 @@ export const press = {
 /** Vertical rhythm — more air, less density. */
 export const space = {
   folioGutter: 28,
-  sectionGap: 64,
-  afterMasthead: 32,
+  sectionGap: 52,
+  afterMasthead: 16,
   afterBandit: 36,
   afterLead: 56,
   endPadding: 56,

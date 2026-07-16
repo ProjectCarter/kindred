@@ -93,17 +93,25 @@ export type ScoredHeroArtwork = {
   reasons: string[];
 };
 
+export type MasterpieceArticleSection = {
+  heading: string;
+  paragraphs: string[];
+};
+
 export type MasterpieceDetail = {
-  longStoryBody: string;
-  longStoryParagraphs: string[];
-  artistBiography: string;
-  lookCloserItems: string[];
+  sections: MasterpieceArticleSection[];
+  lookingCloser: string[];
   didYouKnow: string;
   museumName: string;
   museumLocation: string;
   officialMuseumUrl: string | null;
   officialArtworkUrl: string | null;
   sourceReferences: string[];
+  /** Legacy flat story — ignored when sections are present. */
+  longStoryBody?: string;
+  longStoryParagraphs?: string[];
+  artistBiography?: string;
+  lookCloserItems?: string[];
 };
 
 export type MorningHeroExperience = {

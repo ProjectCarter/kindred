@@ -51,6 +51,7 @@ const verifiedArtwork: HeroArtworkRecord = {
   aboutWordCount: 82,
   longStoryBody: null,
   longStoryParagraphCount: null,
+  editorialSections: null,
   artistBiography: null,
   lookCloserItems: [],
   didYouKnow: null,

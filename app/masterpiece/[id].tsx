@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MasterpieceReader } from "../../components/MasterpieceReader";
+import { MasterpieceLoading } from "../../components/MasterpieceLoading";
 import { getStashedMasterpiece } from "../../lib/edition/masterpieceStore";
-import { paper } from "../../lib/edition/newspaperTheme";
+import { kindredGold, paper } from "../../lib/edition/newspaperTheme";
 
 export default function MasterpieceDetailScreen() {
   const { id, backLabel } = useLocalSearchParams<{
@@ -38,9 +39,7 @@ export default function MasterpieceDetailScreen() {
         <Pressable onPress={handleBack} style={styles.backRow}>
           <Text style={styles.back}>{back}</Text>
         </Pressable>
-        <Text style={styles.missing}>
-          This masterpiece is no longer available.
-        </Text>
+        <MasterpieceLoading backLabel={back} />
       </SafeAreaView>
     );
   }
@@ -65,14 +64,7 @@ const styles = StyleSheet.create({
   },
   back: {
     fontSize: 15,
-    color: paper.terracotta,
+    color: kindredGold.primary,
     letterSpacing: 0.2,
-  },
-  missing: {
-    fontFamily: "Georgia",
-    fontSize: 22,
-    color: paper.inkMuted,
-    paddingHorizontal: 24,
-    marginTop: 24,
   },
 });

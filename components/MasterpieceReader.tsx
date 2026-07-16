@@ -1,5 +1,5 @@
+import type { ReactNode } from "react";
 import {
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -12,9 +12,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
-import { renderMasterpieceCreditLine } from "../lib/edition/heroArtwork/attribution";
+import { formatArtworkCreditBlock } from "../lib/edition/heroArtwork/credits";
 import { renderMasterpieceDetail } from "../lib/edition/heroArtwork/detail";
-import { paper, press, shadow } from "../lib/edition/newspaperTheme";
+import { MasterpieceFrame } from "./MasterpieceFrame";
+import { MasterpieceLoading } from "./MasterpieceLoading";
+import { kindredGold, paper, press, space } from "../lib/edition/newspaperTheme";
 
 export type MasterpieceReaderProps = {
   morningHero: MorningHeroExperience;
@@ -22,9 +24,25 @@ export type MasterpieceReaderProps = {
   backLabel?: string;
 };
 
+function EditorialSection({
+  heading,
+  children,
+}: {
+  heading: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel} maxFontSizeMultiplier={1.1}>
+        {heading}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
 /**
- * Today's Masterpiece detail — museum catalog meets morning newspaper.
- * Renders only pre-stored fields; no fetch or generation at open time.
+ * Today's Masterpiece 2.0 — Smithsonian-caliber editorial on Kindred paper.
  */
 export function MasterpieceReader({
   morningHero,
@@ -33,28 +51,25 @@ export function MasterpieceReader({
 }: MasterpieceReaderProps) {
   const { width: windowWidth } = useWindowDimensions();
   const contentWidth = Math.min(windowWidth, 680);
+  const frameWidth = contentWidth - space.folioGutter * 2;
   const heroHeight = heroFrameHeight(
-    contentWidth,
+    frameWidth - 32,
     morningHero.imageWidth,
     morningHero.imageHeight,
     morningHero.aspectRatio,
-    520
+    480
   );
 
   const detail = renderMasterpieceDetail(morningHero);
-  const creditLine = renderMasterpieceCreditLine(morningHero);
+  const credit = formatArtworkCreditBlock(morningHero);
+
   const titleWithYear = morningHero.year
     ? `${morningHero.artworkTitle} (${morningHero.year})`
     : morningHero.artworkTitle;
-  const artistLine = morningHero.year
-    ? `${morningHero.artist} · ${morningHero.year}`
-    : morningHero.artist;
 
-  const visitUrl =
-    detail?.officialArtworkUrl?.trim() ||
-    detail?.officialMuseumUrl?.trim() ||
-    morningHero.sourceUrl?.trim() ||
-    null;
+  if (!detail) {
+    return <MasterpieceLoading backLabel={backLabel} onBack={onBack} />;
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -72,18 +87,18 @@ export function MasterpieceReader({
           <Text style={styles.back}>{backLabel}</Text>
         </Pressable>
 
-        <View style={styles.heroFrame}>
-          <Image
-            source={{ uri: morningHero.hostedUrl }}
-            style={{ width: contentWidth, height: heroHeight }}
-            resizeMode="cover"
+        <View style={styles.heroWrap}>
+          <MasterpieceFrame
+            imageUri={morningHero.hostedUrl}
+            width={frameWidth}
+            height={heroHeight}
             accessibilityLabel={`${morningHero.artworkTitle} by ${morningHero.artist}`}
           />
         </View>
 
         <View style={[styles.body, { maxWidth: contentWidth }]}>
           <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
-            Today's Masterpiece
+            TODAY'S MASTERPIECE
           </Text>
 
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
@@ -91,102 +106,86 @@ export function MasterpieceReader({
           </Text>
 
           <Text style={styles.artist} maxFontSizeMultiplier={1.15}>
-            {artistLine}
+            {morningHero.artist}
           </Text>
 
-          {creditLine ? (
-            <Text style={styles.credit} maxFontSizeMultiplier={1.05}>
-              {creditLine}
-            </Text>
-          ) : null}
+          <View style={styles.goldRule} />
 
-          <View style={styles.rule} />
-
-          <Text style={styles.intro} maxFontSizeMultiplier={1.15}>
-            Every masterpiece has a story. Here's today's.
-          </Text>
-
-          {detail ? (
-            <>
-              <View style={styles.story}>
-                {detail.longStoryParagraphs.map((paragraph, index) => (
-                  <Text
-                    key={`story-${index}`}
-                    style={[
-                      styles.paragraph,
-                      index === 0 && styles.leadParagraph,
-                    ]}
-                    maxFontSizeMultiplier={1.2}
-                  >
-                    {paragraph}
-                  </Text>
-                ))}
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>About the Artist</Text>
-                <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
-                  {detail.artistBiography}
+          {detail.sections.map((section) => (
+            <EditorialSection key={section.heading} heading={section.heading}>
+              {section.paragraphs.map((paragraph, index) => (
+                <Text
+                  key={`${section.heading}-${index}`}
+                  style={[
+                    styles.paragraph,
+                    section.heading === "Introduction" && index === 0
+                      ? styles.leadParagraph
+                      : null,
+                  ]}
+                  maxFontSizeMultiplier={1.2}
+                >
+                  {paragraph}
                 </Text>
-              </View>
+              ))}
+            </EditorialSection>
+          ))}
 
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Look Closer</Text>
-                {detail.lookCloserItems.map((item, index) => (
-                  <Text
-                    key={`look-${index}`}
-                    style={styles.observation}
-                    maxFontSizeMultiplier={1.15}
-                  >
-                    {item}
-                  </Text>
-                ))}
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Did You Know?</Text>
-                <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
-                  {detail.didYouKnow}
-                </Text>
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Visit the Original</Text>
-                <Text style={styles.museumName} maxFontSizeMultiplier={1.15}>
-                  {detail.museumName}
-                </Text>
-                <Text style={styles.museumLocation} maxFontSizeMultiplier={1.15}>
-                  {detail.museumLocation}
-                </Text>
-                {visitUrl ? (
-                  <Pressable
-                    onPress={() => {
-                      void Linking.openURL(visitUrl).catch(() => {});
-                    }}
-                    style={({ pressed }) => [
-                      styles.visitLink,
-                      pressed && { opacity: press.opacity },
-                    ]}
-                    accessibilityRole="link"
-                    accessibilityLabel={`Open ${detail.museumName} collection page`}
-                  >
-                    <Text style={styles.visitLinkText}>View at the museum</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            </>
-          ) : (
-            <View style={styles.placeholder}>
-              <View style={styles.skeletonLineWide} />
-              <View style={styles.skeletonLine} />
-              <View style={styles.skeletonLine} />
-              <View style={styles.skeletonLineShort} />
-              <Text style={styles.placeholderCopy} maxFontSizeMultiplier={1.1}>
-                The full story for this masterpiece is not yet available in
-                today's edition.
+          <EditorialSection heading="Looking Closer">
+            {detail.lookingCloser.map((item, index) => (
+              <Text
+                key={`look-${index}`}
+                style={styles.observation}
+                maxFontSizeMultiplier={1.15}
+              >
+                {item}
               </Text>
-            </View>
-          )}
+            ))}
+          </EditorialSection>
+
+          <EditorialSection heading="Did You Know?">
+            <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
+              {detail.didYouKnow}
+            </Text>
+          </EditorialSection>
+
+          <EditorialSection heading="Artwork Credit">
+            <Text style={styles.creditTitle} maxFontSizeMultiplier={1.1}>
+              {credit.title}
+            </Text>
+            <Text style={styles.creditLine} maxFontSizeMultiplier={1.1}>
+              {credit.artist}
+            </Text>
+            <Text style={styles.creditLine} maxFontSizeMultiplier={1.1}>
+              {credit.institution}
+            </Text>
+            <Text style={styles.creditLine} maxFontSizeMultiplier={1.1}>
+              {credit.licenseLabel}
+            </Text>
+            {credit.sourceUrl ? (
+              <Pressable
+                onPress={() => {
+                  void Linking.openURL(credit.sourceUrl!).catch(() => {});
+                }}
+                style={({ pressed }) => [
+                  styles.sourceLink,
+                  pressed && { opacity: press.opacity },
+                ]}
+                accessibilityRole="link"
+                accessibilityLabel="Open source"
+              >
+                <Text style={styles.sourceLinkText}>Source Available</Text>
+              </Pressable>
+            ) : null}
+          </EditorialSection>
+
+          <EditorialSection heading="Visit the Original">
+            <Text style={styles.museumName} maxFontSizeMultiplier={1.15}>
+              {detail.museumName}
+            </Text>
+            <Text style={styles.museumLocation} maxFontSizeMultiplier={1.15}>
+              {detail.museumLocation}
+            </Text>
+          </EditorialSection>
 
           <Pressable
             onPress={onBack}
@@ -216,34 +215,32 @@ const styles = StyleSheet.create({
   },
   backRow: {
     alignSelf: "stretch",
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingHorizontal: space.folioGutter,
+    paddingVertical: 12,
   },
   back: {
     fontSize: 15,
-    color: paper.terracotta,
+    color: kindredGold.primary,
     letterSpacing: 0.2,
   },
-  heroFrame: {
-    alignSelf: "stretch",
-    overflow: "hidden",
-    backgroundColor: paper.creamDeep,
-    ...shadow.photo,
+  heroWrap: {
+    paddingHorizontal: space.folioGutter,
+    marginBottom: 8,
   },
   body: {
     alignSelf: "stretch",
-    paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingHorizontal: space.folioGutter,
+    paddingTop: 20,
   },
   kicker: {
     fontFamily: "Georgia",
     fontSize: 11,
     lineHeight: 16,
-    letterSpacing: 1.4,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: paper.inkMuted,
+    color: kindredGold.deep,
     fontWeight: "600",
-    marginBottom: 14,
+    marginBottom: 12,
   },
   title: {
     fontFamily: "Georgia",
@@ -254,36 +251,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   artist: {
-    marginTop: 10,
+    marginTop: 8,
     fontFamily: "Georgia",
     fontSize: 17,
     lineHeight: 24,
     color: paper.inkMuted,
   },
-  credit: {
-    marginTop: 16,
+  goldRule: {
+    marginTop: 24,
+    marginBottom: 8,
+    height: 2,
+    backgroundColor: kindredGold.rule,
+    borderRadius: 1,
+  },
+  section: {
+    marginTop: 24,
+    paddingTop: 4,
+  },
+  sectionLabel: {
     fontFamily: "Georgia",
     fontSize: 11,
-    lineHeight: 17,
-    letterSpacing: 0.15,
-    color: paper.inkFaint,
-  },
-  rule: {
-    marginTop: 28,
-    marginBottom: 24,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
-  },
-  intro: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 28,
-    fontStyle: "italic",
-    color: paper.inkBody,
-    marginBottom: 24,
-    maxWidth: 520,
-  },
-  story: {
+    lineHeight: 16,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: kindredGold.deep,
+    fontWeight: "600",
     marginBottom: 12,
   },
   paragraph: {
@@ -291,36 +283,45 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 28,
     color: paper.inkBody,
-    marginBottom: 18,
+    marginBottom: 16,
     maxWidth: 560,
   },
   leadParagraph: {
     fontSize: 18,
     lineHeight: 30,
   },
-  section: {
-    marginTop: 28,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: paper.inkRule,
-  },
-  sectionLabel: {
-    fontFamily: "Georgia",
-    fontSize: 11,
-    lineHeight: 16,
-    letterSpacing: 1.3,
-    textTransform: "uppercase",
-    color: paper.inkMuted,
-    fontWeight: "600",
-    marginBottom: 14,
-  },
   observation: {
     fontFamily: "Georgia",
     fontSize: 16,
     lineHeight: 26,
     color: paper.inkBody,
-    marginBottom: 12,
+    marginBottom: 10,
     maxWidth: 540,
+  },
+  creditTitle: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
+    color: paper.ink,
+    fontWeight: "600",
+  },
+  creditLine: {
+    marginTop: 4,
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 22,
+    color: paper.inkMuted,
+  },
+  sourceLink: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+  },
+  sourceLinkText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: kindredGold.primary,
+    letterSpacing: 0.2,
+    textDecorationLine: "underline",
   },
   museumName: {
     fontFamily: "Georgia",
@@ -335,59 +336,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: paper.inkMuted,
-    marginBottom: 12,
-  },
-  visitLink: {
-    alignSelf: "flex-start",
-    paddingVertical: 2,
-  },
-  visitLinkText: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.terracotta,
-    letterSpacing: 0.15,
-    textDecorationLine: "underline",
-  },
-  placeholder: {
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  skeletonLineWide: {
-    height: 12,
-    backgroundColor: paper.creamDeep,
-    borderRadius: 2,
-    marginBottom: 12,
-    width: "92%",
-  },
-  skeletonLine: {
-    height: 12,
-    backgroundColor: paper.creamDeep,
-    borderRadius: 2,
-    marginBottom: 12,
-    width: "88%",
-  },
-  skeletonLineShort: {
-    height: 12,
-    backgroundColor: paper.creamDeep,
-    borderRadius: 2,
-    marginBottom: 20,
-    width: "54%",
-  },
-  placeholderCopy: {
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 24,
-    color: paper.inkMuted,
-    maxWidth: 480,
   },
   returnRow: {
-    marginTop: 36,
+    marginTop: 32,
     paddingVertical: 12,
   },
   returnText: {
     fontSize: 15,
     lineHeight: 22,
-    color: paper.terracotta,
+    color: kindredGold.primary,
     letterSpacing: 0.15,
   },
 });

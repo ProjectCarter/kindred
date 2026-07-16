@@ -118,6 +118,7 @@ export function wikimediaCandidateToDraft(
     aboutWordCount: wordCount,
     longStoryBody: null,
     longStoryParagraphCount: null,
+    editorialSections: null,
     artistBiography: null,
     lookCloserItems: [],
     didYouKnow: null,

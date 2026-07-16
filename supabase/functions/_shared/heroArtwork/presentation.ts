@@ -1,5 +1,5 @@
 import type { HeroArtworkCollectionId } from "./collections.ts";
-import { countWords, validateAboutArtworkBody } from "./editorial.ts";
+import { validateAboutArtworkBody } from "./editorial.ts";
 import {
   isMasterpieceDetailComplete,
   splitStoryParagraphs,
@@ -7,12 +7,23 @@ import {
 } from "./detailEditorial.ts";
 import type { HeroArtworkRecord } from "./types.ts";
 
-/** Full detail article — frozen at ingest, rendered only when the reader taps. */
+export type MasterpieceEditorialSections = {
+  introduction: string;
+  aboutTheArtist: string;
+  storyBehindArtwork: string;
+  historicalContext: string;
+  legacy: string;
+  editorialClosing: string;
+};
+
+export type MasterpieceArticleSection = {
+  heading: string;
+  paragraphs: string[];
+};
+
 export type MasterpieceDetail = {
-  longStoryBody: string;
-  longStoryParagraphs: string[];
-  artistBiography: string;
-  lookCloserItems: string[];
+  sections: MasterpieceArticleSection[];
+  lookingCloser: string[];
   didYouKnow: string;
   museumName: string;
   museumLocation: string;
@@ -35,21 +46,95 @@ export type MorningHeroExperience = {
   sourceUrl: string;
   license: string;
   licenseUrl: string | null;
-  /** Mobile-optimized hosted asset only — never museum full resolution. */
   hostedUrl: string;
   imageUrl: string;
   imageWidth: number;
   imageHeight: number;
   aspectRatio: number;
-  /** Full credit line — pre-authored at ingest. */
   creditLine: string;
-  /** 2–4 sentence homepage summary — pre-authored at ingest. */
   aboutArtworkBody: string;
   aboutWordCount: number;
   collections: HeroArtworkCollectionId[];
-  /** Full detail article — omitted from homepage render path. */
   detail?: MasterpieceDetail | null;
 };
+
+function paragraphsFromText(text: string | null | undefined): string[] {
+  if (!text?.trim()) return [];
+  return text
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter((p) => p.length > 20);
+}
+
+function sectionsFromEditorial(
+  editorial: MasterpieceEditorialSections | null | undefined,
+  artistBiography: string | null
+): MasterpieceArticleSection[] {
+  if (!editorial) return [];
+
+  const aboutArtist =
+    editorial.aboutTheArtist?.trim() || artistBiography?.trim() || "";
+
+  return [
+    {
+      heading: "Introduction",
+      paragraphs: paragraphsFromText(editorial.introduction),
+    },
+    {
+      heading: "About the Artist",
+      paragraphs: paragraphsFromText(aboutArtist),
+    },
+    {
+      heading: "The Story Behind the Artwork",
+      paragraphs: paragraphsFromText(editorial.storyBehindArtwork),
+    },
+    {
+      heading: "Historical Context",
+      paragraphs: paragraphsFromText(editorial.historicalContext),
+    },
+    {
+      heading: "Legacy",
+      paragraphs: paragraphsFromText(editorial.legacy),
+    },
+    {
+      heading: "Editorial Closing",
+      paragraphs: paragraphsFromText(editorial.editorialClosing),
+    },
+  ].filter((section) => section.paragraphs.length > 0);
+}
+
+function legacySectionsFromBody(
+  longStoryBody: string,
+  artistBiography: string | null
+): MasterpieceArticleSection[] {
+  const paragraphs = splitStoryParagraphs(longStoryBody);
+  const sections: MasterpieceArticleSection[] = [
+    { heading: "Introduction", paragraphs: paragraphs.slice(0, 1) },
+  ];
+
+  if (artistBiography?.trim()) {
+    sections.push({
+      heading: "About the Artist",
+      paragraphs: [artistBiography.trim()],
+    });
+  }
+
+  sections.push(
+    {
+      heading: "The Story Behind the Artwork",
+      paragraphs: paragraphs.slice(1, 3),
+    },
+    {
+      heading: "Historical Context",
+      paragraphs: paragraphs.slice(3, 4),
+    },
+    { heading: "Legacy", paragraphs: paragraphs.slice(4, 5) },
+    { heading: "Editorial Closing", paragraphs: paragraphs.slice(5) }
+  );
+
+  return sections.filter((section) => section.paragraphs.length > 0);
+}
 
 export function detailFromRecord(
   artwork: HeroArtworkRecord
@@ -69,12 +154,23 @@ export function detailFromRecord(
 
   if (!isMasterpieceDetailComplete(fields)) return null;
 
-  const paragraphs = splitStoryParagraphs(artwork.longStoryBody!);
+  const structured = sectionsFromEditorial(
+    artwork.editorialSections,
+    artwork.artistBiography
+  );
+  const sections =
+    structured.length > 0
+      ? structured
+      : legacySectionsFromBody(
+          artwork.longStoryBody!,
+          artwork.artistBiography
+        );
+
+  if (sections.length === 0) return null;
+
   return {
-    longStoryBody: artwork.longStoryBody!.trim(),
-    longStoryParagraphs: paragraphs,
-    artistBiography: artwork.artistBiography!.trim(),
-    lookCloserItems: artwork.lookCloserItems.map((item) => item.trim()),
+    sections,
+    lookingCloser: artwork.lookCloserItems.map((item) => item.trim()),
     didYouKnow: artwork.didYouKnow!.trim(),
     museumName: artwork.museumName!.trim(),
     museumLocation: artwork.museumLocation!.trim(),
@@ -104,7 +200,6 @@ export function isCompleteLibraryRecord(
   return detailFromRecord(artwork) != null;
 }
 
-/** Copy existing library fields into the frozen edition payload — no side effects. */
 export function copyMorningHeroFromRecord(
   artwork: HeroArtworkRecord,
   editionDate: string

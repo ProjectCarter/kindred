@@ -1,28 +1,64 @@
-import type { MorningHeroExperience, MasterpieceDetail } from "./types";
+import type {
+  MasterpieceArticleSection,
+  MorningHeroExperience,
+  MasterpieceDetail,
+} from "./types";
+
+function parseSections(raw: unknown): MasterpieceArticleSection[] | null {
+  if (!Array.isArray(raw)) return null;
+  const sections = raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const section = item as Partial<MasterpieceArticleSection>;
+      const heading = section.heading?.trim();
+      const paragraphs = (section.paragraphs ?? [])
+        .map((p) => (typeof p === "string" ? p.trim() : ""))
+        .filter(Boolean);
+      if (!heading || paragraphs.length === 0) return null;
+      return { heading, paragraphs };
+    })
+    .filter(Boolean) as MasterpieceArticleSection[];
+  return sections.length > 0 ? sections : null;
+}
 
 function parseMasterpieceDetail(raw: unknown): MasterpieceDetail | null {
   if (!raw || typeof raw !== "object") return null;
   const d = raw as Partial<MasterpieceDetail>;
-  if (!d.longStoryBody?.trim()) return null;
-  if (!d.artistBiography?.trim()) return null;
-  if (!Array.isArray(d.lookCloserItems) || d.lookCloserItems.length < 2) return null;
   if (!d.didYouKnow?.trim()) return null;
   if (!d.museumName?.trim() || !d.museumLocation?.trim()) return null;
 
-  const paragraphs =
-    Array.isArray(d.longStoryParagraphs) && d.longStoryParagraphs.length > 0
-      ? d.longStoryParagraphs.map((p) => p.trim()).filter(Boolean)
-      : d.longStoryBody
-          .trim()
-          .split(/\n{2,}/)
-          .map((p) => p.trim())
-          .filter(Boolean);
+  const sections = parseSections(d.sections);
+  const lookingCloser = (d.lookingCloser ?? d.lookCloserItems ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (sections && lookingCloser.length >= 2) {
+    return {
+      sections,
+      lookingCloser,
+      didYouKnow: d.didYouKnow.trim(),
+      museumName: d.museumName.trim(),
+      museumLocation: d.museumLocation.trim(),
+      officialMuseumUrl: d.officialMuseumUrl?.trim() || null,
+      officialArtworkUrl: d.officialArtworkUrl?.trim() || null,
+      sourceReferences: (d.sourceReferences ?? [])
+        .map((ref) => ref.trim())
+        .filter(Boolean),
+    };
+  }
+
+  if (!d.longStoryBody?.trim() || !d.artistBiography?.trim()) return null;
+  if (lookingCloser.length < 2) return null;
+
+  const paragraphs = d.longStoryBody
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
 
   return {
-    longStoryBody: d.longStoryBody.trim(),
-    longStoryParagraphs: paragraphs,
-    artistBiography: d.artistBiography.trim(),
-    lookCloserItems: d.lookCloserItems.map((item) => item.trim()).filter(Boolean),
+    sections: [],
+    lookingCloser,
     didYouKnow: d.didYouKnow.trim(),
     museumName: d.museumName.trim(),
     museumLocation: d.museumLocation.trim(),
@@ -31,6 +67,10 @@ function parseMasterpieceDetail(raw: unknown): MasterpieceDetail | null {
     sourceReferences: (d.sourceReferences ?? [])
       .map((ref) => ref.trim())
       .filter(Boolean),
+    longStoryBody: d.longStoryBody.trim(),
+    longStoryParagraphs: paragraphs,
+    artistBiography: d.artistBiography.trim(),
+    lookCloserItems: lookingCloser,
   };
 }
 

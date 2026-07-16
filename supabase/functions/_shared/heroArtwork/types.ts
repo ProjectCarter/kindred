@@ -9,6 +9,15 @@ import type { HeroArtworkCollectionId } from "./collections.ts";
 
 export type HeroArtworkOrientation = "portrait" | "landscape" | "square";
 
+export type MasterpieceEditorialSections = {
+  introduction: string;
+  aboutTheArtist: string;
+  storyBehindArtwork: string;
+  historicalContext: string;
+  legacy: string;
+  editorialClosing: string;
+};
+
 export type HeroArtworkSeason = "spring" | "summer" | "autumn" | "winter";
 
 export type HeroArtworkHoliday =
@@ -84,6 +93,7 @@ export type HeroArtworkRecord = {
   aboutWordCount: number | null;
   longStoryBody: string | null;
   longStoryParagraphCount: number | null;
+  editorialSections: MasterpieceEditorialSections | null;
   artistBiography: string | null;
   lookCloserItems: string[];
   didYouKnow: string | null;
@@ -139,6 +149,7 @@ export type HeroArtworkRow = {
   about_word_count: number | null;
   long_story_body: string | null;
   long_story_paragraph_count: number | null;
+  editorial_sections: unknown;
   artist_biography: string | null;
   look_closer_items: string[];
   did_you_know: string | null;

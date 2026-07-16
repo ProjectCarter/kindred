@@ -4,6 +4,7 @@ import type {
   HeroArtworkRecord,
   HeroArtworkRow,
   HeroArtworkSelectionContext,
+  MasterpieceEditorialSections,
 } from "./types.ts";
 import type { HeroArtworkCollectionId } from "./collections.ts";
 import { isHeroArtworkLicenseSafe } from "./licensing.ts";
@@ -12,6 +13,20 @@ import {
   type MorningHeroExperience,
   type MasterpieceDetail,
 } from "./presentation.ts";
+
+function parseEditorialSections(value: unknown): MasterpieceEditorialSections | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<MasterpieceEditorialSections>;
+  if (!raw.introduction?.trim()) return null;
+  return {
+    introduction: raw.introduction.trim(),
+    aboutTheArtist: raw.aboutTheArtist?.trim() ?? "",
+    storyBehindArtwork: raw.storyBehindArtwork?.trim() ?? "",
+    historicalContext: raw.historicalContext?.trim() ?? "",
+    legacy: raw.legacy?.trim() ?? "",
+    editorialClosing: raw.editorialClosing?.trim() ?? "",
+  };
+}
 
 export function rowToRecord(row: HeroArtworkRow): HeroArtworkRecord {
   return {
@@ -50,6 +65,7 @@ export function rowToRecord(row: HeroArtworkRow): HeroArtworkRecord {
     aboutWordCount: row.about_word_count,
     longStoryBody: row.long_story_body,
     longStoryParagraphCount: row.long_story_paragraph_count,
+    editorialSections: parseEditorialSections(row.editorial_sections),
     artistBiography: row.artist_biography,
     lookCloserItems: row.look_closer_items ?? [],
     didYouKnow: row.did_you_know,
@@ -261,6 +277,7 @@ export async function upsertVerifiedHeroArtwork(
     about_word_count: draft.aboutWordCount,
     long_story_body: draft.longStoryBody,
     long_story_paragraph_count: draft.longStoryParagraphCount,
+    editorial_sections: draft.editorialSections,
     artist_biography: draft.artistBiography,
     look_closer_items: draft.lookCloserItems ?? [],
     did_you_know: draft.didYouKnow,

@@ -64,6 +64,7 @@ const artwork: HeroArtworkRecord = {
   aboutWordCount: 82,
   longStoryBody: SAMPLE_LONG_STORY,
   longStoryParagraphCount: 6,
+  editorialSections: null,
   artistBiography:
     "Claude Monet (1840–1926) was a French painter and a leading figure of Impressionism. " +
     "His studies of light, atmosphere, and everyday landscape changed how modern audiences experience color in nature. " +
@@ -109,6 +110,6 @@ Deno.test("morning hero copies completed library record without generation", () 
     "Painting by Claude Monet • Public Domain via Metropolitan Museum of Art"
   );
   assertEquals(experience?.aboutArtworkBody, SAMPLE_ABOUT);
-  assertEquals(experience?.detail?.longStoryParagraphs.length, 6);
-  assertEquals(experience?.detail?.lookCloserItems.length, 3);
+  assertEquals(experience?.detail?.sections.length, 6);
+  assertEquals(experience?.detail?.lookingCloser.length, 3);
 });

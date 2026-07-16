@@ -1,5 +1,4 @@
 import {
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -8,11 +7,10 @@ import {
 } from "react-native";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
-import { renderMasterpieceCreditLine } from "../lib/edition/heroArtwork/attribution";
-import { paper, shadow } from "../lib/edition/newspaperTheme";
+import { MasterpieceFrame } from "./MasterpieceFrame";
+import { kindredGold, paper, space } from "../lib/edition/newspaperTheme";
 
-/** Side inset used by home folio — artwork bleeds past it for a cover presentation. */
-const FOLIO_GUTTER = 28;
+const FOLIO_GUTTER = space.folioGutter;
 
 export type TodaysMasterpieceProps = {
   morningHero: MorningHeroExperience;
@@ -25,11 +23,8 @@ export type TodaysMasterpieceProps = {
 };
 
 /**
- * Today's Masterpiece — a calm, museum-quality morning tradition.
- * All copy and imagery come pre-frozen on morningHero; this component
- * renders only — no network, generation, or metadata fetching.
- *
- * Future: wire onOpenMasterpiece to a full artwork reader route.
+ * Today's Masterpiece — homepage teaser only.
+ * Artwork, title, artist. Full editorial story opens on tap.
  */
 export function TodaysMasterpiece({
   morningHero,
@@ -40,8 +35,9 @@ export function TodaysMasterpiece({
   onImageError,
   style,
 }: TodaysMasterpieceProps) {
+  const imageWidth = containerWidth - FOLIO_GUTTER * 2;
   const heroHeight = heroFrameHeight(
-    containerWidth,
+    imageWidth,
     morningHero.imageWidth,
     morningHero.imageHeight,
     morningHero.aspectRatio
@@ -51,35 +47,21 @@ export function TodaysMasterpiece({
     ? `${morningHero.artworkTitle} (${morningHero.year})`
     : morningHero.artworkTitle;
 
-  const creditLine = renderMasterpieceCreditLine(morningHero);
-
   const content = (
     <>
-      <View style={styles.sectionRule} accessibilityElementsHidden />
+      <Text style={styles.heading} maxFontSizeMultiplier={1.1}>
+        🎨 TODAY'S MASTERPIECE
+      </Text>
 
-      <View style={styles.header}>
-        <Text style={styles.heading} maxFontSizeMultiplier={1.1}>
-          🎨 Today's Masterpiece
-        </Text>
-        <Text style={styles.tagline} maxFontSizeMultiplier={1.1}>
-          One masterpiece. Every morning.
-        </Text>
-      </View>
-
-      <View style={styles.imageBleed}>
-        <View style={[styles.imageFrame, shadow.photo]}>
-          <Image
-            source={{ uri: imageUri }}
-            style={{
-              width: containerWidth,
-              height: heroHeight,
-              opacity: imageOpacity,
-            }}
-            resizeMode="cover"
-            accessibilityLabel={`${morningHero.artworkTitle} by ${morningHero.artist}`}
-            onError={onImageError}
-          />
-        </View>
+      <View style={styles.frameWrap}>
+        <MasterpieceFrame
+          imageUri={imageUri}
+          width={imageWidth}
+          height={heroHeight}
+          imageOpacity={imageOpacity}
+          onImageError={onImageError}
+          accessibilityLabel={`${morningHero.artworkTitle} by ${morningHero.artist}`}
+        />
       </View>
 
       <View style={styles.copy}>
@@ -89,19 +71,7 @@ export function TodaysMasterpiece({
         <Text style={styles.artist} maxFontSizeMultiplier={1.15}>
           {morningHero.artist}
         </Text>
-        {morningHero.aboutArtworkBody ? (
-          <Text style={styles.about} maxFontSizeMultiplier={1.2}>
-            {morningHero.aboutArtworkBody}
-          </Text>
-        ) : null}
-        {creditLine ? (
-          <Text style={styles.attribution} maxFontSizeMultiplier={1.05}>
-            {creditLine}
-          </Text>
-        ) : null}
       </View>
-
-      <View style={styles.sectionRule} accessibilityElementsHidden />
     </>
   );
 
@@ -131,46 +101,24 @@ export function TodaysMasterpiece({
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 8,
-  },
-  sectionRule: {
-    marginHorizontal: FOLIO_GUTTER,
-    marginVertical: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
-  },
-  header: {
     paddingHorizontal: FOLIO_GUTTER,
-    marginBottom: 18,
+    marginBottom: 4,
   },
   heading: {
     fontFamily: "Georgia",
-    fontSize: 13,
-    lineHeight: 18,
-    letterSpacing: 1.2,
+    fontSize: 11,
+    lineHeight: 16,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: paper.inkMuted,
+    color: kindredGold.deep,
     fontWeight: "600",
+    marginBottom: 14,
   },
-  tagline: {
-    marginTop: 8,
-    fontFamily: "Georgia",
-    fontSize: 17,
-    lineHeight: 24,
-    letterSpacing: -0.15,
-    color: paper.ink,
-    fontStyle: "italic",
-  },
-  imageBleed: {
-    marginHorizontal: -FOLIO_GUTTER,
-  },
-  imageFrame: {
-    overflow: "hidden",
-    backgroundColor: paper.creamDeep,
+  frameWrap: {
+    alignItems: "center",
   },
   copy: {
-    paddingHorizontal: FOLIO_GUTTER,
-    marginTop: 20,
+    marginTop: 16,
     maxWidth: 560,
   },
   title: {
@@ -182,25 +130,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   artist: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 22,
     color: paper.inkMuted,
-  },
-  about: {
-    marginTop: 16,
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 26,
-    color: paper.inkBody,
-  },
-  attribution: {
-    marginTop: 20,
-    fontFamily: "Georgia",
-    fontSize: 11,
-    lineHeight: 17,
-    letterSpacing: 0.15,
-    color: paper.inkFaint,
   },
 });

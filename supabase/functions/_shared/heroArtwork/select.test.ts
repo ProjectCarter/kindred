@@ -45,6 +45,7 @@ function sampleArtwork(overrides: Partial<HeroArtworkRecord>): HeroArtworkRecord
     aboutWordCount: overrides.aboutWordCount ?? 82,
     longStoryBody: overrides.longStoryBody ?? null,
     longStoryParagraphCount: overrides.longStoryParagraphCount ?? null,
+    editorialSections: overrides.editorialSections ?? null,
     artistBiography: overrides.artistBiography ?? null,
     lookCloserItems: overrides.lookCloserItems ?? [],
     didYouKnow: overrides.didYouKnow ?? null,

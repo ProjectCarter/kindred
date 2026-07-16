@@ -365,15 +365,15 @@ function usefulWeather(
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 28,
+    marginBottom: 20,
   },
   masthead: {
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 6,
+    paddingBottom: 4,
   },
   heroBleed: {
     marginHorizontal: -FOLIO_GUTTER,
-    marginBottom: 6,
+    marginBottom: 2,
   },
   heroFrame: {
     overflow: "hidden",
@@ -391,14 +391,15 @@ const styles = StyleSheet.create({
   },
   morningCopy: {
     paddingRight: 8,
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 4,
   },
   weather: {
     fontSize: 13,
     lineHeight: 19,
     letterSpacing: 0.25,
     color: paper.inkMuted,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   greeting: {
     fontFamily: "Georgia",

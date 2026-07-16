@@ -5,10 +5,10 @@
 
 import { countWords } from "./editorial.ts";
 
-export const LONG_STORY_PARAGRAPH_MIN = 4;
-export const LONG_STORY_PARAGRAPH_MAX = 8;
-export const LONG_STORY_WORD_MIN = 320;
-export const LONG_STORY_WORD_MAX = 2200;
+export const LONG_STORY_PARAGRAPH_MIN = 6;
+export const LONG_STORY_PARAGRAPH_MAX = 10;
+export const LONG_STORY_WORD_MIN = 400;
+export const LONG_STORY_WORD_MAX = 2800;
 
 export const ARTIST_BIO_WORD_MIN = 45;
 export const ARTIST_BIO_WORD_MAX = 220;

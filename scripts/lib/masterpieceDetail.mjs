@@ -43,47 +43,89 @@ export function buildMasterpieceDetail(input) {
   const mediumPhrase = medium?.trim() ? medium.trim() : "traditional materials";
   const periodPhrase = period?.replace(/_/g, " ") || "its historical moment";
 
-  const paragraphs = [
-    `${title} is a work associated with ${artist}${yearPhrase}. The piece belongs to the visual traditions of ${periodPhrase}, and it has been preserved through ${museumName}'s open collections for study and public appreciation.`,
-    `${artist} worked within a period when artists were rethinking how subject, light, and form could carry meaning. ${title} reflects those concerns through its handling of ${mediumPhrase}, inviting the viewer to linger rather than glance.`,
-    `When looking at the composition, notice how the artist organizes space and tone. The relationship between foreground and background, together with the direction of light across the surface, gives the scene its particular mood and rhythm.`,
-    `Works like this one matter because they connect everyday looking with broader cultural history. They show how an artist responded to the materials, conventions, and questions of a specific era — and why those choices still feel alive to viewers today.`,
-    `${title} has remained part of public conversation because it rewards repeated attention. Each viewing can reveal a different balance of color, texture, and structure, which is one reason museum collections continue to share it with new audiences.`,
-    `The original work is held by ${museumName} in ${museumLocation}. Kindred presents a mobile-optimized reproduction for morning discovery; the museum remains the authoritative home for the physical artwork and its full catalog record.`,
-  ];
+  const introduction =
+    `${title} opens quietly and confidently — a work associated with ${artist}${yearPhrase}. ` +
+    `Preserved through ${museumName}'s open collections, it invites unhurried looking before the day begins.`;
+
+  const aboutTheArtist =
+    `${artist} is remembered as a significant voice in ${periodPhrase}. ` +
+    `Within ${collection?.replace(/_/g, " ") || "this tradition"}, their work helped shape how later audiences understand color, composition, and the subjects artists chose to honor. ` +
+    `Major examples remain available for study through institutions such as ${museumName}.`;
+
+  let storyBehindArtwork =
+    `${title} reflects a moment when artists were rethinking how subject, light, and form could carry meaning. ` +
+    `Rendered in ${mediumPhrase}, the work asks the viewer to linger inside atmosphere and structure rather than chase narrative action.\n\n` +
+    `Every passage of the surface — from the brightest highlights to the deepest shadows — suggests deliberate choices about rhythm, balance, and mood.`;
 
   if (collection === "ukiyo_e") {
-    paragraphs[1] =
-      `${artist} worked within the ukiyo-e tradition of Japanese woodblock printing, where line, flat color, and careful composition carried both narrative and atmosphere. ${title} reflects those craft values through its structure and surface rhythm.`;
-    paragraphs[2] =
-      "When looking at the print, notice how contour lines define form and how color blocks create depth without Western perspective tricks. The balance between empty space and detail is part of what makes the image breathe.";
+    storyBehindArtwork =
+      `${title} belongs to the ukiyo-e tradition of Japanese woodblock printing, where line, flat color, and careful composition carried both narrative and atmosphere. ` +
+      `The craft values structure and surface rhythm as much as subject matter.\n\n` +
+      `In this print, contour and color blocks define form with an economy that still feels vivid centuries later.`;
   }
 
-  const longStoryBody = paragraphs.join("\n\n");
+  const historicalContext =
+    `The work emerged during ${periodPhrase}, when artists and audiences were negotiating what painting, printmaking, or photography could express about modern life. ` +
+    `${title} belongs to that conversation — not as a footnote, but as an example of how visual language adapts to its moment.`;
 
-  const artistBiography =
-    `${artist} is remembered as a significant voice in ${periodPhrase}. ` +
-    `Their work is preserved and studied through institutions such as ${museumName}, ` +
-    `where open-access collections allow readers to encounter major examples without leaving home. ` +
-    `Within ${collection?.replace(/_/g, " ") || "this tradition"}, ${artist} helped shape how later audiences understand color, composition, and the everyday subjects artists chose to honor.`;
+  const legacy =
+    `${title} has remained part of public conversation because it rewards repeated attention. ` +
+    `Each viewing can reveal a different balance of color, texture, and structure, which is one reason museum collections continue to share it with new audiences.`;
+
+  const editorialClosing =
+    `The original work is held by ${museumName} in ${museumLocation}. ` +
+    `Kindred presents a mobile-optimized reproduction for morning discovery; the museum remains the authoritative home for the physical artwork and its full catalog record. ` +
+    `Return to it when you can — and until then, let today's masterpiece slow the morning by a minute or two.`;
+
+  const editorialSections = {
+    introduction,
+    aboutTheArtist,
+    storyBehindArtwork,
+    historicalContext,
+    legacy,
+    editorialClosing,
+  };
+
+  const sections = [
+    { heading: "Introduction", paragraphs: [introduction] },
+    { heading: "About the Artist", paragraphs: [aboutTheArtist] },
+    {
+      heading: "The Story Behind the Artwork",
+      paragraphs: storyBehindArtwork.split(/\n{2,}/).map((p) => p.trim()),
+    },
+    { heading: "Historical Context", paragraphs: [historicalContext] },
+    { heading: "Legacy", paragraphs: [legacy] },
+    { heading: "Editorial Closing", paragraphs: [editorialClosing] },
+  ];
+
+  const longStoryBody = [
+    introduction,
+    aboutTheArtist,
+    ...storyBehindArtwork.split(/\n{2,}/),
+    historicalContext,
+    legacy,
+    editorialClosing,
+  ].join("\n\n");
 
   const lookCloserItems = [
     `Notice how ${artist} uses light across the surface — where it gathers, where it falls away, and how that shapes the mood of ${title}.`,
     `Look at the handling of ${mediumPhrase.toLowerCase()} in the central passage of the work; the texture and stroke or line weight tell you much about the artist's priorities.`,
     `Compare the foreground and background: see how detail, color, and scale guide your eye through the scene rather than letting every area compete for attention.`,
-    `Follow the main diagonal or curve of the composition — ${artist} often uses that movement to slow the eye and keep the viewer inside the image.`,
-  ].slice(0, 3);
+  ];
 
   const didYouKnow =
-    `${title} is shared through ${museumName}'s open collection, ` +
-    `which makes the work available for careful study, teaching, and quiet daily discovery outside the museum walls.`;
+    `${title} is shared through ${museumName}'s open collection, making the work available for careful study, teaching, and quiet daily discovery outside the museum walls — the kind of fact worth mentioning over coffee.`;
 
   const sourceReferences = [sourceUrl].filter(Boolean);
 
   return {
     long_story_body: longStoryBody,
-    long_story_paragraph_count: paragraphs.length,
-    artist_biography: artistBiography,
+    long_story_paragraph_count: sections.reduce(
+      (count, section) => count + section.paragraphs.length,
+      0
+    ),
+    editorial_sections: editorialSections,
+    artist_biography: aboutTheArtist,
     look_closer_items: lookCloserItems,
     did_you_know: didYouKnow,
     museum_name: museumName,
@@ -101,14 +143,15 @@ export function validateDetailFields(detail) {
   const paragraphs = detail.long_story_body.trim().split(/\n{2,}/);
   const storyWords = countWords(detail.long_story_body);
   return (
-    paragraphs.length >= 4 &&
-    paragraphs.length <= 8 &&
-    storyWords >= 320 &&
+    paragraphs.length >= 6 &&
+    paragraphs.length <= 10 &&
+    storyWords >= 400 &&
     countWords(detail.artist_biography) >= 45 &&
     detail.look_closer_items.length >= 2 &&
     countWords(detail.did_you_know) >= 12 &&
     Boolean(detail.museum_name?.trim()) &&
     Boolean(detail.museum_location?.trim()) &&
-    Boolean(detail.official_artwork_url?.trim() || detail.official_museum_url?.trim())
+    Boolean(detail.official_artwork_url?.trim() || detail.official_museum_url?.trim()) &&
+    Boolean(detail.editorial_sections)
   );
 }
