@@ -36,7 +36,10 @@ import { runMorningEditionDecisions } from "./morningEdition/index.ts";
 import type { MorningEditionPayload } from "./morningEdition/types.ts";
 import { composeHeroOpening } from "./morningEdition/heroOpening.ts";
 import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
+import { fetchApprovedCityArticle } from "./storyOf/library.ts";
+import { cityArticleSourceNote } from "./storyOf/sourceNote.ts";
 import { resolveProductionMorningHero } from "./heroArtwork/production.ts";
+import { isMorningHeroDetailComplete } from "./heroArtwork/presentation.ts";
 import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
 import { getSeason, parseEditionDate } from "./heroArtwork/select.ts";
 import {
@@ -691,7 +694,7 @@ export async function buildEditionForUser(
     ),
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
-    timer.timed("Recommendations - Places", () =>
+    timer.timed("Food & Drink - Places", () =>
       getLocalPlaces(supabaseAdmin, eventsLocation)
     ),
     timer.timed("News - Editorial Decisions", () =>
@@ -1331,8 +1334,8 @@ export async function buildEditionForUser(
         `Write 450–900 words across exactly 6 paragraphs (separated by blank lines). ` +
         `Cover in order: a specific hook, historical context, what happened, why it mattered then, ` +
         `long-term impact, and a unique lasting legacy — plus one or two memorable verified details ` +
-        `woven through the piece. Vary paragraph length. End with a conclusion that could belong only ` +
-        `to this event and year. ` +
+        `woven through the piece. Vary paragraph length. End with a quiet observation that could belong only ` +
+        `to this event and year — never a summary recap. ` +
         `Headline format: "${onThisDay.year} — Compelling editorial title" (never "Today in History" alone). ` +
         `Tone: thoughtful, timeless, curious — never encyclopedic, never copied verbatim. ` +
         `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
@@ -1362,7 +1365,7 @@ export async function buildEditionForUser(
     });
     sections.push({
       section_type: "looking_ahead",
-      position: 5,
+      position: 6,
       groundingData: lookingAheadGrounding,
       instruction:
         `Write a brief, practical Looking Ahead note that closes today’s paper with a glance at tomorrow. ` +
@@ -1698,13 +1701,24 @@ export async function buildEditionForUser(
       },
     });
     if (morningHero) {
-      (morningEdition as MorningEditionPayload & {
-        morningHero?: MorningHeroExperience | null;
-      }).morningHero = morningHero;
-      morningEdition.selectionMeta.usedEngines.push("hero_artwork");
-      morningEdition.selectionMeta.editorNotes.push(
-        `Daily hero artwork: ${morningHero.artworkTitle} by ${morningHero.artist}`
-      );
+      if (!isMorningHeroDetailComplete(morningHero.detail)) {
+        console.warn("[buildEdition] morning hero rejected — incomplete detail article", {
+          editionDate,
+          artworkId: morningHero.artworkId,
+        });
+        morningEdition.selectionMeta.editorNotes.push(
+          "hero_artwork: rejected — masterpiece detail article incomplete"
+        );
+        morningHero = null;
+      } else {
+        (morningEdition as MorningEditionPayload & {
+          morningHero?: MorningHeroExperience | null;
+        }).morningHero = morningHero;
+        morningEdition.selectionMeta.usedEngines.push("hero_artwork");
+        morningEdition.selectionMeta.editorNotes.push(
+          `Daily hero artwork: ${morningHero.artworkTitle} by ${morningHero.artist}`
+        );
+      }
     } else {
       morningEdition.selectionMeta.editorNotes.push(
         "hero_artwork: library empty or no hosted artwork eligible for selection"
@@ -1981,6 +1995,12 @@ export async function buildEditionForUser(
   }
 
   const sectionsWriteStart = performance.now();
+  const cityArticle = await fetchApprovedCityArticle(supabaseAdmin, {
+    city,
+    state,
+    region,
+  });
+
   const { error: deleteError } = await supabaseAdmin
     .from("edition_sections")
     .delete()
@@ -2008,6 +2028,22 @@ export async function buildEditionForUser(
           : null,
     }))
     .filter((r) => r.headline && r.body);
+
+  if (cityArticle) {
+    rows.push({
+      edition_id: edition.id,
+      section_type: "story_of",
+      position: 5,
+      headline: cityArticle.headline,
+      body: cityArticle.body,
+      source_note: cityArticleSourceNote(cityArticle),
+    });
+    console.log("[buildEdition] story of section persisted", {
+      metroKey: cityArticle.metroKey,
+      headline: cityArticle.headline.slice(0, 60),
+      wordCount: cityArticle.body.split(/\s+/).filter(Boolean).length,
+    });
+  }
 
   if (localEvents.length > 0) {
     const publishableEvents = assertEventsVerifiedForPublication(localEvents, {
@@ -2166,7 +2202,7 @@ function logTimingSummary(timer: ReturnType<typeof createTimer>) {
     { label: "Weather", prefixes: ["Weather"] },
     { label: "News", prefixes: ["News"] },
     { label: "Events", prefixes: ["Local Events"] },
-    { label: "Recommendations", prefixes: ["Recommendations"] },
+    { label: "Food & Drink", prefixes: ["Food & Drink", "Recommendations"] },
     { label: "Today in History", prefixes: ["Today in History"] },
     // "AI Summaries" intentionally excludes "AI Summaries - Morning Edition
     // Polish" (listed explicitly below, not via a blanket prefix) so the

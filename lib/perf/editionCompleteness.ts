@@ -27,6 +27,7 @@ export type EditionCompleteness = {
   hasBanditsPick: boolean;
   hasLeadStory: boolean;
   hasMorningHero: boolean;
+  hasStoryOf: boolean;
 };
 
 const EXPECTED_SECTION_TYPES = [
@@ -45,6 +46,8 @@ export function assessEditionCompleteness(input: {
   const hasLocalEvents = sectionTypes.includes("local_events");
   const hasHistory = sectionTypes.includes("today_in_history");
   const hasLookingAhead = sectionTypes.includes("looking_ahead");
+  const hasStoryOf =
+    sectionTypes.includes("story_of") || sectionTypes.includes("your_city");
   const discovery = input.intelligence?.discovery ?? null;
   const hasDiscovery = Boolean(discovery?.surfaces);
   const discoverySurfaceCount = discovery?.surfaces
@@ -98,6 +101,7 @@ export function assessEditionCompleteness(input: {
     hasBanditsPick,
     hasLeadStory,
     hasMorningHero,
+    hasStoryOf,
   };
 }
 

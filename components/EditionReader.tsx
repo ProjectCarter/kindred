@@ -42,7 +42,12 @@ import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { sectionIntro } from "../lib/edition/sectionIntro";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
-import { parseLocalEventsBody, orderEventsForGrid, type LocalEventCard } from "../lib/edition/localEvents";
+import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localEvents";
+import {
+  buildEditionAnchors,
+  curateHomepageEdition,
+} from "../lib/edition/editionCuration";
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../lib/edition/editorialPublishing";
 import {
   logLocalEventsPipeline,
   pipelineCountsFromSections,
@@ -237,23 +242,6 @@ function EditionReaderInner({
   const events =
     (localEvents?.body ? parseLocalEventsBody(localEvents.body) : null) ?? [];
 
-  const visibleEvents = useMemo(
-    () => orderEventsForGrid(events),
-    [events]
-  );
-
-  useMemo(() => {
-    logLocalEventsPipeline(
-      "EditionReader render",
-      pipelineCountsFromSections(sections, visibleEvents.length),
-      {
-        editionId,
-        editionDate,
-        loadStatus: localEventsStatus,
-      }
-    );
-  }, [sections, visibleEvents.length, editionId, editionDate, localEventsStatus]);
-
   const remaining = sections.filter(
     (s) =>
       s.section_type !== "greeting" &&
@@ -411,6 +399,63 @@ function EditionReaderInner({
     ]
   );
 
+  const editionAnchors = useMemo(
+    () =>
+      buildEditionAnchors({
+        banditsPickTitle: banditsPick?.story.headline ?? null,
+        banditsPickCategory:
+          banditsPick?.story.discoveryItem?.category ?? banditsPick?.kind ?? null,
+        historyHeadline: history?.headline ?? history?.body?.slice(0, 160) ?? null,
+        heroStyle: [
+          morningHero?.artworkTitle,
+          morningHero?.aboutArtworkBody,
+          ...(morningHero?.collections ?? []),
+        ]
+          .filter(Boolean)
+          .join(" "),
+      }),
+    [banditsPick, history, morningHero]
+  );
+
+  const curatedEdition = useMemo(
+    () =>
+      curateHomepageEdition({
+        localEvents: events,
+        allocation: fullSectionAllocation,
+        anchors: editionAnchors,
+      }),
+    [events, fullSectionAllocation, editionAnchors]
+  );
+
+  const curatedFullAllocation = curatedEdition.allocation;
+
+  const curatedSectionAllocation = useMemo(
+    () => ({
+      ...sectionAllocation,
+      notebook: curatedFullAllocation.notebook.slice(0, HOMEPAGE_INITIAL_RENDER_COUNT),
+    }),
+    [sectionAllocation, curatedFullAllocation.notebook]
+  );
+
+  const curatedLocalEvents = curatedEdition.localEvents;
+
+  const visibleEvents = useMemo(
+    () => curatedLocalEvents.slice(0, HOMEPAGE_INITIAL_RENDER_COUNT),
+    [curatedLocalEvents]
+  );
+
+  useMemo(() => {
+    logLocalEventsPipeline(
+      "EditionReader render",
+      pipelineCountsFromSections(sections, visibleEvents.length),
+      {
+        editionId,
+        editionDate,
+        loadStatus: localEventsStatus,
+      }
+    );
+  }, [sections, visibleEvents.length, editionId, editionDate, localEventsStatus]);
+
   useMemo(() => {
     if (!editionId) return;
     traceEditionReaderRender({
@@ -434,27 +479,27 @@ function EditionReaderInner({
   ]);
 
   const activityArticlesById = useMemo(
-    () => discoveryArticlesById(fullSectionAllocation.activities, "activity", editionDate),
-    [fullSectionAllocation.activities, editionDate]
+    () => discoveryArticlesById(curatedFullAllocation.activities, "activity", editionDate),
+    [curatedFullAllocation.activities, editionDate]
   );
 
   const recommendationArticlesById = useMemo(
     () =>
       discoveryArticlesById(
-        fullSectionAllocation.recommendations,
+        curatedFullAllocation.recommendations,
         "recommendation",
         editionDate
       ),
-    [fullSectionAllocation.recommendations, editionDate]
+    [curatedFullAllocation.recommendations, editionDate]
   );
 
   const notebookArticlesById = useMemo(() => {
     const map = new Map<string, KindredArticle>();
-    for (const item of sectionAllocation.notebook) {
+    for (const item of curatedSectionAllocation.notebook) {
       map.set(item.item.id, articleFromNotebookItem(item, events, { editionDate }));
     }
     return map;
-  }, [sectionAllocation.notebook, events, editionDate]);
+  }, [curatedSectionAllocation.notebook, events, editionDate]);
 
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
@@ -631,6 +676,7 @@ function EditionReaderInner({
       <FolioReveal index={folioCursor++}>
         <LocalEventsGrid
           events={events}
+          homepageOrder={curatedLocalEvents}
           onOpenEvent={onOpenEvent}
           onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
           loadStatus={localEventsStatus}
@@ -639,7 +685,7 @@ function EditionReaderInner({
 
       <FolioReveal index={folioCursor++}>
         <ActivitiesSection
-          items={fullSectionAllocation.activities}
+          items={curatedFullAllocation.activities}
           locationCity={locationCity}
           readerLocation={resolvedReaderLocation}
           onOpenItem={
@@ -651,7 +697,7 @@ function EditionReaderInner({
               : undefined
           }
           onSeeAll={
-            fullSectionAllocation.activities.length > 0
+            curatedFullAllocation.activities.length > 0
               ? onSeeAllActivities
               : undefined
           }
@@ -660,7 +706,7 @@ function EditionReaderInner({
 
       <FolioReveal index={folioCursor++}>
         <RecommendationsSection
-          items={fullSectionAllocation.recommendations}
+          items={curatedFullAllocation.recommendations}
           locationCity={locationCity}
           readerLocation={resolvedReaderLocation}
           onOpenItem={
@@ -672,7 +718,7 @@ function EditionReaderInner({
               : undefined
           }
           onSeeAll={
-            fullSectionAllocation.recommendations.length > 0
+            curatedFullAllocation.recommendations.length > 0
               ? onSeeAllRecommendations
               : undefined
           }
@@ -922,7 +968,7 @@ function EditionReaderInner({
 
       <FolioReveal index={folioCursor++}>
         <BanditsNotebook
-          items={sectionAllocation.notebook}
+          items={curatedSectionAllocation.notebook}
           discovery={null}
           onOpenItem={
             onOpenArticle

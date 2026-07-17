@@ -91,6 +91,7 @@ import {
   recoverLocalEvents,
 } from "../lib/edition/localEventsRecovery";
 import { recoverTodayInHistory } from "../lib/edition/todayInHistoryRecovery";
+import { recoverStoryOf } from "../lib/edition/storyOfRecovery";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -508,6 +509,40 @@ export default function HomeScreen() {
     };
   }
 
+  async function maybeRecoverStoryOf(params: {
+    editionId: string;
+    editionDate: string;
+    place: KindredPlace | null;
+    sections: EditionSection[];
+  }): Promise<EditionSection[]> {
+    const result = await recoverStoryOf({
+      editionId: params.editionId,
+      editionDate: params.editionDate,
+      place: params.place,
+      currentSections: params.sections,
+      cachedBundle: cachedBundleRef.current,
+    });
+
+    if (!result.recovered) return params.sections;
+
+    if (__DEV__) {
+      console.log("[home] storyOf recovery applied", {
+        metroKey: result.metroKey,
+        headline: result.headline,
+      });
+    }
+
+    if (cachedBundleRef.current) {
+      persistBundleToCache({
+        ...cachedBundleRef.current,
+        sections: result.sections,
+        cachedAt: Date.now(),
+      });
+    }
+
+    return result.sections;
+  }
+
   async function maybeRecoverLocalEvents(params: {
     editionId: string;
     editionDate: string;
@@ -681,14 +716,30 @@ export default function HomeScreen() {
               editionDate: cached.editionDate,
               sections: cached.sections,
               intelligence: cached.intelligence,
-            }).then((recovered) => {
+            }).then(async (recovered) => {
               if (!mountedRef.current || gen !== loadGen.current) return;
+              let nextSections = recovered.sections;
+              let nextIntel = recovered.intelligence;
               if (
                 recovered.sections !== cached.sections ||
                 recovered.intelligence !== cached.intelligence
               ) {
-                setSections(recovered.sections);
-                setIntelligence(recovered.intelligence);
+                setSections(nextSections);
+                setIntelligence(nextIntel);
+              }
+              const active = activeLocationRef.current?.place ?? null;
+              const storySections = await maybeRecoverStoryOf({
+                editionId: cached.editionId,
+                editionDate: cached.editionDate,
+                place: active,
+                sections: nextSections,
+              });
+              if (
+                storySections !== nextSections &&
+                mountedRef.current &&
+                gen === loadGen.current
+              ) {
+                setSections(storySections);
               }
             });
             if (__DEV__) {
@@ -1325,6 +1376,23 @@ export default function HomeScreen() {
         setIntelligence(historyRecovery.intelligence);
         bgSections = historyRecovery.sections;
         bgIntel = historyRecovery.intelligence;
+      }
+
+      const storySections = await maybeRecoverStoryOf({
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        place: refreshed.place,
+        sections: bgSections,
+      });
+
+      if (
+        storySections !== bgSections &&
+        mountedRef.current &&
+        gen === loadGen.current
+      ) {
+        setSections(storySections);
+        bgSections = storySections;
+        persistSectionsToCache(storySections);
       }
 
       if (loaded.length > 0) {

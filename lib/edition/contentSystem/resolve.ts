@@ -27,6 +27,8 @@ const SECTION_MAP: Record<string, ContentType> = {
   top_stories: "news",
   science: "science",
   today_in_history: "history",
+  story_of: "history",
+  your_city: "history",
   looking_ahead: "local_news",
   discovery: "recommendation",
   knowledge: "recommendation",
