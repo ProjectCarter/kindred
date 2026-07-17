@@ -9,11 +9,11 @@ import {
 } from "./editorialPublishing";
 import { isGenericEventTitle } from "./venueQuality";
 import {
-  allocateEventsForGrid,
   parseEventStartDate,
   resolveCardHorizon,
   type EventHorizonBucket,
 } from "./eventHorizon";
+import { selectEditorialHomepageLocalEvents } from "./localEventsHomepage";
 import {
   authorizedEventImageUrl,
   parseEventImageRights,
@@ -485,7 +485,7 @@ export function orderEventsForEdition(events: LocalEventCard[]): LocalEventCard[
 }
 
 /**
- * Homepage grid — balanced mix across the forward-looking buckets.
+ * Homepage grid — editorially balanced front-page spread across event types.
  */
 export function orderEventsForGrid(
   events: LocalEventCard[],
@@ -493,12 +493,10 @@ export function orderEventsForGrid(
 ): LocalEventCard[] {
   const now = new Date();
   const published = orderEventsForEdition(events);
-  return allocateEventsForGrid(
-    published,
-    initialRenderCount,
-    (event, bucket) => scoreEventForGrid(event, now, bucket),
-    now
-  );
+  return selectEditorialHomepageLocalEvents(published, {
+    maxTotal: initialRenderCount,
+    reference: now,
+  }).ordered;
 }
 
 /** @deprecated Use HOMEPAGE_INITIAL_RENDER_COUNT — rendering only */

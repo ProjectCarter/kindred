@@ -7,6 +7,7 @@
  */
 
 import type { LocalEventCategory } from "./localEvents";
+import { resolveSportEventIcon, SPORT_EVENT_ICON_FALLBACK } from "./sportEventIcon";
 import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
 import type { EditorialCategoryId } from "./editorialCategory";
 import type { BanditsPickKind } from "./bandit";
@@ -223,7 +224,7 @@ const EVENT_CATEGORY_FALLBACK: Record<LocalEventCategory, string> = {
   comedy: CATEGORY_ICON_DICTIONARY.comedy,
   arts: CATEGORY_ICON_DICTIONARY.theater,
   family: CATEGORY_ICON_DICTIONARY.playground,
-  sports: CATEGORY_ICON_DICTIONARY.running,
+  sports: SPORT_EVENT_ICON_FALLBACK,
   food: CATEGORY_ICON_DICTIONARY.food_dining,
   market: CATEGORY_ICON_DICTIONARY.farmers_market,
   nightlife: CATEGORY_ICON_DICTIONARY.live_music,
@@ -291,15 +292,24 @@ const EDITORIAL_CATEGORY_ICON: Partial<Record<EditorialCategoryId, string>> = {
   general_place: CATEGORY_ICON_FALLBACK,
 };
 
-export function resolveEventCategoryIcon(input: {
-  name: string;
-  venue?: string | null;
-  category?: LocalEventCategory | null;
-  dek?: string | null;
-}): string {
+export function resolveEventCategoryIcon(
+  input: {
+    name: string;
+    venue?: string | null;
+    category?: LocalEventCategory | null;
+    dek?: string | null;
+  },
+  options?: {
+    sportsMarketId?: string | null;
+  }
+): string {
   const venueHay = hayFrom({ venue: input.venue });
   const venueIcon = iconFromRules(venueHay, PRIMARY_VENUE_RULES, "");
   if (venueIcon) return venueIcon;
+
+  if (input.category === "sports") {
+    return resolveSportEventIcon(input, options);
+  }
 
   const hay = hayFrom({
     title: input.name,

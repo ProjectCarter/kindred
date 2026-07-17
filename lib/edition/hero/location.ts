@@ -36,7 +36,7 @@ export const CITY_DIRECTORY: CityRecord[] = [
     region: "southwest_desert",
     state: "AZ",
     country: "US",
-    aliases: ["scottsdale", "tempe", "mesa", "chandler"],
+    aliases: ["scottsdale", "tempe", "mesa", "chandler", "gilbert", "glendale", "peoria"],
   },
   {
     city: "Tucson",

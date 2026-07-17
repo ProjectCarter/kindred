@@ -72,6 +72,8 @@ import { onThisDayImageFromKnowledge } from "../lib/edition/historicalImages";
 import { historyYearLabel } from "../lib/edition/historyCard";
 import { MorningArrival } from "./MorningArrival";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
+import { resolveSportsMarketId } from "../lib/edition/hometownTeams";
+import { metroKeyFromPlace } from "../lib/location/metroKey";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
 import { ActivitiesSection } from "./ActivitiesSection";
@@ -372,6 +374,20 @@ function EditionReaderInner({
     [readerLocation, stableDiscovery]
   );
 
+  const sportsMarketId = useMemo(() => {
+    const city = stableDiscovery?.location?.city ?? locationCity;
+    const state = stableDiscovery?.location?.state ?? locationState;
+    const region = stableDiscovery?.location?.region ?? locationRegion;
+    return resolveSportsMarketId({
+      city,
+      state,
+      region,
+      metroKey: city?.trim()
+        ? metroKeyFromPlace({ city, state, region })
+        : null,
+    });
+  }, [stableDiscovery, locationCity, locationState, locationRegion]);
+
   const sectionAllocation = useMemo(
     () =>
       allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
@@ -432,8 +448,9 @@ function EditionReaderInner({
         localEvents: events,
         allocation: fullSectionAllocation,
         anchors: editionAnchors,
+        sportsMarketId,
       }),
-    [events, fullSectionAllocation, editionAnchors]
+    [events, fullSectionAllocation, editionAnchors, sportsMarketId]
   );
 
   const curatedFullAllocation = curatedEdition.allocation;
@@ -685,6 +702,7 @@ function EditionReaderInner({
         <LocalEventsGrid
           events={events}
           homepageOrder={curatedLocalEvents}
+          sportsMarketId={sportsMarketId}
           onOpenEvent={onOpenEvent}
           onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
           loadStatus={localEventsStatus}

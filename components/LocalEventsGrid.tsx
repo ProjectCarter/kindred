@@ -27,6 +27,8 @@ type Props = {
   events: LocalEventCard[];
   /** Edition-curated homepage order — skips client re-scoring when provided. */
   homepageOrder?: LocalEventCard[] | null;
+  /** Sports market for hometown team icons and homepage boosts. */
+  sportsMarketId?: string | null;
   onOpenEvent?: (event: LocalEventCard) => void;
   /** Homepage first paint count — rendering only; full edition may contain more. */
   initialRenderCount?: number;
@@ -49,6 +51,7 @@ type Props = {
 export function LocalEventsGrid({
   events,
   homepageOrder,
+  sportsMarketId,
   onOpenEvent,
   initialRenderCount = HOMEPAGE_INITIAL_RENDER_COUNT,
   onSeeAll,
@@ -153,12 +156,21 @@ export function LocalEventsGrid({
             const overline = [category, badge, timeLine].filter(Boolean).join("  ·  ");
             const note = event.banditNote?.trim() || null;
             const categoryIcon =
-              event.categoryIcon ??
-              resolveEventCategoryIcon({
-                name: event.name,
-                venue: event.venue,
-                category: event.category,
-              });
+              event.category === "sports"
+                ? resolveEventCategoryIcon(
+                    {
+                      name: event.name,
+                      venue: event.venue,
+                      category: event.category,
+                    },
+                    { sportsMarketId }
+                  )
+                : event.categoryIcon ??
+                  resolveEventCategoryIcon({
+                    name: event.name,
+                    venue: event.venue,
+                    category: event.category,
+                  });
             const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
             const isLeft = colIndex === 0;
 

@@ -18,7 +18,10 @@ import {
 } from "./editorialPublishing";
 import type { LocalEventCard } from "./localEvents";
 import {
-  allocateEventsForGrid,
+  selectEditorialHomepageLocalEvents,
+  localEventSelectionKey,
+} from "./localEventsHomepage";
+import {
   parseEventStartDate,
   resolveCardHorizon,
 } from "./eventHorizon";
@@ -457,25 +460,26 @@ export function curateLocalEventsForHomepage(
   options?: {
     initialRenderCount?: number;
     reference?: Date;
+    sportsMarketId?: string | null;
   }
 ): LocalEventCard[] {
   const initialRenderCount =
     options?.initialRenderCount ?? HOMEPAGE_INITIAL_RENDER_COUNT;
   const reference = options?.reference ?? new Date();
+  const sportsMarketId = options?.sportsMarketId ?? null;
   const published = events.filter((event) =>
     meetsLocalEventPublishThreshold(scoreLocalEventForCuration(event, reference))
   );
   if (published.length <= 1) return [...published];
 
-  const gridSeed = allocateEventsForGrid(
+  const { homepage: gridSeed, ordered } = selectEditorialHomepageLocalEvents(
     published,
-    initialRenderCount,
-    (event, bucket) => scoreLocalEventForCuration(event, reference),
-    reference
+    {
+      maxTotal: initialRenderCount,
+      reference,
+      sportsMarketId,
+    }
   );
-  const gridIds = new Set(gridSeed.map((event) => event.name));
-  const remainder = published.filter((event) => !gridIds.has(event.name));
-
   const curatedGrid = curateOrderedList(gridSeed, {
     getScore: (event) => scoreLocalEventForCuration(event, reference),
     getFingerprint: inferEditionFingerprintFromLocalEvent,
@@ -484,12 +488,9 @@ export function curateLocalEventsForHomepage(
     curateDepth: initialRenderCount,
   });
 
-  remainder.sort(
-    (a, b) =>
-      scoreLocalEventForCuration(b, reference) -
-      scoreLocalEventForCuration(a, reference)
-  );
-  return [...curatedGrid, ...remainder];
+  const seedKeys = new Set(gridSeed.map(localEventSelectionKey));
+  const tail = ordered.filter((event) => !seedKeys.has(localEventSelectionKey(event)));
+  return [...curatedGrid, ...tail];
 }
 
 export function applyEditionCurationToAllocation(
@@ -527,6 +528,7 @@ export function curateHomepageEdition(input: {
   allocation: SectionAllocation;
   anchors?: EditionCurationAnchors | null;
   initialRenderCount?: number;
+  sportsMarketId?: string | null;
 }): {
   localEvents: LocalEventCard[];
   allocation: SectionAllocation;
@@ -536,6 +538,7 @@ export function curateHomepageEdition(input: {
 
   const localEvents = curateLocalEventsForHomepage(input.localEvents, context, {
     initialRenderCount: input.initialRenderCount,
+    sportsMarketId: input.sportsMarketId,
   });
   const allocation = applyEditionCurationToAllocation(input.allocation, context);
 
