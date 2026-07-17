@@ -467,7 +467,26 @@ const PROFILES: CategoryProfile[] = [
     imagePhrases: ["scenic desert road vista", "scenic highway overlook"],
     forbiddenCopy: [/restaurant dining|bowling|museum interior|observatory telescope/i],
   },
+  {
+    id: "general_place",
+    displayLabel: "local place",
+    imageTag: "general_activity",
+    fsq: [],
+    name: [],
+    description: [],
+    imagePhrases: ["local place exterior", "neighborhood street scene"],
+    forbiddenCopy: [],
+  },
 ];
+
+/** Deterministic last-resort profile when a category id has no registry entry. */
+export const GENERAL_PLACE_FALLBACK: VerifiedEditorialCategory = {
+  categoryId: "general_place",
+  displayLabel: "local place",
+  imageTag: "general_activity",
+  confidence: "tentative",
+  sources: [],
+};
 
 const PROFILE_BY_ID = new Map(PROFILES.map((p) => [p.id, p]));
 
@@ -485,6 +504,20 @@ const DISCOVERY_FALLBACK: Partial<
   scenic_drives: { id: "scenic_lookout", label: "scenic lookout" },
   activities: { id: "general_place", label: "local activity" },
 };
+
+for (const [discoveryCategory, fallback] of Object.entries(DISCOVERY_FALLBACK)) {
+  if (!fallback) continue;
+  if (!PROFILE_BY_ID.has(fallback.id)) {
+    console.warn(
+      "[editorialCategory] DISCOVERY_FALLBACK points at missing profile — will use general_place at runtime",
+      {
+        discoveryCategory,
+        requestedCategoryId: fallback.id,
+        reason: "discovery_fallback_misconfigured",
+      }
+    );
+  }
+}
 
 type Scored = {
   profile: CategoryProfile;
@@ -599,23 +632,29 @@ export function resolveVerifiedEditorialCategory(
     ? DISCOVERY_FALLBACK[input.discoveryCategory]
     : undefined;
   if (fallback) {
-    const profile = PROFILE_BY_ID.get(fallback.id)!;
+    const directProfile = PROFILE_BY_ID.get(fallback.id);
+    if (!directProfile) {
+      console.warn(
+        "[editorialCategory] discovery fallback id missing from profile registry",
+        {
+          requestedCategoryId: fallback.id,
+          discoveryCategory: input.discoveryCategory ?? null,
+          title: input.title?.trim().slice(0, 80) ?? null,
+          reason: "discovery_fallback_missing_profile",
+        }
+      );
+    }
+    const profile = directProfile ?? PROFILE_BY_ID.get("general_place")!;
     return {
-      categoryId: fallback.id,
-      displayLabel: fallback.label,
+      categoryId: profile.id,
+      displayLabel: directProfile ? fallback.label : profile.displayLabel,
       imageTag: profile.imageTag,
       confidence: "tentative",
       sources: [],
     };
   }
 
-  return {
-    categoryId: "general_place",
-    displayLabel: "local place",
-    imageTag: "general_activity",
-    confidence: "tentative",
-    sources: [],
-  };
+  return { ...GENERAL_PLACE_FALLBACK };
 }
 
 export function editorialCopyConflicts(
