@@ -313,6 +313,19 @@ export default function LocationSettingsScreen() {
                 pressed && !busy && styles.pressed,
               ]}
               disabled={busy}
+              onPress={() => router.push("/dev-tools")}
+              accessibilityRole="button"
+              accessibilityLabel="Open developer tools"
+            >
+              <Text style={styles.devActionText}>🛠 Developer Tools</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.devAction,
+                busy && styles.disabled,
+                pressed && !busy && styles.pressed,
+              ]}
+              disabled={busy}
               onPress={() =>
                 void withBusy(async () => {
                   const result = await clearAppCachesForColdLaunch();

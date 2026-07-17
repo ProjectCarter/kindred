@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
     let editionDate: string | null = null;
     let temperatureUnitPreference: TemperatureUnitPreference | null = null;
 
+    let devPreview = false;
     try {
       const body = await req.json();
       if (body?.location && typeof body.location === "object") {
@@ -99,6 +100,7 @@ Deno.serve(async (req) => {
       ) {
         temperatureUnitPreference = body.temperatureUnit;
       }
+      devPreview = body?.devPreview === true;
     } catch {
       // No JSON body
     }
@@ -134,18 +136,21 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createServiceClient();
 
     // Persist active location so overnight jobs match the reader's city.
-    await supabaseAdmin
-      .from("profiles")
-      .update({
-        location: {
-          city: locationHint.city,
-          region: locationHint.region,
-          state: locationHint.state,
-          lat: locationHint.lat,
-          lon: locationHint.lon,
-        },
-      })
-      .eq("id", user.id);
+    // Dev preview skips this so QA cities do not overwrite the reader profile.
+    if (!devPreview) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          location: {
+            city: locationHint.city,
+            region: locationHint.region,
+            state: locationHint.state,
+            lat: locationHint.lat,
+            lon: locationHint.lon,
+          },
+        })
+        .eq("id", user.id);
+    }
 
     const location = await resolveEditionLocation(
       supabaseAdmin,

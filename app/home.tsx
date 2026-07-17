@@ -116,6 +116,21 @@ import {
   type ActiveLocation,
   type KindredPlace,
 } from "../lib/location/deviceLocation";
+import {
+  hydrateDevEditionOverrideState,
+} from "../lib/dev/editionOverrideStore";
+import { consumePendingDevEditionGenerate } from "../lib/dev/pendingDevGenerate";
+import {
+  maybeRecordDevEditionSnapshot,
+  tryApplyDevEditionPreview,
+} from "../lib/dev/devEditionHomeIntegration";
+import {
+  resolveEffectiveEditionDate,
+  resolveEffectiveEditionDateSync,
+  resolveEffectivePlace,
+  shouldBypassEditionCityMismatch,
+  isDevEditionOverrideActive,
+} from "../lib/edition/resolveEditionContext";
 import { citiesMatch, locationKey } from "../lib/location/locationKey";
 import {
   getTemperatureUnitPreference,
@@ -215,6 +230,7 @@ export default function HomeScreen() {
   const mountedRef = useRef(true);
   /** Sync guard — React state alone can miss rapid double-taps. */
   const generatingRef = useRef(false);
+  const devGenerationMsRef = useRef<number | null>(null);
   /** Abort in-flight generate-edition fetch on timeout / unmount / supersede. */
   const generateAbortRef = useRef<AbortController | null>(null);
   /** Collapsing editorial masthead — scroll position drives compact sticky chrome. */
@@ -437,7 +453,7 @@ export default function HomeScreen() {
     ) {
       return false;
     }
-    const todayStr = localEditionDate();
+    const todayStr = resolveEffectiveEditionDateSync();
     if (!isCachedEditionPaintable(bundle, todayStr)) return false;
 
     instantHydratedRef.current = true;
@@ -464,21 +480,23 @@ export default function HomeScreen() {
     const userId = getPrimedLaunchUserId();
     if (!userId) return;
 
-    const todayStr = localEditionDate();
-    pipelineStageBegin("cache_load", { source: "layout" });
-    const memory = peekMemoryCachedEdition(userId, todayStr);
-    if (memory && tryApplyInstantCache(memory, "memory")) {
-      pipelineStageEnd("cache_load", { source: "memory", hit: true });
-      return;
-    }
-
-    void loadCachedEdition(userId, todayStr).then((cached) => {
-      if (!cached || !mountedRef.current) {
-        pipelineStageEnd("cache_load", { source: "disk", hit: false });
+    void hydrateDevEditionOverrideState().then(() => {
+      const todayStr = resolveEffectiveEditionDateSync();
+      pipelineStageBegin("cache_load", { source: "layout" });
+      const memory = peekMemoryCachedEdition(userId, todayStr);
+      if (memory && tryApplyInstantCache(memory, "memory")) {
+        pipelineStageEnd("cache_load", { source: "memory", hit: true });
         return;
       }
-      const painted = tryApplyInstantCache(cached, "disk");
-      pipelineStageEnd("cache_load", { source: "disk", hit: painted });
+
+      void loadCachedEdition(userId, todayStr).then((cached) => {
+        if (!cached || !mountedRef.current) {
+          pipelineStageEnd("cache_load", { source: "disk", hit: false });
+          return;
+        }
+        const painted = tryApplyInstantCache(cached, "disk");
+        pipelineStageEnd("cache_load", { source: "disk", hit: painted });
+      });
     });
   }, []);
 
@@ -813,6 +831,20 @@ export default function HomeScreen() {
     }
 
     try {
+    await hydrateDevEditionOverrideState();
+    if (
+      !eventsOnly &&
+      (await tryApplyDevEditionPreview((bundle) => {
+        if (mountedRef.current && gen === loadGen.current) {
+          applyCachedBundle(bundle);
+          setLoading(false);
+          setRefreshing(false);
+        }
+      }))
+    ) {
+      return;
+    }
+
     if (!isSupabaseConfigured) {
       if (mountedRef.current && gen === loadGen.current) {
         setError("Kindred isn’t configured for this build yet.");
@@ -849,7 +881,7 @@ export default function HomeScreen() {
     // local morning instead of one shared UTC instant. Never blocks load.
     void syncDeviceTimezone(user.id);
 
-    const todayStr = localEditionDate();
+    const todayStr = await resolveEffectiveEditionDate();
 
     if (__DEV__) {
       console.log("[home] loadEdition: date filters", {
@@ -1226,7 +1258,7 @@ export default function HomeScreen() {
         }
         const id = editionIdRef.current;
         const date =
-          cachedBundleRef.current?.editionDate ?? localEditionDate();
+          cachedBundleRef.current?.editionDate ?? resolveEffectiveEditionDateSync();
         const active = activeLocationRef.current?.place ?? null;
         if (id && date && active && needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])) {
           void maybeRecoverLocalEvents({
@@ -1333,7 +1365,7 @@ export default function HomeScreen() {
     // Use cached prefs for city check — never block first paint on GPS refresh.
     const active =
       activeLocationRef.current ??
-      (await resolveActivePlace({ refreshIfStale: false }));
+      (await resolveEffectivePlace({ refreshIfStale: false }));
     if (mountedRef.current && !activeLocationRef.current) {
       setActiveLocation(active);
     }
@@ -1369,7 +1401,7 @@ export default function HomeScreen() {
     }
 
     // Never silently reuse an edition generated for another city.
-    if (cityMismatch && activeCity) {
+    if (cityMismatch && activeCity && !shouldBypassEditionCityMismatch()) {
       if (__DEV__) {
         console.warn("[home] loadEdition: withholding wrong-city edition", {
           mode: active.mode,
@@ -1852,6 +1884,13 @@ export default function HomeScreen() {
         };
         cachedBundleRef.current = bundle;
       scheduleCachedEditionSave(bundle);
+      void maybeRecordDevEditionSnapshot({
+        place: active.place,
+        editionDate: edition.edition_date,
+        bundle,
+        discovery: (edition as { discovery?: unknown }).discovery,
+        generationTimeMs: devGenerationMsRef.current,
+      });
     } else if (bgSections.length > 0) {
         persistSectionsToCache(bgSections);
       }
@@ -1904,7 +1943,7 @@ export default function HomeScreen() {
     const user = session?.user ?? null;
     if (!user) return;
 
-    const todayStr = localEditionDate();
+    const todayStr = await resolveEffectiveEditionDate();
     const [editionResult, jobResult] = await Promise.all([
       supabase
         .from("editions")
@@ -2086,7 +2125,7 @@ export default function HomeScreen() {
 
     try {
       // Always re-resolve — never trust a stale in-memory place for generation.
-      const active = await resolveActivePlace({ refreshIfStale: true });
+      const active = await resolveEffectivePlace({ refreshIfStale: true });
       if (!mountedRef.current) return;
       if (abort.signal.aborted) {
         // Resolving location (e.g. a slow GPS fix) ate the whole timeout budget
@@ -2109,7 +2148,7 @@ export default function HomeScreen() {
 
       const loc: KindredPlace = active.place;
       const tempUnit = await getTemperatureUnitPreference();
-      const editionDate = localEditionDate();
+      const editionDate = await resolveEffectiveEditionDate();
 
       if (__DEV__) {
         console.log("[home] generate-edition: location resolved", {
@@ -2127,6 +2166,7 @@ export default function HomeScreen() {
 
       console.log("[generate] invoke BEGIN");
       const invokeStarted = Date.now();
+      const generationStarted = Date.now();
       let invokeTimer: ReturnType<typeof setTimeout> | undefined;
       const invokeTimeout = new Promise<never>((_, reject) => {
         invokeTimer = setTimeout(
@@ -2148,6 +2188,7 @@ export default function HomeScreen() {
               location: locationPayload(loc),
               editionDate,
               temperatureUnit: tempUnit,
+              ...(isDevEditionOverrideActive() ? { devPreview: true } : {}),
             },
             signal: abort.signal,
           }),
@@ -2240,6 +2281,7 @@ export default function HomeScreen() {
       console.log("[generate] loadEdition BEGIN");
       const loadStarted = Date.now();
       await loadEdition(true);
+      devGenerationMsRef.current = Date.now() - generationStarted;
       console.log("[generate] loadEdition END", { ms: Date.now() - loadStarted });
     } catch (err) {
       if (!mountedRef.current) return;
@@ -2279,6 +2321,15 @@ export default function HomeScreen() {
       console.log("[generate] EXIT handleGenerate");
     }
   }
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!__DEV__) return;
+      void consumePendingDevEditionGenerate().then((pending) => {
+        if (pending) void handleGenerate();
+      });
+    }, [])
+  );
 
   // After withholding a wrong-city paper in Current Location mode, regenerate once.
   // Never duplicate-build while the overnight job is already on the press.
