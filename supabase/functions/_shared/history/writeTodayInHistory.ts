@@ -85,7 +85,8 @@ function thinHistoryFallback(
     opener,
     `${year} sat inside a wider moment — institutions, borders, and daily habits were all shifting in ways people at the time could feel but not always name.`,
     event.length
-      ? `The verified record points to ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")} — a detail worth holding onto because anniversaries compress a long story into one readable morning.`,
+      ? `The verified record points to ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")} — a detail worth holding onto because anniversaries compress a long story into one readable morning.`
+      : `${year} left one anchor date on the calendar — enough to start noticing how the rest of the century rearranged itself around it.`,
     `At the time, the stakes were immediate: who held power, who lost it, and which ordinary routines suddenly looked different by dinner.`,
     `The aftershocks did not stay in ${year}. Laws, maps, industries, and arguments we treat as modern often trace back to mornings like this one.`,
     event.length
