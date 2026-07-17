@@ -17,6 +17,7 @@ export const LIST_SCROLL_KEYS = {
   activities: "activities",
   recommendations: "recommendations",
   events: "events",
+  historyAroundTown: "history-around-town",
   edition: (editionId: string) => `edition:${editionId}`,
 } as const;
 

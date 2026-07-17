@@ -20,6 +20,7 @@ import {
   type EventImageRights,
 } from "./eventImageRights";
 import { validateBanditNote, sanitizeEventEditorialParagraphs } from "./eventEditorial";
+import { passesEventGoldenTest } from "./eventStorytelling";
 import { resolveEventCategoryIcon } from "./categoryIcon";
 
 export type LocalEventImageSource = "provider_thumbnail";

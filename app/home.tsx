@@ -32,6 +32,7 @@ import { stashArticle } from "../lib/edition/articleStore";
 import { parseLocalEventsBody } from "../lib/edition/localEvents";
 import { stashTodaysEvents } from "../lib/edition/eventsListStore";
 import { stashTodaysActivities } from "../lib/edition/activitiesListStore";
+import { stashTodaysHistoryPlaces } from "../lib/edition/historyAroundTownListStore";
 import { stashTodaysRecommendations } from "../lib/edition/recommendationsListStore";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import {
@@ -155,6 +156,12 @@ import {
   needsNetworkMorningHeroMerge,
   resolveMorningHero,
 } from "../lib/edition/resolveMorningHero";
+import {
+  mergeHistoryAroundTownIntoCachedBundle,
+  mergeHistoryAroundTownIntoIntelligence,
+  needsNetworkHistoryAroundTownMerge,
+  resolveHistoryAroundTown,
+} from "../lib/edition/resolveHistoryAroundTown";
 import {
   masterpieceTraceAsync,
 } from "../lib/edition/masterpieceDiagnostics";
@@ -481,7 +488,9 @@ export default function HomeScreen() {
   }, [loading, editionId]);
 
   function applyCachedBundle(bundle: CachedEditionBundle): void {
-    const merged = mergeMorningHeroIntoCachedBundle(bundle);
+    const merged = mergeHistoryAroundTownIntoCachedBundle(
+      mergeMorningHeroIntoCachedBundle(bundle)
+    );
     cachedBundleRef.current = merged;
     editionIdRef.current = merged.editionId;
     setSections(merged.sections);
@@ -560,14 +569,69 @@ export default function HomeScreen() {
 
   function intelligenceWithPreservedMorningHero(
     intel: EditionIntelligence,
-    morningEdition?: unknown
+    morningEdition?: unknown,
+    historyAroundTownRaw?: unknown
   ): EditionIntelligence {
     const preserved = resolveMorningHero({
       intelligence: intel,
       cachedBundle: cachedBundleRef.current,
       morningEdition,
     });
-    return mergeMorningHeroIntoIntelligence(intel, preserved) ?? intel;
+    let merged = mergeMorningHeroIntoIntelligence(intel, preserved) ?? intel;
+    const networkHistory = resolveHistoryAroundTown({
+      intelligence: intel,
+      historyAroundTown: historyAroundTownRaw,
+    });
+    merged =
+      mergeHistoryAroundTownIntoIntelligence(merged, networkHistory) ?? merged;
+    return merged;
+  }
+
+  function applyNetworkHistoryAroundTownMerge(
+    networkIntel: EditionIntelligence,
+    historyAroundTownRaw: unknown,
+    gen: number
+  ): void {
+    if (!mountedRef.current || gen !== loadGen.current) return;
+    if (
+      !needsNetworkHistoryAroundTownMerge({
+        networkIntelligence: networkIntel,
+        onScreenIntelligence: cachedBundleRef.current?.intelligence ?? null,
+        cachedBundle: cachedBundleRef.current,
+        historyAroundTown: historyAroundTownRaw,
+      })
+    ) {
+      return;
+    }
+
+    const networkHistory = resolveHistoryAroundTown({
+      intelligence: networkIntel,
+      historyAroundTown: historyAroundTownRaw,
+    });
+    if (!networkHistory?.places?.length) return;
+
+    const mergedIntel = mergeHistoryAroundTownIntoIntelligence(
+      cachedBundleRef.current?.intelligence ?? networkIntel,
+      networkHistory
+    );
+    if (!mergedIntel) return;
+
+    setIntelligence(mergedIntel);
+    if (cachedBundleRef.current) {
+      const nextBundle = mergeHistoryAroundTownIntoCachedBundle(
+        { ...cachedBundleRef.current, intelligence: mergedIntel },
+        networkHistory
+      );
+      cachedBundleRef.current = nextBundle;
+      scheduleCachedEditionSave(nextBundle);
+    }
+
+    if (__DEV__) {
+      console.log("[home] loadEdition: merged network historyAroundTown", {
+        places: networkHistory.places.length,
+        carousel: networkHistory.carousel.length,
+      });
+    }
   }
 
   function persistSectionsToCache(mergedSections: EditionSection[]): void {
@@ -809,7 +873,7 @@ export default function HomeScreen() {
     const editionQuery = supabase
       .from("editions")
       .select(
-        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context"
+        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context"
       )
       .eq("user_id", user.id)
       .eq("edition_date", todayStr)
@@ -1403,11 +1467,14 @@ export default function HomeScreen() {
           memory: (edition as { memory?: unknown }).memory,
           morning_edition: (edition as { morning_edition?: unknown })
             .morning_edition,
+          history_around_town: (edition as { history_around_town?: unknown })
+            .history_around_town,
           leadStory: lead,
         },
         { deferKnowledgeMemory }
       ),
-      (edition as { morning_edition?: unknown }).morning_edition
+      (edition as { morning_edition?: unknown }).morning_edition,
+      (edition as { history_around_town?: unknown }).history_around_town
     );
 
     // Never block first paint / generate-edition completion on recovery fetch.
@@ -1450,6 +1517,11 @@ export default function HomeScreen() {
       } else if (__DEV__) {
         console.log("[home] loadEdition: network verified cache — no UI churn");
       }
+      applyNetworkHistoryAroundTownMerge(
+        intel,
+        (edition as { history_around_town?: unknown }).history_around_town,
+        gen
+      );
     } else if (syncAfterCache) {
       nextSections = mergeFrozenSections(
         cachedBundleRef.current?.sections ?? loaded,
@@ -2651,6 +2723,14 @@ export default function HomeScreen() {
                 persistHomeScrollNow();
                 stashTodaysRecommendations(items);
                 router.push("/recommendations");
+              }}
+              historyAroundTown={intelligence?.historyAroundTown}
+              onSeeAllHistoryAroundTown={() => {
+                persistHomeScrollNow();
+                stashTodaysHistoryPlaces(
+                  intelligence?.historyAroundTown?.places ?? []
+                );
+                router.push("/history-around-town");
               }}
               knowledge={intelligence?.knowledge}
               clippedSectionIds={clippedIds}

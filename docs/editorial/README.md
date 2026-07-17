@@ -7,6 +7,7 @@ Ratified foundational law for Kindred’s worldwide newspaper.
 | [Editorial Constitution](./EDITORIAL_CONSTITUTION.md) | Trust, verification, never guess — permanent publish law |
 | [Masterpiece Editorial Standard](./MASTERPIECE_EDITORIAL_STANDARD.md) | Today's Masterpiece — museum magazine structure and quality |
 | [Masterpiece Library Architecture](./MASTERPIECE_LIBRARY_ARCHITECTURE.md) | Curated library — ingest, validation, daily freeze (no runtime generation) |
+| [History Around Town Architecture](./HISTORY_AROUND_TOWN_ARCHITECTURE.md) | Metro historic places library — carousel + full directory (no runtime generation) |
 | [Event Editorial Standard](./EVENT_EDITORIAL_STANDARD.md) | Local Events — no templates, golden test, Bandit's Note |
 | [Event Storytelling Standard](./EVENT_STORYTELLING_STANDARD.md) | Category voice, experience summaries, golden test v1 |
 | [Story Standard](./STORY_STANDARD.md) | What every article must achieve before publication |

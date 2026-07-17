@@ -1,10 +1,16 @@
-import { Text, StyleSheet, type TextProps, type TextStyle } from "react-native";
+import {
+  Text,
+  StyleSheet,
+  type StyleProp,
+  type TextProps,
+  type TextStyle,
+} from "react-native";
 import { editorialTitleWithIcon } from "../lib/edition/categoryIcon";
 
 type Props = TextProps & {
   icon?: string | null;
   title: string;
-  style?: TextStyle;
+  style?: StyleProp<TextStyle>;
 };
 
 /** Category icon + title — one emoji immediately before the headline. */

@@ -39,6 +39,7 @@ import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
 import { fetchApprovedCityArticle } from "./storyOf/library.ts";
 import { cityArticleSourceNote } from "./storyOf/sourceNote.ts";
 import { resolveProductionMorningHero } from "./heroArtwork/production.ts";
+import { buildHistoryAroundTownForEdition } from "./historyAroundTown/library.ts";
 import { isMorningHeroDetailComplete } from "./heroArtwork/presentation.ts";
 import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
 import { listApprovedHeroArtwork, listReadyHeroArtworkLibrary } from "./heroArtwork/library.ts";
@@ -1785,6 +1786,30 @@ export async function buildEditionForUser(
     briefingWords: morningEdition.briefings.briefing_60s.wordCount,
   });
 
+  let historyAroundTown = null;
+  try {
+    historyAroundTown = await buildHistoryAroundTownForEdition(supabaseAdmin, {
+      city,
+      region,
+      state,
+    });
+    if (historyAroundTown) {
+      morningEdition.selectionMeta.usedEngines.push("history_around_town");
+      morningEdition.selectionMeta.editorNotes.push(
+        `History Around Town: ${historyAroundTown.carousel.length} carousel / ${historyAroundTown.places.length} total places`
+      );
+    } else {
+      morningEdition.selectionMeta.editorNotes.push(
+        "history_around_town: no approved places in library for this metro"
+      );
+    }
+  } catch (historyErr) {
+    console.warn("[buildEdition] history around town skipped", historyErr);
+    morningEdition.selectionMeta.editorNotes.push(
+      "history_around_town: skipped — library unavailable"
+    );
+  }
+
   // Rebuild editorial context with Morning Edition notes for storage.
   const editorialContextWithMorning = buildEditionEditorialContext({
     editionDate,
@@ -1852,6 +1877,9 @@ export async function buildEditionForUser(
     knowledge: JSON.parse(JSON.stringify(knowledgeWithGrounding)),
     memory: JSON.parse(JSON.stringify(memory)),
     morning_edition: JSON.parse(JSON.stringify(morningEdition)),
+    history_around_town: historyAroundTown
+      ? JSON.parse(JSON.stringify(historyAroundTown))
+      : null,
   };
   for (const [field, value] of Object.entries(editionUpsertFields)) {
     try {
@@ -1886,6 +1914,7 @@ export async function buildEditionForUser(
     knowledge: editionUpsertFields.knowledge,
     memory: editionUpsertFields.memory,
     morning_edition: editionUpsertFields.morning_edition,
+    history_around_town: editionUpsertFields.history_around_town,
   };
 
   let { data: edition, error: editionError } = await supabaseAdmin

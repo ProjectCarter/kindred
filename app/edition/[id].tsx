@@ -39,6 +39,7 @@ import {
   inferTopicFromSection,
   trackReadingSignal,
 } from "../../lib/personalization";
+import { stashTodaysHistoryPlaces } from "../../lib/edition/historyAroundTownListStore";
 import { EditionReader } from "../../components/EditionReader";
 import { EditionAdjacentNav } from "../../components/EditionAdjacentNav";
 import {
@@ -111,7 +112,7 @@ export default function EditionScreen() {
         const { data: edition, error: editionError } = await supabase
           .from("editions")
           .select(
-            "id, edition_date, status, lead_story, bandit, discovery, knowledge, memory, morning_edition, editorial_context"
+            "id, edition_date, status, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context"
           )
           .eq("id", editionId)
           .eq("user_id", user.id)
@@ -156,6 +157,8 @@ export default function EditionScreen() {
             memory: (edition as { memory?: unknown }).memory,
             morning_edition: (edition as { morning_edition?: unknown })
               .morning_edition,
+            history_around_town: (edition as { history_around_town?: unknown })
+              .history_around_town,
             leadStory: lead,
           })
         );
@@ -368,6 +371,14 @@ export default function EditionScreen() {
               clipPendingId={clipPendingId}
               onOpenClippings={() => router.push("/clippings")}
               onOpenArchive={() => router.push("/library")}
+              historyAroundTown={intelligence?.historyAroundTown}
+              onSeeAllHistoryAroundTown={() => {
+                persistNow();
+                stashTodaysHistoryPlaces(
+                  intelligence?.historyAroundTown?.places ?? []
+                );
+                router.push("/history-around-town");
+              }}
             />
             <EditionAdjacentNav
               older={older}

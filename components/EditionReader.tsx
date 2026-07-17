@@ -24,9 +24,13 @@ import {
   articleFromEditionSection,
   articleFromKnowledgeFacet,
   articleFromLeadStory,
-  articleFromNotebookItem,
   sectionOpensArticleReader,
 } from "../lib/edition/article";
+import {
+  selectHistoryAroundTownCarousel,
+  type HistoryAroundTownEditionPayload,
+} from "../lib/edition/historyAroundTown/types";
+import { articleFromHistoryPlace } from "../lib/edition/historyAroundTown/article";
 import {
   isStoryOfSection,
   parseStoryOfSourceNote,
@@ -72,7 +76,7 @@ import { LocalEventsGrid } from "./LocalEventsGrid";
 import { TimeStylePackage } from "./TimeStylePackage";
 import { ActivitiesSection } from "./ActivitiesSection";
 import { RecommendationsSection } from "./RecommendationsSection";
-import { BanditsNotebook } from "./BanditsNotebook";
+import { HistoryAroundTownSection } from "./HistoryAroundTownSection";
 import { TodayInHistorySection } from "./TodayInHistorySection";
 import { StoryOfSection, storyOfSubtitleFromSection } from "./StoryOfSection";
 import { FolioReveal } from "./FolioReveal";
@@ -139,6 +143,9 @@ type Props = {
   mastheadLeading?: ReactNode;
   mastheadScrollY?: Animated.Value;
   localEventsStatus?: LocalEventsLoadStatus;
+  /** Frozen History Around Town — final homepage section. */
+  historyAroundTown?: HistoryAroundTownEditionPayload | null;
+  onSeeAllHistoryAroundTown?: () => void;
 };
 
 const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
@@ -235,6 +242,8 @@ function EditionReaderInner({
   mastheadLeading,
   mastheadScrollY,
   localEventsStatus = "ready",
+  historyAroundTown,
+  onSeeAllHistoryAroundTown,
 }: Props) {
   const weather = sections.find((s) => s.section_type === "weather");
   const localEvents = sections.find((s) => s.section_type === "local_events");
@@ -495,13 +504,10 @@ function EditionReaderInner({
     [curatedFullAllocation.recommendations, editionDate]
   );
 
-  const notebookArticlesById = useMemo(() => {
-    const map = new Map<string, KindredArticle>();
-    for (const item of curatedSectionAllocation.notebook) {
-      map.set(item.item.id, articleFromNotebookItem(item, events, { editionDate }));
-    }
-    return map;
-  }, [curatedSectionAllocation.notebook, events, editionDate]);
+  const historyCarouselCards = useMemo(
+    () => selectHistoryAroundTownCarousel(historyAroundTown),
+    [historyAroundTown]
+  );
 
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
@@ -971,17 +977,20 @@ function EditionReaderInner({
       {otherSections.map((section) => renderSection(section, folioCursor++))}
 
       <FolioReveal index={folioCursor++}>
-        <BanditsNotebook
-          items={curatedSectionAllocation.notebook}
-          discovery={null}
-          onOpenItem={
+        <HistoryAroundTownSection
+          cards={historyCarouselCards}
+          subtitle={historyAroundTown?.subtitle}
+          onOpenPlace={
             onOpenArticle
-              ? (item) => {
-                  const article = notebookArticlesById.get(item.item.id);
-                  if (article) onOpenArticle(article);
-                }
+              ? (card) => onOpenArticle(articleFromHistoryPlace(card.place))
               : undefined
           }
+          onSeeAll={
+            historyAroundTown && historyAroundTown.places.length > 0
+              ? onSeeAllHistoryAroundTown
+              : undefined
+          }
+          seeAllTotal={historyAroundTown?.places.length}
         />
       </FolioReveal>
 
@@ -1010,6 +1019,7 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
     prev.morningOpening === next.morningOpening &&
     prev.morningBriefing === next.morningBriefing &&
     prev.localEventsStatus === next.localEventsStatus &&
+    prev.historyAroundTown === next.historyAroundTown &&
     prev.clippedSectionIds === next.clippedSectionIds &&
     prev.readerLocation === next.readerLocation &&
     prev.topStories === next.topStories &&

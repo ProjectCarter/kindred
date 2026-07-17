@@ -40,6 +40,10 @@ import type { MorningHeroExperience } from "./heroArtwork/types";
 import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
 import type { KindredArticle } from "./article";
+import {
+  parseHistoryAroundTownPayload,
+  type HistoryAroundTownEditionPayload,
+} from "./historyAroundTown/types";
 import { getGoldStandardCompanion } from "./goldStandard/algalBloomArticle";
 import {
   hasSubstance,
@@ -72,6 +76,8 @@ export type EditionIntelligence = {
   leadContinuityKicker: string | null;
   /** Bandit’s single end-of-edition recommendation. */
   banditsPick: BanditsPick | null;
+  /** Frozen History Around Town directory — read-only at runtime. */
+  historyAroundTown: HistoryAroundTownEditionPayload | null;
 };
 
 export type ParseEditionIntelligenceOptions = {
@@ -86,6 +92,7 @@ export function parseEditionIntelligence(
     knowledge?: unknown;
     memory?: unknown;
     morning_edition?: unknown;
+    history_around_town?: unknown;
     leadStory?: LeadStory | null;
   },
   options?: ParseEditionIntelligenceOptions
@@ -169,6 +176,7 @@ export function parseEditionIntelligence(
     null;
 
   const leadContinuityKicker = continuityKickerForLead(memory, lead);
+  const historyAroundTown = parseHistoryAroundTownPayload(row.history_around_town);
 
   return {
     discovery,
@@ -188,6 +196,7 @@ export function parseEditionIntelligence(
     leadWhyChosen: null,
     leadContinuityKicker,
     banditsPick: banditsPick(bandit),
+    historyAroundTown,
   };
 }
 

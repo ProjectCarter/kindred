@@ -3,7 +3,7 @@
  * places to eat and drink. Not a directory; curated, local-first.
  */
 
-import type { RankedDiscoveryItem } from "./discovery";
+import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
 import { venueHayFromParts } from "./venueQuality";
 import { VENUE_EDITORIAL_TIER_GUIDE_MIN } from "./venueEditorialScore";
 

@@ -1,0 +1,85 @@
+---
+description: History Around Town — permanent metro library replacing Bandit's Notebook
+globs:
+  - "**/historyAroundTown/**"
+  - "**/HistoryAroundTown*"
+  - "**/history-around-town*"
+  - "**/kindred_history_places*"
+alwaysApply: false
+---
+
+# History Around Town
+
+**Signature editorial feature.** Replaces Bandit's Notebook. Final section of every homepage edition.
+
+## Mission
+
+An editorial collection of places that tell the story of a community — not a tourism guide, not an attraction list.
+
+Subtitle (locked): **"Every town has a story waiting to be explored."**
+
+## Tone
+
+Timeless · calm · educational · beautifully written · premium local magazine
+
+## Architecture (non-negotiable)
+
+Same philosophy as Masterpiece Library:
+
+1. Prepare each place **once** in `kindred_history_places`
+2. Edition build copies frozen snapshot to `editions.history_around_town`
+3. Client reads snapshot only — **no runtime AI, research, or generation**
+
+## Homepage
+
+- **Position:** always last section before edition close — never reorder other sections
+- **Carousel:** ~20 curated cards (image, category, place name, teaser)
+- **See All:** full vertical directory — **no artificial limit** (Gilbert 25, Seattle 120, DC 300+)
+
+## What qualifies
+
+Genuine places with historical, cultural, architectural, scientific, civic, or local significance:
+
+Historic districts · homes · museums · monuments · memorials · courthouses · churches · schools · train depots · bridges · military sites · archaeological sites · cemeteries · neighborhoods · observatories · lighthouses · historically significant public art · hidden local landmarks
+
+Do **not** limit to famous tourist attractions.
+
+## Full article sections
+
+History · Why it Matters · Interesting Facts · Architecture (when applicable) · Best Time to Visit · Hours · Admission · Parking · Accessibility · Open in Maps · Official Website · Nearby Places · Editorial Closing Note
+
+## Publication gates
+
+Every place must pass:
+
+1. **Accuracy Test** — verified facts only
+2. **Swap Test** — original closing belonging only to this place
+3. **Lasting Thought Test** — one memorable idea
+4. **Validation gate** — `validation_status = 'approved'`
+
+## Images — NO AI (permanent law)
+
+**Never use AI-generated images.** Every image must be authentic and verifiable.
+
+Approved sources: official city/government sites · historical societies · museums · libraries/archives · Wikimedia Commons · verified Open Access collections · official landmark sites · properly licensed documentary photography.
+
+Allowed types: authentic present-day photos · historical photographs · archival maps · historical illustrations · architectural drawings · public-domain documents · verified artwork tied to the location.
+
+Never use: AI-generated or AI-enhanced fictional reconstructions · stock pretending to be the location · generic filler · unverified social media · wrong-location photos · fabricated historical scenes.
+
+Every library record stores permanently: `image_url`/`hosted_url` · `image_source_url` · `image_credit` · `image_photographer` · `image_license` · `image_era` (`historical`|`present_day`) · `image_date` when known.
+
+If no authentic image can be verified → `needs_review`. **HTTP 429 from Wikimedia → `verification_pending_rate_limit` — never reject the record.**
+
+Image HTTP verification: `scripts/lib/historyPlaceImageVerification.mjs` — 3 retries with exponential backoff for trusted sources; 404/410 = failed only.
+
+## Engineering
+
+| Module | Purpose |
+|--------|---------|
+| `supabase/functions/_shared/historyAroundTown/` | Server library + edition build |
+| `lib/edition/historyAroundTown/` | Client types, article, cards |
+| `components/HistoryAroundTownSection.tsx` | Homepage carousel |
+| `app/history-around-town.tsx` | See All directory |
+
+Full architecture: `docs/editorial/HISTORY_AROUND_TOWN_ARCHITECTURE.md`
