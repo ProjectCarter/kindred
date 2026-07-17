@@ -11,18 +11,22 @@ import {
   eventCategoryLabel,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
+import { resolveEventCategoryIcon } from "../lib/edition/categoryIcon";
 import {
   deriveEventBadge,
   eventPlaceLine,
 } from "../lib/edition/eventStore";
 import { eventInfoBadgesFor, eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
+import { EditorialTitle } from "./EditorialTitle";
 import { BanditCharacter } from "./BanditCharacter";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import type { LocalEventsLoadStatus } from "../lib/edition/localEventsPipeline";
 
 type Props = {
   events: LocalEventCard[];
+  /** Edition-curated homepage order — skips client re-scoring when provided. */
+  homepageOrder?: LocalEventCard[] | null;
   onOpenEvent?: (event: LocalEventCard) => void;
   /** Homepage first paint count — rendering only; full edition may contain more. */
   initialRenderCount?: number;
@@ -44,6 +48,7 @@ type Props = {
  */
 export function LocalEventsGrid({
   events,
+  homepageOrder,
   onOpenEvent,
   initialRenderCount = HOMEPAGE_INITIAL_RENDER_COUNT,
   onSeeAll,
@@ -53,17 +58,23 @@ export function LocalEventsGrid({
   /** See All passes the full persisted list — keep server editorial order. */
   const usePersistedOrder =
     events.length > 0 && initialRenderCount >= events.length;
+  /** Phase 5 — edition curation already balanced the homepage slice. */
+  const useCuratedHomepageOrder = Boolean(homepageOrder?.length);
   /** TEMPORARY — Eventbrite-only test: skip client re-scoring, use persisted order. */
   const eventbriteOnlyTest =
     events.length > 0 && events.every((e) => e.sourceId === "eventbrite");
   const published =
-    usePersistedOrder || eventbriteOnlyTest
-      ? events
-      : orderEventsForEdition(events);
+    useCuratedHomepageOrder
+      ? homepageOrder!
+      : usePersistedOrder || eventbriteOnlyTest
+        ? events
+        : orderEventsForEdition(events);
   const visible =
-    usePersistedOrder || eventbriteOnlyTest
-      ? events.slice(0, initialRenderCount)
-      : orderEventsForGrid(events, initialRenderCount);
+    useCuratedHomepageOrder
+      ? homepageOrder!.slice(0, initialRenderCount)
+      : usePersistedOrder || eventbriteOnlyTest
+        ? events.slice(0, initialRenderCount)
+        : orderEventsForGrid(events, initialRenderCount);
   const remainingCount = published.length - visible.length;
   const seeAllTotal = published.length;
 
@@ -141,6 +152,13 @@ export function LocalEventsGrid({
                   : null;
             const overline = [category, badge, timeLine].filter(Boolean).join("  ·  ");
             const note = event.banditNote?.trim() || null;
+            const categoryIcon =
+              event.categoryIcon ??
+              resolveEventCategoryIcon({
+                name: event.name,
+                venue: event.venue,
+                category: event.category,
+              });
             const open = onOpenEvent ? () => onOpenEvent(event) : undefined;
             const isLeft = colIndex === 0;
 
@@ -178,13 +196,13 @@ export function LocalEventsGrid({
                       </Text>
                     ) : null}
 
-                    <Text
+                    <EditorialTitle
+                      icon={categoryIcon}
+                      title={event.name}
                       style={styles.title}
                       numberOfLines={3}
                       maxFontSizeMultiplier={1.15}
-                    >
-                      {event.name}
-                    </Text>
+                    />
 
                     <EventInfoBadgeRow
                       badges={infoBadges}

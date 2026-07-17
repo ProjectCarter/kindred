@@ -7,6 +7,13 @@ import { normalizeLicense } from "./licensing.ts";
 import { countWords } from "./editorial.ts";
 import { getSeason, parseEditionDate } from "./select.ts";
 import type { HeroArtworkProviderDraft } from "./providers.ts";
+import {
+  parseArtworkYearFromText,
+  sanitizeArtworkTitle,
+  sanitizeArtistName,
+  sanitizeArtworkYear,
+  sanitizeEditorialText,
+} from "./sanitizeMetadata.ts";
 
 const APPROVED_LICENSES = new Set(["public_domain", "cc0", "government_work"]);
 
@@ -22,23 +29,26 @@ function isHeroLicense(license: string): boolean {
   return APPROVED_LICENSES.has(normalizeLicense(license));
 }
 
-function parseArtist(raw: string | null | undefined): string {
-  const text = (raw ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  if (!text || /^unknown/i.test(text)) return "Unknown artist";
-  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+function parseArtist(
+  raw: string | null | undefined,
+  filePageTitle?: string | null
+): string {
+  return sanitizeArtistName(raw, filePageTitle);
 }
 
 function parseTitle(candidate: StockSearchCandidate): string {
-  const alt = candidate.altDescription?.trim();
-  if (alt && alt.length >= 4 && !/^file:/i.test(alt)) {
-    return alt.length > 140 ? `${alt.slice(0, 137)}…` : alt;
-  }
-  return "Untitled artwork";
+  return sanitizeArtworkTitle(candidate.altDescription, {
+    objectName: candidate.objectName,
+    filePageTitle: candidate.filePageTitle,
+  });
 }
 
-function parseYear(text: string): string | null {
-  const match = text.match(/\b(1[0-9]{3}|20[0-1][0-9])\b/);
-  return match?.[1] ?? null;
+function parseYear(candidate: StockSearchCandidate): string | null {
+  return sanitizeArtworkYear(null, {
+    title: candidate.altDescription,
+    imageDescription: candidate.altDescription,
+    filePageTitle: candidate.filePageTitle,
+  }) ?? parseArtworkYearFromText(candidate.attributionText ?? "");
 }
 
 function inferCollections(
@@ -65,11 +75,9 @@ export function wikimediaCandidateToDraft(
   const collection = getCollection(collectionId);
   const date = parseEditionDate(editionDate);
   const season = getSeason(date.getMonth() + 1);
-  const artist = parseArtist(candidate.photographerName);
+  const artist = parseArtist(candidate.photographerName, candidate.filePageTitle);
   const artworkTitle = parseTitle(candidate);
-  const year =
-    parseYear(candidate.altDescription ?? "") ??
-    parseYear(candidate.attributionText ?? "");
+  const year = parseYear(candidate);
   const providerId = String(candidate.providerImageId);
   const internalId = `kindred:hero:wikimedia:${providerId}`;
   const wordCount = countWords(aboutArtworkBody);
@@ -105,7 +113,7 @@ export function wikimediaCandidateToDraft(
       license,
       sourceInstitution: "Wikimedia Commons",
       sourceProvider: "wikimedia",
-      mediumHint: candidate.altDescription,
+      mediumHint: sanitizeEditorialText(candidate.altDescription),
       collections,
       tags: candidate.tags ?? [],
     }),

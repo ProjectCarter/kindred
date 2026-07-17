@@ -419,6 +419,11 @@ export function parseTicketmasterEvent(
     date: schedule.startDateTime,
     time: schedule.startTimeIso ?? "See listing",
     category,
+    providerTags: [
+      classification?.segment?.name,
+      classification?.genre?.name,
+      classification?.subGenre?.name,
+    ].filter((tag): tag is string => Boolean(tag?.trim())),
     hasTicketListing: true,
     ticketLinkType: "tickets",
     ticketProviders: ["Ticketmaster"],

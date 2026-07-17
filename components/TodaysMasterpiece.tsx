@@ -7,10 +7,10 @@ import {
 } from "react-native";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
+import { homepageMasterpieceSummary } from "../lib/edition/heroArtwork/homeSummary";
+import { masterpieceTitleLine } from "../lib/edition/heroArtwork/formatTitle";
 import { MasterpieceFrame } from "./MasterpieceFrame";
-import { kindredGold, paper, space } from "../lib/edition/newspaperTheme";
-
-const FOLIO_GUTTER = space.folioGutter;
+import { kindredGold, masterpiece, paper } from "../lib/edition/newspaperTheme";
 
 export type TodaysMasterpieceProps = {
   morningHero: MorningHeroExperience;
@@ -23,8 +23,7 @@ export type TodaysMasterpieceProps = {
 };
 
 /**
- * Today's Masterpiece — homepage teaser only.
- * Artwork, title, artist. Full editorial story opens on tap.
+ * Today's Masterpiece — nearly full-bleed artwork with homepage teaser copy.
  */
 export function TodaysMasterpiece({
   morningHero,
@@ -35,17 +34,19 @@ export function TodaysMasterpiece({
   onImageError,
   style,
 }: TodaysMasterpieceProps) {
-  const imageWidth = containerWidth - FOLIO_GUTTER * 2;
+  const frameWidth = containerWidth - masterpiece.edgeMargin * 2;
+  const imageInnerWidth = frameWidth - masterpiece.frameChrome;
   const heroHeight = heroFrameHeight(
-    imageWidth,
+    imageInnerWidth,
     morningHero.imageWidth,
     morningHero.imageHeight,
-    morningHero.aspectRatio
+    morningHero.aspectRatio,
+    520
   );
 
-  const titleWithYear = morningHero.year
-    ? `${morningHero.artworkTitle} (${morningHero.year})`
-    : morningHero.artworkTitle;
+  const titleWithYear = masterpieceTitleLine(morningHero);
+
+  const summary = homepageMasterpieceSummary(morningHero.aboutArtworkBody);
 
   const content = (
     <>
@@ -56,11 +57,11 @@ export function TodaysMasterpiece({
       <View style={styles.frameWrap}>
         <MasterpieceFrame
           imageUri={imageUri}
-          width={imageWidth}
+          width={frameWidth}
           height={heroHeight}
           imageOpacity={imageOpacity}
           onImageError={onImageError}
-          accessibilityLabel={`${morningHero.artworkTitle} by ${morningHero.artist}`}
+          accessibilityLabel={`${titleWithYear} by ${morningHero.artist}`}
         />
       </View>
 
@@ -71,6 +72,14 @@ export function TodaysMasterpiece({
         <Text style={styles.artist} maxFontSizeMultiplier={1.15}>
           {morningHero.artist}
         </Text>
+        {summary ? (
+          <Text style={styles.summary} maxFontSizeMultiplier={1.15}>
+            {summary}
+            {onOpenMasterpiece ? (
+              <Text style={styles.readMore}> Read more →</Text>
+            ) : null}
+          </Text>
+        ) : null}
       </View>
     </>
   );
@@ -101,39 +110,55 @@ export function TodaysMasterpiece({
 
 const styles = StyleSheet.create({
   section: {
-    paddingHorizontal: FOLIO_GUTTER,
-    marginBottom: 4,
+    marginBottom: 8,
   },
   heading: {
+    paddingHorizontal: masterpiece.edgeMargin,
     fontFamily: "Georgia",
     fontSize: 11,
     lineHeight: 16,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: kindredGold.deep,
+    color: kindredGold.primary,
     fontWeight: "600",
-    marginBottom: 14,
+    marginBottom: 24,
   },
   frameWrap: {
     alignItems: "center",
+    marginBottom: 8,
   },
   copy: {
-    marginTop: 16,
+    paddingHorizontal: masterpiece.edgeMargin,
+    marginTop: 28,
     maxWidth: 560,
   },
   title: {
     fontFamily: "Georgia",
-    fontSize: 20,
-    lineHeight: 28,
-    letterSpacing: -0.25,
+    fontSize: 21,
+    lineHeight: 30,
+    letterSpacing: -0.3,
     color: paper.ink,
     fontWeight: "600",
   },
   artist: {
-    marginTop: 6,
+    marginTop: 12,
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 22,
     color: paper.inkMuted,
+  },
+  summary: {
+    marginTop: 18,
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 27,
+    color: paper.inkBody,
+  },
+  readMore: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 27,
+    color: kindredGold.primary,
+    letterSpacing: 0.1,
   },
 });

@@ -417,7 +417,7 @@ function ClippingCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.sky,
+    backgroundColor: paper.page,
   },
   content: {
     paddingHorizontal: 24,

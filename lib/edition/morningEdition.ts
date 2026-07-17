@@ -1,5 +1,9 @@
 import type { MorningHeroExperience } from "./heroArtwork/types";
 import { normalizeMorningHeroExperience } from "./heroArtwork/normalize";
+import {
+  masterpieceTraceBegin,
+  masterpieceTraceEnd,
+} from "./masterpieceDiagnostics";
 
 /**
  * Client mirror — Morning Edition AI contracts.
@@ -92,9 +96,28 @@ export function parseMorningHeroExperience(
   value: unknown
 ): MorningHeroExperience | null {
   if (!value || typeof value !== "object") return null;
-  return normalizeMorningHeroExperience(
-    value as Partial<MorningHeroExperience> & { attributionText?: string | null }
-  );
+  masterpieceTraceBegin("parser/morningHero");
+  const started = Date.now();
+  try {
+    const parsed = normalizeMorningHeroExperience(
+      value as Partial<MorningHeroExperience> & { attributionText?: string | null }
+    );
+    masterpieceTraceEnd("parser/morningHero", {
+      ms: Date.now() - started,
+      ok: Boolean(parsed),
+    });
+    return parsed;
+  } catch (error) {
+    masterpieceTraceEnd("parser/morningHero", {
+      ms: Date.now() - started,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    if (__DEV__) {
+      console.warn("[morningHero:parser] normalize failed — dropping hero", error);
+    }
+    return null;
+  }
 }
 
 export function morningHeroFromEdition(

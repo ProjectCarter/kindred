@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Text,
   View,
@@ -43,6 +43,7 @@ import {
 import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
 import {
   companionForArticle,
+  enrichEditionIntelligenceKnowledgeMemory,
   parseEditionIntelligence,
   type EditionIntelligence,
 } from "../lib/edition/surfaceIntelligence";
@@ -73,6 +74,7 @@ import {
   loadCachedEdition,
   peekMemoryCachedEdition,
   saveCachedEdition,
+  scheduleCachedEditionSave,
   clearCachedEdition,
   type CachedEditionBundle,
 } from "../lib/edition/editionCache";
@@ -94,6 +96,7 @@ import {
 } from "../lib/edition/localEventsRecovery";
 import { recoverTodayInHistory } from "../lib/edition/todayInHistoryRecovery";
 import { recoverStoryOf } from "../lib/edition/storyOfRecovery";
+import { recoverMorningHero } from "../lib/edition/morningHeroRecovery";
 import { metroExpectsStoryOf } from "../lib/edition/storyOfCoverage";
 import { metroKeyFromKindredPlace } from "../lib/location/metroKey";
 import { paper, press } from "../lib/edition/newspaperTheme";
@@ -128,6 +131,11 @@ import {
   updateHomeScroll,
 } from "../lib/edition/homeSession";
 import { markStartup, logStartupSummary } from "../lib/perf/startupTiming";
+import {
+  pipelineStageBegin,
+  pipelineStageEnd,
+  reportStartupPipeline,
+} from "../lib/perf/startupPipeline";
 import { getLaunchSessionOrFetch, getPrimedLaunchUserId } from "../lib/auth/launchSession";
 import {
   assessEditionCompleteness,
@@ -141,6 +149,26 @@ import {
   traceSupabaseEditionSections,
 } from "../lib/perf/coldLaunchTrace";
 import { parseDiscoveryPayload } from "../lib/edition/discovery";
+import {
+  mergeMorningHeroIntoCachedBundle,
+  mergeMorningHeroIntoIntelligence,
+  needsNetworkMorningHeroMerge,
+  resolveMorningHero,
+} from "../lib/edition/resolveMorningHero";
+import {
+  masterpieceTraceAsync,
+} from "../lib/edition/masterpieceDiagnostics";
+
+const EDITION_SECTIONS_HOME_SELECT =
+  "id, section_type, position, headline, body, source_note";
+
+function queryEditionSections(editionId: string) {
+  return supabase
+    .from("edition_sections")
+    .select(EDITION_SECTIONS_HOME_SELECT)
+    .eq("edition_id", editionId)
+    .order("position", { ascending: true });
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -367,6 +395,21 @@ export default function HomeScreen() {
     day: "numeric",
   });
 
+  const morningHeroFromIntel = intelligence?.morningHero ?? null;
+
+  const morningHero = useMemo(() => {
+    if (morningHeroFromIntel) return morningHeroFromIntel;
+
+    const cached = cachedBundleRef.current;
+    if (!cached || (editionId && cached.editionId !== editionId)) return null;
+
+    return (
+      cached.morningHero ??
+      cached.intelligence?.morningHero ??
+      null
+    );
+  }, [morningHeroFromIntel, editionId]);
+
   function logFirstPaintIfNeeded(
     context: string,
     editionComplete?: boolean
@@ -392,6 +435,7 @@ export default function HomeScreen() {
 
     instantHydratedRef.current = true;
     applyCachedBundle(bundle);
+    editionIdRef.current = bundle.editionId;
     setLoading(false);
     markStartup(
       source === "memory" ? "home_instant_cache_paint" : "home_cache_paint"
@@ -414,12 +458,20 @@ export default function HomeScreen() {
     if (!userId) return;
 
     const todayStr = localEditionDate();
+    pipelineStageBegin("cache_load", { source: "layout" });
     const memory = peekMemoryCachedEdition(userId, todayStr);
-    if (memory && tryApplyInstantCache(memory, "memory")) return;
+    if (memory && tryApplyInstantCache(memory, "memory")) {
+      pipelineStageEnd("cache_load", { source: "memory", hit: true });
+      return;
+    }
 
     void loadCachedEdition(userId, todayStr).then((cached) => {
-      if (!cached || !mountedRef.current) return;
-      tryApplyInstantCache(cached, "disk");
+      if (!cached || !mountedRef.current) {
+        pipelineStageEnd("cache_load", { source: "disk", hit: false });
+        return;
+      }
+      const painted = tryApplyInstantCache(cached, "disk");
+      pipelineStageEnd("cache_load", { source: "disk", hit: painted });
     });
   }, []);
 
@@ -429,28 +481,93 @@ export default function HomeScreen() {
   }, [loading, editionId]);
 
   function applyCachedBundle(bundle: CachedEditionBundle): void {
-    cachedBundleRef.current = bundle;
-    setSections(bundle.sections);
-    setEditionDate(bundle.editionDate);
-    setEditionId(bundle.editionId);
-    setLeadStory(bundle.leadStory);
-    setTopStories(bundle.topStories);
-    setBandit(bundle.bandit);
-    setIntelligence(bundle.intelligence);
+    const merged = mergeMorningHeroIntoCachedBundle(bundle);
+    cachedBundleRef.current = merged;
+    editionIdRef.current = merged.editionId;
+    setSections(merged.sections);
+    setEditionDate(merged.editionDate);
+    setEditionId(merged.editionId);
+    setLeadStory(merged.leadStory);
+    setTopStories(merged.topStories);
+    setBandit(merged.bandit);
+    setIntelligence(merged.intelligence);
     freezeEdition({
-      editionId: bundle.editionId,
-      editionDate: bundle.editionDate,
-      discovery: bundle.intelligence?.discovery ?? null,
-      discoveryItems: bundle.intelligence?.discoveryItems ?? null,
-      heroImageId: bundle.heroImageId ?? null,
+      editionId: merged.editionId,
+      editionDate: merged.editionDate,
+      discovery: merged.intelligence?.discovery ?? null,
+      discoveryItems: merged.intelligence?.discoveryItems ?? null,
+      heroImageId: merged.heroImageId ?? null,
     });
-    if (bundle.heroImageId) setFrozenHeroImageId(bundle.heroImageId);
+    if (merged.heroImageId) setFrozenHeroImageId(merged.heroImageId);
     editionFrozenRef.current = true;
     preloadMorningHeroImage(
-      bundle.morningHero ?? bundle.intelligence?.morningHero ?? null
+      resolveMorningHero({
+        intelligence: merged.intelligence,
+        cachedBundle: merged,
+      })
     );
-    const cachedEventCount = countValidEventsInSections(bundle.sections);
+    const cachedEventCount = countValidEventsInSections(merged.sections);
     setLocalEventsStatus(cachedEventCount > 0 ? "ready" : "loading");
+
+    if (
+      !resolveMorningHero({
+        intelligence: merged.intelligence,
+        cachedBundle: merged,
+      })
+    ) {
+      void recoverMorningHero({
+        editionDate: merged.editionDate,
+        intelligence: merged.intelligence,
+        cachedBundle: merged,
+      }).then((result) => applyMorningHeroRecovery(result, loadGen.current));
+    }
+  }
+
+  function applyMorningHeroRecovery(
+    result: Awaited<ReturnType<typeof recoverMorningHero>>,
+    gen: number
+  ): void {
+    if (!result.recovered || !result.morningHero) return;
+    if (!mountedRef.current || gen !== loadGen.current) return;
+
+    setIntelligence(result.intelligence);
+    if (cachedBundleRef.current) {
+      const nextBundle = mergeMorningHeroIntoCachedBundle({
+        ...cachedBundleRef.current,
+        intelligence: result.intelligence,
+        morningHero: result.morningHero,
+      });
+      cachedBundleRef.current = nextBundle;
+      void saveCachedEdition(nextBundle);
+    }
+    preloadMorningHeroImage(result.morningHero);
+  }
+
+  function scheduleMorningHeroRecovery(
+    editionDate: string,
+    intelligence: EditionIntelligence | null,
+    gen: number
+  ): void {
+    if (resolveMorningHero({ intelligence, cachedBundle: cachedBundleRef.current })) {
+      return;
+    }
+    void recoverMorningHero({
+      editionDate,
+      intelligence,
+      cachedBundle: cachedBundleRef.current,
+    }).then((result) => applyMorningHeroRecovery(result, gen));
+  }
+
+  function intelligenceWithPreservedMorningHero(
+    intel: EditionIntelligence,
+    morningEdition?: unknown
+  ): EditionIntelligence {
+    const preserved = resolveMorningHero({
+      intelligence: intel,
+      cachedBundle: cachedBundleRef.current,
+      morningEdition,
+    });
+    return mergeMorningHeroIntoIntelligence(intel, preserved) ?? intel;
   }
 
   function persistSectionsToCache(mergedSections: EditionSection[]): void {
@@ -462,12 +579,12 @@ export default function HomeScreen() {
       cachedAt: Date.now(),
     };
     cachedBundleRef.current = next;
-    void saveCachedEdition(next);
+    scheduleCachedEditionSave(next);
   }
 
   function persistBundleToCache(bundle: CachedEditionBundle): void {
     cachedBundleRef.current = bundle;
-    void saveCachedEdition(bundle);
+    scheduleCachedEditionSave(bundle);
   }
 
   async function maybeRecoverTodayInHistory(params: {
@@ -679,7 +796,15 @@ export default function HomeScreen() {
 
     // Overlap cache read with the editions network query on cold start.
     const shouldHydrateCache =
-      !quiet && !isRefresh && !editionIdRef.current;
+      !quiet &&
+      !isRefresh &&
+      !editionIdRef.current &&
+      !instantHydratedRef.current;
+
+    const prefetchEditionId =
+      cachedBundleRef.current?.editionId ??
+      peekMemoryCachedEdition(user.id, todayStr)?.editionId ??
+      null;
 
     const editionQuery = supabase
       .from("editions")
@@ -690,84 +815,137 @@ export default function HomeScreen() {
       .eq("edition_date", todayStr)
       .maybeSingle();
 
-    let prefetchedSectionsPromise: ReturnType<
-      typeof supabase.from
-    > | null = null;
+    let prefetchedSectionsPromise: ReturnType<typeof queryEditionSections> | null =
+      prefetchEditionId ? queryEditionSections(prefetchEditionId) : null;
 
     const cachePromise = shouldHydrateCache
-      ? loadCachedEdition(user.id, todayStr).then((cached) => {
-          if (
-            cached &&
-            mountedRef.current &&
-            gen === loadGen.current &&
-            !instantHydratedRef.current
-          ) {
-            instantHydratedRef.current = true;
-            applyCachedBundle(cached);
-            setLoading(false);
-            markStartup("home_cache_paint");
-            const completeness = assessEditionCompleteness({
-              sections: cached.sections,
-              intelligence: cached.intelligence,
-              bandit: cached.bandit,
-              leadStory: cached.leadStory,
-              readerLocation: null,
-            });
-            logFirstPaintIfNeeded("repeat_launch", completeness.complete);
-            void maybeRecoverTodayInHistory({
-              userId: user.id,
-              editionId: cached.editionId,
-              editionDate: cached.editionDate,
-              sections: cached.sections,
-              intelligence: cached.intelligence,
-            }).then(async (recovered) => {
-              if (!mountedRef.current || gen !== loadGen.current) return;
-              let nextSections = recovered.sections;
-              let nextIntel = recovered.intelligence;
-              if (
-                recovered.sections !== cached.sections ||
-                recovered.intelligence !== cached.intelligence
-              ) {
-                setSections(nextSections);
-                setIntelligence(nextIntel);
+      ? (() => {
+          const warm =
+            peekMemoryCachedEdition(user.id, todayStr) ??
+            (cachedBundleRef.current?.editionDate === todayStr
+              ? cachedBundleRef.current
+              : null);
+          if (warm) {
+            if (
+              warm &&
+              mountedRef.current &&
+              gen === loadGen.current &&
+              !instantHydratedRef.current
+            ) {
+              instantHydratedRef.current = true;
+              applyCachedBundle(warm);
+              setLoading(false);
+              markStartup("home_cache_paint");
+              const completeness = assessEditionCompleteness({
+                sections: warm.sections,
+                intelligence: warm.intelligence,
+                bandit: warm.bandit,
+                leadStory: warm.leadStory,
+                readerLocation: null,
+              });
+              logFirstPaintIfNeeded("repeat_launch", completeness.complete);
+              if (__DEV__) {
+                console.log("[home] loadEdition: hydrated from warm cache", {
+                  editionId: warm.editionId,
+                  sectionCount: warm.sections.length,
+                });
               }
-              const active = activeLocationRef.current?.place ?? null;
-              const storySections = await maybeRecoverStoryOf({
+            }
+            if (!prefetchedSectionsPromise && warm.editionId) {
+              prefetchedSectionsPromise = queryEditionSections(warm.editionId);
+            }
+            return Promise.resolve(warm);
+          }
+          pipelineStageBegin("cache_load", { source: "fetch_parallel" });
+          return loadCachedEdition(user.id, todayStr).then((cached) => {
+            pipelineStageEnd("cache_load", {
+              source: "fetch_parallel",
+              hit: Boolean(cached),
+            });
+            if (
+              cached &&
+              mountedRef.current &&
+              gen === loadGen.current &&
+              !instantHydratedRef.current
+            ) {
+              instantHydratedRef.current = true;
+              applyCachedBundle(cached);
+              setLoading(false);
+              markStartup("home_cache_paint");
+              const completeness = assessEditionCompleteness({
+                sections: cached.sections,
+                intelligence: cached.intelligence,
+                bandit: cached.bandit,
+                leadStory: cached.leadStory,
+                readerLocation: null,
+              });
+              logFirstPaintIfNeeded("repeat_launch", completeness.complete);
+              void maybeRecoverTodayInHistory({
+                userId: user.id,
                 editionId: cached.editionId,
                 editionDate: cached.editionDate,
-                place: active,
-                sections: nextSections,
+                sections: cached.sections,
+                intelligence: cached.intelligence,
+              }).then(async (recovered) => {
+                if (!mountedRef.current || gen !== loadGen.current) return;
+                let nextSections = recovered.sections;
+                let nextIntel = recovered.intelligence;
+                if (
+                  recovered.sections !== cached.sections ||
+                  recovered.intelligence !== cached.intelligence
+                ) {
+                  setSections(nextSections);
+                  setIntelligence(nextIntel);
+                }
+                const active = activeLocationRef.current?.place ?? null;
+                const storySections = await maybeRecoverStoryOf({
+                  editionId: cached.editionId,
+                  editionDate: cached.editionDate,
+                  place: active,
+                  sections: nextSections,
+                });
+                if (
+                  storySections !== nextSections &&
+                  mountedRef.current &&
+                  gen === loadGen.current
+                ) {
+                  setSections(storySections);
+                }
               });
-              if (
-                storySections !== nextSections &&
-                mountedRef.current &&
-                gen === loadGen.current
-              ) {
-                setSections(storySections);
+              if (__DEV__) {
+                console.log("[home] loadEdition: hydrated from cache", {
+                  editionId: cached.editionId,
+                  sectionCount: cached.sections.length,
+                });
               }
-            });
-            if (__DEV__) {
-              console.log("[home] loadEdition: hydrated from cache", {
-                editionId: cached.editionId,
-                sectionCount: cached.sections.length,
-              });
             }
-          }
-          if (cached?.editionId) {
-            prefetchedSectionsPromise = supabase
-              .from("edition_sections")
-              .select("id, section_type, position, headline, body, source_note")
-              .eq("edition_id", cached.editionId)
-              .order("position", { ascending: true });
-          }
-          return cached;
-        })
+            if (cached?.editionId && !prefetchedSectionsPromise) {
+              prefetchedSectionsPromise = queryEditionSections(cached.editionId);
+            }
+            return cached;
+          });
+        })()
       : Promise.resolve(null);
 
+    pipelineStageBegin("edition_lookup");
     const [cached, editionResult] = await Promise.all([
       cachePromise,
-      editionQuery,
+      (async () => {
+        if (__DEV__) console.log("[generate] fetchEdition editions query BEGIN");
+        const started = Date.now();
+        const result = await editionQuery;
+        if (__DEV__) {
+          console.log("[generate] fetchEdition editions query END", {
+            ms: Date.now() - started,
+            status: (result.data as { status?: string } | null)?.status ?? null,
+          });
+        }
+        return result;
+      })(),
     ]);
+    pipelineStageEnd("edition_lookup", {
+      status: (editionResult.data as { status?: string } | null)?.status ?? null,
+    });
 
     const {
       data: edition,
@@ -824,37 +1002,54 @@ export default function HomeScreen() {
         adjacent,
         jobResult,
         editionError,
+        edition: edition ?? null,
       };
     }
 
     const canUsePrefetchedSections =
-      cached?.editionId === edition.id && prefetchedSectionsPromise != null;
+      prefetchEditionId === edition.id && prefetchedSectionsPromise != null;
 
     let sectionRows: EditionSection[] | null = null;
-    let sectionsError: { message: string } | null = null;
+    pipelineStageBegin("edition_sections", {
+      prefetched: canUsePrefetchedSections,
+    });
+    const sectionsStarted = Date.now();
 
     if (canUsePrefetchedSections && prefetchedSectionsPromise) {
       const prefetched = await prefetchedSectionsPromise;
       if (prefetched.error) {
-        sectionsError = prefetched.error;
+        const sectionsResult = await queryEditionSections(edition.id);
+        if (sectionsResult.error) {
+          throw new Error(sectionsResult.error.message);
+        }
+        sectionRows = (sectionsResult.data as EditionSection[] | null) ?? null;
       } else {
         sectionRows = (prefetched.data as EditionSection[] | null) ?? null;
       }
-    }
-
-    if (!canUsePrefetchedSections || sectionsError) {
-      const sectionsResult = await supabase
-        .from("edition_sections")
-        .select("id, section_type, position, headline, body, source_note")
-        .eq("edition_id", edition.id)
-        .order("position", { ascending: true });
+    } else {
+      if (__DEV__) console.log("[generate] fetchEdition edition_sections query BEGIN");
+      const sectionsResult = await queryEditionSections(edition.id);
+      if (__DEV__) {
+        console.log("[generate] fetchEdition edition_sections query END", {
+          ms: Date.now() - sectionsStarted,
+          count: sectionsResult.data?.length ?? 0,
+        });
+      }
       if (sectionsResult.error) {
         throw new Error(sectionsResult.error.message);
       }
       sectionRows = (sectionsResult.data as EditionSection[] | null) ?? null;
     }
 
+    pipelineStageEnd("edition_sections", {
+      ms: Date.now() - sectionsStarted,
+      count: sectionRows?.length ?? 0,
+      prefetched: canUsePrefetchedSections,
+    });
+
     const loaded = sectionRows ?? [];
+
+    pipelineStageBegin("normalization");
 
     markStartup("home_sections_query_done");
 
@@ -883,33 +1078,30 @@ export default function HomeScreen() {
     );
 
     if (!persistedComplete.complete) {
-      console.warn("[coldLaunch:trace] ready edition incomplete in Supabase", {
-        editionId: edition.id,
-        editionDate: edition.edition_date,
-        sectionCount: loaded.length,
-        sectionTypes: loaded.map((s) => s.section_type),
-        reasons: persistedComplete.reasons,
-        discoveryParsed: Boolean(parseDiscoveryPayload(discoveryRaw)),
-      });
-      const [adjacent, jobResult] = await Promise.all([
-        fetchAdjacentEditions(user.id, todayStr),
-        supabase
-          .from("generation_jobs")
-          .select("status, last_error")
-          .eq("user_id", user.id)
-          .eq("edition_date", todayStr)
-          .maybeSingle(),
-      ]);
-      return {
-        kind: "not_ready" as const,
-        user,
-        adjacent,
-        jobResult,
-        editionError: null,
-        incompleteReady: true,
-        incompleteReasons: persistedComplete.reasons,
-      };
+      console.warn(
+        "[home] loadEdition: status=ready edition has completeness gaps — painting anyway",
+        {
+          editionId: edition.id,
+          editionDate: edition.edition_date,
+          sectionCount: loaded.length,
+          sectionTypes: loaded.map((s) => s.section_type),
+          reasons: persistedComplete.reasons,
+        }
+      );
     }
+
+    if (__DEV__) {
+      console.log("[generate] fetchEdition completeness evaluation", {
+        complete: persistedComplete.complete,
+        reasons: persistedComplete.reasons,
+      });
+    }
+
+    pipelineStageEnd("normalization");
+    pipelineStageBegin("completeness");
+    pipelineStageEnd("completeness", {
+      complete: persistedComplete.complete,
+    });
 
     __DEV__ && console.log("[home] loadEdition: edition_sections query", {
       editionId: edition.id,
@@ -931,22 +1123,34 @@ export default function HomeScreen() {
     };
     };
 
-    const result = await loadWithRetry(fetchEdition, {
-      label: "loadEdition",
-      timeoutMs: 10_000,
-      maxAttempts: 2,
-      onAttempt: (attempt, error) => {
-        if (__DEV__) {
-          console.log("[home] loadEdition: attempt", {
-            attempt,
-            error: error?.message ?? null,
-            hasCache: Boolean(cachedBundleRef.current),
-          });
-        }
-      },
-    });
+    const result = await masterpieceTraceAsync("article/fetchEdition", () =>
+      loadWithRetry(fetchEdition, {
+        label: "loadEdition",
+        timeoutMs: instantHydratedRef.current || editionFrozenRef.current ? 8_000 : 10_000,
+        maxAttempts:
+          instantHydratedRef.current || editionFrozenRef.current ? 1 : 2,
+        onAttempt: (attempt, error) => {
+          if (__DEV__) {
+            console.log("[home] loadEdition: attempt", {
+              attempt,
+              error: error?.message ?? null,
+              hasCache: Boolean(cachedBundleRef.current),
+            });
+          }
+        },
+      })
+    );
 
-    if (!mountedRef.current || gen !== loadGen.current) return;
+    if (!mountedRef.current || gen !== loadGen.current) {
+      if (__DEV__) {
+        console.log("[generate] loadEdition superseded — newer fetch won", {
+          gen,
+          current: loadGen.current,
+        });
+      }
+      if (isRefresh && !quiet) setRefreshing(false);
+      return;
+    }
 
     if (!result.ok) {
       if (cachedBundleRef.current || editionFrozenRef.current) {
@@ -1010,6 +1214,32 @@ export default function HomeScreen() {
           }
         );
       }
+      const staleEdition = (payload as { edition?: { morning_edition?: unknown } | null })
+        .edition;
+      if (staleEdition && cachedBundleRef.current) {
+        const recoveredHero = resolveMorningHero({
+          intelligence: cachedBundleRef.current.intelligence,
+          cachedBundle: cachedBundleRef.current,
+          morningEdition: staleEdition.morning_edition,
+        });
+        if (recoveredHero) {
+          const mergedIntel = mergeMorningHeroIntoIntelligence(
+            cachedBundleRef.current.intelligence,
+            recoveredHero
+          );
+          if (mergedIntel !== cachedBundleRef.current.intelligence) {
+            setIntelligence(mergedIntel);
+            const nextBundle = mergeMorningHeroIntoCachedBundle({
+              ...cachedBundleRef.current,
+              intelligence: mergedIntel,
+              morningHero: recoveredHero,
+            });
+            cachedBundleRef.current = nextBundle;
+            void saveCachedEdition(nextBundle);
+            preloadMorningHeroImage(recoveredHero);
+          }
+        }
+      }
       if (!cachedBundleRef.current && !editionFrozenRef.current) {
         setSections([]);
         setEditionDate(null);
@@ -1043,17 +1273,6 @@ export default function HomeScreen() {
     if (mountedRef.current && !activeLocationRef.current) {
       setActiveLocation(active);
     }
-
-    const lead = parseLeadStory((edition as { lead_story?: unknown }).lead_story);
-    const intel = parseEditionIntelligence({
-      bandit: (edition as { bandit?: unknown }).bandit,
-      discovery: (edition as { discovery?: unknown }).discovery,
-      knowledge: (edition as { knowledge?: unknown }).knowledge,
-      memory: (edition as { memory?: unknown }).memory,
-      morning_edition: (edition as { morning_edition?: unknown })
-        .morning_edition,
-      leadStory: lead,
-    });
 
     const builtCity = resolveEditionBuiltCity(
       {
@@ -1135,7 +1354,7 @@ export default function HomeScreen() {
       cachedBundleRef.current,
       edition.id
     );
-    if (staleCachedEdition || isRefresh) {
+    if (staleCachedEdition || (isRefresh && !quiet)) {
       editionFrozenRef.current = false;
       clearEditionFreeze();
       if (staleCachedEdition) {
@@ -1163,11 +1382,36 @@ export default function HomeScreen() {
       editionDate: edition.edition_date,
     });
     const narrativeFrozen = frozenNow && editionFrozenRef.current;
-    const patchEventsOnly = eventsOnly || (quiet && narrativeFrozen);
-    const syncAfterCache = narrativeFrozen && !isRefresh && !eventsOnly;
+    const softRefresh =
+      isRefresh && quiet && narrativeFrozen && editionFrozenRef.current;
+    const patchEventsOnly =
+      eventsOnly || (quiet && narrativeFrozen && !softRefresh);
+    const syncAfterCache =
+      (narrativeFrozen && !isRefresh && !eventsOnly) || softRefresh;
     const cacheMatchesNetwork =
       syncAfterCache &&
       networkSectionsMatchCache(cachedBundleRef.current, edition.id, loaded);
+
+    const lead = parseLeadStory((edition as { lead_story?: unknown }).lead_story);
+    const deferKnowledgeMemory = !patchEventsOnly && !syncAfterCache;
+    let intel = intelligenceWithPreservedMorningHero(
+      parseEditionIntelligence(
+        {
+          bandit: (edition as { bandit?: unknown }).bandit,
+          discovery: (edition as { discovery?: unknown }).discovery,
+          knowledge: (edition as { knowledge?: unknown }).knowledge,
+          memory: (edition as { memory?: unknown }).memory,
+          morning_edition: (edition as { morning_edition?: unknown })
+            .morning_edition,
+          leadStory: lead,
+        },
+        { deferKnowledgeMemory }
+      ),
+      (edition as { morning_edition?: unknown }).morning_edition
+    );
+
+    // Never block first paint / generate-edition completion on recovery fetch.
+    scheduleMorningHeroRecovery(edition.edition_date, intel, gen);
 
     let nextSections = loaded;
 
@@ -1179,7 +1423,31 @@ export default function HomeScreen() {
       setSections(nextSections);
     } else if (syncAfterCache && cacheMatchesNetwork) {
       nextSections = cachedBundleRef.current?.sections ?? loaded;
-      if (__DEV__) {
+      const shouldMergeMorningHero = needsNetworkMorningHeroMerge({
+        networkIntelligence: intel,
+        onScreenIntelligence: cachedBundleRef.current?.intelligence ?? null,
+        cachedBundle: cachedBundleRef.current,
+      });
+      if (shouldMergeMorningHero) {
+        const networkHero = resolveMorningHero({ intelligence: intel });
+        setIntelligence(intel);
+        if (networkHero && cachedBundleRef.current) {
+          const nextBundle = mergeMorningHeroIntoCachedBundle({
+            ...cachedBundleRef.current,
+            intelligence: intel,
+            morningHero: networkHero,
+          });
+          cachedBundleRef.current = nextBundle;
+          void saveCachedEdition(nextBundle);
+          preloadMorningHeroImage(networkHero);
+        }
+        if (__DEV__) {
+          console.log(
+            "[home] loadEdition: merged network morningHero during cache sync",
+            { artworkId: networkHero?.artworkId ?? null }
+          );
+        }
+      } else if (__DEV__) {
         console.log("[home] loadEdition: network verified cache — no UI churn");
       }
     } else if (syncAfterCache) {
@@ -1225,7 +1493,7 @@ export default function HomeScreen() {
         morningHero: intel.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
       };
       cachedBundleRef.current = bundle;
-      void saveCachedEdition(bundle);
+      scheduleCachedEditionSave(bundle);
     } else {
       setSections(loaded);
       nextSections = loaded;
@@ -1335,6 +1603,8 @@ export default function HomeScreen() {
 
     setLoading(false);
     setRefreshing(false);
+    pipelineStageBegin("first_paint");
+    pipelineStageEnd("first_paint");
     if (!startupSummaryLoggedRef.current) {
       markStartup("home_first_paint");
       logFirstPaintIfNeeded(
@@ -1343,12 +1613,34 @@ export default function HomeScreen() {
           : "cold_launch",
         completeness.complete
       );
+      reportStartupPipeline(
+        instantHydratedRef.current || cachedBundleRef.current
+          ? "warm_launch"
+          : "cold_launch"
+      );
     } else if (__DEV__) {
       markStartup("home_network_verified");
+      reportStartupPipeline(isRefresh ? "pull_to_refresh" : "background_sync");
     }
 
     void (async () => {
       if (!mountedRef.current || gen !== loadGen.current) return;
+
+      pipelineStageBegin("background_sync");
+
+      if (deferKnowledgeMemory) {
+        const enriched = enrichEditionIntelligenceKnowledgeMemory(intel, {
+          knowledge: (edition as { knowledge?: unknown }).knowledge,
+          memory: (edition as { memory?: unknown }).memory,
+          leadStory: lead,
+          morning_edition: (edition as { morning_edition?: unknown })
+            .morning_edition,
+        });
+        intel = enriched;
+        if (mountedRef.current && gen === loadGen.current) {
+          setIntelligence(enriched);
+        }
+      }
 
       if (!resetScroll) {
         const targetKey = homeScrollSessionKey(
@@ -1487,8 +1779,8 @@ export default function HomeScreen() {
             bgIntel?.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
         };
         cachedBundleRef.current = bundle;
-        void saveCachedEdition(bundle);
-      } else if (bgSections.length > 0) {
+      scheduleCachedEditionSave(bundle);
+    } else if (bgSections.length > 0) {
         persistSectionsToCache(bgSections);
       }
 
@@ -1511,6 +1803,8 @@ export default function HomeScreen() {
           }
         },
       });
+
+      pipelineStageEnd("background_sync");
     })();
     } catch (err) {
       if (__DEV__) {
@@ -1691,8 +1985,22 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, [loadEdition]);
 
+  function handleHomeRefresh() {
+    // Keep the printed paper visible — sync quietly under the refresh spinner.
+    if (editionIdRef.current && sections.length > 0) {
+      setRefreshing(true);
+      void loadEdition({ isRefresh: true, quiet: true });
+      return;
+    }
+    void loadEdition(true);
+  }
+
   async function handleGenerate() {
-    if (generatingRef.current) return;
+    console.log("[generate] ENTER handleGenerate");
+    if (generatingRef.current) {
+      console.log("[generate] EXIT handleGenerate (already running)");
+      return;
+    }
     generatingRef.current = true;
     setGenerating(true);
     setError(null);
@@ -1703,8 +2011,6 @@ export default function HomeScreen() {
     generateAbortRef.current = abort;
     const INVOKE_TIMEOUT_MS = 90_000;
     const timeoutId = setTimeout(() => abort.abort(), INVOKE_TIMEOUT_MS);
-
-    __DEV__ && console.log("[home] generate-edition: start");
 
     try {
       // Always re-resolve — never trust a stale in-memory place for generation.
@@ -1747,17 +2053,42 @@ export default function HomeScreen() {
         });
       }
 
-      const { data, error: invokeError } = await supabase.functions.invoke(
-        "generate-edition",
-        {
-          body: {
-            location: locationPayload(loc),
-            editionDate,
-            temperatureUnit: tempUnit,
-          },
-          signal: abort.signal,
-        }
-      );
+      console.log("[generate] invoke BEGIN");
+      const invokeStarted = Date.now();
+      let invokeTimer: ReturnType<typeof setTimeout> | undefined;
+      const invokeTimeout = new Promise<never>((_, reject) => {
+        invokeTimer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `generate-edition invoke timed out after ${INVOKE_TIMEOUT_MS}ms`
+              )
+            ),
+          INVOKE_TIMEOUT_MS
+        );
+      });
+      let data: unknown;
+      let invokeError: Error | null = null;
+      try {
+        const invokeResult = await Promise.race([
+          supabase.functions.invoke("generate-edition", {
+            body: {
+              location: locationPayload(loc),
+              editionDate,
+              temperatureUnit: tempUnit,
+            },
+            signal: abort.signal,
+          }),
+          invokeTimeout,
+        ]);
+        data = invokeResult.data;
+        invokeError = invokeResult.error;
+      } finally {
+        if (invokeTimer) clearTimeout(invokeTimer);
+        console.log("[generate] invoke END", {
+          ms: Date.now() - invokeStarted,
+        });
+      }
 
       if (!mountedRef.current || abort.signal.aborted) return;
 
@@ -1834,8 +2165,10 @@ export default function HomeScreen() {
       editionFrozenRef.current = false;
       clearEditionFreeze();
       resetScrollOnLoadRef.current = true;
+      console.log("[generate] loadEdition BEGIN");
+      const loadStarted = Date.now();
       await loadEdition(true);
-      __DEV__ && console.log("[home] generate-edition: loadEdition finished");
+      console.log("[generate] loadEdition END", { ms: Date.now() - loadStarted });
     } catch (err) {
       if (!mountedRef.current) return;
       // Timeout / explicit abort — do not treat as a generic stumble when we
@@ -1863,12 +2196,15 @@ export default function HomeScreen() {
           : friendly
       );
     } finally {
+      console.log("[generate] finally ENTER");
       clearTimeout(timeoutId);
       if (generateAbortRef.current === abort) {
         generateAbortRef.current = null;
       }
       generatingRef.current = false;
       if (mountedRef.current) setGenerating(false);
+      console.log("[generate] setGenerating false");
+      console.log("[generate] EXIT handleGenerate");
     }
   }
 
@@ -2044,7 +2380,7 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => void loadEdition(true)}
+            onRefresh={() => void handleHomeRefresh()}
             tintColor={paper.terracotta}
             colors={[paper.terracotta]}
           />
@@ -2212,9 +2548,9 @@ export default function HomeScreen() {
               memoryNote={intelligence?.memoryNote}
               morningOpening={intelligence?.morningOpening}
               morningBriefing={intelligence?.morningBriefing}
-              morningHero={intelligence?.morningHero}
+              morningHero={morningHero}
               onOpenMasterpiece={() => {
-                const hero = intelligence?.morningHero;
+                const hero = morningHero;
                 if (!hero) return;
                 persistHomeScrollNow();
                 openMasterpiece(router, hero, {

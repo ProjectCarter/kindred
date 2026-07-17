@@ -20,8 +20,12 @@ import { getCollection } from "./collections.ts";
 import type { HeroArtworkSelectionContext } from "./types.ts";
 import { getSeason, parseEditionDate } from "./select.ts";
 import { hostHeroArtworkImage } from "./hosting.ts";
+import {
+  sanitizeArtworkTitle,
+  sanitizeArtistName,
+} from "./sanitizeMetadata.ts";
 
-const MIN_LIBRARY_GROWTH_TARGET = 5;
+const MIN_LIBRARY_GROWTH_TARGET = 2;
 const MAX_DISCOVERY_ATTEMPTS = 12;
 
 export type GrowHeroArtworkLibraryInput = {
@@ -98,8 +102,14 @@ export async function growHeroArtworkLibrary(
         continue;
       }
 
-      const artist = candidate.photographerName?.trim() || "Unknown artist";
-      const title = candidate.altDescription?.trim() || "Untitled artwork";
+      const artist = sanitizeArtistName(
+        candidate.photographerName,
+        candidate.filePageTitle
+      );
+      const title = sanitizeArtworkTitle(candidate.altDescription, {
+        objectName: candidate.objectName,
+        filePageTitle: candidate.filePageTitle,
+      });
 
       const grounding = await groundHeroArtworkMetadata(admin, {
         artist,

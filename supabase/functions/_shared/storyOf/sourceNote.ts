@@ -5,6 +5,23 @@
 
 import type { CityArticleSnapshot } from "./types.ts";
 
+/** Correct known bad URLs persisted before the Gilbert image fix. */
+const GILBERT_PRIMARY_URL =
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Gilbert-Gilbert_Water_Tower-1925.jpg/960px-Gilbert-Gilbert_Water_Tower-1925.jpg";
+
+const KNOWN_IMAGE_URL_CORRECTIONS: Record<string, string> = {
+  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Gilbert_Water_Tower%2C_Gilbert%2C_Arizona.jpg/960px-Gilbert_Water_Tower%2C_Gilbert%2C_Arizona.jpg":
+    GILBERT_PRIMARY_URL,
+  "https://upload.wikimedia.org/wikipedia/commons/5/5e/Gilbert_Water_Tower%2C_Gilbert%2C_Arizona.jpg":
+    GILBERT_PRIMARY_URL,
+};
+
+function normalizeStoryOfImageUrl(url: string | null | undefined): string | null {
+  const trimmed = url?.trim();
+  if (!trimmed) return null;
+  return KNOWN_IMAGE_URL_CORRECTIONS[trimmed] ?? trimmed;
+}
+
 export type StoryOfSourceNotePayload = {
   kind: "story_of";
   metroKey: string;
@@ -31,7 +48,7 @@ export function cityArticleSourceNote(
     subtitle: article.subtitle.trim(),
     furtherReading: article.furtherReading,
     cityImage: {
-      url: article.image.url,
+      url: normalizeStoryOfImageUrl(article.image.url) ?? article.image.url,
       caption: article.image.caption,
       credit: article.image.credit,
       sourcePageUrl: article.image.sourceUrl,

@@ -135,7 +135,7 @@ export type MorningHeroExperience = {
   /** Legacy alias — older editions may only have attributionText. */
   attributionText?: string;
   collections: HeroArtworkCollectionId[];
-  /** 2–4 sentence homepage summary — pre-authored at ingest. */
+  /** 1–2 sentence homepage teaser — pre-authored at ingest. */
   aboutArtworkBody: string;
   aboutWordCount: number;
   /** Full detail article — loaded on tap only; never rendered on homepage. */

@@ -1,4 +1,5 @@
 import type { MorningHeroExperience } from "./types";
+import { masterpieceTitleLine } from "./formatTitle";
 
 export type ArtworkCreditBlock = {
   title: string;
@@ -37,7 +38,7 @@ export function formatArtworkCreditBlock(
     null;
 
   return {
-    title: morningHero.artworkTitle.trim(),
+    title: masterpieceTitleLine(morningHero),
     artist: morningHero.artist.trim(),
     institution: institutionLine(morningHero.sourceInstitution),
     licenseLabel: licenseLabel(morningHero.license),

@@ -3,6 +3,10 @@
 **On what makes a truthful article stay with someone — hours, days, or years later.**  
 **Ratified foundational document.**
 
+**Operational standard (engineering gates):** `.cursor/rules/kindred-memorable-writing.mdc`
+— the **Lasting Thought Test** applied at publish time. This constitution explains
+*why* memorable writing matters; that rule defines *how* we enforce it in every article.
+
 ---
 
 ## Core thesis

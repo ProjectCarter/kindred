@@ -25,12 +25,6 @@ export type BanditSeasonalEditorial = {
   actionLabel: string;
 };
 
-export const CLOSING_NOTE_POOL = [
-  "I have a feeling you'll be glad you didn't miss this one.",
-  "Some things are only beautiful because they don't last.",
-  "I'll keep looking. See you tomorrow.",
-];
-
 export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> = {
   blueberry_season: {
     headline: "Blueberry Season",
@@ -64,7 +58,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Low rows, easy picking, and plenty of room for kids to treat it like a treasure hunt.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote:
+      "Blueberry rows empty fast on hot weekends — if your basket is still light by mid-morning, walk one more aisle before the best fruit goes home in someone else's bag.",
     mapsQuery: "u-pick blueberry farms",
     actionLabel: "Find nearby farms",
   },
@@ -96,7 +91,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "A flat of seconds for jam, a few perfect specimens for eating out of hand, and whatever cobbler recipe you've been saving.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "A peach that bruises in your tote on the drive home is still the right peach — supermarket fruit was bred to survive shipping, not to taste like this week.",
     mapsQuery: "peach orchards farm stands",
     actionLabel: "Find local peach orchards",
   },
@@ -128,7 +124,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "A late bedtime worth granting once — quiet wonder without a ticket or a line.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote:
+      "The first flash you see after your eyes adjust is the one you'll remember — fireflies do not perform on command, which is exactly why the porch light should stay off tonight.",
     mapsQuery: "nature parks meadows",
     actionLabel: "Find a quiet park nearby",
   },
@@ -160,7 +157,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "If a regional bloom report mentions your county, a forty-minute detour often beats waiting another year.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "The hillside that blazed on Tuesday may look tired by Sunday — wildflowers keep their own calendar, and the best view is almost always the one you take before you feel ready.",
     mapsQuery: "wildflower trails meadows",
     actionLabel: "See nearby wildflowers",
   },
@@ -192,7 +190,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Low stakes, quick rewards, and a tangible result kids can carry to the car.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote:
+      "Strawberries rarely survive the car ride home intact — eat one warm from the row and you'll understand why the season is measured in days, not months.",
     mapsQuery: "u-pick strawberry farms",
     actionLabel: "Find nearby strawberry fields",
   },
@@ -224,7 +223,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Bring cash for small vendors, wear shoes you don't mind getting muddy, and check whether tickets are timed-entry.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote:
+      "The pumpkin you choose in October is the one your stoop remembers all winter — knobby, warty, and imperfect beats photogenic if it survived the hayride home.",
     mapsQuery: "pumpkin patches farms",
     actionLabel: "Find nearby pumpkin patches",
   },
@@ -256,7 +256,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Watch the weather radar, keep distance from active lightning, and never chase storms into open fields.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "When the clouds stack up over the western horizon, pull over somewhere safe — monsoon light turns an ordinary strip mall into something you'll talk about at breakfast.",
     mapsQuery: "scenic overlook sunset",
     actionLabel: "Find a viewpoint nearby",
   },
@@ -288,7 +289,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Even thirty minutes beyond the city glow can double what you're able to see.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "Most people leave the Perseids too early — the hour after midnight, when your neck stops craning and the streaks start arriving in clusters, is the one worth losing sleep for.",
     mapsQuery: "dark sky parks observatories",
     actionLabel: "Find a dark-sky spot nearby",
   },
@@ -320,7 +322,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Safe, scenic, and productive — kids leave with something they picked themselves.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote:
+      "The thunk of an apple landing in your bag is the sound of autumn arriving — ask which block is open before you climb, because orchards rotate rows to protect the trees.",
     mapsQuery: "apple orchards u-pick",
     actionLabel: "Find nearby apple orchards",
   },
@@ -352,7 +355,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Botanical gardens and native-plant preserves often post weekly counts during peak migration.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "Sit still near a late-blooming aster longer than feels necessary — the migration passes through gardens quietly, and the bench view beats chasing a single monarch with your camera.",
     mapsQuery: "butterfly gardens botanical gardens",
     actionLabel: "Find butterfly gardens nearby",
   },
@@ -379,7 +383,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "The day after full bloom, when petals begin to fall — often the most photogenic and least crowded hour.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "The day after full bloom — when petals begin to fall like slow snow — is often more beautiful than the peak, and far easier to find a quiet block for.",
     mapsQuery: "cherry blossom trees parks",
     actionLabel: "Find blossom walks nearby",
   },
@@ -411,7 +416,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Regional lavender farms are often rural — plan for a slow afternoon, not a quick stop.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote:
+      "Even a small lavender planting beside a country road can stop the car — the scent strengthens in late afternoon heat, when the rows look borrowed from somewhere far from here.",
     mapsQuery: "lavender farms",
     actionLabel: "Find lavender farms nearby",
   },
@@ -438,7 +444,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Wear closed shoes, bring water, and respect posted hours — some fields close once petals begin to drop.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[1],
+    closingNote:
+      "Sunflower fields are someone's crop, not just a backdrop — stay on the path, buy a bouquet at the gate, and let one bundle on the kitchen table extend the visit by a week.",
     mapsQuery: "sunflower fields farms",
     actionLabel: "Find sunflower fields nearby",
   },
@@ -465,7 +472,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "The small makers' tables — often the best finds are not on the main aisle.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[2],
+    closingNote:
+      "When the market tents come down in January, the same square returns to ordinary winter — which is exactly why the small makers' table you skipped tonight won't be there next year.",
     mapsQuery: "holiday Christmas markets",
     actionLabel: "Explore holiday markets",
   },
@@ -492,7 +500,8 @@ export const BANDIT_SEASONAL_EDITORIAL: Record<string, BanditSeasonalEditorial> 
         body: "Low cost, high wonder — especially with thermoses and a route short enough for small legs.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[2],
+    closingNote:
+      "The modest after-dinner loop through an older neighborhood — extension cords buried in snow, competing yards done with stubborn pride — is the whole ritual; famous addresses are optional.",
     mapsQuery: "holiday light displays",
     actionLabel: "Find holiday light displays",
   },
@@ -526,7 +535,7 @@ export function fallbackSeasonalEditorial(
         body: "Seasonal windows do not slide — they open, peak, and close on their own calendar.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[2],
+    closingNote: `${headline} opens and closes on its own schedule — take the weekday version this month, before the season you keep meaning to catch becomes last year's regret.`,
     mapsQuery: headline.toLowerCase(),
     actionLabel: "Explore nearby",
   };
@@ -604,16 +613,10 @@ export function composeEventEditorial(event: {
         body: "Confirm hours, parking, and whether tickets are required at the door.",
       },
     ],
-    closingNote: CLOSING_NOTE_POOL[0],
+    closingNote: venue
+      ? `${headline} at ${venue} is the kind of evening that looks optional on paper and obvious afterward — confirm the date once, then treat it like a reservation with yourself.`
+      : `${headline} will not stay on the calendar quietly — check the listing tonight so the date does not slip past while you're still meaning to go.`,
     mapsQuery: venue ? `${headline} ${venue}` : headline,
     actionLabel: venue ? "Open in Maps" : "Find event details",
   };
-}
-
-export function pickClosingNote(seed: string): string {
-  let n = 0;
-  for (let i = 0; i < seed.length; i++) {
-    n = (n + seed.charCodeAt(i) * (i + 3)) % CLOSING_NOTE_POOL.length;
-  }
-  return CLOSING_NOTE_POOL[n];
 }

@@ -1,0 +1,91 @@
+---
+description: Memorable Writing — Lasting Thought Test for every Kindred article (permanent)
+alwaysApply: true
+---
+
+# Memorable Writing — The Lasting Thought Test
+
+**Permanent Kindred editorial law.** Applies to **every article** Kindred publishes —
+alongside the Editorial Constitution, Swap Test, and Unique Conclusions standard.
+
+Kindred does not merely inform. It leaves the reader knowing, noticing, or
+appreciating something they did not before.
+
+When someone finishes reading, they should naturally think:
+
+- *"I never knew that."*
+- *"I'll remember that."*
+
+## The Lasting Thought Test
+
+Before publishing, ask:
+
+**"What is the one idea the reader will remember an hour from now?"**
+
+If there isn't one → **rewrite the article.**
+
+Every article must contain at least one memorable observation, verified historical
+fact, overlooked detail, interesting comparison, or meaningful takeaway.
+
+## Avoid generic endings
+
+Never end with interchangeable lines such as:
+
+- "This remains important today."
+- "It is worth visiting."
+- "It continues to inspire."
+- "This city continues to grow."
+- "This artwork is still admired."
+
+Leave the reader with something **specific** to remember.
+
+## Examples (good)
+
+| Desk | Memorable closing thought |
+| --- | --- |
+| City | "The next time you drive past the Gilbert Water Tower, remember that it once overlooked miles of farmland instead of neighborhoods." |
+| Masterpiece | "The first thing Caravaggio wanted you to notice wasn't the people—it was the light." |
+| History | "Long after the headlines faded, the decisions made that day still shape the world around us." |
+| Recommendation | "Some of the best places in town aren't hidden—they're simply easy to overlook." |
+| Event | "Whether you attend or not, it's another reminder that something interesting is always happening close to home." |
+
+## Editorial philosophy
+
+Kindred is not trying to impress readers. Kindred makes readers **more curious.**
+
+- Every article should **teach**
+- Every article should **reward attention**
+- Every article should feel **carefully edited**, not automatically generated
+
+Readers should finish feeling slightly more connected to their city, history,
+community, surroundings, or the artwork they just experienced.
+
+## Writing style
+
+Calm newspaper prose. Never dramatic for effect. Never poetic filler. Never
+exaggerate. Never invent details. Every sentence earns its place. Every
+paragraph introduces new information. Every article has its own personality.
+
+## Publication gates — all four tests
+
+Every article must pass:
+
+1. **Accuracy Test** — verified facts only (`kindred-editorial-constitution.mdc`)
+2. **Swap Test** — no reusable conclusions (`kindred-unique-conclusions.mdc`)
+3. **Unique Conclusions Test** — original ending belonging only to this article
+4. **Lasting Thought Test** — one memorable idea worth remembering
+
+**Teach first. Inspire second. Respect the reader's time.**
+
+Kindred never publishes an article that merely fills space.
+
+## Engineering gates
+
+| Module | Purpose |
+| --- | --- |
+| `lib/edition/memorableWriting.ts` | Lasting Thought patterns + validation |
+| `supabase/functions/_shared/editorial/memorableWriting.ts` | Server mirror |
+| `scripts/lib/memorableWriting.mjs` | Seed script validation |
+
+Wired into Story of seeding, event golden test, masterpiece detail ingest, and
+Today in History writer prompts.

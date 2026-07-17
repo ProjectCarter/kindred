@@ -48,3 +48,5 @@ export function isGenericEventTitle(title: string): boolean {
   if (/^networking event$/i.test(t)) return true;
   return false;
 }
+
+export { isEditoriallyExcludedListing, isAdultEntertainmentListing } from "../localEvents/familyFriendlyFilter.ts";

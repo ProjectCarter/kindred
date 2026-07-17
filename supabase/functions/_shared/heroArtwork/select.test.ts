@@ -4,12 +4,8 @@ import { selectDailyHeroArtwork } from "./select.ts";
 import type { HeroArtworkRecord } from "./types.ts";
 
 const SAMPLE_ABOUT =
-  "Claude Monet painted this scene during a prolific period of study along the Seine, " +
-  "when Impressionism was still a young and controversial movement in Paris. The work matters " +
-  "because it helped redefine how painters could capture light, atmosphere, and the passing " +
-  "moment rather than polished illusion. It became famous as audiences recognized a new way " +
-  "of seeing everyday beauty in modern life. Monet's brushwork here invites the viewer to " +
-  "linger in color and reflection rather than narrative detail, offering calm at daybreak.";
+  "Monet painted Water Lilies when Impressionism was still a daring experiment — and Paris had not yet learned to trust quick brushwork and open air. " +
+  "The painting still rewards anyone willing to slow down, watch light move across water, and wonder why it endures.";
 
 function sampleArtwork(overrides: Partial<HeroArtworkRecord>): HeroArtworkRecord {
   return {

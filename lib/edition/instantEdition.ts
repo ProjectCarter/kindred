@@ -7,6 +7,7 @@ import type { EditionSection } from "./types";
 import type { CachedEditionBundle } from "./editionCache";
 import { assessEditionCompleteness } from "../perf/editionCompleteness";
 import { localEditionDate } from "./dates";
+import { resolveMorningHero, mergeMorningHeroIntoIntelligence } from "./resolveMorningHero";
 
 /** Stable section identity for diffing cache vs network without full body compare. */
 export function sectionsFingerprint(sections: EditionSection[]): string {
@@ -23,15 +24,25 @@ export function isCachedEditionPaintable(
     return false;
   }
 
+  const morningHero = resolveMorningHero({
+    intelligence: bundle.intelligence,
+    cachedBundle: bundle,
+  });
+
   const completeness = assessEditionCompleteness({
     sections: bundle.sections,
-    intelligence: bundle.intelligence,
+    intelligence: mergeMorningHeroIntoIntelligence(
+      bundle.intelligence,
+      morningHero
+    ),
     bandit: bundle.bandit,
     leadStory: bundle.leadStory,
     readerLocation: null,
   });
 
-  return completeness.complete;
+  // Paint when the full paper is complete, or when narrative hero survived a
+  // catalog-only partial rebuild (sections + masterpiece still on shelf).
+  return completeness.complete || (Boolean(morningHero) && bundle.sections.length > 0);
 }
 
 /** True when network sections match what is already on screen from cache. */

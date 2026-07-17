@@ -4,6 +4,7 @@ import {
   copyMorningHeroFromRecord,
   type MorningHeroExperience,
 } from "./presentation.ts";
+import { validateMorningHeroArticle } from "./articleValidation.ts";
 import {
   freezeHeroArtworkSelection,
   getFrozenHeroArtworkSelection,
@@ -15,6 +16,10 @@ import {
   selectDailyHeroFromPool,
 } from "./ensurePool.ts";
 import { getSeason, parseEditionDate } from "./select.ts";
+import {
+  morningHeroMetadataNeedsRepair,
+  sanitizeMorningHeroExperience,
+} from "./sanitizeRecord.ts";
 
 export type ResolveMorningHeroFromLibraryInput = {
   editionDate: string;
@@ -23,7 +28,7 @@ export type ResolveMorningHeroFromLibraryInput = {
 
 /**
  * Edition-build path — read the permanent library, pick today's artwork, freeze.
- * No Wikimedia, Claude, downloads, or external APIs.
+ * No Wikimedia, Claude, downloads, synthesis, or external APIs.
  */
 export async function resolveMorningHeroFromLibrary(
   admin: SupabaseClient,
@@ -37,7 +42,30 @@ export async function resolveMorningHeroFromLibrary(
     typeof frozen.presentationSnapshot === "object" &&
     "artworkId" in frozen.presentationSnapshot
   ) {
-    return frozen.presentationSnapshot as unknown as MorningHeroExperience;
+    const snapshot =
+      frozen.presentationSnapshot as unknown as MorningHeroExperience;
+    const sanitized = sanitizeMorningHeroExperience(snapshot);
+
+    if (!validateMorningHeroArticle(sanitized)) {
+      console.warn(
+        "[heroArtwork] frozen snapshot failed article validation — not repairing at edition build",
+        { editionDate, artworkId: sanitized.artworkId }
+      );
+      return null;
+    }
+
+    if (morningHeroMetadataNeedsRepair(snapshot, sanitized)) {
+      await freezeHeroArtworkSelection(admin, editionDate, sanitized.artworkId, {
+        selectionContext: frozen.selectionContext,
+        presentation: sanitized,
+      });
+      console.log("[heroArtwork] sanitized metadata in frozen snapshot", {
+        editionDate,
+        artworkId: sanitized.artworkId,
+      });
+    }
+
+    return sanitized;
   }
 
   const rotation = await listRecentHeroArtworkRotation(admin);
@@ -58,7 +86,7 @@ export async function resolveMorningHeroFromLibrary(
 
   const catalog = await listReadyHeroArtworkLibrary(admin);
   if (!catalog.length) {
-    console.warn("[heroArtwork] library empty — no hosted artwork ready", {
+    console.warn("[heroArtwork] library empty — no approved artwork ready", {
       editionDate,
     });
     return null;
@@ -74,28 +102,36 @@ export async function resolveMorningHeroFromLibrary(
   }
 
   const presentation = copyMorningHeroFromRecord(selected, editionDate);
-
   if (!presentation) {
-    console.warn("[heroArtwork] presentation build failed", {
+    console.warn("[heroArtwork] presentation build failed — artwork not fully approved", {
       editionDate,
       artworkId: selected.id,
     });
     return null;
   }
 
+  const publishable = sanitizeMorningHeroExperience(presentation);
+  if (!validateMorningHeroArticle(publishable)) {
+    console.warn("[heroArtwork] selected artwork failed article validation", {
+      editionDate,
+      artworkId: selected.id,
+      title: selected.artworkTitle,
+    });
+    return null;
+  }
+
   await freezeHeroArtworkSelection(admin, editionDate, selected.id, {
     selectionContext: context,
-    presentation,
+    presentation: publishable,
   });
-  await markHeroArtworkUsed(admin, selected.id);
+  await markHeroArtworkUsed(admin, selected.id, editionDate);
 
   console.log("[heroArtwork] daily hero selected from library", {
     editionDate,
     artworkId: selected.id,
     title: selected.artworkTitle,
     artist: selected.artist,
-    hostedUrl: selected.hostedUrl,
   });
 
-  return presentation;
+  return publishable;
 }

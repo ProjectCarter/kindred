@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
   Linking,
@@ -13,10 +14,10 @@ import { StatusBar } from "expo-status-bar";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
 import { formatArtworkCreditBlock } from "../lib/edition/heroArtwork/credits";
-import { renderMasterpieceDetail } from "../lib/edition/heroArtwork/detail";
+import { masterpieceTitleLine } from "../lib/edition/heroArtwork/formatTitle";
+import { resolveMasterpieceDetail } from "../lib/edition/heroArtwork/detail";
 import { MasterpieceFrame } from "./MasterpieceFrame";
-import { MasterpieceLoading } from "./MasterpieceLoading";
-import { kindredGold, paper, press, space } from "../lib/edition/newspaperTheme";
+import { kindredGold, masterpiece, paper, press } from "../lib/edition/newspaperTheme";
 
 export type MasterpieceReaderProps = {
   morningHero: MorningHeroExperience;
@@ -41,8 +42,105 @@ function EditorialSection({
   );
 }
 
+function TextSection({
+  heading,
+  paragraphs,
+  lead = false,
+}: {
+  heading: string;
+  paragraphs: string[];
+  lead?: boolean;
+}) {
+  if (!paragraphs.length) return null;
+
+  return (
+    <EditorialSection heading={heading}>
+      {paragraphs.map((paragraph, index) => (
+        <Text
+          key={`${heading}-${index}`}
+          style={[
+            styles.paragraph,
+            lead && index === 0 ? styles.leadParagraph : null,
+          ]}
+          maxFontSizeMultiplier={1.2}
+        >
+          {paragraph}
+        </Text>
+      ))}
+    </EditorialSection>
+  );
+}
+
+function FullMasterpieceArticle({
+  detail,
+}: {
+  detail: ReturnType<typeof resolveMasterpieceDetail>;
+}) {
+  const sectionByHeading = new Map(
+    detail.sections.map((section) => [section.heading, section])
+  );
+
+  const story = sectionByHeading.get("The Story Behind the Artwork");
+  const reflection =
+    sectionByHeading.get("Editorial Reflection") ??
+    sectionByHeading.get("Editorial Closing");
+
+  return (
+    <>
+      <TextSection
+        heading="Introduction"
+        paragraphs={sectionByHeading.get("Introduction")?.paragraphs ?? []}
+        lead
+      />
+      <TextSection
+        heading="About the Artist"
+        paragraphs={sectionByHeading.get("About the Artist")?.paragraphs ?? []}
+      />
+      {story ? (
+        <TextSection heading={story.heading} paragraphs={story.paragraphs} />
+      ) : null}
+
+      {detail.lookingCloser.length > 0 ? (
+        <EditorialSection heading="Looking Closer">
+          {detail.lookingCloser.map((item, index) => (
+            <Text
+              key={`look-${index}`}
+              style={styles.observation}
+              maxFontSizeMultiplier={1.15}
+            >
+              {item}
+            </Text>
+          ))}
+        </EditorialSection>
+      ) : null}
+
+      <TextSection
+        heading="Historical Context"
+        paragraphs={sectionByHeading.get("Historical Context")?.paragraphs ?? []}
+      />
+
+      {detail.didYouKnow?.trim() ? (
+        <EditorialSection heading="Did You Know?">
+          <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
+            {detail.didYouKnow}
+          </Text>
+        </EditorialSection>
+      ) : null}
+
+      <TextSection
+        heading="Legacy"
+        paragraphs={sectionByHeading.get("Legacy")?.paragraphs ?? []}
+      />
+
+      {reflection ? (
+        <TextSection heading="Editorial Reflection" paragraphs={reflection.paragraphs} />
+      ) : null}
+    </>
+  );
+}
+
 /**
- * Today's Masterpiece 2.0 — Smithsonian-caliber editorial on Kindred paper.
+ * Today's Masterpiece reader — instant shell from frozen edition data.
  */
 export function MasterpieceReader({
   morningHero,
@@ -50,26 +148,22 @@ export function MasterpieceReader({
   backLabel = "← Today's paper",
 }: MasterpieceReaderProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const contentWidth = Math.min(windowWidth, 680);
-  const frameWidth = contentWidth - space.folioGutter * 2;
+  const frameWidth = windowWidth - masterpiece.edgeMargin * 2;
   const heroHeight = heroFrameHeight(
-    frameWidth - 32,
+    frameWidth - masterpiece.frameChrome,
     morningHero.imageWidth,
     morningHero.imageHeight,
     morningHero.aspectRatio,
-    480
+    520
   );
 
-  const detail = renderMasterpieceDetail(morningHero);
+  const detail = useMemo(
+    () => resolveMasterpieceDetail(morningHero),
+    [morningHero]
+  );
   const credit = formatArtworkCreditBlock(morningHero);
 
-  const titleWithYear = morningHero.year
-    ? `${morningHero.artworkTitle} (${morningHero.year})`
-    : morningHero.artworkTitle;
-
-  if (!detail) {
-    return <MasterpieceLoading backLabel={backLabel} onBack={onBack} />;
-  }
+  const titleWithYear = masterpieceTitleLine(morningHero);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -92,13 +186,13 @@ export function MasterpieceReader({
             imageUri={morningHero.hostedUrl}
             width={frameWidth}
             height={heroHeight}
-            accessibilityLabel={`${morningHero.artworkTitle} by ${morningHero.artist}`}
+            accessibilityLabel={`${titleWithYear} by ${morningHero.artist}`}
           />
         </View>
 
-        <View style={[styles.body, { maxWidth: contentWidth }]}>
+        <View style={[styles.body, { maxWidth: windowWidth }]}>
           <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
-            TODAY'S MASTERPIECE
+            🎨 TODAY'S MASTERPIECE
           </Text>
 
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
@@ -109,44 +203,7 @@ export function MasterpieceReader({
             {morningHero.artist}
           </Text>
 
-          <View style={styles.goldRule} />
-
-          {detail.sections.map((section) => (
-            <EditorialSection key={section.heading} heading={section.heading}>
-              {section.paragraphs.map((paragraph, index) => (
-                <Text
-                  key={`${section.heading}-${index}`}
-                  style={[
-                    styles.paragraph,
-                    section.heading === "Introduction" && index === 0
-                      ? styles.leadParagraph
-                      : null,
-                  ]}
-                  maxFontSizeMultiplier={1.2}
-                >
-                  {paragraph}
-                </Text>
-              ))}
-            </EditorialSection>
-          ))}
-
-          <EditorialSection heading="Looking Closer">
-            {detail.lookingCloser.map((item, index) => (
-              <Text
-                key={`look-${index}`}
-                style={styles.observation}
-                maxFontSizeMultiplier={1.15}
-              >
-                {item}
-              </Text>
-            ))}
-          </EditorialSection>
-
-          <EditorialSection heading="Did You Know?">
-            <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
-              {detail.didYouKnow}
-            </Text>
-          </EditorialSection>
+          <FullMasterpieceArticle detail={detail} />
 
           <EditorialSection heading="Artwork Credit">
             <Text style={styles.creditTitle} maxFontSizeMultiplier={1.1}>
@@ -178,15 +235,6 @@ export function MasterpieceReader({
             ) : null}
           </EditorialSection>
 
-          <EditorialSection heading="Visit the Original">
-            <Text style={styles.museumName} maxFontSizeMultiplier={1.15}>
-              {detail.museumName}
-            </Text>
-            <Text style={styles.museumLocation} maxFontSizeMultiplier={1.15}>
-              {detail.museumLocation}
-            </Text>
-          </EditorialSection>
-
           <Pressable
             onPress={onBack}
             style={({ pressed }) => [
@@ -211,11 +259,9 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingBottom: 72,
-    alignItems: "center",
   },
   backRow: {
-    alignSelf: "stretch",
-    paddingHorizontal: space.folioGutter,
+    paddingHorizontal: masterpiece.edgeMargin,
     paddingVertical: 12,
   },
   back: {
@@ -224,12 +270,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   heroWrap: {
-    paddingHorizontal: space.folioGutter,
-    marginBottom: 8,
+    paddingHorizontal: masterpiece.edgeMargin,
+    marginBottom: 12,
   },
   body: {
-    alignSelf: "stretch",
-    paddingHorizontal: space.folioGutter,
+    paddingHorizontal: masterpiece.edgeMargin,
     paddingTop: 20,
   },
   kicker: {
@@ -238,35 +283,30 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 1.5,
     textTransform: "uppercase",
-    color: kindredGold.deep,
+    color: kindredGold.primary,
     fontWeight: "600",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   title: {
     fontFamily: "Georgia",
     fontSize: 30,
     lineHeight: 38,
-    letterSpacing: -0.35,
+    letterSpacing: -0.4,
     color: paper.ink,
     fontWeight: "600",
+    maxWidth: 560,
   },
   artist: {
-    marginTop: 8,
+    marginTop: 10,
+    marginBottom: 6,
     fontFamily: "Georgia",
     fontSize: 17,
     lineHeight: 24,
     color: paper.inkMuted,
   },
-  goldRule: {
-    marginTop: 24,
-    marginBottom: 8,
-    height: 2,
-    backgroundColor: kindredGold.rule,
-    borderRadius: 1,
-  },
   section: {
-    marginTop: 24,
-    paddingTop: 4,
+    marginTop: 28,
+    paddingTop: 2,
   },
   sectionLabel: {
     fontFamily: "Georgia",
@@ -274,7 +314,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     letterSpacing: 1.4,
     textTransform: "uppercase",
-    color: kindredGold.deep,
+    color: kindredGold.primary,
     fontWeight: "600",
     marginBottom: 12,
   },
@@ -287,15 +327,15 @@ const styles = StyleSheet.create({
     maxWidth: 560,
   },
   leadParagraph: {
-    fontSize: 18,
-    lineHeight: 30,
+    fontSize: 19,
+    lineHeight: 32,
   },
   observation: {
     fontFamily: "Georgia",
     fontSize: 16,
-    lineHeight: 26,
+    lineHeight: 27,
     color: paper.inkBody,
-    marginBottom: 10,
+    marginBottom: 12,
     maxWidth: 540,
   },
   creditTitle: {
@@ -323,23 +363,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     textDecorationLine: "underline",
   },
-  museumName: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 26,
-    color: paper.ink,
-    fontWeight: "600",
-  },
-  museumLocation: {
-    marginTop: 4,
-    fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.inkMuted,
-  },
   returnRow: {
-    marginTop: 32,
-    paddingVertical: 12,
+    marginTop: 24,
+    paddingVertical: 10,
   },
   returnText: {
     fontSize: 15,

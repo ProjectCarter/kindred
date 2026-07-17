@@ -25,6 +25,31 @@ function museumDisplayName(institution) {
   return institution.trim();
 }
 
+export function buildHomepageTeaser(input) {
+  const { title, artist, year, period, collection } = input;
+  const yearPhrase = year ? ` (${year})` : "";
+  const periodPhrase = period?.replace(/_/g, " ") || "its moment";
+
+  if (collection === "ukiyo_e") {
+    return (
+      `${artist}'s ${title}${yearPhrase} compresses an entire world into one unforgettable image — bold lines, flat color, and a scene you want to step inside. ` +
+      `It is the kind of print that makes you wonder what daily life looked like centuries ago.`
+    );
+  }
+
+  if (collection === "impressionism") {
+    return (
+      `${title}${yearPhrase} catches light the way memory does — fleeting, layered, and impossible to pin down. ` +
+      `${artist} painted it when Impressionism was still a daring experiment, and it still teaches you to slow down and look.`
+    );
+  }
+
+  return (
+    `${title}${yearPhrase} holds a detail most people walk past — until ${artist} makes you see it. ` +
+    `Created during ${periodPhrase}, it rewards anyone willing to linger for one more minute over coffee.`
+  );
+}
+
 export function buildMasterpieceDetail(input) {
   const {
     title,
@@ -35,17 +60,19 @@ export function buildMasterpieceDetail(input) {
     institution,
     sourceUrl,
     collection,
+    homepageTeaser,
   } = input;
 
   const museumName = museumDisplayName(institution);
   const museumLocation = inferMuseumLocation(institution);
   const yearPhrase = year ? ` around ${year}` : "";
-  const mediumPhrase = medium?.trim() ? medium.trim() : "traditional materials";
+  const mediumPhrase = medium?.trim() ? medium.trim() : "paint and surface";
   const periodPhrase = period?.replace(/_/g, " ") || "its historical moment";
 
   const introduction =
-    `${title} opens quietly and confidently — a work associated with ${artist}${yearPhrase}. ` +
-    `Preserved through ${museumName}'s open collections, it invites unhurried looking before the day begins.`;
+    `Step closer to ${title}, and the homepage glimpse becomes something richer. ` +
+    `${artist} built this work${yearPhrase} not as a caption for a place, but as an invitation to notice how light, structure, and mood can carry a whole afternoon. ` +
+    `What felt radical to its first viewers now reads as a quiet lesson in paying attention.`;
 
   const aboutTheArtist =
     `${artist} is remembered as a significant voice in ${periodPhrase}. ` +
@@ -54,7 +81,7 @@ export function buildMasterpieceDetail(input) {
 
   let storyBehindArtwork =
     `${title} reflects a moment when artists were rethinking how subject, light, and form could carry meaning. ` +
-    `Rendered in ${mediumPhrase}, the work asks the viewer to linger inside atmosphere and structure rather than chase narrative action.\n\n` +
+    `Working in ${mediumPhrase}, ${artist} asks the viewer to linger inside atmosphere and structure rather than chase narrative action.\n\n` +
     `Every passage of the surface — from the brightest highlights to the deepest shadows — suggests deliberate choices about rhythm, balance, and mood.`;
 
   if (collection === "ukiyo_e") {
@@ -72,10 +99,10 @@ export function buildMasterpieceDetail(input) {
     `${title} has remained part of public conversation because it rewards repeated attention. ` +
     `Each viewing can reveal a different balance of color, texture, and structure, which is one reason museum collections continue to share it with new audiences.`;
 
-  const editorialClosing =
-    `The original work is held by ${museumName} in ${museumLocation}. ` +
-    `Kindred presents a mobile-optimized reproduction for morning discovery; the museum remains the authoritative home for the physical artwork and its full catalog record. ` +
-    `Return to it when you can — and until then, let today's masterpiece slow the morning by a minute or two.`;
+  const editorialReflection =
+    `The original ${title} is held by ${museumName} in ${museumLocation}. ` +
+    `Before you leave, look once more at how ${artist} handles light in the central passage of the work — that single choice is often what separates a glance from a memory. ` +
+    `Kindred presents a mobile-optimized reproduction for morning discovery; the museum remains the authoritative home for the physical artwork and its full catalog record.`;
 
   const editorialSections = {
     introduction,
@@ -83,7 +110,8 @@ export function buildMasterpieceDetail(input) {
     storyBehindArtwork,
     historicalContext,
     legacy,
-    editorialClosing,
+    editorialClosing: editorialReflection,
+    editorialReflection,
   };
 
   const sections = [
@@ -95,7 +123,7 @@ export function buildMasterpieceDetail(input) {
     },
     { heading: "Historical Context", paragraphs: [historicalContext] },
     { heading: "Legacy", paragraphs: [legacy] },
-    { heading: "Editorial Closing", paragraphs: [editorialClosing] },
+    { heading: "Editorial Reflection", paragraphs: [editorialReflection] },
   ];
 
   const longStoryBody = [
@@ -104,7 +132,7 @@ export function buildMasterpieceDetail(input) {
     ...storyBehindArtwork.split(/\n{2,}/),
     historicalContext,
     legacy,
-    editorialClosing,
+    editorialReflection,
   ].join("\n\n");
 
   const lookCloserItems = [

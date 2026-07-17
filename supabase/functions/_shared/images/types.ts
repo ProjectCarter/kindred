@@ -103,6 +103,10 @@ export type StockSearchCandidate = {
   tags: string[];
   orientation: ImageOrientation;
   altDescription?: string | null;
+  /** Wikimedia Commons ObjectName — preferred human title when present. */
+  objectName?: string | null;
+  /** Raw Commons File: page title for filename-based title/artist parsing. */
+  filePageTitle?: string | null;
   /** Wikimedia Commons license metadata — preserved for attribution. */
   licenseShortName?: string | null;
   licenseUrl?: string | null;

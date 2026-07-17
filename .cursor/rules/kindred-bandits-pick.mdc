@@ -1,0 +1,68 @@
+---
+description: Bandit's Pick — editorial voice, imagery, and experience verification
+globs: supabase/functions/_shared/bandit/**,lib/edition/bandit*.ts,lib/edition/banditsPickHero.ts,components/EditionReader.tsx
+alwaysApply: false
+---
+
+# Bandit's Picks — Permanent Editorial Rules
+
+Bandit's Pick is Kindred's signature editorial feature. Every morning it
+answers one question:
+
+**"What is genuinely special here, right now?"**
+
+## Core philosophy
+
+**NOT:** "Something happening this time of year."  
+**NOT:** "What business can I recommend?"
+
+**IS:** "What meaningful experience could someone have this week?"
+
+A pick can be a place, event, seasonal moment, natural phenomenon, or local
+tradition — but it must always feel authentic, timely, and worth experiencing.
+
+If a lifelong local would say *"Yep, that's happening right now,"* it passes.  
+If they would say *"That isn't really a thing here,"* it fails.
+
+**Bandit's credibility beats filling the slot.**
+
+## Evidence hierarchy
+
+1. **Verified seasonal experiences** (highest) — monsoon skies, Perseids,
+   wildflower bloom, firefly season, first cool morning, etc.
+2. **Verified local events**
+3. **Verified places and destinations**
+4. **Verified natural phenomena** — parks, preserves, viewpoints, NPS
+5. **Verified community traditions** — markets, light displays, recurring rituals
+
+Implementation: `experienceProfiles.ts`, `localEvidence.ts`, `evidenceEditorial.ts`.
+
+Harvest and venue-tied topics (u-pick, orchards, markets) still require a
+verified anchor. Phenomenon experiences can publish on regional authenticity
+alone, enriched with optional anchors for *where* to catch them.
+
+## Four publish questions
+
+Every pick must answer with verified evidence:
+
+- What is happening?
+- Why is it special right now?
+- Where can I experience it?
+- Why should I go this week?
+
+## Hero photography
+
+- Homepage card and article **share the same hero image**.
+- Specific topics require specific photography — never misleading generics.
+- No verified image → no image.
+
+## Three layers — never repeat
+
+1. **Whisper** (8–20 words) — curiosity only (`whispers.ts`)
+2. **Headline + card excerpt** — experience or anchor hook
+3. **Article body** — satisfies curiosity; never repeats the whisper
+
+## Bandit's voice
+
+*"Psst... don't miss this."* — a local newspaper editor surfacing discoveries,
+not an AI writing seasonal essays.

@@ -1,11 +1,11 @@
 /**
- * Editorial standards for hero artwork — 2–4 polished sentences, never marketing.
+ * Homepage teaser for Today's Masterpiece — 1–2 curiosity-driven sentences.
  */
 
-export const ABOUT_ARTWORK_SENTENCE_MIN = 2;
-export const ABOUT_ARTWORK_SENTENCE_MAX = 4;
+export const ABOUT_ARTWORK_SENTENCE_MIN = 1;
+export const ABOUT_ARTWORK_SENTENCE_MAX = 2;
 export const ABOUT_ARTWORK_WORD_MIN = 35;
-export const ABOUT_ARTWORK_WORD_MAX = 130;
+export const ABOUT_ARTWORK_WORD_MAX = 60;
 
 export function countWords(text: string): number {
   return text
@@ -82,6 +82,15 @@ export function validateAboutArtworkBody(body: string | null | undefined): {
   }
 
   return { valid: true, wordCount, sentenceCount };
+}
+
+/** Library ingest may store long bodies — homepage trims to 1–2 sentences at display. */
+export function hasLibraryAboutArtworkBody(
+  body: string | null | undefined
+): boolean {
+  const trimmed = body?.trim() ?? "";
+  if (!trimmed) return false;
+  return countWords(trimmed) >= ABOUT_ARTWORK_WORD_MIN;
 }
 
 export type AboutArtworkGuidelines = {

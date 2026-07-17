@@ -218,7 +218,7 @@ export async function resolveDailyHeroArtwork(
     selectionContext: { ...context, date: editionDate },
     presentation: presentation ?? undefined,
   });
-  await markHeroArtworkUsed(admin, selected.id);
+  await markHeroArtworkUsed(admin, selected.id, editionDate);
   return selected;
 }
 

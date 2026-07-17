@@ -1,9 +1,16 @@
 /**
  * Editorial standards for Today's Masterpiece detail articles.
+ * Canonical law: docs/editorial/MASTERPIECE_EDITORIAL_STANDARD.md
+ * Cursor rule: .cursor/rules/kindred-masterpiece-editorial.mdc
  * All content is composed at ingest — never at app open.
  */
 
 import { countWords } from "./editorial.ts";
+import {
+  extractLastParagraph,
+  passesUniqueConclusionTest,
+} from "../editorial/uniqueConclusions.ts";
+import { passesLastingThoughtTest } from "../editorial/memorableWriting.ts";
 
 export const LONG_STORY_PARAGRAPH_MIN = 6;
 export const LONG_STORY_PARAGRAPH_MAX = 10;
@@ -73,6 +80,27 @@ export function validateLongStoryBody(body: string | null | undefined): {
       wordCount,
       paragraphs,
       reason: `too_long:${wordCount}`,
+    };
+  }
+
+  const lastParagraph = paragraphs.at(-1) ?? "";
+  if (!passesUniqueConclusionTest(lastParagraph)) {
+    return {
+      valid: false,
+      paragraphCount: paragraphs.length,
+      wordCount,
+      paragraphs,
+      reason: "generic_conclusion",
+    };
+  }
+
+  if (!passesLastingThoughtTest(paragraphs.join("\n\n"))) {
+    return {
+      valid: false,
+      paragraphCount: paragraphs.length,
+      wordCount,
+      paragraphs,
+      reason: "weak_lasting_thought",
     };
   }
 

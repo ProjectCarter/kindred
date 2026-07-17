@@ -86,7 +86,7 @@ const DESK_GUIDANCE: Record<HumanDetailsDesk, string> = {
     "the moment before you start, the quiet before lanes open, what regulars do first. " +
     "Infer only from venue type and verified listing facts.",
   recommendations:
-    "Recommendations desk: where people pause, when locals go, seasonal rhythm, quiet corners, " +
+    "Food & Drink desk: where people pause, when locals go, seasonal rhythm, quiet corners, " +
     "how light or sound shifts through the day. Never invent menu items, smells, or popularity.",
   bandits_pick:
     "Bandit's Pick: one experiential observation that makes the reader feel the moment — " +

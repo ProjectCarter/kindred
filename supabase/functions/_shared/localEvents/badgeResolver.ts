@@ -64,6 +64,8 @@ export type EventBadgeSignals = {
   date?: string;
   time?: string;
   eventCategory?: EventCategory | null;
+  /** Provider classification tags — segment, genre, organizer labels. */
+  providerTags?: string[];
 
   venueCategory?: VenueCategory | null;
   admissionCost?: "free" | "paid" | null;
@@ -570,6 +572,7 @@ export type EventBadgeSignalInput = {
   date?: string;
   time?: string;
   category?: EventCategory | null;
+  providerTags?: string[];
   banditNote?: string | null;
   hasTicketListing?: boolean;
   ticketLinkType?: "tickets" | "more_info" | null;
@@ -614,6 +617,7 @@ export function buildEventBadgeSignals(
     date: input.date,
     time: input.time,
     eventCategory: input.category ?? null,
+    providerTags: input.providerTags?.filter(Boolean),
     venueCategory,
     admissionCost,
     parkingInfo: input.parkingInfo ?? null,

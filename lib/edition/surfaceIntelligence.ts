@@ -74,17 +74,29 @@ export type EditionIntelligence = {
   banditsPick: BanditsPick | null;
 };
 
-export function parseEditionIntelligence(row: {
-  bandit?: unknown;
-  discovery?: unknown;
-  knowledge?: unknown;
-  memory?: unknown;
-  morning_edition?: unknown;
-  leadStory?: LeadStory | null;
-}): EditionIntelligence {
+export type ParseEditionIntelligenceOptions = {
+  /** Skip knowledge + memory JSON parse on the critical path; enrich in background. */
+  deferKnowledgeMemory?: boolean;
+};
+
+export function parseEditionIntelligence(
+  row: {
+    bandit?: unknown;
+    discovery?: unknown;
+    knowledge?: unknown;
+    memory?: unknown;
+    morning_edition?: unknown;
+    leadStory?: LeadStory | null;
+  },
+  options?: ParseEditionIntelligenceOptions
+): EditionIntelligence {
   const discovery = parseDiscoveryPayload(row.discovery);
-  const knowledge = parseKnowledgePayload(row.knowledge);
-  const memory = parseMemoryPayload(row.memory);
+  const knowledge = options?.deferKnowledgeMemory
+    ? null
+    : parseKnowledgePayload(row.knowledge);
+  const memory = options?.deferKnowledgeMemory
+    ? null
+    : parseMemoryPayload(row.memory);
   const morning = parseMorningEditionPayload(row.morning_edition);
   const bandit = parseBanditPayload(row.bandit);
 
@@ -176,6 +188,41 @@ export function parseEditionIntelligence(row: {
     leadWhyChosen: null,
     leadContinuityKicker,
     banditsPick: banditsPick(bandit),
+  };
+}
+
+/** Parse knowledge + memory after first paint — fills fields deferred at launch. */
+export function enrichEditionIntelligenceKnowledgeMemory(
+  base: EditionIntelligence,
+  row: {
+    knowledge?: unknown;
+    memory?: unknown;
+    leadStory?: LeadStory | null;
+    morning_edition?: unknown;
+  }
+): EditionIntelligence {
+  const knowledge = parseKnowledgePayload(row.knowledge);
+  const memory = parseMemoryPayload(row.memory);
+  const morning = parseMorningEditionPayload(row.morning_edition);
+  const lead = row.leadStory ?? null;
+
+  const since = memorySinceYouLastRead(memory);
+  const memoryNote =
+    since?.summary?.trim() ||
+    (since?.title?.trim() ? since.title.trim() : null);
+
+  const packet = lead ? knowledge?.byStoryKey?.[lead.id] ?? null : null;
+  const whyFacet = whyThisMatters(packet);
+  const leadWhyThisMatters =
+    whyFacet?.summary?.trim() || morning?.beats?.leadWhy || null;
+
+  return {
+    ...base,
+    knowledge,
+    memory,
+    memoryNote,
+    leadWhyThisMatters,
+    leadContinuityKicker: continuityKickerForLead(memory, lead),
   };
 }
 

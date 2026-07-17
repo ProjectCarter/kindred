@@ -1,0 +1,84 @@
+---
+description: The Story of [City Name] — signature civic editorial feature (v1)
+alwaysApply: false
+globs:
+  - "**/storyOf/**"
+  - "**/StoryOfSection*"
+  - "**/city-articles/**"
+  - "**/kindred_city_articles*"
+  - "**/storyOfEditorial*"
+---
+
+# The Story of [City Name] — Editorial Standard (v1)
+
+Permanent name: **The Story of [City Name]** (e.g. The Story of Gilbert).
+
+A timeless Sunday newspaper feature — not news, not travel marketing, not a tourism brochure.
+
+## Purpose
+
+After Events, Activities, and Recommendations, this section creates an editorial pause:
+depth, context, and local pride before Today in History and Bandit's Picks.
+Alternates **doing** with **understanding**.
+
+## Homepage order
+
+1. Today's Masterpiece → 2. Local Events → 3. Activities → 4. Recommendations →
+5. **The Story of [City]** → 6. Today in History → 7. Bandit's Picks
+
+## Homepage card (in order)
+
+1. Historic photograph (verified, credited)
+2. Title: `The Story of [City Name]`
+3. Unique editorial subtitle (captures city identity)
+4. Short preview paragraph (first paragraph of body)
+5. Tap → full article
+
+## Article length
+
+- **Target: 4–8 substantial paragraphs**
+- Quality over word count — never pad
+- Every paragraph introduces new information; never repeat facts or ideas
+
+## Editorial structure (8 sections → up to 8 paragraphs)
+
+1. Introduction — where, identity, why it matters
+2. Origins — founding, naming, original purpose
+3. Growth & Transformation — turning points, industries, population
+4. Landmarks & Identity — places that define the city
+5. Culture Today — what makes it unique now
+6. Did You Know? — memorable verified facts (in prose)
+7. Legacy — why history still matters today
+8. Further Reading — authoritative sources (Wikipedia secondary only)
+
+## Voice
+
+Experienced newspaper feature writer: warm, educational, timeless, interesting.
+Never academic, robotic, repetitive, or generic filler.
+
+## Verification
+
+Every statement historically accurate. Never guess, infer, invent, or exaggerate.
+If it cannot be verified, leave it out. Trust beats length.
+
+## Images
+
+One historically accurate image per city — Wikimedia Commons, Library of Congress,
+official city/state archives, NPS, or properly licensed landmark photography.
+Never AI-generated, fabricated, or fictional. Always credit the source.
+
+## Architecture
+
+- `kindred_city_articles` library keyed by `metro_key`
+- Copied into `edition_sections` at build time — **no daily AI rewrite**
+- `section_type`: `story_of`
+
+## Golden test
+
+Reader finishes thinking: *"I've lived here for years... and I never knew that."*
+
+**Swap Test (conclusions):** The Legacy paragraph must pass
+`kindred-unique-conclusions.mdc` — city-specific, never a reusable wrap-up.
+
+**Lasting Thought Test:** The full article must leave the reader with one
+memorable idea (`kindred-memorable-writing.mdc`).

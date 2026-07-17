@@ -20,6 +20,10 @@ import {
 import { attachEventHorizon } from "./horizon.ts";
 import { buildEditorialDiscoveryStrategies } from "./searchStrategies.ts";
 import { pickOfficialWebsiteFromUrls } from "./officialWebsite.ts";
+import {
+  loadEventsCatalogForEdition,
+  registerEventsMetro,
+} from "./eventsCatalogSync.ts";
 
 export type LocalEventLocation = {
   lat: number;
@@ -253,9 +257,6 @@ export async function getLocalEvents(
   options?: LocalEventsFetchOptions
 ): Promise<LocalEvent[]> {
   if (options?.admin) {
-    const { loadEventsCatalogForEdition, registerEventsMetro } = await import(
-      "./eventsCatalogSync.ts"
-    );
     await registerEventsMetro(options.admin, location);
     return loadEventsCatalogForEdition(options.admin, location, options);
   }

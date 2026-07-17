@@ -90,7 +90,7 @@ export function PaperLoading({ hint = "Opening today’s paper…" }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     flex: 1,
-    backgroundColor: paper.sky,
+    backgroundColor: paper.page,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 36,

@@ -1,10 +1,18 @@
 import type { HeroArtworkCollectionId } from "./collections.ts";
-import { validateAboutArtworkBody } from "./editorial.ts";
+import { hasLibraryAboutArtworkBody, validateAboutArtworkBody } from "./editorial.ts";
+import { isApprovedMasterpieceLibraryRecord } from "./libraryValidation.ts";
 import {
   isMasterpieceDetailComplete,
   splitStoryParagraphs,
   type MasterpieceDetailFields,
 } from "./detailEditorial.ts";
+import {
+  isFrozenDetailComplete,
+  synthesizeMasterpieceDetail,
+} from "./detailTemplate.ts";
+import { resolveArtworkYear } from "./resolveYear.ts";
+import { buildValidatedMasterpieceDetail } from "./articleDetail.ts";
+import { masterpieceDetailIsCorrupt } from "./articleValidation.ts";
 import type { HeroArtworkRecord } from "./types.ts";
 
 export type MasterpieceEditorialSections = {
@@ -13,7 +21,9 @@ export type MasterpieceEditorialSections = {
   storyBehindArtwork: string;
   historicalContext: string;
   legacy: string;
+  /** @deprecated Use editorialReflection — kept for stored JSON compatibility. */
   editorialClosing: string;
+  editorialReflection?: string;
 };
 
 export type MasterpieceArticleSection = {
@@ -98,8 +108,12 @@ function sectionsFromEditorial(
       paragraphs: paragraphsFromText(editorial.legacy),
     },
     {
-      heading: "Editorial Closing",
-      paragraphs: paragraphsFromText(editorial.editorialClosing),
+      heading: "Editorial Reflection",
+      paragraphs: paragraphsFromText(
+        editorial.editorialReflection?.trim() ||
+          editorial.editorialClosing?.trim() ||
+          ""
+      ),
     },
   ].filter((section) => section.paragraphs.length > 0);
 }
@@ -130,13 +144,13 @@ function legacySectionsFromBody(
       paragraphs: paragraphs.slice(3, 4),
     },
     { heading: "Legacy", paragraphs: paragraphs.slice(4, 5) },
-    { heading: "Editorial Closing", paragraphs: paragraphs.slice(5) }
+    { heading: "Editorial Reflection", paragraphs: paragraphs.slice(5) }
   );
 
   return sections.filter((section) => section.paragraphs.length > 0);
 }
 
-export function detailFromRecord(
+export function detailFromApprovedRecord(
   artwork: HeroArtworkRecord
 ): MasterpieceDetail | null {
   const fields: MasterpieceDetailFields = {
@@ -168,7 +182,7 @@ export function detailFromRecord(
 
   if (sections.length === 0) return null;
 
-  return {
+  const detail: MasterpieceDetail = {
     sections,
     lookingCloser: artwork.lookCloserItems.map((item) => item.trim()),
     didYouKnow: artwork.didYouKnow!.trim(),
@@ -178,26 +192,73 @@ export function detailFromRecord(
     officialArtworkUrl: artwork.officialArtworkUrl?.trim() || null,
     sourceReferences: (artwork.sourceReferences ?? []).map((ref) => ref.trim()),
   };
+
+  if (!isFrozenDetailComplete(detail) || masterpieceDetailIsCorrupt(detail)) {
+    return null;
+  }
+
+  return detail;
+}
+
+/** Ingest / backfill only — may synthesize thin rows. Never call at edition build. */
+export function detailFromRecord(
+  artwork: HeroArtworkRecord
+): MasterpieceDetail | null {
+  const approved = detailFromApprovedRecord(artwork);
+  if (approved) return approved;
+
+  if (!hasLibraryAboutArtworkBody(artwork.aboutArtworkBody)) return null;
+
+  const detail = buildValidatedMasterpieceDetail({
+    artworkTitle: artwork.artworkTitle,
+    artist: artwork.artist,
+    year: artwork.year,
+    sourceInstitution: artwork.sourceInstitution,
+    sourceUrl: artwork.sourceUrl,
+    aboutArtworkBody: artwork.aboutArtworkBody ?? "",
+    collections: artwork.collections,
+  });
+
+  if (!isFrozenDetailComplete(detail) || masterpieceDetailIsCorrupt(detail)) {
+    return synthesizeMasterpieceDetail({
+      artworkTitle: artwork.artworkTitle,
+      artist: artwork.artist,
+      year: artwork.year,
+      sourceInstitution: artwork.sourceInstitution,
+      sourceUrl: artwork.sourceUrl,
+      aboutArtworkBody: artwork.aboutArtworkBody ?? "",
+      collections: artwork.collections,
+    });
+  }
+
+  return detail;
+}
+
+export function isMorningHeroDetailComplete(
+  detail: MasterpieceDetail | null | undefined
+): boolean {
+  return isFrozenDetailComplete(detail);
+}
+
+function defaultHeroDimensions(artwork: HeroArtworkRecord): {
+  imageWidth: number;
+  imageHeight: number;
+  aspectRatio: number;
+} {
+  const imageWidth = artwork.imageWidth ?? 1400;
+  const aspectRatio = artwork.aspectRatio ?? 1.5;
+  const imageHeight =
+    artwork.imageHeight ?? Math.round(imageWidth / aspectRatio);
+  return { imageWidth, imageHeight, aspectRatio };
 }
 
 export function isCompleteLibraryRecord(
   artwork: HeroArtworkRecord
 ): boolean {
-  if (!artwork.hostedUrl?.trim() || !artwork.storagePath?.trim()) return false;
-  if (!artwork.imageWidth || !artwork.imageHeight || !artwork.aspectRatio) {
-    return false;
-  }
-  if (!artwork.artworkTitle?.trim() || !artwork.artist?.trim()) return false;
-  if (!artwork.sourceInstitution?.trim() || !artwork.sourceUrl?.trim()) {
-    return false;
-  }
-  if (!artwork.license?.trim() || !artwork.attributionText?.trim()) {
-    return false;
-  }
-  const about = validateAboutArtworkBody(artwork.aboutArtworkBody);
-  if (!about.valid) return false;
-
-  return detailFromRecord(artwork) != null;
+  return (
+    isApprovedMasterpieceLibraryRecord(artwork) &&
+    detailFromApprovedRecord(artwork) != null
+  );
 }
 
 export function copyMorningHeroFromRecord(
@@ -206,28 +267,38 @@ export function copyMorningHeroFromRecord(
 ): MorningHeroExperience | null {
   if (!isCompleteLibraryRecord(artwork)) return null;
 
-  const about = validateAboutArtworkBody(artwork.aboutArtworkBody);
-  const detail = detailFromRecord(artwork);
-  if (!about.valid || !artwork.aboutArtworkBody?.trim() || !detail) return null;
+  const body = artwork.aboutArtworkBody?.trim() ?? "";
+  if (!hasLibraryAboutArtworkBody(body)) return null;
+  const detail = detailFromApprovedRecord(artwork);
+  if (!detail) return null;
+
+  const dims = defaultHeroDimensions(artwork);
+  const aboutWordCount = body.split(/\s+/).filter(Boolean).length;
 
   return {
     editionDate,
     artworkId: artwork.id,
     artworkTitle: artwork.artworkTitle.trim(),
     artist: artwork.artist.trim(),
-    year: artwork.year,
+    year: resolveArtworkYear({
+      year: artwork.year,
+      artworkTitle: artwork.artworkTitle,
+      sourceUrl: artwork.sourceUrl,
+      tags: artwork.tags,
+      aboutArtworkBody: artwork.aboutArtworkBody,
+    }),
     sourceInstitution: artwork.sourceInstitution.trim(),
     sourceUrl: artwork.sourceUrl.trim(),
     license: artwork.license,
     licenseUrl: artwork.licenseUrl,
     hostedUrl: artwork.hostedUrl!.trim(),
     imageUrl: artwork.hostedUrl!.trim(),
-    imageWidth: artwork.imageWidth!,
-    imageHeight: artwork.imageHeight!,
-    aspectRatio: artwork.aspectRatio!,
+    imageWidth: dims.imageWidth,
+    imageHeight: dims.imageHeight,
+    aspectRatio: dims.aspectRatio,
     creditLine: artwork.attributionText!.trim(),
-    aboutArtworkBody: artwork.aboutArtworkBody.trim(),
-    aboutWordCount: about.wordCount,
+    aboutArtworkBody: body,
+    aboutWordCount,
     collections: artwork.collections,
     detail,
   };

@@ -1,0 +1,44 @@
+---
+description: Masterpiece Library — curated ingest, no runtime generation
+globs:
+  - supabase/functions/_shared/heroArtwork/**
+  - lib/edition/heroArtwork/**
+  - lib/edition/morningHeroRecovery.ts
+  - lib/edition/openMasterpiece.ts
+  - lib/edition/resolveMorningHero.ts
+  - scripts/seed-hero-artwork-library.mjs
+  - scripts/freeze-daily-masterpiece.mjs
+  - docs/editorial/MASTERPIECE_LIBRARY_ARCHITECTURE.md
+alwaysApply: false
+---
+
+# Masterpiece Library — Permanent Architecture
+
+Full spec: `docs/editorial/MASTERPIECE_LIBRARY_ARCHITECTURE.md`
+
+## Priority order
+
+1. User experience (fast, reliable, beautiful, accurate)
+2. Low operating cost (generate once, reuse forever)
+3. Fast startup (no heavy work at app open)
+4. Simplicity
+
+## Hard rules
+
+- **Edition build** (`librarySelection.ts`, `buildEdition.ts`): DB read + freeze only. Never Wikimedia, Claude, downloads, metadata parsing, or article synthesis.
+- **Client** (`resolveMorningHero`, `openMasterpiece`): read frozen `morning_edition.morningHero` or `presentation_snapshot` only.
+- **Ingest** (`backgroundDiscovery.ts`, seed scripts): all discovery, AI, hosting, validation happens here — never during user sessions.
+- Only `validation_status = 'approved'` artworks enter the daily pool.
+- Failed ingest → `needs_review` or `rejected` — never shown.
+- Authentic public-domain sources only (Wikimedia Commons, museum Open Access). Never AI/stock/fictional images.
+
+## Selection path (single)
+
+`production.ts` → `librarySelection.ts` → `listReadyHeroArtworkLibrary` → `copyMorningHeroFromRecord` (pre-stored article via `detailFromApprovedRecord`).
+
+Do not add runtime fallbacks in `detailFromRecord` / `synthesizeMasterpieceDetail` on the edition path.
+
+## Growth targets
+
+- Seed: 30–60 approved masterpieces
+- Background: ~2 new approved artworks per day (`grow-hero-artwork-library` cron)

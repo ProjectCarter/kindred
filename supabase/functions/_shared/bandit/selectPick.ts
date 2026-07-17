@@ -15,7 +15,6 @@ import {
 import {
   composeEventEditorial,
   getBanditSeasonalEditorial,
-  pickClosingNote,
 } from "./editorialContent.ts";
 import { composeEvidenceBackedSeasonalEditorial } from "./evidenceEditorial.ts";
 import {
@@ -310,8 +309,8 @@ export function composeBanditsPickIntro(
 
 export function composeBanditsPickClosing(
   pick: BanditsPickStory,
-  editionDate?: string | null
+  _editionDate?: string | null
 ): string {
   if (pick.closingNote?.trim()) return pick.closingNote.trim();
-  return pickClosingNote(`${editionDate ?? ""}:${pick.id}:close`);
+  return pick.body.filter(Boolean).at(-1)?.trim() ?? "";
 }

@@ -8,13 +8,15 @@ export const paper = {
   sky: "#EEF6FB",
   /** Navigation / sticky header wash. */
   chrome: "#DCECF6",
-  /** Physical newspaper page — cards and reading surfaces. */
-  page: "#FAF8F3",
+  /** Kindred paper — unified editorial stock (#FDFCF9) across the entire newspaper. */
+  page: "#FDFCF9",
+  newsprint: "#FDFCF9",
+  journal: "#FDFCF9",
   /**
    * Paper surface alias (cards, reading column, raised panels).
-   * Prefer `page` in new code; kept for existing call sites.
+   * Same stock as `page` — one printed newspaper.
    */
-  cream: "#FAF8F3",
+  cream: "#FDFCF9",
   /** Slightly deeper paper for photographs / recessed panels. */
   creamDeep: "#F0EBE3",
   /** Soft wash behind callouts and side notes. */
@@ -37,23 +39,25 @@ export const paper = {
 } as const;
 
 /**
- * Kindred Gold — discovery, craftsmanship, and editorial warmth.
- * Use sparingly: masterpiece frame, Bandit's bandana, dividers, saved state, loading accents.
+ * Official Kindred Gold — single accent for editorial highlights.
+ * HEX #CC903E · RGB 204, 144, 62
  */
 export const kindredGold = {
-  primary: "#B88A3B",
-  light: "#C4953F",
-  deep: "#A9782D",
-  wash: "#B88A3B18",
-  rule: "#B88A3B44",
+  primary: "#CC903E",
+  /** Museum frame inner hairline only (~9% darker than primary). */
+  frameInner: "#B98338",
+  wash: "#CC903E18",
+  rule: "#CC903E44",
 } as const;
 
-/** Today's Masterpiece — museum mat + thin gold frame signature. */
+/** Today's Masterpiece — museum-thin rules, nearly full-bleed. */
 export const masterpiece = {
-  frameBorderWidth: 3.5,
-  frameRadius: 11,
-  matPadding: 16,
-  matColor: paper.page,
+  edgeMargin: 8,
+  /** Paper-colored mat between outer and inner frame rules. */
+  frameInset: 3,
+  /** Horizontal chrome consumed by double hairline frame + mat. */
+  frameChrome: 10,
+  frameRadius: 1,
 } as const;
 
 /** Soft print-like elevation — pages floating on morning air. */

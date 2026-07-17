@@ -10,9 +10,12 @@ import type { HeroArtworkCollectionId } from "./collections.ts";
 import { isHeroArtworkLicenseSafe } from "./licensing.ts";
 import {
   copyMorningHeroFromRecord,
+  isCompleteLibraryRecord,
   type MorningHeroExperience,
   type MasterpieceDetail,
 } from "./presentation.ts";
+import { sanitizeHeroArtworkRecord } from "./sanitizeRecord.ts";
+import { computeHeroArtworkValidationStatus } from "./libraryValidation.ts";
 
 function parseEditorialSections(value: unknown): MasterpieceEditorialSections | null {
   if (!value || typeof value !== "object") return null;
@@ -25,11 +28,15 @@ function parseEditorialSections(value: unknown): MasterpieceEditorialSections | 
     historicalContext: raw.historicalContext?.trim() ?? "",
     legacy: raw.legacy?.trim() ?? "",
     editorialClosing: raw.editorialClosing?.trim() ?? "",
+    editorialReflection:
+      (raw as { editorialReflection?: string }).editorialReflection?.trim() ??
+      raw.editorialClosing?.trim() ??
+      "",
   };
 }
 
 export function rowToRecord(row: HeroArtworkRow): HeroArtworkRecord {
-  return {
+  return sanitizeHeroArtworkRecord({
     id: row.id,
     internalId: row.internal_id,
     artworkTitle: row.artwork_title,
@@ -82,9 +89,11 @@ export function rowToRecord(row: HeroArtworkRow): HeroArtworkRecord {
     featured: row.featured,
     editorialPriority: row.editorial_priority,
     lastUsedAt: row.last_used_at,
+    lastShownDate: row.last_shown_date ?? null,
     useCount: row.use_count,
     approvalStatus: row.approval_status,
-  };
+    validationStatus: row.validation_status ?? "needs_review",
+  });
 }
 
 export function isHostedHeroArtwork(row: HeroArtworkRow | HeroArtworkRecord): boolean {
@@ -97,7 +106,7 @@ export function isHostedHeroArtwork(row: HeroArtworkRow | HeroArtworkRecord): bo
 
 export function isSelectableHeroArtwork(row: HeroArtworkRow): boolean {
   if (!isHostedHeroArtwork(row)) return false;
-  if (!row.image_width || !row.image_height || !row.aspect_ratio) return false;
+  // Dimensions are optional — pre-0024 rows and backfill gaps default at presentation.
   if (!row.attribution_text?.trim()) return false;
   return isHeroArtworkLicenseSafe({
     license: row.license,
@@ -110,7 +119,6 @@ export function isSelectableHeroArtwork(row: HeroArtworkRow): boolean {
     verificationSource: row.verification_source,
     commercialUseConfirmed: row.commercial_use_confirmed,
     curatorEditorialStatus: row.curator_editorial_status,
-    aboutArtworkBody: row.about_artwork_body,
   });
 }
 
@@ -121,13 +129,15 @@ export async function listApprovedHeroArtwork(
     .from("kindred_hero_artwork")
     .select("*")
     .eq("approval_status", "approved")
+    .eq("validation_status", "approved")
     .eq("public_domain_status", "verified")
     .eq("curator_editorial_status", "approved")
+    .eq("detail_editorial_status", "approved")
     .eq("commercial_use_confirmed", true)
     .not("hosted_url", "is", null)
     .not("storage_path", "is", null)
     .order("editorial_priority", { ascending: false })
-    .order("last_used_at", { ascending: true, nullsFirst: true });
+    .order("last_shown_date", { ascending: true, nullsFirst: true });
 
   const rows = (data as HeroArtworkRow[] | null) ?? [];
   return rows.filter(isSelectableHeroArtwork).map(rowToRecord);
@@ -137,7 +147,8 @@ export async function listApprovedHeroArtwork(
 export async function listReadyHeroArtworkLibrary(
   admin: SupabaseClient
 ): Promise<HeroArtworkRecord[]> {
-  return listApprovedHeroArtwork(admin);
+  const catalog = await listApprovedHeroArtwork(admin);
+  return catalog.filter(isCompleteLibraryRecord);
 }
 
 export async function getHeroArtworkById(
@@ -156,7 +167,8 @@ export async function getHeroArtworkById(
 
 export async function markHeroArtworkUsed(
   admin: SupabaseClient,
-  artworkId: string
+  artworkId: string,
+  editionDate: string
 ): Promise<void> {
   const { data } = await admin
     .from("kindred_hero_artwork")
@@ -168,6 +180,7 @@ export async function markHeroArtworkUsed(
     .from("kindred_hero_artwork")
     .update({
       last_used_at: new Date().toISOString(),
+      last_shown_date: editionDate,
       use_count: count + 1,
     })
     .eq("id", artworkId);
@@ -245,11 +258,22 @@ export async function upsertVerifiedHeroArtwork(
     return null;
   }
 
+  const clean = sanitizeHeroArtworkRecord({
+    ...draft,
+    id: draft.id ?? "",
+    lastUsedAt: null,
+    lastShownDate: null,
+    useCount: 0,
+    validationStatus: draft.validationStatus ?? "needs_review",
+  });
+
+  const validationStatus = computeHeroArtworkValidationStatus(clean);
+
   const row = {
-    internal_id: draft.internalId,
-    artwork_title: draft.artworkTitle,
-    artist: draft.artist,
-    year: draft.year,
+    internal_id: clean.internalId,
+    artwork_title: clean.artworkTitle,
+    artist: clean.artist,
+    year: clean.year,
     source_institution: draft.sourceInstitution,
     source_url: draft.sourceUrl,
     image_url: draft.imageUrl,
@@ -259,7 +283,7 @@ export async function upsertVerifiedHeroArtwork(
     dominant_colors: draft.dominantColors,
     collections: draft.collections,
     mood_tags: draft.moodTags,
-    tags: draft.tags,
+    tags: clean.tags,
     seasons: draft.seasons,
     holidays: draft.holidays,
     license: draft.license,
@@ -267,22 +291,22 @@ export async function upsertVerifiedHeroArtwork(
     public_domain_status: draft.publicDomainStatus,
     verification_source: draft.verificationSource,
     commercial_use_confirmed: draft.commercialUseConfirmed,
-    attribution_text: draft.attributionText,
+    attribution_text: clean.attributionText,
     attribution_required: draft.attributionRequired,
     verified_at: draft.verifiedAt,
     verified_by: draft.verifiedBy,
     source_provider: draft.sourceProvider,
     source_provider_artwork_id: draft.sourceProviderArtworkId,
-    about_artwork_body: draft.aboutArtworkBody,
-    about_word_count: draft.aboutWordCount,
-    long_story_body: draft.longStoryBody,
+    about_artwork_body: clean.aboutArtworkBody,
+    about_word_count: clean.aboutWordCount ?? draft.aboutWordCount,
+    long_story_body: clean.longStoryBody,
     long_story_paragraph_count: draft.longStoryParagraphCount,
     editorial_sections: draft.editorialSections,
-    artist_biography: draft.artistBiography,
+    artist_biography: clean.artistBiography,
     look_closer_items: draft.lookCloserItems ?? [],
-    did_you_know: draft.didYouKnow,
-    museum_name: draft.museumName,
-    museum_location: draft.museumLocation,
+    did_you_know: clean.didYouKnow,
+    museum_name: clean.museumName,
+    museum_location: clean.museumLocation,
     official_museum_url: draft.officialMuseumUrl,
     official_artwork_url: draft.officialArtworkUrl,
     source_references: draft.sourceReferences ?? [],
@@ -294,6 +318,7 @@ export async function upsertVerifiedHeroArtwork(
     image_height: draft.imageHeight,
     aspect_ratio: draft.aspectRatio,
     approval_status: draft.approvalStatus,
+    validation_status: validationStatus,
   };
 
   const { data, error } = await admin

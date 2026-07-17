@@ -1,0 +1,70 @@
+---
+description: Today's Masterpiece editorial standard — museum magazine, verified facts, no repetition
+globs:
+  - lib/edition/heroArtwork/**/*
+  - supabase/functions/_shared/heroArtwork/**/*
+  - components/Masterpiece*.tsx
+  - components/TodaysMasterpiece.tsx
+alwaysApply: false
+---
+
+# Masterpiece Editorial Standard
+
+Today's Masterpiece is a **signature editorial feature**. Every article reads
+like a beautifully edited **museum magazine** — Smithsonian, Apollo, or an
+exhibition catalog — **not** a generic encyclopedia entry or AI summary.
+
+**Constitution:** `kindred-editorial-constitution.mdc` — never invent history;
+every factual claim from verified museum or scholarly sources.
+
+## General principles
+
+- Never repeat information across sections
+- Each section teaches something **new**
+- Lead with **facts before interpretation**
+- Explain **why the artwork matters**
+- Tone: educational, timeless, accessible
+- Never invent history or speculate
+- Target **1,200–2,000 words** when verified material supports it
+- If confidence is low, **omit** — do not pad
+
+## Section architecture (publish order)
+
+| # | Section | Job |
+| --- | --- | --- |
+| 1 | **Overview** (`Introduction`) | 2–3 factual paragraphs: what, who, when, movement, medium, where displayed, why important. **Begin with knowledge** — never "Step closer…" or emotional invitations |
+| 2 | **About the Artist** | Birthplace, period, influences, innovations, famous works, legacy — no repeats from Overview |
+| 3 | **Historical Context** | Political, cultural, religious, scientific, societal context — **why this artwork existed** |
+| 4 | **The Story Behind the Artwork** | Commission, purpose, subjects, action, symbolism, reception, controversies |
+| 5 | **Looking Closer** | Composition, perspective, light, color, brushwork, symbolism, hidden details — each paragraph teaches observation |
+| 6 | **Legacy** | Influence on artists, art history, museum significance, culture, scholarship |
+| 7 | **Did You Know?** | **3–5** verified surprising facts — no filler (single blob today → expand at ingest) |
+| 8 | **Where to See It Today** | Museum, city, country, official website — encourage seeing the original |
+| 9 | **Editorial Reflection** | **Only** Kindred voice: one thoughtful paragraph on curiosity, learning, observation. No fact repeats, no summary |
+| 10 | **Artwork Credits** | Title, artist, year, medium, museum, image source, license, official link |
+
+## Quality rules
+
+- Every section introduces **new** information
+- Never restate facts already covered
+- Reader should finish feeling they **genuinely learned** something new
+
+## Implementation map
+
+| Concern | Location |
+| --- | --- |
+| Ingest validation | `heroArtwork/detailEditorial.ts` — `isMasterpieceDetailComplete()` |
+| Detail assembly | `heroArtwork/detailTemplate.ts`, `presentation.ts` |
+| Client reader order | `components/MasterpieceReader.tsx` |
+| Credits block | `lib/edition/heroArtwork/credits.ts` |
+| Freeze / completeness | `buildEdition.ts`, `librarySelection.ts` |
+| Full standard (human) | `docs/editorial/MASTERPIECE_EDITORIAL_STANDARD.md` |
+
+## Anti-patterns (reject at ingest)
+
+- Opening with invitation copy ("Step closer", "Imagine standing…")
+- Generic movement filler without verified specifics
+- Editorial Reflection that repeats museum name, license, or historical facts
+- Same fact in Overview and About the Artist
+- Did You Know that restates the lead paragraph
+- Synthesized detail when library record lacks approved scholarly body

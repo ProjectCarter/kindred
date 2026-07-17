@@ -107,7 +107,7 @@ const DESK_GUIDANCE: Record<SourceConfidenceDesk, string> = {
     "Activities desk: verified listing fields may be stated directly. Category timing (weekday mornings, early evening) " +
     "must use inference hedges — 'likely', 'tends to', 'usually'.",
   recommendations:
-    "Recommendations desk: name, address, and provider category are verified. Atmosphere beyond that is inferred or omitted.",
+    "Food & Drink desk: name, address, and provider category are verified. Atmosphere beyond that is inferred or omitted.",
   bandits_pick:
     "Bandit's Pick: ground every sentence in the evidence brief. Seasonal timing may be inferred with hedges only.",
   history:

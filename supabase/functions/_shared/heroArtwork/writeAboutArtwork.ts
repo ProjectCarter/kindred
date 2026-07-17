@@ -51,10 +51,12 @@ export async function writeAboutArtworkBody(
       model: "claude-sonnet-4-5",
       max_tokens: 500,
       system:
-        "You are Kindred's art editor, writing the short 'About Today's Artwork' note " +
-        "for a calm morning newspaper masthead. " +
-        "Tone: thoughtful, warm, educational, timeless — like a curator speaking over coffee. " +
+        "You are Kindred's art editor, writing the short homepage teaser for Today's Masterpiece " +
+        "on a calm morning newspaper. " +
+        "Tone: thoughtful, warm, curious, timeless — like a curator speaking over coffee. " +
+        "Spark intrigue in one or two sentences; teach one interesting thing; never catalog copy. " +
         "Never marketing, never exclamation points, never 'According to Wikipedia'. " +
+        "Avoid phrases like 'rendered in traditional materials' or 'open collections'. " +
         "Write ONLY from the facts provided — do not invent dates, patrons, or provenance. " +
         `${NEWSPAPER_STYLE_RULES} ` +
         "Respond ONLY with valid JSON: {\"body\": string}. " +
@@ -76,11 +78,10 @@ export async function writeAboutArtworkBody(
             (input.groundingText
               ? `Reference notes:\n${input.groundingText}\n`
               : "") +
-            `\nWrite exactly ${ABOUT_ARTWORK_SENTENCE_MIN}–${ABOUT_ARTWORK_SENTENCE_MAX} complete sentences (plain prose, no markdown) covering:\n` +
-            "1) what the artwork is\n" +
-            "2) why it became historically important\n" +
-            "3) one interesting fact\n" +
-            "4) why it is still appreciated today",
+            `\nWrite exactly ${ABOUT_ARTWORK_SENTENCE_MIN}–${ABOUT_ARTWORK_SENTENCE_MAX} complete sentences (plain prose, no markdown).\n` +
+            "Goal: make the reader think 'I want to learn more.'\n" +
+            "Include one specific, grounded detail that creates curiosity — not a museum catalog summary.\n" +
+            "Do not repeat the artwork title more than once unless necessary.",
         },
       ],
     }),

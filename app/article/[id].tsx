@@ -238,10 +238,10 @@ export default function ArticleScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: paper.sky },
+  flex: { flex: 1, backgroundColor: paper.page },
   centered: {
     flex: 1,
-    backgroundColor: paper.sky,
+    backgroundColor: paper.page,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 36,

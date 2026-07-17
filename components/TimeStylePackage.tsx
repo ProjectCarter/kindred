@@ -9,6 +9,7 @@ import {
   type ImageSourcePropType,
 } from "react-native";
 import { paper, press } from "../lib/edition/newspaperTheme";
+import { EditorialTitle } from "./EditorialTitle";
 
 function CardPhoto({
   source,
@@ -40,6 +41,7 @@ export type TimeStoryCard = {
   id: string;
   kicker?: string | null;
   headline: string;
+  categoryIcon?: string | null;
   dek?: string | null;
   byline?: string | null;
   image?: ImageSourcePropType | null;
@@ -119,12 +121,12 @@ export function TimeStylePackage({
             {feature.kicker ? (
               <Text style={styles.cardKicker}>{feature.kicker}</Text>
             ) : null}
-            <Text
+            <EditorialTitle
+              icon={feature.categoryIcon}
+              title={feature.headline}
               style={[styles.featureHeadline, wide && styles.featureHeadlineWide]}
               maxFontSizeMultiplier={1.2}
-            >
-              {feature.headline}
-            </Text>
+            />
             {feature.dek ? (
               <Text style={styles.dek} numberOfLines={3} maxFontSizeMultiplier={1.15}>
                 {feature.dek}
@@ -195,9 +197,13 @@ function SideCard({
         {story.kicker ? (
           <Text style={styles.cardKicker}>{story.kicker}</Text>
         ) : null}
-        <Text style={styles.sideHeadline} numberOfLines={4} maxFontSizeMultiplier={1.2}>
-          {story.headline}
-        </Text>
+        <EditorialTitle
+          icon={story.categoryIcon}
+          title={story.headline}
+          style={styles.sideHeadline}
+          numberOfLines={4}
+          maxFontSizeMultiplier={1.2}
+        />
         {story.byline ? (
           <Text style={styles.byline}>{story.byline}</Text>
         ) : null}

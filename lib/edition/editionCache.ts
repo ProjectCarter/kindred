@@ -13,20 +13,30 @@ import type { BanditPayload } from "./bandit";
 import type { EditionIntelligence } from "./surfaceIntelligence";
 import type { MorningHeroExperience } from "./heroArtwork/types";
 import { parseMorningHeroExperience } from "./morningEdition";
+import { mergeMorningHeroIntoCachedBundle } from "./resolveMorningHero";
 import {
   recordEditionCacheDiskHit,
   recordEditionCacheMemoryHit,
   recordEditionCacheMiss,
   recordEditionCacheParse,
 } from "../perf/startupMetrics";
+import {
+  masterpieceTraceAsync,
+  masterpieceTraceBegin,
+  masterpieceTraceEnd,
+} from "./masterpieceDiagnostics";
 
 const CACHE_KEY_PREFIX = "@kindred/edition-cache:";
+/** Bump when morning hero article sanitization changes — invalidates stale detail on disk. */
+export const EDITION_CACHE_ARTICLE_VERSION = 2;
 
 export type CachedEditionBundle = {
   userId: string;
   editionId: string;
   editionDate: string;
   cachedAt: number;
+  /** Bumped when masterpiece article payload normalization changes. */
+  morningHeroArticleVersion?: number;
   sections: EditionSection[];
   leadStory: LeadStory | null;
   topStories: TopStoryItem[];
@@ -77,7 +87,24 @@ function normalizeCachedBundle(
         parsed.intelligence.morningHero,
     };
   }
-  return parsed;
+  if (
+    (parsed.morningHeroArticleVersion ?? 0) < EDITION_CACHE_ARTICLE_VERSION
+  ) {
+    parsed.morningHero =
+      parseMorningHeroExperience(parsed.morningHero) ??
+      parseMorningHeroExperience(parsed.intelligence?.morningHero) ??
+      parsed.morningHero;
+    parsed.intelligence = parsed.intelligence
+      ? {
+          ...parsed.intelligence,
+          morningHero:
+            parseMorningHeroExperience(parsed.intelligence.morningHero) ??
+            parsed.intelligence.morningHero,
+        }
+      : parsed.intelligence;
+  }
+  parsed.morningHeroArticleVersion = EDITION_CACHE_ARTICLE_VERSION;
+  return mergeMorningHeroIntoCachedBundle(parsed);
 }
 
 /** Synchronous warm-cache read — no AsyncStorage, no JSON parse. */
@@ -103,10 +130,16 @@ export async function loadCachedEdition(
   if (inflight) return inflight;
 
   const promise = (async () => {
+    masterpieceTraceBegin("article/cache-load", { userId, editionDate });
+    const started = Date.now();
     try {
       const raw = await AsyncStorage.getItem(key);
       if (!raw) {
         recordEditionCacheMiss();
+        masterpieceTraceEnd("article/cache-load", {
+          ms: Date.now() - started,
+          hit: false,
+        });
         return null;
       }
       recordEditionCacheParse();
@@ -119,9 +152,18 @@ export async function loadCachedEdition(
       if (parsed) {
         memoryBundles.set(memoryKey(userId, editionDate), parsed);
       }
+      masterpieceTraceEnd("article/cache-load", {
+        ms: Date.now() - started,
+        hit: Boolean(parsed),
+      });
       return parsed;
     } catch {
       recordEditionCacheMiss();
+      masterpieceTraceEnd("article/cache-load", {
+        ms: Date.now() - started,
+        hit: false,
+        error: "parse_failed",
+      });
       return null;
     } finally {
       inflightLoads.delete(key);
@@ -132,16 +174,73 @@ export async function loadCachedEdition(
   return promise;
 }
 
+/** Debounce disk writes — memory stays hot immediately. */
+const pendingSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+export function scheduleCachedEditionSave(
+  bundle: CachedEditionBundle,
+  delayMs = 400
+): void {
+  const normalized = {
+    ...bundle,
+    morningHeroArticleVersion: EDITION_CACHE_ARTICLE_VERSION,
+    morningHero: bundle.morningHero
+      ? parseMorningHeroExperience(bundle.morningHero) ?? bundle.morningHero
+      : bundle.morningHero,
+    intelligence: bundle.intelligence
+      ? {
+          ...bundle.intelligence,
+          morningHero: bundle.intelligence.morningHero
+            ? parseMorningHeroExperience(bundle.intelligence.morningHero) ??
+              bundle.intelligence.morningHero
+            : bundle.intelligence.morningHero,
+        }
+      : bundle.intelligence,
+  };
+  memoryBundles.set(
+    memoryKey(normalized.userId, normalized.editionDate),
+    mergeMorningHeroIntoCachedBundle(normalized)
+  );
+  const key = cacheKey(normalized.userId, normalized.editionDate);
+  const existing = pendingSaveTimers.get(key);
+  if (existing) clearTimeout(existing);
+  pendingSaveTimers.set(
+    key,
+    setTimeout(() => {
+      pendingSaveTimers.delete(key);
+      void saveCachedEdition(normalized);
+    }, delayMs)
+  );
+}
+
 export async function saveCachedEdition(bundle: CachedEditionBundle): Promise<void> {
-  memoryBundles.set(memoryKey(bundle.userId, bundle.editionDate), bundle);
-  try {
-    await AsyncStorage.setItem(
-      cacheKey(bundle.userId, bundle.editionDate),
-      JSON.stringify(bundle)
-    );
-  } catch {
-    // Cache write is best-effort — never block the reader.
-  }
+  await masterpieceTraceAsync("article/cache-save", async () => {
+    const normalized = {
+      ...bundle,
+      morningHeroArticleVersion: EDITION_CACHE_ARTICLE_VERSION,
+      morningHero: bundle.morningHero
+        ? parseMorningHeroExperience(bundle.morningHero) ?? bundle.morningHero
+        : bundle.morningHero,
+      intelligence: bundle.intelligence
+        ? {
+            ...bundle.intelligence,
+            morningHero: bundle.intelligence.morningHero
+              ? parseMorningHeroExperience(bundle.intelligence.morningHero) ??
+                bundle.intelligence.morningHero
+              : bundle.intelligence.morningHero,
+          }
+        : bundle.intelligence,
+    };
+    memoryBundles.set(memoryKey(normalized.userId, normalized.editionDate), normalized);
+    try {
+      await AsyncStorage.setItem(
+        cacheKey(normalized.userId, normalized.editionDate),
+        JSON.stringify(normalized)
+      );
+    } catch {
+      // Cache write is best-effort — never block the reader.
+    }
+  }, { editionId: bundle.editionId });
 }
 
 export async function clearCachedEdition(

@@ -4,7 +4,8 @@
  * Provider safety limits (retrieval only — never truncate published editions):
  * - SERPAPI_MAX_PAGES: max paginated SerpAPI requests per city fetch
  * - SERPAPI_CANDIDATE_CAP: max raw event rows retained before editorial filter
- * - FOURSQUARE_RESULT_LIMIT: per-category Foursquare page size (places/foursquareProvider.ts)
+ * - FOURSQUARE_RESULT_LIMIT: per-page Foursquare page size (places/foursquareProvider.ts)
+ * - FOURSQUARE_MAX_PAGES: pagination safety cap per category search
  *
  * Rendering limits (UI only — full edition stored separately):
  * - HOMEPAGE_INITIAL_RENDER_COUNT: first paint on the homepage grid

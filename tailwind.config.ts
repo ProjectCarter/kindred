@@ -7,8 +7,8 @@ const config: Config = {
       colors: {
         sky: "#EEF6FB",
         chrome: "#DCECF6",
-        cream: "#FAF8F3",
-        page: "#FAF8F3",
+        cream: "#FDFCF9",
+        page: "#FDFCF9",
         ink: "#2D2926",
         muted: "#7E776F",
         terracotta: "#B56A3A",

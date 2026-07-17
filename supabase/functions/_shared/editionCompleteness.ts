@@ -8,6 +8,10 @@ import type { DiscoveryPayload } from "./discovery/types.ts";
 import { parseDiscoveryPayload } from "./discovery/discoveryPayload.ts";
 import { allocateDiscoverySections } from "./discovery/sectionAllocation.ts";
 import { metroKeyFromLocation } from "./storyOf/metroKey.ts";
+import {
+  getCatalogBootstrapState,
+  type CatalogBootstrapState,
+} from "./catalog/catalogBootstrap.ts";
 
 export type EditionSectionRow = {
   section_type: string;
@@ -38,6 +42,9 @@ export function assessPersistedEditionBuild(input: {
   discovery: DiscoveryPayload | null | undefined;
   hasBanditsPick: boolean;
   expectStoryOf?: boolean;
+  catalogBootstrap?: CatalogBootstrapState;
+  hasMorningHero?: boolean;
+  libraryHasHeroArtwork?: boolean;
 }): { complete: boolean; reasons: string[] } {
   const types = input.sections.map((s) => s.section_type);
   const discovery =
@@ -47,11 +54,22 @@ export function assessPersistedEditionBuild(input: {
   const reasons: string[] = [];
   const hasStoryOf =
     types.includes("story_of") || types.includes("your_city");
+  const bootstrap = input.catalogBootstrap;
+  const catalogBootstrapPending = Boolean(
+    bootstrap &&
+      !bootstrap.eventsCatalogBootstrapped &&
+      !bootstrap.activitiesCatalogBootstrapped &&
+      !bootstrap.foodDrinkCatalogBootstrapped
+  );
 
   if (!types.includes("today_in_history")) {
     reasons.push("edition_sections missing today_in_history");
   }
-  if (!types.includes("local_events")) {
+  if (
+    !catalogBootstrapPending &&
+    (!bootstrap || bootstrap.eventsCatalogBootstrapped) &&
+    !types.includes("local_events")
+  ) {
     reasons.push("edition_sections missing local_events");
   }
   if (input.expectStoryOf && !hasStoryOf) {
@@ -62,16 +80,28 @@ export function assessPersistedEditionBuild(input: {
   }
 
   const surfaceItems = discoverySurfaceItemCount(discovery);
-  if (surfaceItems === 0) {
+  if (!catalogBootstrapPending && surfaceItems === 0) {
     reasons.push("discovery has zero surfaced items");
   }
 
   const allocation = allocateDiscoverySections(discovery);
-  if (allocation.activities.length === 0) {
+  if (
+    !catalogBootstrapPending &&
+    (!bootstrap || bootstrap.activitiesCatalogBootstrapped) &&
+    allocation.activities.length === 0
+  ) {
     reasons.push("discovery pool has zero activities after allocate");
   }
-  if (allocation.recommendations.length === 0) {
+  if (
+    !catalogBootstrapPending &&
+    (!bootstrap || bootstrap.foodDrinkCatalogBootstrapped) &&
+    allocation.recommendations.length === 0
+  ) {
     reasons.push("discovery pool has zero recommendations after allocate");
+  }
+
+  if (input.libraryHasHeroArtwork && !input.hasMorningHero) {
+    reasons.push("morning_hero missing while hero library has eligible artwork");
   }
 
   return { complete: reasons.length === 0, reasons };
@@ -81,11 +111,15 @@ export function assessPersistedEditionBuild(input: {
 export async function assessPersistedEditionRow(
   admin: SupabaseClient,
   editionId: string,
-  options?: { expectStoryOf?: boolean }
+  options?: {
+    expectStoryOf?: boolean;
+    morningEdition?: unknown;
+    libraryHasHeroArtwork?: boolean;
+  }
 ): Promise<{ complete: boolean; reasons: string[] }> {
   const { data: edition, error: editionError } = await admin
     .from("editions")
-    .select("discovery, bandit")
+    .select("discovery, bandit, morning_edition")
     .eq("id", editionId)
     .maybeSingle();
 
@@ -107,22 +141,37 @@ export async function assessPersistedEditionRow(
 
   const discovery = parseDiscoveryPayload(edition.discovery);
   let expectStoryOf = options?.expectStoryOf;
+  const metroKey = discovery?.location?.city
+    ? metroKeyFromLocation(discovery.location)
+    : null;
   if (expectStoryOf === undefined && discovery?.location?.city) {
-    const metroKey = metroKeyFromLocation(discovery.location);
     const { data: article } = await admin
       .from("kindred_city_articles")
       .select("metro_key")
-      .eq("metro_key", metroKey)
+      .eq("metro_key", metroKey!)
       .eq("approval_status", "approved")
       .maybeSingle();
     expectStoryOf = Boolean(article);
   }
+
+  const catalogBootstrap = await getCatalogBootstrapState(admin, metroKey);
+  const morningEditionPayload =
+    options?.morningEdition ?? edition.morning_edition;
+  const hasMorningHero = Boolean(
+    morningEditionPayload &&
+      typeof morningEditionPayload === "object" &&
+      (morningEditionPayload as { morningHero?: { hostedUrl?: string } })
+        .morningHero?.hostedUrl?.trim()
+  );
 
   return assessPersistedEditionBuild({
     sections: sections ?? [],
     discovery,
     hasBanditsPick: hasBanditsPickFromPayload(edition.bandit),
     expectStoryOf,
+    catalogBootstrap,
+    hasMorningHero,
+    libraryHasHeroArtwork: options?.libraryHasHeroArtwork,
   });
 }
 

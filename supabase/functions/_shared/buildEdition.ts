@@ -41,6 +41,7 @@ import { cityArticleSourceNote } from "./storyOf/sourceNote.ts";
 import { resolveProductionMorningHero } from "./heroArtwork/production.ts";
 import { isMorningHeroDetailComplete } from "./heroArtwork/presentation.ts";
 import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
+import { listApprovedHeroArtwork, listReadyHeroArtworkLibrary } from "./heroArtwork/library.ts";
 import { getSeason, parseEditionDate } from "./heroArtwork/select.ts";
 import {
   buildWeatherIntelligence,
@@ -1698,6 +1699,19 @@ export async function buildEditionForUser(
     "opening_20s replaced with a handcrafted, non-AI hero line (see heroOpening.ts)"
   );
 
+  const { data: priorEditionRow } = await supabaseAdmin
+    .from("editions")
+    .select("morning_edition")
+    .eq("user_id", userId)
+    .eq("edition_date", editionDate)
+    .maybeSingle();
+  const priorMorningHero =
+    priorEditionRow?.morning_edition &&
+    typeof priorEditionRow.morning_edition === "object"
+      ? ((priorEditionRow.morning_edition as { morningHero?: MorningHeroExperience })
+          .morningHero ?? null)
+      : null;
+
   let morningHero: MorningHeroExperience | null = null;
   try {
     const heroMonth = parseEditionDate(editionDate).getMonth() + 1;
@@ -1741,6 +1755,20 @@ export async function buildEditionForUser(
     } else {
       morningEdition.selectionMeta.editorNotes.push(
         "hero_artwork: library empty or no hosted artwork eligible for selection"
+      );
+    }
+
+    if (
+      !morningHero &&
+      priorMorningHero?.hostedUrl?.trim() &&
+      priorMorningHero.aboutArtworkBody?.trim()
+    ) {
+      morningHero = priorMorningHero;
+      (morningEdition as MorningEditionPayload & {
+        morningHero?: MorningHeroExperience | null;
+      }).morningHero = morningHero;
+      morningEdition.selectionMeta.editorNotes.push(
+        "hero_artwork: preserved frozen morning hero from prior edition row"
       );
     }
   } catch (heroErr) {
@@ -1867,24 +1895,23 @@ export async function buildEditionForUser(
     .single();
 
   if (editionError && /invalid json/i.test(editionError.message)) {
+    const preservedMorningEdition =
+      editionUpsertFields.morning_edition ??
+      priorEditionRow?.morning_edition ??
+      null;
     const stripAttempts: Array<{
       label: string;
       payload: Record<string, unknown>;
     }> = [
       {
-        label: "without_morning_edition",
-        payload: (() => {
-          const p = { ...upsertCore };
-          delete (p as { morning_edition?: unknown }).morning_edition;
-          return p;
-        })(),
-      },
-      {
         label: "without_knowledge",
         payload: (() => {
           const p = { ...upsertCore };
-          delete (p as { morning_edition?: unknown }).morning_edition;
           delete (p as { knowledge?: unknown }).knowledge;
+          if (preservedMorningEdition) {
+            (p as { morning_edition?: unknown }).morning_edition =
+              preservedMorningEdition;
+          }
           return p;
         })(),
       },
@@ -1892,9 +1919,12 @@ export async function buildEditionForUser(
         label: "without_memory",
         payload: (() => {
           const p = { ...upsertCore };
-          delete (p as { morning_edition?: unknown }).morning_edition;
           delete (p as { knowledge?: unknown }).knowledge;
           delete (p as { memory?: unknown }).memory;
+          if (preservedMorningEdition) {
+            (p as { morning_edition?: unknown }).morning_edition =
+              preservedMorningEdition;
+          }
           return p;
         })(),
       },
@@ -1902,10 +1932,13 @@ export async function buildEditionForUser(
         label: "without_discovery",
         payload: (() => {
           const p = { ...upsertCore };
-          delete (p as { morning_edition?: unknown }).morning_edition;
           delete (p as { knowledge?: unknown }).knowledge;
           delete (p as { memory?: unknown }).memory;
           delete (p as { discovery?: unknown }).discovery;
+          if (preservedMorningEdition) {
+            (p as { morning_edition?: unknown }).morning_edition =
+              preservedMorningEdition;
+          }
           return p;
         })(),
       },
@@ -1918,6 +1951,9 @@ export async function buildEditionForUser(
           editorial_context: editorialContextWithMorning,
           lead_story: leadStory,
           bandit,
+          ...(preservedMorningEdition
+            ? { morning_edition: preservedMorningEdition }
+            : {}),
         },
       },
     ];
@@ -2163,7 +2199,12 @@ export async function buildEditionForUser(
     return { ok: false, error: `edition_sections: ${sectionsError.message}` };
   }
 
-  const buildComplete = await assessPersistedEditionRow(supabaseAdmin, edition.id);
+  const heroLibrary = await listReadyHeroArtworkLibrary(supabaseAdmin);
+  const approvedHosted = await listApprovedHeroArtwork(supabaseAdmin);
+  const buildComplete = await assessPersistedEditionRow(supabaseAdmin, edition.id, {
+    morningEdition: editionUpsertFields.morning_edition,
+    libraryHasHeroArtwork: heroLibrary.length > 0 || approvedHosted.length > 0,
+  });
 
   if (!buildComplete.complete) {
     console.warn("[buildEdition] refusing ready — persisted row incomplete", {

@@ -1,4 +1,5 @@
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
 import type { EditionSection } from "../lib/edition/types";
 import type { HistoricalImageAsset } from "../lib/edition/knowledgeGrounding";
 import {
@@ -6,11 +7,19 @@ import {
   storyOfCardIntro,
   storyOfTitle,
 } from "../lib/edition/storyOf";
+import {
+  logStoryOfImageEvent,
+  nextStoryOfImageFallback,
+  resolveStoryOfCityImage,
+  STORY_OF_CARD_ASPECT_RATIO,
+  type ResolvedStoryOfImage,
+} from "../lib/edition/storyOfImage";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   section: EditionSection;
   cityName?: string | null;
+  /** @deprecated Resolved from section.source_note — kept for call-site compat. */
   image?: HistoricalImageAsset | null;
   subtitle?: string | null;
   onOpen?: () => void;
@@ -23,12 +32,10 @@ type Props = {
 export function StoryOfSection({
   section,
   cityName,
-  image,
   subtitle,
   onOpen,
 }: Props) {
   const preview = storyOfCardIntro(section.body);
-  const imageUri = image?.url?.trim() || null;
   const title =
     section.headline?.trim() ||
     storyOfTitle(cityName ?? "");
@@ -36,6 +43,72 @@ export function StoryOfSection({
     subtitle?.trim() ||
     storyOfSubtitleFromSection(section) ||
     null;
+
+  const metroKey = parseStoryOfSourceNote(section.source_note)?.metroKey ?? null;
+
+  const initialImage = useMemo(
+    () =>
+      resolveStoryOfCityImage({
+        sourceNote: section.source_note,
+        metroKey,
+      }),
+    [section.source_note, metroKey]
+  );
+
+  const [displayImage, setDisplayImage] = useState<ResolvedStoryOfImage | null>(
+    initialImage
+  );
+
+  useEffect(() => {
+    setDisplayImage(initialImage);
+  }, [initialImage]);
+
+  function handleImageError() {
+    const failedUrl = displayImage?.resolvedUrl ?? displayImage?.url ?? null;
+    logStoryOfImageEvent("load_error", {
+      sectionType: "story_of",
+      originalUrl: displayImage?.originalUrl ?? failedUrl,
+      resolvedUrl: failedUrl,
+      metroKey,
+      fallbackLevel: displayImage?.fallbackLevel ?? null,
+    });
+
+    if (!failedUrl) {
+      setDisplayImage(null);
+      return;
+    }
+
+    const next = nextStoryOfImageFallback({
+      sourceNote: section.source_note,
+      metroKey,
+      failedUrl,
+    });
+    if (next) {
+      logStoryOfImageEvent("resolve", {
+        sectionType: "story_of",
+        originalUrl: displayImage?.originalUrl ?? failedUrl,
+        resolvedUrl: next.resolvedUrl,
+        fallbackLevel: next.fallbackLevel,
+        metroKey,
+        reason: "homepage_load_error",
+      });
+      setDisplayImage(next);
+      return;
+    }
+
+    setDisplayImage(null);
+  }
+
+  function handleImageLoad() {
+    if (!displayImage) return;
+    logStoryOfImageEvent("load_success", {
+      sectionType: "story_of",
+      originalUrl: displayImage.originalUrl,
+      resolvedUrl: displayImage.resolvedUrl,
+      fallbackLevel: displayImage.fallbackLevel,
+      metroKey,
+    });
+  }
 
   return (
     <View style={styles.section} accessibilityRole="summary">
@@ -54,21 +127,28 @@ export function StoryOfSection({
           onOpen && pressed && { opacity: press.opacity },
         ]}
       >
-        {imageUri ? (
+        {displayImage ? (
           <View style={styles.imageWrap}>
             <Image
-              source={{ uri: imageUri }}
+              key={displayImage.resolvedUrl}
+              source={{ uri: displayImage.resolvedUrl }}
               style={styles.image}
               resizeMode="cover"
-              accessibilityLabel={image?.caption || title}
+              accessibilityLabel={displayImage.caption || title}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
             />
-            {image?.credit ? (
+            {displayImage.credit ? (
               <Text style={styles.imageCredit} numberOfLines={2}>
-                {image.credit}
+                {displayImage.credit}
               </Text>
             ) : null}
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.imagePlaceholder} accessibilityLabel="Historic photograph unavailable">
+            <Text style={styles.placeholderLabel}>Historic photograph</Text>
+          </View>
+        )}
 
         <Text style={styles.title} maxFontSizeMultiplier={1.2}>
           {title}
@@ -126,11 +206,31 @@ const styles = StyleSheet.create({
   },
   imageWrap: {
     marginBottom: 16,
+    overflow: "hidden",
+    borderRadius: 2,
   },
   image: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: STORY_OF_CARD_ASPECT_RATIO,
     backgroundColor: paper.creamDeep,
+  },
+  imagePlaceholder: {
+    width: "100%",
+    height: 72,
+    marginBottom: 16,
+    borderRadius: 2,
+    backgroundColor: paper.creamDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeholderLabel: {
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: paper.inkFaint,
+    fontFamily: "Georgia",
   },
   imageCredit: {
     marginTop: 8,

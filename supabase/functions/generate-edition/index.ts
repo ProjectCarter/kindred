@@ -19,6 +19,26 @@ type ClientLocation = {
   lon?: number;
 };
 
+function morningHeroSummary(
+  hero: {
+    artworkId?: string;
+    artworkTitle?: string;
+    artist?: string;
+    hostedUrl?: string;
+  } | null | undefined
+) {
+  if (!hero?.artworkId || !hero.hostedUrl?.trim()) {
+    return { present: false as const };
+  }
+  return {
+    present: true as const,
+    artworkId: hero.artworkId,
+    artworkTitle: hero.artworkTitle ?? null,
+    artist: hero.artist ?? null,
+    hostedUrl: hero.hostedUrl,
+  };
+}
+
 Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
@@ -198,6 +218,22 @@ Deno.serve(async (req) => {
       { onConflict: "user_id,edition_date" }
     );
 
+    const { data: editionRow } = await supabaseAdmin
+      .from("editions")
+      .select("morning_edition")
+      .eq("id", result.editionId)
+      .maybeSingle();
+    const morningHero = (
+      editionRow?.morning_edition as {
+        morningHero?: {
+          artworkId?: string;
+          artworkTitle?: string;
+          artist?: string;
+          hostedUrl?: string;
+        } | null;
+      } | null
+    )?.morningHero;
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -208,6 +244,7 @@ Deno.serve(async (req) => {
           state: location.state,
         },
         editionDate: jobDate,
+        morningHero: morningHeroSummary(morningHero),
       }),
       { headers: { "content-type": "application/json" } }
     );

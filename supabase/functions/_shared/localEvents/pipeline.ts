@@ -39,6 +39,7 @@ import {
   isEventbriteOnlyMode,
   qualifyEventbriteEvents,
 } from "./eventbriteOnlyMode.ts";
+import { filterFamilyFriendlyEvents } from "./familyFriendlyFilter.ts";
 
 export type LocalEventsPipelineMeta = {
   candidateCount: number;
@@ -68,6 +69,13 @@ export type LocalEventsPipelineMeta = {
   ticketmaster?: TicketmasterGatherDiagnostics;
   /** Candidates removed during cross-source dedupe. */
   duplicatesRemoved?: number;
+  /** Adult entertainment listings removed before dedupe and ranking. */
+  familyFilteredCount?: number;
+  familyFilterSamples?: Array<{
+    name: string;
+    signal: string;
+    category: import("./familyFriendlyFilter.ts").EditorialExclusionCategory;
+  }>;
 };
 
 export type LocalEventsPipelineOptions = LocalEventsFetchOptions & {
@@ -86,18 +94,39 @@ export async function runLocalEventsPipeline(
 
   const editorNotes: string[] = [];
   const sourceCounts: Record<string, number> = {};
+  let familyFilteredCount = 0;
+  const familyFilterSamples: LocalEventsPipelineMeta["familyFilterSamples"] = [];
 
   // 1. Gather
   const gatherResults = await gatherFromAllSources(location, options);
   const sourceBatches: LocalEvent[][] = [];
   for (const result of gatherResults) {
     if (result.events.length) {
-      sourceCounts[result.sourceId] = result.events.length;
-      sourceBatches.push(result.events);
+      const familyFiltered = filterFamilyFriendlyEvents(result.events);
+      familyFilteredCount += familyFiltered.filteredCount;
+      for (const sample of familyFiltered.samples) {
+        if (familyFilterSamples.length < 8) {
+          familyFilterSamples.push(sample);
+        }
+      }
+      if (familyFiltered.kept.length) {
+        sourceCounts[result.sourceId] = familyFiltered.kept.length;
+        sourceBatches.push(familyFiltered.kept);
+      }
     }
     if (result.error) {
       editorNotes.push(`${result.sourceId} gather failed — continuing.`);
     }
+  }
+
+  if (familyFilteredCount > 0) {
+    console.log("[localEvents:editorialFilter] removed excluded listings", {
+      filteredCount: familyFilteredCount,
+      samples: familyFilterSamples,
+    });
+    editorNotes.push(
+      `Editorial exclusion filter removed ${familyFilteredCount} listing(s) before ranking.`
+    );
   }
 
   const candidateCount = sourceBatches.reduce((n, batch) => n + batch.length, 0);
@@ -186,6 +215,7 @@ export async function runLocalEventsPipeline(
   }
   editorNotes.push(
     `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
+      `${familyFilteredCount} removed by editorial exclusion filter; ` +
       `${merged.length} after dedupe; ${inHorizon.length} within 30 days; ` +
       `${dateVerified.rejected.length} rejected by date verification; ` +
       `${ranked.length} scored above threshold; ${ranked.length} persisted.`
@@ -214,6 +244,9 @@ export async function runLocalEventsPipeline(
     editorNotes,
     ticketmaster: ticketmasterDiagnostics,
     duplicatesRemoved,
+    familyFilteredCount,
+    familyFilterSamples:
+      familyFilterSamples.length > 0 ? familyFilterSamples : undefined,
   };
 
   console.log("[localEvents:pipeline] complete", meta);
@@ -237,6 +270,7 @@ async function runEventbriteOnlyPipeline(
   });
 
   const raw = gatherResults.flatMap((r) => r.events);
+  const familyFiltered = filterFamilyFriendlyEvents(raw);
   const sourceCounts: Record<string, number> = {};
   for (const result of gatherResults) {
     if (result.events.length) {
@@ -244,12 +278,23 @@ async function runEventbriteOnlyPipeline(
     }
   }
 
+  if (familyFiltered.filteredCount > 0) {
+    console.log("[localEvents:editorialFilter] eventbriteOnly removed listings", {
+      filteredCount: familyFiltered.filteredCount,
+      samples: familyFiltered.samples,
+    });
+    editorNotes.push(
+      `Editorial exclusion filter removed ${familyFiltered.filteredCount} listing(s).`
+    );
+  }
+
   console.log("[localEvents:eventbriteOnly] gathered", {
     totalReturned: raw.length,
+    afterFamilyFilter: familyFiltered.kept.length,
     sources: Object.keys(sourceCounts),
   });
 
-  const normalized = normalizeEvents(raw);
+  const normalized = normalizeEvents(familyFiltered.kept);
   const beforeRights = normalized.filter((e) => Boolean(e.imageUrl?.trim())).length;
   const withRights = applyEventImageRightsBatch(normalized);
   const imagesDisplayAuthorized = withRights.filter((e) =>
@@ -296,6 +341,9 @@ async function runEventbriteOnlyPipeline(
     rankedPoolTitles: verified.map((e) => e.name),
     editorNotes,
     eventbriteOnly: report,
+    familyFilteredCount: familyFiltered.filteredCount,
+    familyFilterSamples:
+      familyFiltered.samples.length > 0 ? familyFiltered.samples : undefined,
   };
 
   console.log("[localEvents:eventbriteOnly] complete", meta);

@@ -18,6 +18,8 @@ import {
   isParticipatoryActivityVenue,
   venueHayFromParts,
 } from "./venueQuality";
+import { isFoodEstablishmentItem } from "./foodDrinkDesk";
+import { resolveDiscoveryCategoryIcon } from "./categoryIcon";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -94,6 +96,10 @@ const SUBTYPE_MATCHERS: Array<{ subtype: ActivitySubtype; pattern: RegExp }> = [
   { subtype: "arcades", pattern: /arcade/i },
 ];
 
+export function inferActivitySubtype(item: RankedDiscoveryItem["item"]): ActivitySubtype {
+  return inferSubtype(item);
+}
+
 function inferSubtype(item: RankedDiscoveryItem["item"]): ActivitySubtype {
   if (item.category === "hiking") return "hiking";
 
@@ -133,6 +139,16 @@ function inferSubtype(item: RankedDiscoveryItem["item"]): ActivitySubtype {
 }
 
 export function activityOverline(item: RankedDiscoveryItem["item"]): string {
+  const destinationLabel: Record<string, string> = {
+    museums: "Museum",
+    parks: "Park",
+    beaches: "Beach",
+    gardens: "Garden",
+    scenic_drives: "Scenic Drive",
+    hiking: "Hiking",
+  };
+  if (destinationLabel[item.category]) return destinationLabel[item.category];
+
   const venue = resolveVenueClassification({
     title: item.title,
     venueCategories: item.venueCategories,
@@ -186,6 +202,7 @@ export function selectActivityCards(
 ): EditorialGridCard[] {
   const readerLocation = options?.readerLocation ?? null;
   const ranked = [...(items ?? [])]
+    .filter((d) => !isFoodEstablishmentItem(d))
     .filter((d) => isCompleteCard(d.item))
     .filter((d) => isWithinActivitiesSectionRadius(d, readerLocation))
     .sort((a, b) => {
@@ -194,11 +211,32 @@ export function selectActivityCards(
       return activitySortScore(b) - activitySortScore(a);
     });
 
-  return ranked.map((d) => ({
-    id: d.item.id,
-    overline: activityOverline(d.item),
-    title: d.item.title.trim(),
-    subtitle: activityLocationLine(d.item, options?.city),
-    note: activityNote(d.item),
-  }));
+  return ranked.map((d) => {
+    const venue = resolveVenueClassification({
+      title: d.item.title,
+      venueCategories: d.item.venueCategories,
+      discoveryCategory: d.item.category,
+      dek: d.item.dek,
+    });
+    return {
+      id: d.item.id,
+      overline: activityOverline(d.item),
+      categoryIcon: resolveDiscoveryCategoryIcon(
+        {
+          title: d.item.title,
+          dek: d.item.dek,
+          category: d.item.category,
+          venueCategories: d.item.venueCategories,
+          tags: d.item.tags,
+          editorialCategoryId:
+            venue.confidence !== "low" ? venue.categoryId : null,
+          activitySubtype: inferSubtype(d.item),
+        },
+        "activity"
+      ),
+      title: d.item.title.trim(),
+      subtitle: activityLocationLine(d.item, options?.city),
+      note: activityNote(d.item),
+    };
+  });
 }

@@ -1,0 +1,81 @@
+---
+description: Event Storytelling Standard v1 — category voice, experience summaries, golden test
+globs:
+  - lib/edition/eventEditorial.ts
+  - lib/edition/eventStorytelling.ts
+  - lib/edition/localEvents.ts
+  - lib/edition/article.ts
+  - supabase/functions/_shared/localEvents/**/*
+alwaysApply: false
+---
+
+# Event Storytelling Standard (Version 1)
+
+Verification and anti-template rules are working. This standard governs **editorial quality**.
+
+Kindred is a **newspaper**, not an event directory. Every event should feel personally selected and written by an editor.
+
+**Also applies:** `kindred-event-editorial.mdc` · `kindred-editorial-constitution.mdc`
+
+## Before writing
+
+Classify the event type first (`classifyEventStoryType`):
+
+Concert · Festival · Farmers Market · Art Exhibition · Museum Event · Theater · Author Talk · Community Gathering · Outdoor Recreation · Food & Drink · Workshop / Class · Sports · Family · Seasonal
+
+**Do not use one writing style for every category.**
+
+## Summarize the experience
+
+Do not restate the listing. From verified data explain:
+
+- What is actually happening
+- Why someone would attend
+- What makes this event unique
+- What visitors should expect
+
+Never invent · exaggerate · speculate. If verified information is missing, **say less**.
+
+## No template writing
+
+Permanently banned phrases live in `eventEditorial.ts` — including:
+
+`Worth stepping out for…` · `This is the kind of plan…` · `Show up with curiosity…` · `Looking for something different?` · `Don't miss…` · `Mark your calendar…` · `Gather your friends…` · `Perfect way to spend…`
+
+No rotating templates · no canned introductions · no filler.
+
+## Golden test (enforced in code)
+
+Hide the title. Read only the copy.
+
+**"Could this describe ONLY this event?"**
+
+`passesEventGoldenTest()` requires identifiable name/venue tokens in the copy and rejects listing-only openers.
+
+## Write about the event
+
+**Bad:** "An event is happening Friday night."
+
+**Good:** "The Queen Creek Olive Mill is hosting an evening watercolor workshop where guests paint a desert-inspired landscape while enjoying a seasonal spritz."
+
+Describe the experience — not just logistics.
+
+## Final editorial check (before publish)
+
+1. Does this sound like a real newspaper article?
+2. Is every sentence supported by verified information?
+3. Does this accurately describe **this** event?
+4. Could this be mistaken for another event?
+5. Would I proudly publish this for my own family?
+
+If any answer is **no** → rewrite or omit.
+
+## Implementation
+
+| Concern | Module |
+| --- | --- |
+| Story type + golden test | `eventStorytelling.ts` |
+| AI prompt + validation | `localEvents/eventEditorial.ts` |
+| Edition generation | `banditNotes.ts` |
+| Client article | `composeEventArticleFromVerifiedData()` |
+| Full standard | `docs/editorial/EVENT_STORYTELLING_STANDARD.md` |

@@ -19,6 +19,8 @@ import {
   parseEventImageRights,
   type EventImageRights,
 } from "./eventImageRights";
+import { validateBanditNote, sanitizeEventEditorialParagraphs } from "./eventEditorial";
+import { resolveEventCategoryIcon } from "./categoryIcon";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -88,10 +90,14 @@ export type LocalEventCard = {
   imageSource?: LocalEventImageSource | null;
   /** Whether Kindred may display listing photography from this source. */
   imageRights?: EventImageRights | null;
-  /** Bandit’s invitation — why this is worth leaving the house. */
+  /** Bandit's invitation — why this is worth leaving the house. */
   banditNote?: string | null;
+  /** Verified editorial paragraphs — frozen at edition build. */
+  editorialBody?: string[] | null;
   /** Keyword-inferred genre, e.g. "music" or "food" — never invented. */
   category?: LocalEventCategory;
+  /** Editorial category icon — one emoji, frozen at parse time. */
+  categoryIcon?: string;
   /** Utility badges — structured metadata from the events provider. */
   badges?: EventInfoBadgeId[];
   /** ISO start date when the edition stored one. */
@@ -183,7 +189,7 @@ function inferEventCategoryClient(name: string, venue: string): LocalEventCatego
   const hay = `${name} ${venue}`.toLowerCase();
   if (/\b(comedy|stand-?up|improv)\b/.test(hay)) return "comedy";
   if (
-    /\b(game|match|tournament|marathon|5k|10k|race|triathlon|football|basketball|baseball|softball|soccer|hockey|golf|tennis|pickleball|fitness|yoga|workout|bootcamp)\b/.test(
+    /\b(game|match|tournament|marathon|5k|10k|race|triathlon|football|basketball|baseball|softball|soccer|hockey|golf|tennis|pickleball|fitness|yoga|workout|bootcamp|mlb|nfl|nba|nhl|mls|wnba|ncaa| vs | v\. )\b/.test(
       hay
     )
   )
@@ -251,18 +257,41 @@ function normalizeImageSource(
   return "provider_thumbnail";
 }
 
-/** Client fallback when edition has no Bandit note yet. */
-export function fallbackBanditNote(event: Pick<LocalEventCard, "venue">): string {
-  const venue = event.venue?.trim();
-  if (venue && venue !== "Venue TBA") {
-    return `Worth stepping out for — ${venue} has something happening tonight.`;
-  }
-  return "Worth leaving the house for — a local moment you might otherwise miss.";
+/** Client-side — never synthesize Bandit's Note; edition build or omit. */
+export function normalizeBanditNote(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return validateBanditNote(value.trim());
+}
+
+function normalizeEditorialBody(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const cleaned = sanitizeEventEditorialParagraphs(
+    value.filter((p): p is string => typeof p === "string")
+  );
+  return cleaned.length ? cleaned : undefined;
+}
+
+/** Avoid re-parsing the same edition section body on every render / pipeline trace. */
+const parsedEventsBodyCache = new Map<string, LocalEventCard[] | null>();
+const PARSED_EVENTS_CACHE_MAX = 6;
+
+function localEventsBodyCacheKey(body: string): string {
+  if (body.length <= 96) return body;
+  return `${body.length}:${body.slice(0, 48)}:${body.slice(-48)}`;
+}
+
+export function clearParsedLocalEventsBodyCacheForTests(): void {
+  parsedEventsBodyCache.clear();
 }
 
 export function parseLocalEventsBody(
   body: string
 ): LocalEventCard[] | null {
+  const cacheKey = localEventsBodyCacheKey(body);
+  if (parsedEventsBodyCache.has(cacheKey)) {
+    return parsedEventsBodyCache.get(cacheKey) ?? null;
+  }
+
   try {
     const parsed = JSON.parse(body) as LocalEventsBody;
     if (!parsed || !Array.isArray(parsed.events)) {
@@ -289,10 +318,30 @@ export function parseLocalEventsBody(
         });
         const venue = typeof e.venue === "string" ? e.venue.trim() : "";
         const name = e.name.trim();
-        const banditNote =
-          typeof e.banditNote === "string" && e.banditNote.trim()
-            ? e.banditNote.trim()
-            : fallbackBanditNote({ venue });
+        let banditNote = normalizeBanditNote(e.banditNote);
+        let editorialBody = normalizeEditorialBody(e.editorialBody);
+        if (
+          editorialBody &&
+          !passesEventGoldenTest({
+            name,
+            venue,
+            banditNote,
+            editorialBody,
+          })
+        ) {
+          editorialBody = undefined;
+        }
+        if (
+          banditNote &&
+          !passesEventGoldenTest({
+            name,
+            venue,
+            banditNote,
+            editorialBody: editorialBody ?? null,
+          })
+        ) {
+          banditNote = null;
+        }
         const category = normalizeCategory(e.category, name, venue);
         const badges =
           normalizeBadges(e.badges) ??
@@ -327,7 +376,9 @@ export function parseLocalEventsBody(
           imageSource: normalizeImageSource(e.imageSource, imageUrl),
           imageRights,
           banditNote,
+          ...(editorialBody ? { editorialBody } : {}),
           category,
+          categoryIcon: resolveEventCategoryIcon({ name, venue, category }),
           badges: badges.length ? badges : undefined,
           startDateIso:
             typeof e.startDateIso === "string" && e.startDateIso.trim()
@@ -379,6 +430,11 @@ export function parseLocalEventsBody(
       });
     }
 
+    if (parsedEventsBodyCache.size >= PARSED_EVENTS_CACHE_MAX) {
+      const oldest = parsedEventsBodyCache.keys().next().value;
+      if (oldest) parsedEventsBodyCache.delete(oldest);
+    }
+    parsedEventsBodyCache.set(cacheKey, valid);
     return valid;
   } catch (err) {
     if (__DEV__) {
@@ -387,6 +443,11 @@ export function parseLocalEventsBody(
         bodyPreview: body.slice(0, 120),
       });
     }
+    if (parsedEventsBodyCache.size >= PARSED_EVENTS_CACHE_MAX) {
+      const oldest = parsedEventsBodyCache.keys().next().value;
+      if (oldest) parsedEventsBodyCache.delete(oldest);
+    }
+    parsedEventsBodyCache.set(cacheKey, null);
     return null;
   }
 }

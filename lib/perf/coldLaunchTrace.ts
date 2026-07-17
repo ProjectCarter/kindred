@@ -513,11 +513,19 @@ export function isPersistedEditionComplete(
   if (!hasDiscoveryItems) {
     reasons.push("editions.discovery has zero surfaced items");
   }
-  if (allocation.activities.length === 0) {
-    reasons.push("discovery pool has zero activities after allocate");
-  }
-  if (allocation.recommendations.length === 0) {
-    reasons.push("discovery pool has zero recommendations after allocate");
+  const hasLocalEventsSection = types.includes("local_events");
+  const catalogSectionsPending =
+    !hasLocalEventsSection &&
+    allocation.activities.length === 0 &&
+    allocation.recommendations.length === 0;
+
+  if (!catalogSectionsPending) {
+    if (allocation.activities.length === 0) {
+      reasons.push("discovery pool has zero activities after allocate");
+    }
+    if (allocation.recommendations.length === 0) {
+      reasons.push("discovery pool has zero recommendations after allocate");
+    }
   }
   if (!banditsPick(edition.bandit as BanditPayload | null)) {
     reasons.push("editions.bandit has no pick");

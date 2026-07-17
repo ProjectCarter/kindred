@@ -1,4 +1,8 @@
 import type { ImageOrientation, StockSearchCandidate } from "./types.ts";
+import {
+  sanitizeArtworkTitle,
+  sanitizeArtistName,
+} from "../heroArtwork/sanitizeMetadata.ts";
 
 const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
 const USER_AGENT =
@@ -158,8 +162,15 @@ export async function searchWikimediaCommons(
       ? `https://commons.wikimedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`
       : "https://commons.wikimedia.org/";
 
-    const artist = metaValue(info, "Artist") || metaValue(info, "Credit") || null;
-    const description = metaValue(info, "ImageDescription");
+    const artistRaw = metaValue(info, "Artist") || metaValue(info, "Credit") || null;
+    const imageDescription = metaValue(info, "ImageDescription");
+    const objectName = metaValue(info, "ObjectName");
+    const filePageTitle = title || null;
+    const artist = sanitizeArtistName(artistRaw, filePageTitle);
+    const altDescription = sanitizeArtworkTitle(imageDescription || fileTitleToId(title), {
+      objectName,
+      filePageTitle,
+    });
     const orientation = orientationOf(width, height);
     if (
       preferred !== "any" &&
@@ -181,7 +192,9 @@ export async function searchWikimediaCommons(
       sourcePageUrl,
       tags: tagsFromFile(title, info),
       orientation,
-      altDescription: description || fileTitleToId(title),
+      altDescription,
+      objectName: objectName || null,
+      filePageTitle,
       licenseShortName: licenseShortName || null,
       licenseUrl: metaValue(info, "LicenseUrl") || null,
       attributionText: buildAttribution(info, sourcePageUrl),

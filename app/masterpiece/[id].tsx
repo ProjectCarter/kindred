@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -18,10 +18,17 @@ export default function MasterpieceDetailScreen() {
   const artworkId =
     typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
 
-  const morningHero = useMemo(
-    () => (artworkId ? getStashedMasterpiece(artworkId) : null),
-    [artworkId]
-  );
+  const [stashReady, setStashReady] = useState(false);
+
+  const morningHero = useMemo(() => {
+    if (!artworkId || !stashReady) return null;
+    return getStashedMasterpiece(artworkId);
+  }, [artworkId, stashReady]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setStashReady(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const back =
     typeof backLabel === "string" && backLabel.trim()
@@ -32,6 +39,10 @@ export default function MasterpieceDetailScreen() {
     router.back();
   }
 
+  if (!stashReady) {
+    return <MasterpieceLoading backLabel={back} onBack={handleBack} />;
+  }
+
   if (!morningHero) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -39,7 +50,7 @@ export default function MasterpieceDetailScreen() {
         <Pressable onPress={handleBack} style={styles.backRow}>
           <Text style={styles.back}>{back}</Text>
         </Pressable>
-        <MasterpieceLoading backLabel={back} />
+        <MasterpieceLoading backLabel={back} onBack={handleBack} />
       </SafeAreaView>
     );
   }

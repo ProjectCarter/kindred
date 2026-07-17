@@ -53,25 +53,44 @@ export async function loadWithRetry<T>(
   let lastError = new Error(`${label} failed`);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const attemptStarted = Date.now();
+    if (__DEV__) {
+      console.log(`[loadWithRetry] ${label} attempt ${attempt}/${maxAttempts} BEGIN`, {
+        timeoutMs,
+      });
+    }
     options?.onAttempt?.(attempt);
     try {
       const value = await withTimeout(fn(), timeoutMs, label);
+      const elapsedMs = Date.now() - started;
+      if (__DEV__) {
+        console.log(`[loadWithRetry] ${label} attempt ${attempt}/${maxAttempts} END ok`, {
+          attemptMs: Date.now() - attemptStarted,
+          totalMs: elapsedMs,
+        });
+      }
       return {
         ok: true,
         value,
         attempt,
-        elapsedMs: Date.now() - started,
+        elapsedMs,
       };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       options?.onAttempt?.(attempt, lastError);
       if (__DEV__) {
-        console.warn(`[loadWithRetry] ${label} attempt ${attempt} failed`, {
+        console.warn(`[loadWithRetry] ${label} attempt ${attempt}/${maxAttempts} END failed`, {
+          attemptMs: Date.now() - attemptStarted,
+          totalMs: Date.now() - started,
           message: lastError.message,
         });
       }
       if (attempt < maxAttempts) {
-        await delay(RETRY_DELAY_MS * attempt);
+        const retryDelay = RETRY_DELAY_MS * attempt;
+        if (__DEV__) {
+          console.log(`[loadWithRetry] ${label} retry delay ${retryDelay}ms before attempt ${attempt + 1}`);
+        }
+        await delay(retryDelay);
       }
     }
   }

@@ -1,0 +1,93 @@
+---
+description: Unique Conclusions — Swap Test for every long-form article (permanent)
+alwaysApply: true
+---
+
+# Unique Conclusions — The Swap Test
+
+**Permanent Kindred editorial law.** Applies to every long-form article:
+
+- The Story of [City Name]
+- Today's Masterpiece
+- Today in History
+- Recommendations (article body)
+- Bandit's Picks
+- Events (when editorial body applies)
+- Future editorial features
+
+## No template conclusions
+
+No article may end with a reusable paragraph, default ending, or interchangeable
+structure. A reader should never reach the last paragraph and think:
+*"I've read this before."*
+
+## The Swap Test (Golden Editorial Test)
+
+Before publishing every article, ask:
+
+**"If I copied this paragraph into a different article, would anyone notice?"**
+
+If the answer is **No, it still fits** → rewrite it.
+
+Every paragraph — especially the ending — must belong only to that article.
+
+## Every conclusion should answer
+
+1. What makes this subject memorable?
+2. Why does it still matter today?
+3. What should the reader notice next time they encounter it?
+4. What makes this different from every other story in Kindred?
+
+Leave the reader with **one final thought that only belongs to that article.**
+
+## Examples
+
+| Desk | Good ending |
+| --- | --- |
+| Gilbert (Story of) | Water Tower, Heritage District, irrigation canals beneath fast growth |
+| Seattle (Story of) | Pike Place, Elliott Bay, ferries, waterfront still telling the story |
+| Masterpiece | One specific detail in the painting the reader may have overlooked |
+| Today in History | Lasting impact connected to the modern world — not "history matters" |
+| Event | One authentic reason **this** event stands out — not "don't miss it" |
+
+## Editorial philosophy
+
+Every article should feel **handcrafted**, never assembled, templated, or
+interchangeable. Readers should feel a real editor wrote each piece for them.
+
+## Required in every article
+
+- Original introduction
+- Original transitions
+- Original conclusion
+- No repeated phrases · No reusable paragraphs · No filler · No redundancy
+- No generic wrap-up
+
+**Quality over quantity. Originality over automation. Teach first. Inspire second.**
+
+Reader finishes thinking: *"I learned something I didn't know."*
+—not— *"That sounded just like the last article."*
+
+## Publication gates — all four tests
+
+Every article must pass:
+
+1. **Accuracy Test** — verified facts only
+2. **Swap Test** — no reusable conclusions (this rule)
+3. **Unique Conclusions Test** — original ending for this article only
+4. **Lasting Thought Test** — one memorable idea (`kindred-memorable-writing.mdc`)
+
+## Engineering gates
+
+| Module | Purpose |
+| --- | --- |
+| `lib/edition/uniqueConclusions.ts` | Swap Test patterns + validation |
+| `supabase/functions/_shared/editorial/uniqueConclusions.ts` | Server mirror |
+| `scripts/lib/uniqueConclusions.mjs` | Seed script validation |
+| `eventStorytelling.ts` | Last editorial paragraph must pass Swap Test |
+| `storyOfEditorial.mjs` | Story of Legacy paragraph validation |
+| `detailEditorial.ts` | Masterpiece long-story conclusion gate |
+| `writeTodayInHistory.ts` | No generic fallback closings |
+
+**Never use rotating closing pools** (`CLOSING_NOTE_POOL`, `pickClosingNote`).
+Every Bandit's Pick closing must be written for that pick.

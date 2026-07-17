@@ -49,7 +49,7 @@ test("editionSectionFromCityArticle builds a valid story_of section", () => {
   const note = parseStoryOfSourceNote(section!.source_note);
   assert.equal(note?.kind, "story_of");
   assert.equal(note?.subtitle, gilbert.subtitle);
-  assert.ok(note?.cityImage?.url?.includes("Gilbert_Water_Tower"));
+  assert.ok(note?.cityImage?.url?.includes("Gilbert-Gilbert_Water_Tower-1925"));
 });
 
 test("isStoryOfSection recognizes story_of and legacy your_city", () => {

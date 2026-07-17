@@ -1,5 +1,5 @@
 import { Image, StyleSheet, View, type ImageProps, type ViewStyle } from "react-native";
-import { kindredGold, masterpiece, paper, shadow } from "../lib/edition/newspaperTheme";
+import { kindredGold, masterpiece, paper } from "../lib/edition/newspaperTheme";
 
 export type MasterpieceFrameProps = {
   imageUri: string;
@@ -11,8 +11,10 @@ export type MasterpieceFrameProps = {
   style?: ViewStyle;
 };
 
+const HAIRLINE = StyleSheet.hairlineWidth;
+
 /**
- * Kindred Gold mat + frame — museum-quality signature presentation.
+ * Museum double hairline — official Kindred Gold, paper mat, no effects.
  */
 export function MasterpieceFrame({
   imageUri,
@@ -23,19 +25,12 @@ export function MasterpieceFrame({
   accessibilityLabel,
   style,
 }: MasterpieceFrameProps) {
-  const innerWidth = width - masterpiece.matPadding * 2;
-  const innerHeight = height;
-
   return (
-    <View style={[styles.mat, { width }, style]}>
-      <View style={styles.frame}>
+    <View style={[styles.outer, { width }, style]}>
+      <View style={styles.inner}>
         <Image
           source={{ uri: imageUri }}
-          style={{
-            width: innerWidth,
-            height: innerHeight,
-            opacity: imageOpacity,
-          }}
+          style={{ width: "100%", height, opacity: imageOpacity }}
           resizeMode="cover"
           accessibilityLabel={accessibilityLabel}
           onError={onImageError}
@@ -46,16 +41,17 @@ export function MasterpieceFrame({
 }
 
 const styles = StyleSheet.create({
-  mat: {
-    backgroundColor: masterpiece.matColor,
-    padding: masterpiece.matPadding,
-    ...shadow.photo,
-  },
-  frame: {
-    overflow: "hidden",
-    borderWidth: masterpiece.frameBorderWidth,
+  outer: {
+    borderWidth: HAIRLINE,
     borderColor: kindredGold.primary,
     borderRadius: masterpiece.frameRadius,
-    backgroundColor: paper.creamDeep,
+    padding: masterpiece.frameInset,
+    backgroundColor: paper.page,
+  },
+  inner: {
+    overflow: "hidden",
+    borderWidth: HAIRLINE,
+    borderColor: kindredGold.frameInner,
+    borderRadius: Math.max(0, masterpiece.frameRadius - 1),
   },
 });

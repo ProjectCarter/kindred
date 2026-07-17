@@ -1,0 +1,94 @@
+---
+description: Local Events editorial standard — no templates, original voice, golden test
+globs:
+  - lib/edition/localEvents*.ts
+  - lib/edition/article.ts
+  - lib/edition/openEvent.ts
+  - lib/edition/eventStore.ts
+  - supabase/functions/_shared/localEvents/**/*
+  - components/LocalEvents*.tsx
+  - app/event/**/*
+  - app/events.tsx
+alwaysApply: false
+---
+
+# Kindred Event Editorial Standard
+
+Kindred is **not** a directory of events. It is a **newspaper**. Every event
+should feel personally selected, researched, and written by an editor — not
+generated from a template.
+
+**Trust always comes before speed.**  
+**Also applies:** `kindred-event-storytelling.mdc` (category voice + golden test v1)  
+**Constitution:** `kindred-editorial-constitution.mdc` · **Dates:** `eventDateVerification.ts`
+
+## No template writing
+
+Every event article must be written **from scratch**. Never reuse:
+
+- Opening paragraphs · Bandit's Note wording · Closing paragraphs
+- Advice sections · Transitions · Generic lifestyle copy
+
+**Golden test:** If you removed the title, could this article still only
+describe **this** event? If **no** → rewrite.
+
+If two articles could swap openings without anyone noticing, **both fail**.
+
+## First understand the event
+
+Before writing one sentence, determine:
+
+- What is actually happening?
+- Why are people attending?
+- Who is it for?
+- What makes it different?
+- What verified details are worth mentioning?
+
+Do not start writing until the event is understood.
+
+## True editorial summary
+
+- Do **not** rewrite the listing, copy the organizer, or paraphrase line-by-line
+- Read the complete event → understand → explain in Kindred's voice
+- Reader should grasp: what it is · why go · what's interesting · what to expect
+- **Never** invent, exaggerate, speculate, or guess — omit the unknown
+
+## Bandit's Note
+
+Handwritten **every day** for **that** event. Never reuse:
+
+`Worth stepping out for…` · `This is the kind of plan…` · `Show up with curiosity…`
+· `Perfect evening…` · `Hidden gem…` · `Something for everyone…`
+
+React naturally to the specific event (venue, format, season, audience).
+
+## The body
+
+Answer only from verified facts:
+
+- What is happening · who hosts · what visitors experience
+- Activities · demonstrations · performances · food · live music · what's unique
+
+No filler. No repetition. Each paragraph = new information.
+
+## The Kindred promise
+
+Readers trust us with their time. Quality beats quantity. **Never publish
+generic or template writing** — only thoughtful, accurate, original summaries.
+
+## Implementation map
+
+| Concern | Location |
+| --- | --- |
+| Bandit notes (edition build) | `localEvents/banditNotes.ts` |
+| Event article assembly | `lib/edition/article.ts` → `articleFromLocalEvent()` |
+| Card + note display | `LocalEventsGrid.tsx`, `app/event/[id].tsx` |
+| Date / trust gate | `eventDateVerification.ts`, `editorial/confidence.ts` |
+| Full standard (human) | `docs/editorial/EVENT_EDITORIAL_STANDARD.md` |
+
+## Anti-patterns (reject or rewrite)
+
+- Listing paraphrase disguised as editorial copy
+- Body that could describe any concert, market, or class in any city
+- Any banned phrase in `lib/edition/eventEditorial.ts` / `localEvents/eventEditorial.ts`
+- Synthesizing Bandit's Note client-side when edition build omitted it

@@ -5,6 +5,7 @@
 
 import type { HistoricalImageAsset } from "./knowledgeGrounding";
 import type { EditionSection } from "./types";
+import { normalizeStoryOfImageUrl, storyOfImageAssetFromSourceNote } from "./storyOfImage";
 
 export const STORY_OF_SECTION_TYPE = "story_of";
 
@@ -32,7 +33,7 @@ type RawCityImage = {
 };
 
 function normalizeCityImage(raw: RawCityImage | null | undefined): HistoricalImageAsset | null {
-  const url = raw?.url?.trim();
+  const url = normalizeStoryOfImageUrl(raw?.url?.trim() ?? null);
   if (!url) return null;
   return {
     url,
@@ -117,9 +118,10 @@ export function parseStoryOfSourceNote(
 }
 
 export function storyOfImageFromSourceNote(
-  sourceNote: string | null | undefined
+  sourceNote: string | null | undefined,
+  metroKey?: string | null
 ): HistoricalImageAsset | null {
-  return parseStoryOfSourceNote(sourceNote)?.cityImage ?? null;
+  return storyOfImageAssetFromSourceNote(sourceNote, metroKey);
 }
 
 export function isStoryOfSection(sectionType: string): boolean {
@@ -186,7 +188,7 @@ export function editionSectionFromCityArticle(
   if (!headline || !body || !subtitle) return null;
   if (headline !== expectedHeadline) return null;
 
-  const imageUrl = row.image_url?.trim();
+  const imageUrl = normalizeStoryOfImageUrl(row.image_url?.trim() ?? null);
   if (!imageUrl) return null;
 
   return {

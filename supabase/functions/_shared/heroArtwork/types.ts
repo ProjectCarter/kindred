@@ -15,7 +15,9 @@ export type MasterpieceEditorialSections = {
   storyBehindArtwork: string;
   historicalContext: string;
   legacy: string;
+  /** @deprecated Use editorialReflection — kept for stored JSON compatibility. */
   editorialClosing: string;
+  editorialReflection?: string;
 };
 
 export type HeroArtworkSeason = "spring" | "summer" | "autumn" | "winter";
@@ -36,6 +38,11 @@ export type HeroArtworkHoliday =
 export type HeroArtworkPublicDomainStatus = "pending" | "verified" | "rejected";
 
 export type HeroArtworkApprovalStatus = "pending" | "approved" | "rejected";
+
+export type HeroArtworkValidationStatus =
+  | "needs_review"
+  | "approved"
+  | "rejected";
 
 export type HeroArtworkCuratorEditorialStatus = "pending" | "approved" | "rejected";
 
@@ -108,8 +115,10 @@ export type HeroArtworkRecord = {
   featured: boolean;
   editorialPriority: number;
   lastUsedAt: string | null;
+  lastShownDate: string | null;
   useCount: number;
   approvalStatus: HeroArtworkApprovalStatus;
+  validationStatus: HeroArtworkValidationStatus;
 };
 
 export type HeroArtworkRow = {
@@ -164,8 +173,10 @@ export type HeroArtworkRow = {
   featured: boolean;
   editorial_priority: number;
   last_used_at: string | null;
+  last_shown_date: string | null;
   use_count: number;
   approval_status: HeroArtworkApprovalStatus;
+  validation_status: HeroArtworkValidationStatus;
   created_at: string;
 };
 

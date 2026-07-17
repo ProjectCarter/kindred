@@ -1,4 +1,9 @@
 import type { MorningHeroExperience } from "./heroArtwork/types";
+import { normalizeMorningHeroExperience } from "./heroArtwork/normalize";
+import {
+  masterpieceTraceBegin,
+  masterpieceTraceEnd,
+} from "./masterpieceDiagnostics";
 
 /**
  * In-memory handoff for Today's Masterpiece detail — no network on open.
@@ -27,8 +32,21 @@ export function stashMasterpiece(
 export function getStashedMasterpiece(
   id: string
 ): MorningHeroExperience | null {
+  masterpieceTraceBegin("article/stash-read", { artworkId: id });
+  const started = Date.now();
   const experience = store.get(id);
-  if (!experience) return null;
-  touch(id, experience);
-  return experience;
+  if (!experience) {
+    masterpieceTraceEnd("article/stash-read", {
+      ms: Date.now() - started,
+      found: false,
+    });
+    return null;
+  }
+  const normalized = normalizeMorningHeroExperience(experience) ?? experience;
+  touch(id, normalized);
+  masterpieceTraceEnd("article/stash-read", {
+    ms: Date.now() - started,
+    found: true,
+  });
+  return normalized;
 }

@@ -1,0 +1,67 @@
+---
+description: Reader-facing editorial voice — the technology disappears
+globs:
+  - lib/edition/**/*.ts
+  - lib/edition/**/*.tsx
+  - components/**/*Article*.tsx
+  - components/BanditsPick.tsx
+  - components/DiscoveryDesk.tsx
+  - supabase/functions/_shared/places/notes.ts
+  - supabase/functions/_shared/bandit/**/*.ts
+alwaysApply: false
+---
+
+# Kindred Editorial Voice
+
+Kindred is a **timeless morning newspaper**, not an AI application.
+
+## Principle
+
+The technology disappears. Readers never hear the engine thinking.
+
+## Never publish (reader-facing)
+
+- verified listing / verified local listing
+- category guess / category detection
+- confidence / evidence / selected because
+- Kindred flagged / Kindred selected / algorithm
+- AI verified / Foursquare verified
+- source confidence / editorial quality (as prose)
+- "we could confirm" / "grounded in what"
+
+These belong in scoring, tests, and internal logs only.
+
+## Write like a local editor
+
+Every article should naturally answer:
+
+- What is this?
+- Why is it worth knowing about?
+- Who would enjoy it?
+- When is the best time to go?
+- Any helpful local tip?
+
+**Never explain why the recommendation exists.** Simply recommend it.
+
+## Tone
+
+Calm · Thoughtful · Confident · Curious · Warm · Timeless
+
+Never: promotional · defensive · technical · documentation · engine-speak
+
+## Observation over explanation
+
+Bad: "Contender eSports is a verified local listing."
+
+Good: "Contender eSports is Gilbert's dedicated esports lounge, offering high-end gaming PCs, console gaming, and regular tournaments."
+
+## Images & maps
+
+- Topic-matched hero only; no unrelated fallbacks; no image beats wrong image
+- Maps: coordinates → full address → name + city/state; hide if insufficient
+
+## Publish gate
+
+> If this appeared in a beautifully designed Sunday newspaper, would a reader believe an experienced local editor wrote it?
+
+If no → rewrite.

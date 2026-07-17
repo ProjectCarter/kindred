@@ -1,6 +1,11 @@
 import type { Router } from "expo-router";
 import type { MorningHeroExperience } from "./heroArtwork/types";
+import { normalizeMorningHeroExperience } from "./heroArtwork/normalize";
 import { stashMasterpiece } from "./masterpieceStore";
+import {
+  masterpieceTraceBegin,
+  masterpieceTraceEnd,
+} from "./masterpieceDiagnostics";
 
 export type OpenMasterpieceOptions = {
   editionId?: string | null;
@@ -16,7 +21,13 @@ export function openMasterpiece(
   morningHero: MorningHeroExperience,
   options: OpenMasterpieceOptions = {}
 ): void {
-  const id = stashMasterpiece(morningHero);
+  masterpieceTraceBegin("navigation/openMasterpiece", {
+    artworkId: morningHero.artworkId,
+  });
+  const started = Date.now();
+  const normalized =
+    normalizeMorningHeroExperience(morningHero) ?? morningHero;
+  const id = stashMasterpiece(normalized);
   const backLabel = options.backLabel?.trim() || "← Today's paper";
 
   router.push({
@@ -26,5 +37,9 @@ export function openMasterpiece(
       backLabel,
       ...(options.editionId ? { editionId: options.editionId } : {}),
     },
+  });
+  masterpieceTraceEnd("navigation/openMasterpiece", {
+    ms: Date.now() - started,
+    artworkId: id,
   });
 }

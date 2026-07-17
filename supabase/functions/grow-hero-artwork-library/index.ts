@@ -6,7 +6,7 @@
 import { createServiceClient } from "../_shared/buildEdition.ts";
 import { growHeroArtworkLibrary } from "../_shared/heroArtwork/backgroundDiscovery.ts";
 
-const DEFAULT_TARGET_NEW = 8;
+const DEFAULT_TARGET_NEW = 2;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

@@ -1,0 +1,123 @@
+---
+description: Editorial discovery formula — Wildjoy-inspired principles, Kindred voice. Not a directory; curate experiences that make readers stop and think.
+alwaysApply: true
+---
+
+# Kindred Editorial Discovery
+
+Kindred studied how excellent experience curators (including @wildjoyexperiences)
+make recommendations feel exciting — **not** to copy their Instagram layout,
+branding, typography, colors, or social-media aesthetic.
+
+Kindred remains calm, elegant, timeless, and newspaper-inspired.
+
+## The Wildjoy Effect → The Kindred Effect
+
+Wildjoy succeeds because every post answers an unspoken reader question:
+*"I didn't know that existed — and I want to do it."*
+
+Kindred's equivalent is **The Kindred Effect**: help someone have a better day
+by surfacing experiences they would never have found on their own.
+
+**Goal:** Not to publish everything. Publish experiences that make readers stop
+and think:
+
+- "I had no idea this was happening."
+- "I want to do that."
+
+## What to prioritize (editorial dimensions)
+
+When selecting Events, Activities, Experiences, Recommendations, and
+Bandit's Picks, favor listings that are:
+
+- Unique · Seasonal · Highly visual · Family-friendly · Date-worthy
+- Worth driving to · Hidden gems · Local favorites · Educational
+- Community-focused · Memorable · Bucket-list worthy
+
+Do **not** rank by popularity alone. Think like an experienced newspaper
+editor choosing the front page — not an algorithm sorting by review count.
+
+## Four questions every pick must answer
+
+Before a card ships, the editorial engine and copy should be able to answer:
+
+1. **Why should I care?** — timeliness, relevance, joy, relief from the ordinary
+2. **What makes this special?** — uniqueness, local character, delight, rarity
+3. **Why is it happening now?** — season, date, weather, limited window, opening
+4. **Why this over dozens of others?** — comparative edge; never generic filler
+
+If a listing cannot answer at least three of four convincingly, hold or reject it.
+
+## Card excitement (before the tap)
+
+Every card should feel worth opening from the headline and photo alone:
+
+- Beautiful **authentic** photography (never wrong stock; never invented visuals)
+- Strong editorial headlines — **exact verified names**, never rewritten
+- Concise summaries (Bandit one-liners, not directory blurbs)
+- Interesting facts when grounded in verified sources
+- Seasonal context and helpful badges (free, family, outdoor, official, etc.)
+- Verified information, official websites, maps, ticket links when appropriate
+
+## Hard variety — the magazine spread test
+
+Never let one category crowd a section. **Maximum two picks from any single
+category per section** (Activities, Recommendations, Bandit's Notebook, Local
+Events).
+
+Bad spread:
+
+```
+Coffee · Coffee · Coffee · Coffee
+```
+
+Good spread:
+
+```
+Museum · Coffee · Botanical Garden · Festival · Beach · Restaurant ·
+Lookout · Farmer's Market · Concert · State Park · Brewery · Historic
+District · Bookstore · Gallery · Hiking Trail · Local Event
+```
+
+Every scroll should introduce something **different**. Cross-section dedup
+still applies — the same venue never appears twice in one day's edition.
+
+## Editorial quality standard (publish gate)
+
+Before publishing, ask:
+
+- Would this genuinely improve someone's Saturday?
+- Would I recommend this to a close friend visiting town?
+- Would an experienced newspaper editor include this in tomorrow's edition?
+
+If **no** → do not publish. Accuracy and trust beat quantity every time
+(see `kindred-editorial-confidence` / `editorial/confidence.ts`).
+
+## Kindred is not Wildjoy
+
+| Wildjoy (inspiration) | Kindred (our voice) |
+| --- | --- |
+| Daily social posts, high energy | Once-a-morning curated edition |
+| Lifestyle categories (date night, day trip) | Newspaper desks (Events, Activities, Recommendations) |
+| Community events & Joy Club | Bandit's Pick, calm discovery |
+| App map pins | Verified edition cards + reader |
+| Influencer enthusiasm | Bandit — quiet, trustworthy, one sentence |
+
+Borrow the **curiosity and specificity**. Never borrow the visual noise.
+
+## Implementation pointers (for engineers)
+
+Scoring and selection live in:
+
+- `supabase/functions/_shared/discovery/score.ts`
+- `supabase/functions/_shared/localEvents/ranking.ts`
+- `supabase/functions/_shared/bandit/selectPick.ts`
+- `lib/edition/sectionAllocator.ts` + `localEvents/variety.ts`
+- `supabase/functions/_shared/editorial/confidence.ts`
+
+When extending scoring, map dimensions above to explicit signals — especially
+gaps today: family-friendly, date-worthy, memorable, visual quality in rank,
+and max-2-per-category for Activities/Recommendations (not just Local Events).
+
+Place notes (`places/notes.ts`) should steer toward the four questions while
+staying within verified facts — never invent details for excitement.

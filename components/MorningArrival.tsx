@@ -308,13 +308,13 @@ export function MorningArrival({
         )}
       </View>
 
-      {/* Immediately under hero: weather, greeting, Bandit */}
+      {/* Immediately under hero: weather (editorial photo only), greeting, Bandit */}
       <View style={styles.morningCopy}>
-        {weatherLine ? (
+        {!showArtworkHero && weatherLine ? (
           <Text style={styles.weather} maxFontSizeMultiplier={1.2}>
             {placeLabel ? `${placeLabel} · ${weatherLine}` : weatherLine}
           </Text>
-        ) : placeLabel ? (
+        ) : !showArtworkHero && placeLabel ? (
           <Text style={styles.weather} maxFontSizeMultiplier={1.2}>
             {placeLabel}
           </Text>

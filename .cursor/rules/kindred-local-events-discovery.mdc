@@ -34,6 +34,9 @@ Balanced allocation: `localEvents/horizonAllocator.ts`
 
 Orchestrator: `supabase/functions/_shared/localEvents/pipeline.ts`
 
+**Editorial voice:** `kindred-event-editorial.mdc` — no template copy, golden
+test, unique Bandit's Note per event.
+
 1. **Gather** from all enabled connectors (`sources/registry.ts`)
 2. **Remove duplicates** — prefer official > venue > aggregator (`merge.ts`)
 3. **Normalize** dates, times, locations, provenance (`normalize.ts`)

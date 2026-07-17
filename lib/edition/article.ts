@@ -11,6 +11,7 @@ import {
   parseStoryOfSourceNote,
   storyOfImageFromSourceNote,
 } from "./storyOf";
+import { resolveStoryOfCityImage } from "./storyOfImage";
 import { dedupeProse, isNearDuplicateProse } from "./contentQuality";
 import { getGoldStandardArticle } from "./goldStandard/algalBloomArticle";
 import {
@@ -453,7 +454,14 @@ export function articleFromEditionSection(
     dek?: string | null;
   }
 ): KindredArticle {
-  const historical = options?.historicalImage;
+  let historical = options?.historicalImage;
+  if (isStoryOfSection(section.section_type)) {
+    const resolved = resolveStoryOfCityImage({
+      sourceNote: section.source_note,
+      metroKey: parseStoryOfSourceNote(section.source_note)?.metroKey ?? null,
+    });
+    historical = resolved ?? historical ?? null;
+  }
   const storyNote = isStoryOfSection(section.section_type)
     ? parseStoryOfSourceNote(section.source_note)
     : null;

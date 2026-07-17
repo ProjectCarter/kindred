@@ -26,6 +26,7 @@ import {
   isKindredBriefing,
 } from "../lib/edition/article";
 import { isV1TextOnlyListing } from "../lib/edition/v1ImagePolicy";
+import { EditorialTitle } from "./EditorialTitle";
 import {
   getArticleCompanion,
   type ArticleCompanion,
@@ -72,6 +73,14 @@ import {
   resolveArticleContextActions,
 } from "../lib/edition/actionBar";
 import { ArticleActionList } from "./ArticleActionList";
+
+function isCityHistorySection(section: string): boolean {
+  return section === "story_of" || section === "your_city";
+}
+
+function isProtectedHistoricalSection(section: string): boolean {
+  return section === "today_in_history" || isCityHistorySection(section);
+}
 
 type Props = {
   article: KindredArticle;
@@ -235,7 +244,7 @@ export function ArticleReader({
 
   const swapInEditorialHero = useCallback(() => {
     if (
-      article.section === "today_in_history" ||
+      isProtectedHistoricalSection(article.section) ||
       article.section === "bandits_pick" ||
       article.section === "discovery" ||
       article.section === "local_events" ||
@@ -291,7 +300,7 @@ export function ArticleReader({
       const timer = setTimeout(() => {
         if (!heroReadyRef.current) {
           if (
-            article.section === "today_in_history" ||
+            isProtectedHistoricalSection(article.section) ||
             article.section === "bandits_pick" ||
             article.section === "discovery" ||
             article.section === "local_events" ||
@@ -730,6 +739,7 @@ export function ArticleReader({
                   return;
                 }
                 if (
+                  isProtectedHistoricalSection(article.section) ||
                   article.section === "bandits_pick" ||
                   article.section === "discovery" ||
                   article.section === "local_events" ||
@@ -863,9 +873,18 @@ export function ArticleReader({
             </Text>
 
             {/* 3. Headline */}
-            <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
-              {article.headline}
-            </Text>
+            {article.categoryIcon ? (
+              <EditorialTitle
+                icon={article.categoryIcon}
+                title={article.headline}
+                style={styles.headline}
+                maxFontSizeMultiplier={1.25}
+              />
+            ) : (
+              <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
+                {article.headline}
+              </Text>
+            )}
 
             {/* 4. Reading time · source · date */}
             {metaLine ? (
@@ -1385,7 +1404,7 @@ function formatSectionLabel(section: string): string {
     health: "Health",
     culture: "Culture",
     technology: "Technology",
-    recommendations: "Recommendations",
+    recommendations: "Food & Drink",
   };
   if (map[section]) return map[section];
   return section

@@ -7,11 +7,8 @@ import { copyMorningHeroFromRecord } from "./presentation.ts";
 import type { HeroArtworkRecord } from "./types.ts";
 
 const SAMPLE_ABOUT =
-  "Claude Monet painted this scene during a prolific period of study along the Seine, " +
-  "when Impressionism was still a young and controversial movement in Paris. The work matters " +
-  "because it helped redefine how painters could capture light, atmosphere, and the passing " +
-  "moment rather than polished illusion. It became famous as audiences recognized a new way " +
-  "of seeing everyday beauty in modern life.";
+  "Monet painted Water Lilies when Impressionism was still a daring experiment — and Paris had not yet learned to trust quick brushwork and open air. " +
+  "The painting still rewards anyone willing to slow down, watch light move across water, and wonder why it endures.";
 
 const SAMPLE_LONG_STORY =
   "Claude Monet painted Water Lilies during a late chapter of his career, when the artist devoted himself to the shifting surface of his garden pond at Giverny. " +
@@ -61,7 +58,7 @@ const artwork: HeroArtworkRecord = {
   sourceProvider: "met",
   sourceProviderArtworkId: "123",
   aboutArtworkBody: SAMPLE_ABOUT,
-  aboutWordCount: 82,
+  aboutWordCount: 38,
   longStoryBody: SAMPLE_LONG_STORY,
   longStoryParagraphCount: 6,
   editorialSections: null,
@@ -91,7 +88,7 @@ const artwork: HeroArtworkRecord = {
   approvalStatus: "approved",
 };
 
-Deno.test("about artwork enforces 2-4 sentence editorial range", () => {
+Deno.test("about artwork enforces 1-2 sentence homepage teaser range", () => {
   const valid = validateAboutArtworkBody(SAMPLE_ABOUT);
   assertEquals(valid.valid, true);
   assertEquals(valid.sentenceCount >= ABOUT_ARTWORK_SENTENCE_MIN, true);

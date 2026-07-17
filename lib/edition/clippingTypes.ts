@@ -20,5 +20,5 @@ export const CLIPPING_TYPE_LABEL: Record<ClippingContentType, string> = {
   article: "Article",
   event: "Event",
   activity: "Activity",
-  recommendation: "Recommendation",
+  recommendation: "Food & Drink",
 };

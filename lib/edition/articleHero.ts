@@ -127,6 +127,14 @@ function pickEditorialAsset(
   return catalog.find((a) => a.id === "default-morning") ?? catalog[0];
 }
 
+function isAuthenticHistoricalSection(section: string): boolean {
+  return (
+    section === "today_in_history" ||
+    section === "story_of" ||
+    section === "your_city"
+  );
+}
+
 function isAuthenticHistorySection(section: string): boolean {
   return section === "today_in_history";
 }
@@ -151,7 +159,7 @@ export function resolveArticleHero(input: {
 
   if (wireUri) {
     const sourceName = input.source?.trim() || "Kindred";
-    const isHistory = isAuthenticHistorySection(input.section);
+  const isHistory = isAuthenticHistoricalSection(input.section);
     return {
       uri: wireUri,
       source: null,
@@ -166,12 +174,12 @@ export function resolveArticleHero(input: {
     };
   }
 
-  if (isAuthenticHistorySection(input.section)) {
+  if (isAuthenticHistoricalSection(input.section)) {
     return {
       uri: null,
       source: null,
       caption: input.headline,
-      credit: null,
+      credit: input.existing?.credit?.trim() || null,
       kind: "historical",
     };
   }
@@ -208,7 +216,7 @@ export function resolveArticleHero(input: {
 export function ensureArticleHero(article: KindredArticle): KindredArticle {
   const hasWire = Boolean(article.heroImage?.uri?.trim());
   const hasLocal = Boolean(article.heroImage?.source);
-  const isHistory = isAuthenticHistorySection(article.section);
+  const isHistory = isAuthenticHistoricalSection(article.section);
 
   if (hasWire || hasLocal) {
     if (hasWire && !article.heroImage?.credit && !isHistory) {
@@ -282,7 +290,7 @@ export function supportingFiguresForArticle(
     return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
   }
 
-  if (isAuthenticHistorySection(article.section)) {
+  if (isAuthenticHistoricalSection(article.section)) {
     return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
   }
 

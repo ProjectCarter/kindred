@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { kindredGold, paper } from "../lib/edition/newspaperTheme";
@@ -14,30 +14,42 @@ export type MasterpieceLoadingProps = {
   onBack?: () => void;
 };
 
-/** Premium loading — never implies the story is unavailable. */
+/** Brief premium loading — never indefinite; caller must render article shell. */
 export function MasterpieceLoading({
   backLabel = "← Today's paper",
+  onBack,
 }: MasterpieceLoadingProps) {
   const [lineIndex, setLineIndex] = useState(0);
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    const rotate = setInterval(() => {
       setLineIndex((current) => (current + 1) % LOADING_LINES.length);
-    }, 2800);
-    return () => clearInterval(timer);
+    }, 2400);
+    const timeout = setTimeout(() => setTimedOut(true), 5000);
+    return () => {
+      clearInterval(rotate);
+      clearTimeout(timeout);
+    };
   }, []);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar style="dark" />
+      {onBack ? (
+        <Pressable onPress={onBack} style={styles.backRow}>
+          <Text style={styles.back}>{backLabel}</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.body}>
         <View style={styles.goldRule} />
-        <ActivityIndicator color={kindredGold.primary} size="small" />
+        {!timedOut ? (
+          <ActivityIndicator color={kindredGold.primary} size="small" />
+        ) : null}
         <Text style={styles.line} maxFontSizeMultiplier={1.1}>
-          {LOADING_LINES[lineIndex]}
-        </Text>
-        <Text style={styles.backHint} maxFontSizeMultiplier={1.05}>
-          {backLabel}
+          {timedOut
+            ? "Opening today's masterpiece…"
+            : LOADING_LINES[lineIndex]}
         </Text>
       </View>
     </SafeAreaView>
@@ -48,6 +60,15 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: paper.page,
+  },
+  backRow: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  back: {
+    fontSize: 15,
+    color: kindredGold.primary,
+    letterSpacing: 0.2,
   },
   body: {
     flex: 1,
@@ -71,11 +92,5 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.inkMuted,
     textAlign: "center",
-  },
-  backHint: {
-    marginTop: 8,
-    fontSize: 13,
-    color: paper.inkFaint,
-    letterSpacing: 0.2,
   },
 });

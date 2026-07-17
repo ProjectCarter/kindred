@@ -4,7 +4,7 @@ import type {
   HeroArtworkPublicDomainStatus,
   HeroArtworkRecord,
 } from "./types.ts";
-import { validateAboutArtworkBody } from "./editorial.ts";
+import { hasLibraryAboutArtworkBody, validateAboutArtworkBody } from "./editorial.ts";
 
 export type HeroArtworkLicenseInput = {
   license: HeroArtworkLicense | string;
@@ -118,10 +118,8 @@ export function assertHeroArtworkSelectable(artwork: HeroArtworkRecord): void {
 
 export function isHeroArtworkRecordSelectable(artwork: HeroArtworkRecord): boolean {
   if (!artwork.hostedUrl?.trim() || !artwork.storagePath?.trim()) return false;
-  if (!artwork.imageWidth || !artwork.imageHeight || !artwork.aspectRatio) {
-    return false;
-  }
   if (!artwork.attributionText?.trim()) return false;
+  if (!hasLibraryAboutArtworkBody(artwork.aboutArtworkBody)) return false;
   return isHeroArtworkLicenseSafe({
     license: artwork.license,
     publicDomainStatus: artwork.publicDomainStatus,
@@ -133,6 +131,5 @@ export function isHeroArtworkRecordSelectable(artwork: HeroArtworkRecord): boole
     verificationSource: artwork.verificationSource,
     commercialUseConfirmed: artwork.commercialUseConfirmed,
     curatorEditorialStatus: artwork.curatorEditorialStatus,
-    aboutArtworkBody: artwork.aboutArtworkBody,
   });
 }

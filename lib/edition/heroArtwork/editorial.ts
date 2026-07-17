@@ -1,7 +1,8 @@
-export const ABOUT_ARTWORK_SENTENCE_MIN = 2;
-export const ABOUT_ARTWORK_SENTENCE_MAX = 4;
+/** Homepage teaser — 1–2 editorial sentences (keep in sync with server editorial.ts). */
+export const ABOUT_ARTWORK_SENTENCE_MIN = 1;
+export const ABOUT_ARTWORK_SENTENCE_MAX = 2;
 export const ABOUT_ARTWORK_WORD_MIN = 35;
-export const ABOUT_ARTWORK_WORD_MAX = 130;
+export const ABOUT_ARTWORK_WORD_MAX = 60;
 
 export function countWords(text: string): number {
   return text

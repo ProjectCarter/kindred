@@ -12,7 +12,13 @@
  */
 import { createClient } from "@supabase/supabase-js";
 import { buildMasterpieceCreditLine } from "./lib/masterpieceCredit.mjs";
-import { buildMasterpieceDetail } from "./lib/masterpieceDetail.mjs";
+import { buildMasterpieceDetail, buildHomepageTeaser } from "./lib/masterpieceDetail.mjs";
+import {
+  sanitizeArtworkTitle,
+  sanitizeArtistName,
+  sanitizeArtworkYear,
+  parseArtworkYearFromText,
+} from "./lib/sanitizeWikimediaMetadata.mjs";
 
 const SUPABASE_URL = "https://zdqjeocdsbdzecawumdp.supabase.co";
 const SERVICE_KEY =
@@ -22,10 +28,10 @@ const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
 const MET_API = "https://collectionapi.metmuseum.org/public/collection/v1";
 const HERO_BUCKET = "kindred-hero-artwork";
 const USER_AGENT = "Kindred/1.0 (hero-artwork-library-seed)";
-const ABOUT_SENTENCE_MIN = 2;
-const ABOUT_SENTENCE_MAX = 4;
+const ABOUT_SENTENCE_MIN = 1;
+const ABOUT_SENTENCE_MAX = 2;
 const ABOUT_WORD_MIN = 35;
-const ABOUT_WORD_MAX = 130;
+const ABOUT_WORD_MAX = 60;
 
 const CONCURRENCY = 4;
 const PER_QUERY_PAGE_LIMIT = 12;
@@ -196,29 +202,28 @@ function normalizeLicense(shortName) {
   return "public_domain";
 }
 
-function parseArtist(raw) {
-  const text = stripHtml(raw);
-  if (!text || /^unknown/i.test(text)) return "Unknown artist";
-  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+function parseArtist(raw, filePageTitle) {
+  return sanitizeArtistName(raw, filePageTitle);
 }
 
 function parseTitle(candidate) {
-  const objectName = candidate.objectName?.trim();
-  if (objectName && objectName.length >= 4 && !/^file:/i.test(objectName)) {
-    return objectName.length > 140 ? `${objectName.slice(0, 137)}…` : objectName;
-  }
-  let alt = candidate.altDescription?.trim() || "";
-  alt = alt.split(/title QS:|label QS:/i)[0].trim();
-  alt = alt.replace(/^File:/i, "").replace(/\.(jpe?g|png|webp)$/i, "").trim();
-  if (alt && alt.length >= 4) {
-    return alt.length > 140 ? `${alt.slice(0, 137)}…` : alt;
-  }
-  return "Untitled artwork";
+  const filePageTitle = candidate.sourcePageUrl?.includes("commons.wikimedia.org")
+    ? `File:${decodeURIComponent(candidate.sourcePageUrl.split("/wiki/").pop() ?? "").replace(/_/g, " ")}`
+    : null;
+  return sanitizeArtworkTitle(candidate.altDescription || candidate.objectName, {
+    objectName: candidate.objectName,
+    filePageTitle,
+  });
 }
 
-function parseYear(text) {
-  const match = String(text ?? "").match(/\b(1[0-9]{3}|20[0-1][0-9])\b/);
-  return match?.[1] ?? null;
+function parseYear(candidate) {
+  return (
+    sanitizeArtworkYear(null, {
+      title: candidate.altDescription,
+      imageDescription: candidate.altDescription,
+      filePageTitle: candidate.sourcePageUrl,
+    }) ?? parseArtworkYearFromText(candidate.objectName ?? candidate.altDescription)
+  );
 }
 
 function countSentences(text) {
@@ -251,23 +256,21 @@ function computeDisplayDimensions(sourceWidth, sourceHeight) {
 }
 
 function buildAboutBody(input) {
-  const { title, artist, year, medium, period, institution } = input;
-  const sentences = [
-    `${title} is a celebrated work by ${artist}${year ? `, created around ${year}` : ""}.`,
-    `${medium ? `Rendered in ${medium}, it` : "It"} reflects the visual language of ${period}.`,
-    `The work is shared through ${institution}'s open collections, made available for study, teaching, and quiet daily appreciation.`,
-    `Viewers have long been drawn to its balance of color, form, and atmosphere — qualities that reward unhurried looking rather than a quick glance.`,
-  ];
+  const { title, artist, year, period, collection } = input;
+  const body = buildHomepageTeaser({
+    title,
+    artist,
+    year,
+    period,
+    collection,
+  });
 
-  let body = sentences.join(" ");
-  while (!validateAboutBody(body) && sentences.length > ABOUT_SENTENCE_MIN) {
-    sentences.pop();
-    body = sentences.join(" ");
-  }
-  if (!validateAboutBody(body)) {
-    body += ` It remains a beloved example of how art can slow the morning and invite curiosity before the day begins.`;
-  }
-  return body.trim();
+  if (validateAboutBody(body)) return body.trim();
+
+  const fallback =
+    `${title}${year ? ` (${year})` : ""} holds a detail most people walk past — until ${artist} makes you see it. ` +
+    `It is the kind of work that makes you want to know what happened next.`;
+  return fallback.trim();
 }
 
 async function searchWikimedia(query, offset = 0) {
@@ -380,16 +383,15 @@ async function hostImage(provider, providerId, downloadUrl, sourceWidth, sourceH
 
 async function upsertWikimediaArtwork(candidate, collection, hosted) {
   const providerId = candidate.providerImageId;
-  const artist = parseArtist(candidate.photographerName);
+  const artist = parseArtist(candidate.photographerName, candidate.sourcePageUrl);
   const title = parseTitle(candidate);
-  const year = parseYear(candidate.altDescription ?? candidate.objectName);
+  const year = parseYear(candidate);
   const aboutBody = buildAboutBody({
     title,
     artist,
     year,
-    medium: candidate.medium || "traditional materials",
     period: collection.replace(/_/g, " "),
-    institution: "Wikimedia Commons",
+    collection,
   });
   const wordCount = countWords(aboutBody);
   if (!validateAboutBody(aboutBody)) return false;
@@ -446,6 +448,7 @@ async function upsertWikimediaArtwork(candidate, collection, hosted) {
       institution: "Wikimedia Commons",
       sourceUrl: candidate.sourcePageUrl,
       collection,
+      homepageTeaser: aboutBody,
     }),
     curator_editorial_status: "approved",
     featured: false,
@@ -493,9 +496,8 @@ async function tryMetTopUp(remaining) {
         title,
         artist,
         year: parseYear(obj.objectDate),
-        medium: obj.medium || "traditional materials",
         period: obj.period || "its era",
-        institution: "The Metropolitan Museum of Art",
+        collection: "impressionism",
       });
       const row = {
         internal_id: `kindred:hero:met:${objectId}`,
@@ -542,7 +544,8 @@ async function tryMetTopUp(remaining) {
           period: obj.period || "its era",
           institution: "The Metropolitan Museum of Art",
           sourceUrl: obj.objectURL ?? "https://www.metmuseum.org/",
-          collection: "museum_open_access",
+          collection: "impressionism",
+          homepageTeaser: aboutBody,
         }),
         curator_editorial_status: "approved",
         featured: false,

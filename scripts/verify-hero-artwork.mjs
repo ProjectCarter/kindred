@@ -3,18 +3,40 @@
  */
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://zdqjeocdsbdzecawumdp.supabase.co";
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ??
+  process.env.EXPO_PUBLIC_SUPABASE_URL ??
+  "https://zdqjeocdsbdzecawumdp.supabase.co";
 const SERVICE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkcWplb2Nkc2JkemVjYXd1bWRwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzI3ODM1MCwiZXhwIjoyMDk4ODU0MzUwfQ.FwAqKj2kD7OOfYrePX2ahBSt3UFO4n2YjpFgPU-VUWk";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY;
 
 const USER_ID = process.env.USER_ID ?? "24bbe9e7-8455-4c3c-87eb-8424ba27ab81";
-const EDITION_DATE = process.env.EDITION_DATE ?? "2026-07-15";
+const EDITION_DATE =
+  process.env.EDITION_DATE ?? new Date().toISOString().slice(0, 10);
+
+if (!SERVICE_KEY) {
+  console.error("Set SUPABASE_SERVICE_ROLE_KEY");
+  process.exit(1);
+}
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const [{ count: libraryCount }, { data: sample }, { data: selection }, { data: editions }] =
+function detailStatus(detail) {
+  if (!detail) return { complete: false, reason: "missing" };
+  const sections = detail.sections?.length ?? 0;
+  const lookCloser = detail.lookingCloser?.length ?? 0;
+  const didYouKnow = Boolean(detail.didYouKnow?.trim());
+  return {
+    complete: sections >= 6 && lookCloser >= 2 && didYouKnow,
+    sections,
+    lookCloser,
+    didYouKnow,
+  };
+}
+
+const [{ count: libraryCount }, { data: sample }, { data: selection }, { data: editions }, schemaProbe] =
   await Promise.all([
     admin
       .from("kindred_hero_artwork")
@@ -36,21 +58,29 @@ const [{ count: libraryCount }, { data: sample }, { data: selection }, { data: e
       .eq("user_id", USER_ID)
       .eq("edition_date", EDITION_DATE)
       .limit(1),
+    admin
+      .from("kindred_hero_artwork")
+      .select("detail_editorial_status")
+      .limit(1),
   ]);
 
+const detailColumnsApplied = !schemaProbe.error?.message?.includes("does not exist");
 const me = editions?.[0]?.morning_edition;
 const morningHero = me?.morningHero ?? null;
+const snapshot = selection?.presentation_snapshot ?? null;
 
 console.log(
   JSON.stringify(
     {
+      editionDate: EDITION_DATE,
+      detailColumnsApplied,
       libraryHostedCount: libraryCount,
       librarySample: sample,
       editionSelection: selection
         ? {
             editionDate: selection.edition_date,
             artworkId: selection.artwork_id,
-            hasSnapshot: Boolean(selection.presentation_snapshot?.artworkId),
+            snapshotDetail: detailStatus(snapshot?.detail),
           }
         : null,
       editionMorningHero: morningHero
@@ -58,20 +88,31 @@ console.log(
             artworkId: morningHero.artworkId,
             title: morningHero.artworkTitle,
             artist: morningHero.artist,
+            year: morningHero.year,
             hostedUrl: morningHero.hostedUrl,
-            imageUrl: morningHero.imageUrl,
             aboutWordCount: morningHero.aboutWordCount,
+            detail: detailStatus(morningHero.detail),
           }
         : null,
       usedEngines: me?.selectionMeta?.usedEngines,
       heroNotes: (me?.selectionMeta?.editorNotes ?? []).filter((n) =>
         /hero/i.test(n)
       ),
-      ok: Boolean(libraryCount > 0 && morningHero?.hostedUrl),
+      ok: Boolean(
+        libraryCount > 0 &&
+          morningHero?.hostedUrl &&
+          detailStatus(morningHero.detail).complete
+      ),
     },
     null,
     2
   )
 );
 
-process.exit(libraryCount > 0 && morningHero?.hostedUrl ? 0 : 1);
+process.exit(
+  libraryCount > 0 &&
+    morningHero?.hostedUrl &&
+    detailStatus(morningHero.detail).complete
+    ? 0
+    : 1
+);

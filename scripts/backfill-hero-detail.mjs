@@ -3,7 +3,10 @@
  * Run: node scripts/backfill-hero-detail.mjs [--dry-run]
  */
 import { createClient } from "@supabase/supabase-js";
-import { buildMasterpieceDetail } from "./lib/masterpieceDetail.mjs";
+import {
+  buildMasterpieceDetail,
+  buildHomepageTeaser,
+} from "./lib/masterpieceDetail.mjs";
 
 const dryRun = process.argv.includes("--dry-run");
 
@@ -21,6 +24,10 @@ const admin = createClient(url, key, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+function countWords(text) {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
 function hasDetail(row) {
   return (
     row.detail_editorial_status === "approved" &&
@@ -28,7 +35,8 @@ function hasDetail(row) {
     row.artist_biography?.trim() &&
     Array.isArray(row.look_closer_items) &&
     row.look_closer_items.length >= 2 &&
-    row.did_you_know?.trim()
+    row.did_you_know?.trim() &&
+    row.editorial_sections?.introduction?.trim()
   );
 }
 
@@ -36,7 +44,7 @@ async function main() {
   const { data: rows, error } = await admin
     .from("kindred_hero_artwork")
     .select(
-      "id, artwork_title, artist, year, source_institution, source_url, collections, long_story_body, detail_editorial_status, artist_biography, look_closer_items, did_you_know"
+      "id, artwork_title, artist, year, source_institution, source_url, collections, long_story_body, detail_editorial_status, artist_biography, look_closer_items, did_you_know, editorial_sections"
     );
 
   if (error) {
@@ -54,6 +62,13 @@ async function main() {
     }
 
     const collection = row.collections?.[0] ?? "museum_open_access";
+    const teaser = buildHomepageTeaser({
+      title: row.artwork_title,
+      artist: row.artist,
+      year: row.year,
+      period: collection.replace(/_/g, " "),
+      collection,
+    });
     const detail = buildMasterpieceDetail({
       title: row.artwork_title,
       artist: row.artist,
@@ -63,6 +78,7 @@ async function main() {
       institution: row.source_institution,
       sourceUrl: row.source_url,
       collection,
+      homepageTeaser: teaser,
     });
 
     console.log(`${row.id}: detail ready (${detail.long_story_paragraph_count} paragraphs)`);
@@ -70,7 +86,11 @@ async function main() {
     if (!dryRun) {
       const { error: updateError } = await admin
         .from("kindred_hero_artwork")
-        .update(detail)
+        .update({
+          ...detail,
+          about_artwork_body: teaser,
+          about_word_count: countWords(teaser),
+        })
         .eq("id", row.id);
 
       if (updateError) {

@@ -12,6 +12,10 @@ alwaysApply: false
 
 # Kindred Editorial Standard
 
+**Constitution:** See `kindred-editorial-constitution.mdc` — trust, verification,
+never guess. This file covers horizon, radius, and ranking; the constitution
+covers what may be published at all.
+
 Kindred is a **local daily newspaper**, not a "things to do today" app. Every
 discovery desk helps readers enjoy today, plan for this weekend, and discover
 worthwhile experiences over the **coming month**.

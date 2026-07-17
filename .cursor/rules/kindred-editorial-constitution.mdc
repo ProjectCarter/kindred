@@ -1,0 +1,132 @@
+---
+description: Kindred Editorial Constitution — trust, verification, never guess; permanent engineering law
+alwaysApply: true
+---
+
+# Kindred Editorial Constitution
+
+**Trust is our most valuable feature.**
+
+Kindred **NEVER** guesses, assumes, fabricates, or fills missing information
+with AI inference. If something cannot be verified with sufficient confidence,
+**it is not published.**
+
+**Accuracy always beats quantity.** A smaller newspaper with 25 verified events
+is better than 40 events containing one incorrect listing. The same rule applies
+to Activities and Recommendations.
+
+**When in doubt: LEAVE IT OUT.** Every pick should be accurate enough that we
+would confidently send our own family there.
+
+## Before publication — verify
+
+### Events
+
+- Date, time, timezone
+- Venue
+- Official website
+- Maps coordinates
+- Event status (not cancelled / postponed / registration closed)
+- Source agreement (no conflicting dates across sources)
+- **Editorial copy:** original summary + Bandit's Note — no templates (`kindred-event-editorial.mdc`)
+
+**Gate:** `localEvents/eventDateVerification.ts` · `editorial/confidence.ts` ·
+`localEvents/familyFriendlyFilter.ts` (before dedupe + rank) · pipeline +
+`buildEdition.ts` publish re-check. Only `verificationStatus = "verified"` enters
+the edition.
+
+### Editorial exclusion filter (permanent)
+
+Kindred is a **premium, family-friendly morning newspaper**. Surface inspiring,
+educational, cultural, historical, recreational, and community content only.
+
+**Always exclude:** adult entertainment (strip clubs, revues, escort services,
+swinger/BDSM/fetish events, sex expos, pornography, adult bookstores/arcades,
+explicit burlesque); hate groups and extremist rallies; violence or illegal
+activity promotion; scams (pyramid schemes, MLM recruiting, timeshare pitches,
+get-rich-quick and predatory financial seminars, fake crypto/investment schemes).
+
+**Never exclude when legitimate:** Broadway, theater, ballet, opera, symphony,
+concerts, comedy, live music, museums, festivals, art exhibits, family
+performances, educational seminars, charity events, community gatherings,
+sporting events.
+
+**Diagnostics:** log filtered count, reason (`signal` + `category`), and sample
+titles each edition. Provider-agnostic — applies to Eventbrite, Ticketmaster, and
+all future sources. Same gate in `discovery/score.ts` for Activities,
+Recommendations, and Bandit's Pick.
+
+### Activities
+
+- Business exists
+- Not permanently closed
+- Maps coordinates verified
+- Website verified
+- Hours verified when available
+
+**Gate:** `editorial/confidence.ts` · `discovery/confidencePayload.ts` ·
+place provider verification.
+
+### Recommendations
+
+- Location exists
+- Maps coordinates verified
+- Official website when applicable
+- Business not permanently closed
+- Article facts verified
+
+**Gate:** same discovery confidence stack; `familyFriendlyFilter.ts` ·
+`contentQuality.ts` · `places/chains.ts` for local-first, verified listings.
+
+### Maps
+
+Never guess coordinates. Always verify the pin opens at the intended
+destination. **If coordinates cannot be verified, do not publish.**
+
+### Articles
+
+Never invent history, facts, rankings, awards, or claims. Write only from
+verified information. If confidence is low, **omit the statement** — do not
+soften with speculation.
+
+**Unique Conclusions (Swap Test):** `kindred-unique-conclusions.mdc` — every
+long-form article must end with an original conclusion. No reusable paragraphs,
+no rotating closing pools, no generic wrap-ups. If the last paragraph could
+paste into another article unnoticed, rewrite it.
+
+**Memorable Writing (Lasting Thought Test):** `kindred-memorable-writing.mdc` —
+every article must leave the reader with one memorable idea. No filler, no
+generic takeaways. If nothing would stick an hour later, rewrite it.
+
+**Today's Masterpiece:** `kindred-masterpiece-editorial.mdc` — museum magazine
+structure, facts-first Overview, no cross-section repetition, 1,200–2,000 words
+when verified material supports it.
+
+**Gate:** `storyEditor/` · `editorial/confidence.ts` · `uniqueConclusions.ts` ·
+`memorableWriting.ts` · `categoryIcon.ts` · hero/detail templates must use verified
+library metadata only.
+
+**Visual Language (v1):** `kindred-visual-language.mdc` — one verified category,
+one permanent emoji. Never stack. Icon follows the article everywhere.
+
+## General rule
+
+When confidence is below the publishing threshold: **DO NOT PUBLISH.**
+
+Do not backfill sections with questionable content. An empty desk is better
+than a wrong one.
+
+## Engineering defaults
+
+| Action | Required behavior |
+| --- | --- |
+| Missing field | Reject or omit — never invent |
+| Low confidence | `action: "reject"` or `"enrich"` — never force `"publish"` |
+| Conflicting sources | Reject until resolved |
+| AI copy | Enrich verified facts only — never create facts |
+| Expired / past event | Remove — never show as upcoming |
+
+Existing patterns to extend, not bypass: `computeEventConfidence`,
+`computeDiscoveryConfidence`, `shouldPublishEditorialConfidence`,
+`filterVerifiedEventsForEdition`, `filterFamilyFriendlyEvents`,
+`assessFamilyFriendlyListing`, `pruneDiscoveryPayloadByConfidence`.

@@ -138,6 +138,49 @@ Deno.test("assessPersistedEditionBuild accepts complete persisted payload", () =
   assertEquals(result.reasons.length, 0);
 });
 
+Deno.test("assessPersistedEditionBuild skips catalog desks before bootstrap", () => {
+  const discovery = sampleDiscovery([], []);
+  const sectionsWithoutEvents = baseSections.filter(
+    (s) => s.section_type !== "local_events"
+  );
+
+  const pending = assessPersistedEditionBuild({
+    sections: sectionsWithoutEvents,
+    discovery,
+    hasBanditsPick: true,
+    catalogBootstrap: {
+      eventsCatalogBootstrapped: false,
+      activitiesCatalogBootstrapped: false,
+      foodDrinkCatalogBootstrapped: false,
+    },
+  });
+
+  assertEquals(pending.complete, true);
+});
+
+Deno.test("assessPersistedEditionBuild requires morning hero when library has artwork", () => {
+  const discovery = sampleDiscovery(
+    [ranked("act1", "activities")],
+    [ranked("rec1", "coffee")]
+  );
+
+  const missingHero = assessPersistedEditionBuild({
+    sections: baseSections,
+    discovery,
+    hasBanditsPick: true,
+    libraryHasHeroArtwork: true,
+    hasMorningHero: false,
+  });
+
+  assertEquals(missingHero.complete, false);
+  assertEquals(
+    missingHero.reasons.includes(
+      "morning_hero missing while hero library has eligible artwork"
+    ),
+    true
+  );
+});
+
 Deno.test("assessPersistedEditionBuild requires story_of when expected", () => {
   const discovery = sampleDiscovery(
     [ranked("act1", "activities")],

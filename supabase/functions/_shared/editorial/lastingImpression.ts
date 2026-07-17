@@ -69,7 +69,7 @@ const DESK_GUIDANCE: Record<LastingImpressionDesk, string> = {
     "Activities desk: close on pacing, memory, or why people return — not a sales line. " +
     "The last sentence should feel like a last look, not a review score.",
   recommendations:
-    "Recommendations desk: end on atmosphere, ritual, or seasonal rhythm — never 'check it out' or 'perfect for everyone.' " +
+    "Food & Drink desk: end on atmosphere, ritual, or seasonal rhythm — never 'check it out' or 'perfect for everyone.' " +
     "Observation beats promotion.",
   bandits_pick:
     "Bandit's Pick: one timeless sentence that makes the reader carry the moment forward — " +

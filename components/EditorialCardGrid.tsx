@@ -8,11 +8,14 @@ import {
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { HOMEPAGE_INITIAL_RENDER_COUNT, sliceForInitialRender } from "../lib/edition/editorialPublishing";
 import { BanditCharacter } from "./BanditCharacter";
+import { EditorialTitle } from "./EditorialTitle";
 
 export type EditorialGridCard = {
   id: string;
   /** Small caps meta line above the title (category, distance, price tier…). */
   overline?: string | null;
+  /** Single editorial category emoji — shown before title. */
+  categoryIcon?: string | null;
   title: string;
   /** Venue-equivalent line (neighborhood, address). */
   subtitle?: string | null;
@@ -147,13 +150,13 @@ export function EditorialCardGrid({
                     </Text>
                   ) : null}
 
-                  <Text
+                  <EditorialTitle
+                    icon={card.categoryIcon}
+                    title={card.title}
                     style={styles.title}
                     numberOfLines={3}
                     maxFontSizeMultiplier={1.15}
-                  >
-                    {card.title}
-                  </Text>
+                  />
 
                   {card.subtitle ? (
                     <Text

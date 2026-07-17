@@ -1,0 +1,127 @@
+---
+description: Kindred Visual Language Constitution v1 — one category, one permanent emoji
+alwaysApply: true
+---
+
+# Kindred Visual Language Constitution (v1)
+
+**Permanent editorial law.** Icons are not decoration — they help readers instantly
+recognize what something is before reading a single word. Over time, Kindred readers
+should recognize categories from the icon alone.
+
+## One category = one icon
+
+Every editorial category has **one permanent emoji**. Never rotate. Never substitute.
+Never choose randomly.
+
+- Every coffee shop → ☕
+- Every theater → 🎭
+- Every museum → 🏛️
+
+## Official icon dictionary
+
+| Icon | Category |
+| --- | --- |
+| 🎵 | Live Music |
+| 🎤 | Concert |
+| 🎭 | Theater / Performing Arts |
+| 😂 | Comedy |
+| 🎬 | Movies |
+| 🎪 | Festival |
+| 🥕 | Farmers Market |
+| 🍽️ | Food Festival / Food Event |
+| ☕ | Coffee Shop |
+| 🍺 | Brewery |
+| 🍷 | Winery |
+| 🍸 | Cocktail Bar |
+| 💃 | Dancing |
+| 🎨 | Art Gallery |
+| 🏛️ | Museum |
+| 📜 | Historic Site |
+| 📚 | Library |
+| 📖 | Bookstore |
+| 🌳 | Park |
+| 🌸 | Botanical Garden |
+| 🌿 | Nature Preserve |
+| 🌅 | Scenic View |
+| 🏖️ | Beach |
+| 🌊 | Lake / River |
+| 🥾 | Hiking |
+| 🚶 | Walking Trail |
+| 🚴 | Cycling |
+| 🏃 | Running |
+| 🏓 | Pickleball |
+| 🎾 | Tennis |
+| ⛳ | Golf |
+| 🏌️ | Mini Golf |
+| 🎳 | Bowling |
+| 🕹️ | Arcade |
+| 🔐 | Escape Room |
+| 🏎️ | Go-Karts |
+| 🧗 | Rock Climbing |
+| 🏊 | Swimming |
+| 🛝 | Playground |
+| 🐕 | Dog Park |
+| 🐾 | Pet Friendly |
+| 🛍️ | Shopping |
+| 🪑 | Antique Store |
+| 🛒 | Flea Market |
+| 🤝 | Community Event |
+| 💼 | Business Networking |
+| 🎓 | Educational Talk |
+| ❤️ | Charity / Fundraiser |
+| 🚗 | Car Show |
+| ✈️ | Aviation |
+| 🎆 | Fireworks |
+| 🎄 | Holiday Event |
+
+Source of truth in code: `CATEGORY_ICON_DICTIONARY` in `lib/edition/categoryIcon.ts`.
+
+## Editorial rules
+
+- **One emoji only** — never stack (🍺🎵 is wrong)
+- Never use decorative emojis or emojis because they "look fun"
+- Icon = **primary reason** someone is going
+- If two categories apply, choose the strongest editorial category
+
+Example: brewery hosting live music → `🍺 Desert Eagle Brewing` (not 🍺🎵).
+The article may mention live music; the icon is the primary destination.
+
+## Verify before assigning
+
+Do **not** assign an icon until the category has been verified. Never infer from
+business name alone — determine what a visitor would actually experience.
+
+Examples:
+
+- "Hurricane Simulator" ≠ Arcade (may be one attraction)
+- "Natural Expressions" ≠ Rock Shop (research first, then categorize)
+
+Classification order: verified venue category → experience → `editorialCategory.ts`.
+Icons follow verified category via `resolveDiscoveryCategoryIcon`.
+
+## Consistency — icon follows the article everywhere
+
+Same icon on: homepage card · See All · search · Saved · Today's Board ·
+article page · related stories.
+
+Store on `KindredArticle.categoryIcon` and `LocalEventCard.categoryIcon`.
+Render via `EditorialTitle` / `editorialTitleWithIcon`.
+
+## Not in scope
+
+Today's Masterpiece, The Story of…, Today in History — editorial photography only.
+No promotional flyers or scraped event images as icons.
+
+## The Kindred Test
+
+> If someone removed all text except the icon and headline, would the reader
+> still immediately understand what kind of place this is?
+
+If not → the category is wrong.
+
+## Goal
+
+Kindred develops its own visual language — like newspaper sections, but for
+experience categories. Readers recognize Kindred content at a glance, even
+without photographs.
