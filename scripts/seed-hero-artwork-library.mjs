@@ -20,9 +20,17 @@ import {
   parseArtworkYearFromText,
 } from "./lib/sanitizeWikimediaMetadata.mjs";
 
-const SUPABASE_URL = "https://zdqjeocdsbdzecawumdp.supabase.co";
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ??
+  process.env.EXPO_PUBLIC_SUPABASE_URL ??
+  "https://zdqjeocdsbdzecawumdp.supabase.co";
 const SERVICE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkcWplb2Nkc2JkemVjYXd1bWRwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzI3ODM1MCwiZXhwIjoyMDk4ODU0MzUwfQ.FwAqKj2kD7OOfYrePX2ahBSt3UFO4n2YjpFgPU-VUWk";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_KEY;
+
+if (!SERVICE_KEY) {
+  console.error("Set SUPABASE_SERVICE_ROLE_KEY");
+  process.exit(1);
+}
 
 const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
 const MET_API = "https://collectionapi.metmuseum.org/public/collection/v1";
@@ -454,6 +462,7 @@ async function upsertWikimediaArtwork(candidate, collection, hosted) {
     featured: false,
     editorial_priority: 75,
     approval_status: "approved",
+    validation_status: "needs_review",
   };
 
   if (dryRun) {
@@ -551,6 +560,7 @@ async function tryMetTopUp(remaining) {
         featured: false,
         editorial_priority: 80,
         approval_status: "approved",
+        validation_status: "needs_review",
       };
       if (!dryRun) {
         const { error } = await admin
@@ -664,7 +674,7 @@ async function main() {
     dryRun,
   });
 
-  if (!dryRun && (finalCount ?? 0) < 100) {
+  if (!dryRun && (finalCount ?? 0) < 100 && !hardLimit) {
     process.exit(1);
   }
 }

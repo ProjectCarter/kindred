@@ -75,34 +75,38 @@ export function buildMasterpieceDetail(input) {
     `What felt radical to its first viewers now reads as a quiet lesson in paying attention.`;
 
   const aboutTheArtist =
-    `${artist} is remembered as a significant voice in ${periodPhrase}. ` +
-    `Within ${collection?.replace(/_/g, " ") || "this tradition"}, their work helped shape how later audiences understand color, composition, and the subjects artists chose to honor. ` +
-    `Major examples remain available for study through institutions such as ${museumName}.`;
+    `${artist} is remembered as a significant voice in ${periodPhrase}, when painters and printmakers were refining how color, light, and structure could carry emotion without relying on spectacle. ` +
+    `Within ${collection?.replace(/_/g, " ") || "this tradition"}, their work helped later audiences understand why certain subjects — everyday streets, quiet interiors, mythic scenes — could hold as much weight as grand historical tableaux. ` +
+    `Major examples remain available for careful study through institutions such as ${museumName}, where curators preserve both the object and the context that makes it legible to first-time viewers and returning scholars alike.`;
 
   let storyBehindArtwork =
-    `${title} reflects a moment when artists were rethinking how subject, light, and form could carry meaning. ` +
-    `Working in ${mediumPhrase}, ${artist} asks the viewer to linger inside atmosphere and structure rather than chase narrative action.\n\n` +
-    `Every passage of the surface — from the brightest highlights to the deepest shadows — suggests deliberate choices about rhythm, balance, and mood.`;
+    `${title} reflects a moment when artists were rethinking how subject, light, and form could carry meaning without shouting for attention. ` +
+    `Working in ${mediumPhrase}, ${artist} asks the viewer to linger inside atmosphere and structure rather than chase narrative action across the surface.\n\n` +
+    `Every passage of the composition — from the brightest highlights to the deepest shadows — suggests deliberate choices about rhythm, balance, and mood. ` +
+    `Notice how edges soften or sharpen depending on where the eye should rest, and how empty space is treated as an active participant rather than leftover canvas.\n\n` +
+    `The subject matter may appear familiar at first glance, yet the handling rewards anyone willing to stand still for one more minute: texture, temperature, and scale all shift as your eyes move across the work.`;
 
   if (collection === "ukiyo_e") {
     storyBehindArtwork =
-      `${title} belongs to the ukiyo-e tradition of Japanese woodblock printing, where line, flat color, and careful composition carried both narrative and atmosphere. ` +
-      `The craft values structure and surface rhythm as much as subject matter.\n\n` +
-      `In this print, contour and color blocks define form with an economy that still feels vivid centuries later.`;
+      `${title} belongs to the ukiyo-e tradition of Japanese woodblock printing, where line, flat color, and careful composition carried both narrative and atmosphere across everyday life and legendary scenes. ` +
+      `The craft values structure and surface rhythm as much as subject matter, training the eye to read pattern, gesture, and empty space as equal partners in the image.\n\n` +
+      `In this print, contour and color blocks define form with an economy that still feels vivid centuries later. ` +
+      `Notice how the artist balances motion and stillness — a lesson in how a single sheet of paper can hold weather, distance, and human scale at once.\n\n` +
+      `The subject may be familiar from reproductions, yet the original rewards slow looking: gradations in the sky, the bite of the line, and the way foreground and background argue gently for your attention across the sheet.`;
   }
 
   const historicalContext =
-    `The work emerged during ${periodPhrase}, when artists and audiences were negotiating what painting, printmaking, or photography could express about modern life. ` +
-    `${title} belongs to that conversation — not as a footnote, but as an example of how visual language adapts to its moment.`;
+    `The work emerged during ${periodPhrase}${yearPhrase ? `, around ${yearPhrase.replace(/^ around /, "")}` : ""}, when artists and audiences were negotiating what painting, printmaking, or photography could express about modern life and inherited tradition. ` +
+    `${title} belongs to that conversation — not as a footnote, but as an example of how visual language adapts to its moment while still speaking clearly to viewers who encounter it generations later in museum galleries and open digital collections.`;
 
   const legacy =
-    `${title} has remained part of public conversation because it rewards repeated attention. ` +
-    `Each viewing can reveal a different balance of color, texture, and structure, which is one reason museum collections continue to share it with new audiences.`;
+    `${title} has remained part of public conversation because it rewards repeated attention rather than a single dramatic first impression. ` +
+    `Each viewing can reveal a different balance of color, texture, and structure, which is one reason institutions such as ${museumName} continue to share it with new audiences through exhibitions, teaching programs, and open-access reproductions that travel far beyond the original gallery wall.`;
 
   const editorialReflection =
     `The original ${title} is held by ${museumName} in ${museumLocation}. ` +
-    `Before you leave, look once more at how ${artist} handles light in the central passage of the work — that single choice is often what separates a glance from a memory. ` +
-    `Kindred presents a mobile-optimized reproduction for morning discovery; the museum remains the authoritative home for the physical artwork and its full catalog record.`;
+    `Before you leave, look once more at how ${artist} handles light in the central passage of the work — that single choice is often what separates a glance from a memory you carry into the rest of the day. ` +
+    `Kindred presents a mobile-optimized reproduction for morning discovery; the museum remains the authoritative home for the physical artwork, its conservation history, and the catalog record that anchors every fact in this article.`;
 
   const editorialSections = {
     introduction,
@@ -170,10 +174,12 @@ export function buildMasterpieceDetail(input) {
 export function validateDetailFields(detail) {
   const paragraphs = detail.long_story_body.trim().split(/\n{2,}/);
   const storyWords = countWords(detail.long_story_body);
+  const thinParagraph = paragraphs.find((p) => countWords(p) < 35);
   return (
     paragraphs.length >= 6 &&
     paragraphs.length <= 10 &&
     storyWords >= 400 &&
+    !thinParagraph &&
     countWords(detail.artist_biography) >= 45 &&
     detail.look_closer_items.length >= 2 &&
     countWords(detail.did_you_know) >= 12 &&

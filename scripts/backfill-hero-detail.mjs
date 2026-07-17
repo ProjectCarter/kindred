@@ -9,6 +9,7 @@ import {
 } from "./lib/masterpieceDetail.mjs";
 
 const dryRun = process.argv.includes("--dry-run");
+const force = process.argv.includes("--force");
 
 const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
 const key =
@@ -56,7 +57,7 @@ async function main() {
   let skipped = 0;
 
   for (const row of rows ?? []) {
-    if (hasDetail(row)) {
+    if (hasDetail(row) && !force) {
       skipped++;
       continue;
     }

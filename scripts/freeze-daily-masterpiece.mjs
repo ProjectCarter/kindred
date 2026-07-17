@@ -1,16 +1,12 @@
 /**
- * Freeze Today's Masterpiece for an edition date when no selection row exists yet.
- * Reuses library rotation (recent 14 days) and the same morningHero snapshot shape
- * as edition build + repair-masterpiece-editions.mjs.
+ * Freeze Today's Masterpiece — library read/freeze only (no runtime synthesis).
  *
  * Usage:
  *   SUPABASE_SERVICE_ROLE_KEY=... node scripts/freeze-daily-masterpiece.mjs
- *   SUPABASE_SERVICE_ROLE_KEY=... node scripts/freeze-daily-masterpiece.mjs --edition-date=2026-07-17
- *   node scripts/freeze-daily-masterpiece.mjs --dry-run
+ *   SUPABASE_SERVICE_ROLE_KEY=... node scripts/freeze-daily-masterpiece.mjs --edition-date=2026-07-18
  */
 import { createClient } from "@supabase/supabase-js";
-import { buildMasterpieceDetail, buildHomepageTeaser } from "./lib/masterpieceDetail.mjs";
-import { resolveArtworkYear } from "./lib/resolveArtworkYear.mjs";
+import { validateDetailFields } from "./lib/masterpieceDetail.mjs";
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ??
@@ -39,8 +35,10 @@ function countWords(text) {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function detailFromFields(fields) {
-  const editorial = fields.editorial_sections;
+function detailFromStoredRow(row) {
+  const editorial = row.editorial_sections;
+  if (!editorial) return null;
+
   const sections = [
     { heading: "Introduction", paragraphs: [editorial.introduction] },
     { heading: "About the Artist", paragraphs: [editorial.aboutTheArtist] },
@@ -52,85 +50,60 @@ function detailFromFields(fields) {
     { heading: "Legacy", paragraphs: [editorial.legacy] },
     {
       heading: "Editorial Reflection",
-      paragraphs: [
-        editorial.editorialReflection ?? editorial.editorialClosing,
-      ],
+      paragraphs: [editorial.editorialReflection ?? editorial.editorialClosing],
     },
   ];
 
   return {
     sections,
-    lookingCloser: fields.look_closer_items,
-    didYouKnow: fields.did_you_know,
-    museumName: fields.museum_name,
-    museumLocation: fields.museum_location,
-    officialMuseumUrl: fields.official_museum_url,
-    officialArtworkUrl: fields.official_artwork_url,
-    sourceReferences: fields.source_references ?? [],
+    lookingCloser: row.look_closer_items,
+    didYouKnow: row.did_you_know,
+    museumName: row.museum_name,
+    museumLocation: row.museum_location,
+    officialMuseumUrl: row.official_museum_url,
+    officialArtworkUrl: row.official_artwork_url,
+    sourceReferences: row.source_references ?? [],
   };
 }
 
-function isDetailComplete(detail) {
+function isApprovedLibraryRow(row) {
   return (
-    detail?.sections?.length >= 6 &&
-    detail.lookingCloser?.length >= 2 &&
-    Boolean(detail.didYouKnow?.trim())
-  );
-}
-
-function isReadyLibraryRow(row) {
-  return (
+    row.validation_status === "approved" &&
     row.approval_status === "approved" &&
+    row.detail_editorial_status === "approved" &&
     row.public_domain_status === "verified" &&
     row.hosted_url?.trim() &&
     row.about_artwork_body?.trim() &&
     row.artwork_title?.trim() &&
-    row.artist?.trim()
+    row.artist?.trim() &&
+    row.year?.trim() &&
+    validateDetailFields({
+      long_story_body: row.long_story_body,
+      artist_biography: row.artist_biography,
+      look_closer_items: row.look_closer_items,
+      did_you_know: row.did_you_know,
+      museum_name: row.museum_name,
+      museum_location: row.museum_location,
+      official_artwork_url: row.official_artwork_url,
+      official_museum_url: row.official_museum_url,
+      editorial_sections: row.editorial_sections,
+    })
   );
 }
 
-function buildMorningHero(row, date) {
-  const collection = row.collections?.[0] ?? "museum_open_access";
-  const year = resolveArtworkYear({
-    year: row.year,
-    artworkTitle: row.artwork_title,
-    sourceUrl: row.source_url,
-    tags: row.tags,
-    aboutArtworkBody: row.about_artwork_body,
-  });
-  const teaser =
-    row.about_artwork_body?.trim() ||
-    buildHomepageTeaser({
-      title: row.artwork_title,
-      artist: row.artist,
-      year,
-      period: collection.replace(/_/g, " "),
-      collection,
-    });
-
-  const detailFields = buildMasterpieceDetail({
-    title: row.artwork_title,
-    artist: row.artist,
-    year,
-    medium: "traditional materials",
-    period: collection.replace(/_/g, " "),
-    institution: row.source_institution,
-    sourceUrl: row.source_url,
-    collection,
-    homepageTeaser: teaser,
-  });
-
-  const detail = detailFromFields(detailFields);
-  if (!isDetailComplete(detail)) {
-    throw new Error(`Detail synthesis failed for ${row.id}`);
+function buildMorningHeroFromStored(row, date) {
+  const detail = detailFromStoredRow(row);
+  if (!detail) {
+    throw new Error(`Stored detail incomplete for ${row.id}`);
   }
 
+  const teaser = row.about_artwork_body.trim();
   return {
     editionDate: date,
     artworkId: row.id,
     artworkTitle: row.artwork_title.trim(),
     artist: row.artist.trim(),
-    year,
+    year: row.year.trim(),
     sourceInstitution: row.source_institution.trim(),
     sourceUrl: row.source_url.trim(),
     license: row.license,
@@ -156,7 +129,7 @@ function daySeed(date) {
 async function pickArtworkForDate(date) {
   const { data: recent } = await admin
     .from("kindred_hero_artwork_edition_selections")
-    .select("artwork_id")
+    .select("artwork_id, edition_date")
     .order("edition_date", { ascending: false })
     .limit(14);
 
@@ -165,17 +138,15 @@ async function pickArtworkForDate(date) {
   const { data: library, error } = await admin
     .from("kindred_hero_artwork")
     .select("*")
-    .eq("approval_status", "approved")
-    .eq("public_domain_status", "verified")
-    .not("hosted_url", "is", null)
-    .order("editorial_priority", { ascending: false })
-    .order("featured", { ascending: false });
+    .eq("validation_status", "approved")
+    .order("last_shown_date", { ascending: true, nullsFirst: true })
+    .order("use_count", { ascending: true });
 
   if (error) throw new Error(error.message);
 
-  const eligible = (library ?? []).filter(isReadyLibraryRow);
+  const eligible = (library ?? []).filter(isApprovedLibraryRow);
   if (eligible.length === 0) {
-    throw new Error("No eligible approved hero artwork in library");
+    throw new Error("No approved masterpiece library artwork ready");
   }
 
   const fresh = eligible.filter((row) => !recentIds.has(row.id));
@@ -209,7 +180,7 @@ async function main() {
     });
   } else {
     const artwork = await pickArtworkForDate(editionDate);
-    morningHero = buildMorningHero(artwork, editionDate);
+    morningHero = buildMorningHeroFromStored(artwork, editionDate);
     artworkId = artwork.id;
     console.log("Selected artwork for freeze:", {
       editionDate,
@@ -247,51 +218,25 @@ async function main() {
       );
     if (freezeError) throw new Error(freezeError.message);
 
+    const { data: usageRow } = await admin
+      .from("kindred_hero_artwork")
+      .select("use_count")
+      .eq("id", artworkId)
+      .single();
+
     await admin
       .from("kindred_hero_artwork")
       .update({
         last_used_at: new Date().toISOString(),
+        last_shown_date: editionDate,
+        use_count: (usageRow?.use_count ?? 0) + 1,
       })
       .eq("id", artworkId);
 
     console.log("Created frozen selection row.");
-  } else if (!existing.presentation_snapshot?.hostedUrl) {
-    await admin
-      .from("kindred_hero_artwork_edition_selections")
-      .update({
-        presentation_snapshot: morningHero,
-        selected_at: new Date().toISOString(),
-      })
-      .eq("edition_date", editionDate);
-    console.log("Repaired empty presentation_snapshot.");
   }
 
-  const { data: editions } = await admin
-    .from("editions")
-    .select("id, morning_edition")
-    .eq("edition_date", editionDate);
-
-  let patched = 0;
-  for (const edition of editions ?? []) {
-    const payload = edition.morning_edition;
-    if (!payload || typeof payload !== "object") continue;
-    const current = payload.morningHero;
-    if (current?.artworkId === morningHero.artworkId && current?.hostedUrl) {
-      continue;
-    }
-    const next = { ...payload, morningHero };
-    const { error } = await admin
-      .from("editions")
-      .update({ morning_edition: next })
-      .eq("id", edition.id);
-    if (error) {
-      console.error(`Edition ${edition.id} patch failed:`, error.message);
-      continue;
-    }
-    patched++;
-  }
-
-  console.log(`Done. Patched ${patched} edition row(s) for ${editionDate}.`);
+  console.log(`Done for ${editionDate}.`);
 }
 
 main().catch((err) => {

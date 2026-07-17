@@ -43,26 +43,5 @@ create index if not exists kindred_hero_artwork_validation_ready_idx
   on public.kindred_hero_artwork (validation_status, last_shown_date nulls first)
   where validation_status = 'approved';
 
--- Daily quiet growth (~2 approved artworks). Unschedule weekly job if present.
-select cron.unschedule(jobid)
-from cron.job
-where jobname = 'grow-hero-artwork-library-weekly';
-
-select cron.schedule(
-  'grow-hero-artwork-library-daily',
-  '0 3 * * *',
-  $cron$
-  select net.http_post(
-    url := 'https://zdqjeocdsbdzecawumdp.supabase.co/functions/v1/grow-hero-artwork-library',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'x-cron-secret', (
-        select decrypted_secret
-        from vault.decrypted_secrets
-        where name = 'CRON_SECRET'
-      )
-    ),
-    body := jsonb_build_object('targetNewCount', 2)
-  );
-  $cron$
-);
+-- Background growth cron intentionally disabled until library QA passes.
+-- Enable via scripts/enable-masterpiece-growth-cron.mjs after verification.

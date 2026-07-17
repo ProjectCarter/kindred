@@ -97,10 +97,14 @@ export function sanitizeArtistName(raw, filePageTitle) {
 }
 
 export function parseArtworkYearFromText(text) {
-  const clean = stripWikidataMarkup(text ?? "");
+  const raw = text ?? "";
+  const clean = stripWikidataMarkup(raw);
   if (!clean.trim()) return null;
+  const prop = raw.match(/QS:P(\d+)/i);
   const single = clean.match(/(?:^|[^\d])(1[0-9]{3}|20[0-1][0-9])(?:[^\d]|$)/);
-  return single?.[1] ?? null;
+  if (!single?.[1]) return null;
+  if (prop && prop[1] === single[1]) return null;
+  return single[1];
 }
 
 export function sanitizeArtworkYear(year, context = {}) {
