@@ -72,6 +72,7 @@ export async function refreshEventsSection(
       now: new Date(),
       editionDate: input.editionDate,
       timezone: eventTimezone,
+      admin,
     });
 
     if (fetched.length === 0) {
@@ -182,6 +183,7 @@ export async function refreshDiscoveryData(
         now: new Date(),
         editionDate: input.editionDate,
         timezone: eventTimezone,
+        admin,
       }),
       getLocalPlaces(admin, input.location),
     ]);

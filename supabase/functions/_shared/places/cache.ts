@@ -30,11 +30,36 @@ import type {
   PlacesProvider,
 } from "./types.ts";
 
-/** Food & Drink is served from food_drink_catalog — never this cache. */
+/** Food & Drink and Activities use shared catalogs — never this cache. */
 const FOOD_DRINK_CATEGORIES = new Set<PlacesCategory>([
   "coffee",
   "restaurants",
   "bakeries",
+]);
+
+const ACTIVITY_CATEGORIES = new Set<PlacesCategory>([
+  "water_recreation",
+  "escape_rooms",
+  "bowling",
+  "mini_golf",
+  "rock_climbing",
+  "axe_throwing",
+  "go_karts",
+  "pickleball",
+  "arcades",
+  "laser_tag",
+  "paintball",
+  "billiards",
+  "roller_skating",
+  "ice_skating",
+  "karaoke",
+  "batting_cages",
+  "parks",
+  "museums",
+  "scenic_drives",
+  "gardens",
+  "beaches",
+  "attractions",
 ]);
 
 /** Places don't turn over often — a week-old cache is still accurate. */
@@ -72,7 +97,7 @@ export async function getCachedPlaces(
   location: PlacesLocation,
   category: PlacesCategory
 ): Promise<NormalizedPlace[]> {
-  if (FOOD_DRINK_CATEGORIES.has(category)) {
+  if (FOOD_DRINK_CATEGORIES.has(category) || ACTIVITY_CATEGORIES.has(category)) {
     return [];
   }
 

@@ -694,6 +694,7 @@ export async function buildEditionForUser(
         now: new Date(),
         editionDate,
         timezone: eventTimezone,
+        admin: supabaseAdmin,
       })
     ),
     // Shared per-metro cache (see places/cache.ts) — this call almost

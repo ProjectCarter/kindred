@@ -8,6 +8,10 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getCachedPlaces } from "./cache.ts";
 import {
+  loadActivitiesCatalogPlaces,
+  registerActivitiesMetro,
+} from "./activitiesCatalogSync.ts";
+import {
   loadFoodDrinkCatalogPlaces,
   metroKeyFromLocation,
   registerFoodDrinkMetro,
@@ -18,6 +22,10 @@ import type {
   PlacesLocation,
 } from "./types.ts";
 
+export {
+  registerActivitiesMetro,
+  loadActivitiesCatalogPlaces,
+} from "./activitiesCatalogSync.ts";
 export {
   registerFoodDrinkMetro,
   loadFoodDrinkCatalogPlaces,
@@ -70,6 +78,8 @@ export const ALL_PLACES_CATEGORIES: PlacesCategory[] = [
   ...ACTIVITY_PLACES_CATEGORIES,
 ];
 
+const ACTIVITY_CATEGORY_SET = new Set<PlacesCategory>(ACTIVITY_PLACES_CATEGORIES);
+
 /** Dedupe provider rows when the same venue appears in multiple category searches. */
 export function dedupePlacesByProviderId(
   places: NormalizedPlace[]
@@ -84,10 +94,8 @@ export function dedupePlacesByProviderId(
 /**
  * Fetch verified local places for a metro across every category.
  *
- * Food & Drink (coffee, restaurants, bakeries) reads the shared
- * `food_drink_catalog` table — zero Foursquare calls at edition time.
- * Activities and other categories use `local_places_cache` with the
- * existing single-flight refresh model.
+ * Food & Drink reads `food_drink_catalog`; Activities reads
+ * `activities_catalog` — zero Foursquare calls at edition time.
  */
 export async function getLocalPlaces(
   admin: SupabaseClient,
@@ -98,12 +106,16 @@ export async function getLocalPlaces(
 
   try {
     await registerFoodDrinkMetro(admin, location);
+    await registerActivitiesMetro(admin, location);
     const metroKey = metroKeyFromLocation(location);
 
     const results = await Promise.all(
       categories.map(async (category) => {
         if (FOOD_DRINK_CATEGORY_SET.has(category)) {
           return loadFoodDrinkCatalogPlaces(admin, metroKey, category);
+        }
+        if (ACTIVITY_CATEGORY_SET.has(category)) {
+          return loadActivitiesCatalogPlaces(admin, metroKey, category);
         }
         return getCachedPlaces(admin, location, category);
       })

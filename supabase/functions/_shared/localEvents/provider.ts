@@ -197,6 +197,8 @@ export type LocalEventsFetchOptions = {
   editionDate?: string | null;
   /** IANA timezone for event schedule verification. */
   timezone?: string | null;
+  /** When set, read the shared metro events catalog — zero provider calls. */
+  admin?: import("https://esm.sh/@supabase/supabase-js@2.45.4").SupabaseClient;
 };
 
 export type LocalEventsPipelineProbe = {
@@ -250,6 +252,13 @@ export async function getLocalEvents(
   location: LocalEventLocation,
   options?: LocalEventsFetchOptions
 ): Promise<LocalEvent[]> {
+  if (options?.admin) {
+    const { loadEventsCatalogForEdition, registerEventsMetro } = await import(
+      "./eventsCatalogSync.ts"
+    );
+    await registerEventsMetro(options.admin, location);
+    return loadEventsCatalogForEdition(options.admin, location, options);
+  }
   const { getLocalEventsFromPipeline } = await import("./pipeline.ts");
   return getLocalEventsFromPipeline(location, options);
 }
