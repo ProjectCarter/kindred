@@ -119,7 +119,13 @@ import {
 import {
   hydrateDevEditionOverrideState,
 } from "../lib/dev/editionOverrideStore";
-import { consumePendingDevEditionGenerate } from "../lib/dev/pendingDevGenerate";
+import { consumePendingDevEditionGenerate, peekPendingDevEditionGenerate } from "../lib/dev/pendingDevGenerate";
+import {
+  createDevGenerateTraceId,
+  devGenerateTrace,
+  devGenerateTraceSummary,
+} from "../lib/dev/devGenerateTrace";
+import { shouldDeferLoadEditionDuringGenerate } from "../lib/dev/devGenerateGuard";
 import {
   maybeRecordDevEditionSnapshot,
   tryApplyDevEditionPreview,
@@ -135,7 +141,7 @@ import { citiesMatch, locationKey } from "../lib/location/locationKey";
 import {
   getTemperatureUnitPreference,
 } from "../lib/weather/units";
-import { resolveEditionBuiltCity } from "../lib/edition/editionLocation";
+import { resolveEditionBuiltCity, cityFromEditionSections } from "../lib/edition/editionLocation";
 import {
   LocationFirstRun,
   useLocationFirstRun,
@@ -180,6 +186,20 @@ import {
 import {
   masterpieceTraceAsync,
 } from "../lib/edition/masterpieceDiagnostics";
+import { SUPPORTED_REGION_MESSAGE } from "../lib/markets/constants";
+
+function isNonUsEditionResponse(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const record = body as { code?: unknown; error?: unknown };
+  if (record.code === "NON_US_REGION") return true;
+  const message = String(record.error ?? "");
+  return message.includes(SUPPORTED_REGION_MESSAGE);
+}
+
+function editionCacheMetroKey(place: KindredPlace | null | undefined): string | null {
+  if (!place?.city) return null;
+  return metroKeyFromKindredPlace(place);
+}
 
 const EDITION_SECTIONS_HOME_SELECT =
   "id, section_type, position, headline, body, source_note";
@@ -233,6 +253,7 @@ export default function HomeScreen() {
   const devGenerationMsRef = useRef<number | null>(null);
   /** Abort in-flight generate-edition fetch on timeout / unmount / supersede. */
   const generateAbortRef = useRef<AbortController | null>(null);
+  const devGenerateTraceIdRef = useRef<string | null>(null);
   /** Collapsing editorial masthead — scroll position drives compact sticky chrome. */
   const mastheadScrollY = useRef(new Animated.Value(0)).current;
   /** One auto-regen per edition id + active city. */
@@ -444,7 +465,8 @@ export default function HomeScreen() {
 
   function tryApplyInstantCache(
     bundle: CachedEditionBundle,
-    source: "memory" | "disk"
+    source: "memory" | "disk",
+    metroKey: string
   ): boolean {
     if (
       instantHydratedRef.current ||
@@ -454,7 +476,7 @@ export default function HomeScreen() {
       return false;
     }
     const todayStr = resolveEffectiveEditionDateSync();
-    if (!isCachedEditionPaintable(bundle, todayStr)) return false;
+    if (!isCachedEditionPaintable(bundle, todayStr, metroKey)) return false;
 
     instantHydratedRef.current = true;
     applyCachedBundle(bundle);
@@ -480,22 +502,32 @@ export default function HomeScreen() {
     const userId = getPrimedLaunchUserId();
     if (!userId) return;
 
-    void hydrateDevEditionOverrideState().then(() => {
+    void hydrateDevEditionOverrideState().then(async () => {
+      if (await peekPendingDevEditionGenerate()) {
+        pipelineStageEnd("cache_load", { source: "layout", hit: false, pendingDevGenerate: true });
+        return;
+      }
       const todayStr = resolveEffectiveEditionDateSync();
-      pipelineStageBegin("cache_load", { source: "layout" });
-      const memory = peekMemoryCachedEdition(userId, todayStr);
-      if (memory && tryApplyInstantCache(memory, "memory")) {
-        pipelineStageEnd("cache_load", { source: "memory", hit: true });
+      const active = await resolveEffectivePlace({ refreshIfStale: false });
+      const metroKey = editionCacheMetroKey(active.place);
+      if (!metroKey) {
+        pipelineStageEnd("cache_load", { source: "layout", hit: false, reason: "no_metro" });
+        return;
+      }
+      pipelineStageBegin("cache_load", { source: "layout", metroKey });
+      const memory = peekMemoryCachedEdition(userId, todayStr, metroKey);
+      if (memory && tryApplyInstantCache(memory, "memory", metroKey)) {
+        pipelineStageEnd("cache_load", { source: "memory", hit: true, metroKey });
         return;
       }
 
-      void loadCachedEdition(userId, todayStr).then((cached) => {
+      void loadCachedEdition(userId, todayStr, metroKey).then((cached) => {
         if (!cached || !mountedRef.current) {
-          pipelineStageEnd("cache_load", { source: "disk", hit: false });
+          pipelineStageEnd("cache_load", { source: "disk", hit: false, metroKey });
           return;
         }
-        const painted = tryApplyInstantCache(cached, "disk");
-        pipelineStageEnd("cache_load", { source: "disk", hit: painted });
+        const painted = tryApplyInstantCache(cached, "disk", metroKey);
+        pipelineStageEnd("cache_load", { source: "disk", hit: painted, metroKey });
       });
     });
   }, []);
@@ -791,6 +823,9 @@ export default function HomeScreen() {
     quiet?: boolean;
     /** Only patch structured local event facts; ignore discovery reshuffles. */
     eventsOnly?: boolean;
+    /** After generate-edition succeeded — bypass in-flight generate guard. */
+    afterGenerate?: boolean;
+    traceId?: string | null;
   };
 
   function parseLoadOptions(
@@ -801,7 +836,7 @@ export default function HomeScreen() {
   }
 
   const loadEdition = useCallback(async (input?: boolean | LoadEditionOptions) => {
-    const { isRefresh = false, quiet = false, eventsOnly = false } =
+    const { isRefresh = false, quiet = false, eventsOnly = false, afterGenerate = false, traceId = null } =
       parseLoadOptions(input);
     const gen = ++loadGen.current;
     const resetScroll = isRefresh && !quiet;
@@ -832,8 +867,33 @@ export default function HomeScreen() {
 
     try {
     await hydrateDevEditionOverrideState();
+    const pendingDevGenerate = await peekPendingDevEditionGenerate();
+    if (
+      shouldDeferLoadEditionDuringGenerate({
+        pendingDevGenerate,
+        generating: generatingRef.current,
+        eventsOnly,
+        afterGenerate,
+      })
+    ) {
+      devGenerateTrace(traceId ?? devGenerateTraceIdRef.current, "load_edition_blocked", {
+        pendingDevGenerate,
+        generating: generatingRef.current,
+        quiet,
+      });
+      if (!quiet && !generatingRef.current) setLoading(true);
+      return;
+    }
+
+    devGenerateTrace(traceId ?? devGenerateTraceIdRef.current, "load_edition_start", {
+      isRefresh,
+      quiet,
+      eventsOnly,
+      afterGenerate,
+    });
     if (
       !eventsOnly &&
+      !pendingDevGenerate &&
       (await tryApplyDevEditionPreview((bundle) => {
         if (mountedRef.current && gen === loadGen.current) {
           applyCachedBundle(bundle);
@@ -882,10 +942,15 @@ export default function HomeScreen() {
     void syncDeviceTimezone(user.id);
 
     const todayStr = await resolveEffectiveEditionDate();
+    const activeForCache =
+      activeLocationRef.current ??
+      (await resolveEffectivePlace({ refreshIfStale: false }));
+    const cacheMetroKey = editionCacheMetroKey(activeForCache.place);
 
     if (__DEV__) {
       console.log("[home] loadEdition: date filters", {
         localEditionDate: todayStr,
+        cacheMetroKey,
         timezoneOffsetMinutes: new Date().getTimezoneOffset(),
       });
     }
@@ -895,11 +960,15 @@ export default function HomeScreen() {
       !quiet &&
       !isRefresh &&
       !editionIdRef.current &&
-      !instantHydratedRef.current;
+      !instantHydratedRef.current &&
+      !pendingDevGenerate &&
+      Boolean(cacheMetroKey);
 
     const prefetchEditionId =
       cachedBundleRef.current?.editionId ??
-      peekMemoryCachedEdition(user.id, todayStr)?.editionId ??
+      (cacheMetroKey
+        ? peekMemoryCachedEdition(user.id, todayStr, cacheMetroKey)?.editionId
+        : null) ??
       null;
 
     const editionQuery = supabase
@@ -914,11 +983,12 @@ export default function HomeScreen() {
     let prefetchedSectionsPromise: ReturnType<typeof queryEditionSections> | null =
       prefetchEditionId ? queryEditionSections(prefetchEditionId) : null;
 
-    const cachePromise = shouldHydrateCache
+    const cachePromise = shouldHydrateCache && cacheMetroKey
       ? (() => {
           const warm =
-            peekMemoryCachedEdition(user.id, todayStr) ??
-            (cachedBundleRef.current?.editionDate === todayStr
+            peekMemoryCachedEdition(user.id, todayStr, cacheMetroKey) ??
+            (cachedBundleRef.current?.editionDate === todayStr &&
+            cachedBundleRef.current?.metroKey === cacheMetroKey
               ? cachedBundleRef.current
               : null);
           if (warm) {
@@ -943,6 +1013,7 @@ export default function HomeScreen() {
               if (__DEV__) {
                 console.log("[home] loadEdition: hydrated from warm cache", {
                   editionId: warm.editionId,
+                  metroKey: warm.metroKey,
                   sectionCount: warm.sections.length,
                 });
               }
@@ -952,11 +1023,12 @@ export default function HomeScreen() {
             }
             return Promise.resolve(warm);
           }
-          pipelineStageBegin("cache_load", { source: "fetch_parallel" });
-          return loadCachedEdition(user.id, todayStr).then((cached) => {
+          pipelineStageBegin("cache_load", { source: "fetch_parallel", metroKey: cacheMetroKey });
+          return loadCachedEdition(user.id, todayStr, cacheMetroKey).then((cached) => {
             pipelineStageEnd("cache_load", {
               source: "fetch_parallel",
               hit: Boolean(cached),
+              metroKey: cacheMetroKey,
             });
             if (
               cached &&
@@ -1382,6 +1454,7 @@ export default function HomeScreen() {
     );
 
     const activeCity = active.place?.city ?? null;
+    const sectionCity = cityFromEditionSections(loaded);
     const cityMismatch = Boolean(
       activeCity &&
         (builtCity
@@ -1389,24 +1462,31 @@ export default function HomeScreen() {
           : // Unknown build city + Current Location → do not trust the cache
             active.mode === "current")
     );
+    const sectionCityMismatch = Boolean(
+      activeCity && sectionCity && !citiesMatch(activeCity, sectionCity)
+    );
+    const contentCityMismatch = cityMismatch || sectionCityMismatch;
 
     if (__DEV__) {
       console.log("[home] loadEdition: location check", {
         mode: active.mode,
         activeCity,
         builtCity,
+        sectionCity,
         cityMismatch,
+        sectionCityMismatch,
         editionId: edition.id,
       });
     }
 
     // Never silently reuse an edition generated for another city.
-    if (cityMismatch && activeCity && !shouldBypassEditionCityMismatch()) {
+    if (contentCityMismatch && activeCity && !shouldBypassEditionCityMismatch()) {
       if (__DEV__) {
         console.warn("[home] loadEdition: withholding wrong-city edition", {
           mode: active.mode,
           activeCity,
           builtCity,
+          sectionCity,
           editionId: edition.id,
         });
       }
@@ -1457,7 +1537,11 @@ export default function HomeScreen() {
         const supersededEditionId = cachedBundleRef.current?.editionId ?? null;
         cachedBundleRef.current = null;
         instantHydratedRef.current = false;
-        void clearCachedEdition(user.id, edition.edition_date);
+        void clearCachedEdition(
+          user.id,
+          edition.edition_date,
+          editionCacheMetroKey(active.place)
+        );
         if (__DEV__) {
           console.log("[home] loadEdition: discarded stale cached edition", {
             cachedEditionId: supersededEditionId,
@@ -1585,6 +1669,15 @@ export default function HomeScreen() {
         userId: user.id,
         editionId: edition.id,
         editionDate: edition.edition_date,
+        metroKey:
+          editionCacheMetroKey(active.place) ??
+          metroKeyFromKindredPlace({
+            city: builtCity ?? active.place?.city ?? "unknown",
+            state: active.place?.state ?? null,
+            region: active.place?.region ?? null,
+            lat: active.place?.lat ?? 0,
+            lon: active.place?.lon ?? 0,
+          }),
         cachedAt: Date.now(),
         sections: nextSections,
         leadStory: lead,
@@ -1707,6 +1800,10 @@ export default function HomeScreen() {
 
     setLoading(false);
     setRefreshing(false);
+    devGenerateTrace(traceId ?? devGenerateTraceIdRef.current, "first_paint", {
+      editionId: edition.id,
+      sectionCount: nextSections.length,
+    });
     pipelineStageBegin("first_paint");
     pipelineStageEnd("first_paint");
     if (!startupSummaryLoggedRef.current) {
@@ -1870,6 +1967,9 @@ export default function HomeScreen() {
           userId: user.id,
           editionId: edition.id,
           editionDate: edition.edition_date,
+          metroKey:
+            editionCacheMetroKey(active.place) ??
+            metroKeyFromKindredPlace(active.place!),
           cachedAt: Date.now(),
           sections: bgSections,
           leadStory: lead,
@@ -2106,14 +2206,18 @@ export default function HomeScreen() {
     void loadEdition(true);
   }
 
-  async function handleGenerate() {
-    console.log("[generate] ENTER handleGenerate");
+  async function handleGenerate(continuedTraceId?: string) {
+    const traceId = continuedTraceId ?? createDevGenerateTraceId();
+    devGenerateTraceIdRef.current = traceId;
+    devGenerateTrace(traceId, "handle_generate_enter");
+    console.log("[generate] ENTER handleGenerate", { traceId });
     if (generatingRef.current) {
-      console.log("[generate] EXIT handleGenerate (already running)");
+      console.log("[generate] EXIT handleGenerate (already running)", { traceId });
       return;
     }
     generatingRef.current = true;
     setGenerating(true);
+    setLoading(false);
     setError(null);
 
     // Supersede any prior in-flight invoke (should be none when the guard holds).
@@ -2124,8 +2228,47 @@ export default function HomeScreen() {
     const timeoutId = setTimeout(() => abort.abort(), INVOKE_TIMEOUT_MS);
 
     try {
+      // Dev override: never flash yesterday's city while the new edition builds.
+      if (isDevEditionOverrideActive()) {
+        devGenerateTrace(traceId, "dev_cache_clear");
+        editionFrozenRef.current = false;
+        clearEditionFreeze();
+        instantHydratedRef.current = false;
+        cachedBundleRef.current = null;
+        setSections([]);
+        setEditionDate(null);
+        setEditionId(null);
+        setLeadStory(null);
+        setTopStories([]);
+        setBandit(null);
+        setIntelligence(null);
+        setClippedIds(new Set());
+        setLocationMismatch(null);
+      }
+
+      devGenerateTrace(traceId, "location_resolve_start");
       // Always re-resolve — never trust a stale in-memory place for generation.
       const active = await resolveEffectivePlace({ refreshIfStale: true });
+      devGenerateTrace(traceId, "location_resolve_end", {
+        city: active.place?.city ?? null,
+        mode: active.mode,
+        metroKey: editionCacheMetroKey(active.place),
+      });
+
+      if (isDevEditionOverrideActive()) {
+        const {
+          data: { session },
+        } = await getLaunchSessionOrFetch();
+        const user = session?.user ?? null;
+        if (user) {
+          const editionDate = await resolveEffectiveEditionDate();
+          await clearCachedEdition(
+            user.id,
+            editionDate,
+            editionCacheMetroKey(active.place)
+          );
+        }
+      }
       if (!mountedRef.current) return;
       if (abort.signal.aborted) {
         // Resolving location (e.g. a slow GPS fix) ate the whole timeout budget
@@ -2164,7 +2307,11 @@ export default function HomeScreen() {
         });
       }
 
-      console.log("[generate] invoke BEGIN");
+      devGenerateTrace(traceId, "invoke_prepare", {
+        city: loc.city,
+        editionDate,
+      });
+      console.log("[generate] invoke BEGIN", { traceId });
       const invokeStarted = Date.now();
       const generationStarted = Date.now();
       let invokeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2182,12 +2329,14 @@ export default function HomeScreen() {
       let data: unknown;
       let invokeError: Error | null = null;
       try {
+        devGenerateTrace(traceId, "invoke_start");
         const invokeResult = await Promise.race([
           supabase.functions.invoke("generate-edition", {
             body: {
               location: locationPayload(loc),
               editionDate,
               temperatureUnit: tempUnit,
+              editionTraceId: traceId,
               ...(isDevEditionOverrideActive() ? { devPreview: true } : {}),
             },
             signal: abort.signal,
@@ -2200,6 +2349,11 @@ export default function HomeScreen() {
         if (invokeTimer) clearTimeout(invokeTimer);
         console.log("[generate] invoke END", {
           ms: Date.now() - invokeStarted,
+          traceId,
+        });
+        devGenerateTrace(traceId, "invoke_end", {
+          ms: Date.now() - invokeStarted,
+          hadError: Boolean(invokeError),
         });
       }
 
@@ -2237,10 +2391,11 @@ export default function HomeScreen() {
           body: responseBody,
         });
 
-        const friendly =
-          "The presses stumbled. Give it another moment.";
+        const friendly = isNonUsEditionResponse(responseBody)
+          ? SUPPORTED_REGION_MESSAGE
+          : "The presses stumbled. Give it another moment.";
         setError(
-          __DEV__
+          __DEV__ && !isNonUsEditionResponse(responseBody)
             ? `${friendly}\n\nmessage: ${invokeError.message}\nstatus: ${responseStatus ?? "(none)"}\nbody: ${JSON.stringify(responseBody)}`
             : friendly
         );
@@ -2263,10 +2418,11 @@ export default function HomeScreen() {
         if (__DEV__) console.error("[home] generate-edition: error in response body", {
           body: responseBody,
         });
-        const friendly =
-          "The presses stumbled. Give it another moment.";
+        const friendly = isNonUsEditionResponse(responseBody)
+          ? SUPPORTED_REGION_MESSAGE
+          : "The presses stumbled. Give it another moment.";
         setError(
-          __DEV__
+          __DEV__ && !isNonUsEditionResponse(responseBody)
             ? `${friendly}\n\nmessage: ${bodyError}\nstatus: (in body)\nbody: ${JSON.stringify(responseBody)}`
             : friendly
         );
@@ -2278,11 +2434,23 @@ export default function HomeScreen() {
       editionFrozenRef.current = false;
       clearEditionFreeze();
       resetScrollOnLoadRef.current = true;
-      console.log("[generate] loadEdition BEGIN");
+
+      // Release generating UI before loading the saved edition — otherwise
+      // loadEdition's in-flight guard returns early and leaves loading stuck.
+      generatingRef.current = false;
+      if (mountedRef.current) setGenerating(false);
+      devGenerateTrace(traceId, "generating_cleared");
+
+      console.log("[generate] loadEdition BEGIN", { traceId });
       const loadStarted = Date.now();
-      await loadEdition(true);
+      await loadEdition({ isRefresh: true, afterGenerate: true, traceId });
       devGenerationMsRef.current = Date.now() - generationStarted;
-      console.log("[generate] loadEdition END", { ms: Date.now() - loadStarted });
+      devGenerateTrace(traceId, "load_edition_end", {
+        ms: Date.now() - loadStarted,
+      });
+      console.log("[generate] loadEdition END", { ms: Date.now() - loadStarted, traceId });
+      devGenerateTraceSummary(traceId);
+      devGenerateTraceIdRef.current = null;
     } catch (err) {
       if (!mountedRef.current) return;
       // Timeout / explicit abort — do not treat as a generic stumble when we
@@ -2310,23 +2478,35 @@ export default function HomeScreen() {
           : friendly
       );
     } finally {
-      console.log("[generate] finally ENTER");
+      console.log("[generate] finally ENTER", { traceId });
       clearTimeout(timeoutId);
       if (generateAbortRef.current === abort) {
         generateAbortRef.current = null;
       }
       generatingRef.current = false;
-      if (mountedRef.current) setGenerating(false);
-      console.log("[generate] setGenerating false");
-      console.log("[generate] EXIT handleGenerate");
+      if (mountedRef.current) {
+        setGenerating(false);
+        if (!editionIdRef.current) {
+          setLoading(false);
+        }
+      }
+      devGenerateTrace(traceId, "handle_generate_exit", {
+        editionId: editionIdRef.current,
+      });
+      console.log("[generate] setGenerating false", { traceId });
+      console.log("[generate] EXIT handleGenerate", { traceId });
     }
   }
 
   useFocusEffect(
     useCallback(() => {
       if (!__DEV__) return;
-      void consumePendingDevEditionGenerate().then((pending) => {
-        if (pending) void handleGenerate();
+      void consumePendingDevEditionGenerate().then(({ pending, traceId }) => {
+        if (pending) {
+          if (traceId) devGenerateTraceIdRef.current = traceId;
+          devGenerateTrace(traceId ?? devGenerateTraceIdRef.current, "home_focus_consume_pending");
+          void handleGenerate(traceId ?? undefined);
+        }
       });
     }, [])
   );
@@ -2568,7 +2748,7 @@ export default function HomeScreen() {
                 styles.mismatchButton,
                 pressed && styles.linkPressed,
               ]}
-              onPress={handleGenerate}
+              onPress={() => void handleGenerate()}
               accessibilityRole="button"
               accessibilityLabel="Refresh today’s edition"
             >
@@ -2615,7 +2795,7 @@ export default function HomeScreen() {
                   styles.button,
                   pressed && styles.linkPressed,
                 ]}
-                onPress={handleGenerate}
+                onPress={() => void handleGenerate()}
                 accessibilityRole="button"
                 accessibilityLabel={waitingCopy.openAction}
               >
@@ -2626,7 +2806,7 @@ export default function HomeScreen() {
             {!locationMismatch && backgroundJobActive ? (
               <Pressable
                 style={styles.previousLink}
-                onPress={handleGenerate}
+                onPress={() => void handleGenerate()}
                 accessibilityRole="button"
                 accessibilityLabel={waitingCopy.backgroundBuildNow}
               >

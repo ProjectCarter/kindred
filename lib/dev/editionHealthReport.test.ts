@@ -33,6 +33,7 @@ function minimalBundle(overrides: Partial<CachedEditionBundle> = {}): CachedEdit
     userId: "user-1",
     editionId: "edition-1",
     editionDate: "2026-07-17",
+    metroKey: "gilbert-az",
     cachedAt: Date.now(),
     sections: [
       { section_type: "local_events", title: "Local Events", body: "[]" },

@@ -80,7 +80,8 @@ export function isDevEditionPreviewActive(): boolean {
 }
 
 export function shouldBypassEditionCityMismatch(): boolean {
-  return isDevEditionOverrideActive() || isDevEditionPreviewActive();
+  // Only frozen historical previews may bypass — never live dev override generation.
+  return isDevEditionPreviewActive();
 }
 
 export function getDevActivePreviewEntry() {

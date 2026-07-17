@@ -1,51 +1,36 @@
 import { SUGGESTED_CITIES } from "../location/cities";
 import { searchCities } from "../location/kindredLocation";
 import type { KindredPlace } from "../location/types";
+import { isUsKindredPlace } from "../markets/usOnly";
 
 export type DevCitySearchFilters = {
-  country?: string;
   state?: string;
 };
 
 function matchesFilters(place: KindredPlace, filters?: DevCitySearchFilters): boolean {
-  if (!filters) return true;
-  const country = filters.country?.trim().toLowerCase();
-  const state = filters.state?.trim().toLowerCase();
-  if (state) {
-    const hay = `${place.state ?? ""} ${place.region ?? ""}`.toLowerCase();
-    if (!hay.includes(state)) return false;
-  }
-  if (country) {
-    const hay = `${place.region ?? ""} ${place.state ?? ""} ${place.city}`.toLowerCase();
-    if (country === "us" || country === "usa" || country === "united states") {
-      if (!place.state) return false;
-    } else if (!hay.includes(country)) {
-      return false;
-    }
-  }
-  return true;
+  if (!isUsKindredPlace(place)) return false;
+  if (!filters?.state?.trim()) return true;
+  const state = filters.state.trim().toLowerCase();
+  const hay = `${place.state ?? ""} ${place.region ?? ""}`.toLowerCase();
+  return hay.includes(state);
 }
 
-/** QA presets — extends curated cities; add entries in lib/location/cities.ts. */
-export const DEV_QA_CITY_PRESETS: KindredPlace[] = [
-  ...SUGGESTED_CITIES.filter((c) =>
-    [
-      "Gilbert",
-      "Phoenix",
-      "Seattle",
-      "San Diego",
-      "Denver",
-      "Chicago",
-      "New York",
-      "London",
-      "Paris",
-      "Rome",
-      "Tokyo",
-      "Sydney",
-      "Toronto",
-    ].includes(c.city)
-  ),
-];
+/** United States QA presets for Developer Tools edition override. */
+export const DEV_QA_CITY_PRESETS: KindredPlace[] = SUGGESTED_CITIES.filter((c) =>
+  isUsKindredPlace(c) &&
+  [
+    "Gilbert",
+    "Phoenix",
+    "Seattle",
+    "San Diego",
+    "Denver",
+    "Chicago",
+    "New York",
+    "Los Angeles",
+    "Austin",
+    "Portland",
+  ].includes(c.city)
+);
 
 export async function searchDevEditionCities(
   query: string,
@@ -56,6 +41,7 @@ export async function searchDevEditionCities(
   const seen = new Set<string>();
   const out: KindredPlace[] = [];
   for (const place of merged) {
+    if (!isUsKindredPlace(place)) continue;
     const key = `${place.city}|${place.lat}|${place.lon}`;
     if (seen.has(key)) continue;
     if (!matchesFilters(place, filters)) continue;

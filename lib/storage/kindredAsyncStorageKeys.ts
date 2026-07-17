@@ -28,7 +28,7 @@ export const KINDRED_ASYNC_STORAGE_KEYS: KindredStorageEntry[] = [
   {
     label: "edition_cache",
     keyOrPrefix: "@kindred/edition-cache:",
-    source: "lib/edition/editionCache.ts — `{userId}:{editionDate}`",
+    source: "lib/edition/editionCache.ts — `{userId}:{editionDate}:{metroKey}`",
   },
   {
     label: "home_scroll_position",
@@ -68,6 +68,18 @@ export const KINDRED_ASYNC_STORAGE_KEYS: KindredStorageEntry[] = [
     label: "live_refresh_throttle",
     keyOrPrefix: "@kindred/live-refresh/last-at:",
     source: "lib/edition/liveRefresh.ts — `{editionId}`",
+  },
+  {
+    label: "dev_edition_override",
+    keyOrPrefix: "@kindred/dev/edition-override-v1",
+    preserve: true,
+    source: "lib/dev/editionOverrideStore.ts",
+  },
+  {
+    label: "dev_pending_generate",
+    keyOrPrefix: "@kindred/dev/pending-generate-v1",
+    preserve: true,
+    source: "lib/dev/pendingDevGenerate.ts",
   },
   {
     label: "timezone_sync",

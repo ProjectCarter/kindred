@@ -42,7 +42,7 @@ import { resolveProductionMorningHero } from "./heroArtwork/production.ts";
 import { buildHistoryAroundTownForEdition } from "./historyAroundTown/library.ts";
 import { isMorningHeroDetailComplete } from "./heroArtwork/presentation.ts";
 import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
-import { listApprovedHeroArtwork, listReadyHeroArtworkLibrary } from "./heroArtwork/library.ts";
+import { listReadyHeroArtworkLibrary } from "./heroArtwork/library.ts";
 import { getSeason, parseEditionDate } from "./heroArtwork/select.ts";
 import {
   buildWeatherIntelligence,
@@ -88,6 +88,14 @@ import {
   auditFoodDrinkPipeline,
   logFoodDrinkPipelineAudit,
 } from "./places/foodDrinkPipelineAudit.ts";
+import {
+  filterLocalEventsByMarket,
+  filterPlacesByMarket,
+  logMarketIsolationRejections,
+  resolveEditionMarket,
+  type ResolvedEditionMarket,
+} from "./markets/editionMarket.ts";
+import { metroKeyFromPlace } from "../../../lib/location/metroKey.ts";
 
 export type { LocalEvent } from "./localEvents/provider.ts";
 export {
@@ -107,6 +115,8 @@ export type BuildEditionOptions = {
   /** Reader's local calendar date YYYY-MM-DD — preferred over UTC. */
   editionDate?: string | null;
   temperatureUnitPreference?: TemperatureUnitPreference | null;
+  /** Structured trace for dev / market isolation audits. */
+  editionTraceId?: string | null;
 };
 
 type SectionInput = {
@@ -557,13 +567,41 @@ export async function buildEditionForUser(
     };
   }
 
+  const editionMarket: ResolvedEditionMarket | null = resolveEditionMarket({
+    city: location.city,
+    state: location.state,
+    region: location.region,
+    lat: location.lat,
+    lon: location.lon,
+  });
+  const catalogMetroKey = metroKeyFromPlace({
+    city: location.city,
+    state: location.state,
+    region: location.region,
+  });
+  const marketAnchor = {
+    lat: location.lat,
+    lon: location.lon,
+    city: location.city,
+    state: location.state ?? null,
+  };
+
   console.log("[buildEdition] resolved location", {
+    traceId: options.editionTraceId ?? null,
     source: locationHint?.city ? "client-or-profile" : "profile-only",
+    requestedCity: locationHint?.city ?? null,
+    requestedState: locationHint?.state ?? null,
+    requestedLat: locationHint?.lat ?? null,
+    requestedLon: locationHint?.lon ?? null,
     city: location.city,
     region: location.region,
     state: location.state,
     lat: location.lat,
     lon: location.lon,
+    resolvedMarket: editionMarket?.metroKey ?? null,
+    catalogMetroKey,
+    marketPrimaryCity: editionMarket?.primaryCity ?? null,
+    marketState: editionMarket?.stateCode ?? null,
   });
 
   // Single consolidated `profiles` read. Personalization, Memory, and the
@@ -630,13 +668,14 @@ export async function buildEditionForUser(
       ),
     ]);
 
-  const city = personalization.city ?? location.city;
-  const region = personalization.region ?? location.region;
-  const state = personalization.state ?? location.state;
+  // Edition geography is atomic — never mix override city labels with profile coords.
+  const city = location.city;
+  const region = location.region ?? personalization.region ?? null;
+  const state = location.state ?? personalization.state ?? null;
   const followedTopics = personalization.followedTopics;
 
-  const weatherLat = personalization.lat ?? location.lat;
-  const weatherLon = personalization.lon ?? location.lon;
+  const weatherLat = location.lat;
+  const weatherLon = location.lon;
   const eventsLocation: Location = {
     lat: weatherLat,
     lon: weatherLon,
@@ -732,6 +771,46 @@ export async function buildEditionForUser(
     ),
   ]);
 
+  let localEventsRawFiltered = localEventsRaw;
+  let localPlacesFiltered = localPlaces;
+  if (editionMarket) {
+    const eventIsolation = filterLocalEventsByMarket(
+      localEventsRaw,
+      editionMarket,
+      marketAnchor
+    );
+    localEventsRawFiltered = eventIsolation.kept;
+    logMarketIsolationRejections(
+      options.editionTraceId,
+      "local_events",
+      editionMarket,
+      eventIsolation.rejected
+    );
+
+    const placeIsolation = filterPlacesByMarket(
+      localPlaces,
+      editionMarket,
+      marketAnchor
+    );
+    localPlacesFiltered = placeIsolation.kept;
+    logMarketIsolationRejections(
+      options.editionTraceId,
+      "places",
+      editionMarket,
+      placeIsolation.rejected
+    );
+
+    console.log("[buildEdition] market isolation gate", {
+      traceId: options.editionTraceId ?? null,
+      metroKey: editionMarket.metroKey,
+      catalogMetroKey,
+      eventsIn: localEventsRaw.length,
+      eventsKept: localEventsRawFiltered.length,
+      placesIn: localPlaces.length,
+      placesKept: localPlacesFiltered.length,
+    });
+  }
+
   const frontPage = editorial.frontPage;
   const topStories = frontPage.stories;
   let leadStory: LeadStory | null = editorial.leadStory;
@@ -782,7 +861,7 @@ export async function buildEditionForUser(
   }
 
   // Pipeline already returns the full ranked qualified pool — do not re-allocate.
-  const localEventsRanked = localEventsRaw;
+  const localEventsRanked = localEventsRawFiltered;
 
   console.log("[buildEdition] local events ranked", {
     qualified: localEventsRanked.length,
@@ -834,7 +913,7 @@ export async function buildEditionForUser(
     npsParks,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
-    localPlaces,
+    localPlaces: localPlacesFiltered,
     recentKeys: recentDiscoveryKeys,
   };
 
@@ -861,8 +940,8 @@ export async function buildEditionForUser(
       : localEventsRanked;
   const localPlacesForDiscovery =
     claim?.kind === "place"
-      ? localPlaces.filter((p) => p.providerId !== claim.providerId)
-      : localPlaces;
+      ? localPlacesFiltered.filter((p) => p.providerId !== claim.providerId)
+      : localPlacesFiltered;
   const npsParksForDiscovery =
     claim?.kind === "nps"
       ? npsParks.filter((p) => p.parkCode !== claim.parkCode)
@@ -1057,7 +1136,7 @@ export async function buildEditionForUser(
   try {
     logFoodDrinkPipelineAudit(
       auditFoodDrinkPipeline({
-        localPlaces,
+        localPlaces: localPlacesFiltered,
         discovery: discoveryForBuild,
         readerLat: weatherLat,
         readerLon: weatherLon,
@@ -2229,10 +2308,11 @@ export async function buildEditionForUser(
   }
 
   const heroLibrary = await listReadyHeroArtworkLibrary(supabaseAdmin);
-  const approvedHosted = await listApprovedHeroArtwork(supabaseAdmin);
   const buildComplete = await assessPersistedEditionRow(supabaseAdmin, edition.id, {
     morningEdition: editionUpsertFields.morning_edition,
-    libraryHasHeroArtwork: heroLibrary.length > 0 || approvedHosted.length > 0,
+    // Only require morning hero when at least one library record is fully
+    // publishable — approved-but-incomplete rows must not block the edition.
+    libraryHasHeroArtwork: heroLibrary.length > 0,
   });
 
   if (!buildComplete.complete) {

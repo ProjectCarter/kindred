@@ -17,8 +17,10 @@ export function sectionsFingerprint(sections: EditionSection[]): string {
 /** Only paint a cached bundle that matches today and passes client completeness. */
 export function isCachedEditionPaintable(
   bundle: CachedEditionBundle,
-  editionDate: string = localEditionDate()
+  editionDate: string = localEditionDate(),
+  metroKey?: string | null
 ): boolean {
+  if (metroKey && bundle.metroKey !== metroKey) return false;
   if (bundle.editionDate !== editionDate) return false;
   if (!Array.isArray(bundle.sections) || bundle.sections.length === 0) {
     return false;

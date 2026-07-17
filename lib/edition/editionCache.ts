@@ -3,6 +3,9 @@
  * the network catches up. A printed newspaper should never leave the reader
  * staring at a loading screen for minutes when yesterday's bundle is still
  * on the shelf.
+ *
+ * Cache keys include market identity (`metroKey`) so Gilbert and San Diego
+ * editions for the same calendar day never collide.
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -34,6 +37,8 @@ export type CachedEditionBundle = {
   userId: string;
   editionId: string;
   editionDate: string;
+  /** Market-scoped cache identity — must match active reader location. */
+  metroKey: string;
   cachedAt: number;
   /** Bumped when masterpiece article payload normalization changes. */
   morningHeroArticleVersion?: number;
@@ -48,12 +53,16 @@ export type CachedEditionBundle = {
   morningHero?: MorningHeroExperience | null;
 };
 
-function cacheKey(userId: string, editionDate: string): string {
+function cacheKey(userId: string, editionDate: string, metroKey: string): string {
+  return `${CACHE_KEY_PREFIX}${userId}:${editionDate}:${metroKey}`;
+}
+
+function legacyCacheKey(userId: string, editionDate: string): string {
   return `${CACHE_KEY_PREFIX}${userId}:${editionDate}`;
 }
 
-function memoryKey(userId: string, editionDate: string): string {
-  return `${userId}:${editionDate}`;
+function memoryKey(userId: string, editionDate: string, metroKey: string): string {
+  return `${userId}:${editionDate}:${metroKey}`;
 }
 
 /** In-process warm cache — instant on warm relaunch within the same JS session. */
@@ -65,7 +74,8 @@ const inflightLoads = new Map<string, Promise<CachedEditionBundle | null>>();
 function normalizeCachedBundle(
   parsed: CachedEditionBundle,
   userId: string,
-  editionDate: string
+  editionDate: string,
+  metroKey: string
 ): CachedEditionBundle | null {
   if (
     !parsed ||
@@ -73,6 +83,9 @@ function normalizeCachedBundle(
     parsed.editionDate !== editionDate ||
     !Array.isArray(parsed.sections)
   ) {
+    return null;
+  }
+  if (parsed.metroKey && parsed.metroKey !== metroKey) {
     return null;
   }
   if (parsed.morningHero) {
@@ -103,6 +116,7 @@ function normalizeCachedBundle(
         }
       : parsed.intelligence;
   }
+  parsed.metroKey = metroKey;
   parsed.morningHeroArticleVersion = EDITION_CACHE_ARTICLE_VERSION;
   return mergeMorningHeroIntoCachedBundle(parsed);
 }
@@ -110,27 +124,29 @@ function normalizeCachedBundle(
 /** Synchronous warm-cache read — no AsyncStorage, no JSON parse. */
 export function peekMemoryCachedEdition(
   userId: string,
-  editionDate: string
+  editionDate: string,
+  metroKey: string
 ): CachedEditionBundle | null {
-  return memoryBundles.get(memoryKey(userId, editionDate)) ?? null;
+  return memoryBundles.get(memoryKey(userId, editionDate, metroKey)) ?? null;
 }
 
 export async function loadCachedEdition(
   userId: string,
-  editionDate: string
+  editionDate: string,
+  metroKey: string
 ): Promise<CachedEditionBundle | null> {
-  const warm = peekMemoryCachedEdition(userId, editionDate);
+  const warm = peekMemoryCachedEdition(userId, editionDate, metroKey);
   if (warm) {
     recordEditionCacheMemoryHit();
     return warm;
   }
 
-  const key = cacheKey(userId, editionDate);
+  const key = cacheKey(userId, editionDate, metroKey);
   const inflight = inflightLoads.get(key);
   if (inflight) return inflight;
 
   const promise = (async () => {
-    masterpieceTraceBegin("article/cache-load", { userId, editionDate });
+    masterpieceTraceBegin("article/cache-load", { userId, editionDate, metroKey });
     const started = Date.now();
     try {
       const raw = await AsyncStorage.getItem(key);
@@ -147,10 +163,11 @@ export async function loadCachedEdition(
       const parsed = normalizeCachedBundle(
         JSON.parse(raw) as CachedEditionBundle,
         userId,
-        editionDate
+        editionDate,
+        metroKey
       );
       if (parsed) {
-        memoryBundles.set(memoryKey(userId, editionDate), parsed);
+        memoryBundles.set(memoryKey(userId, editionDate, metroKey), parsed);
       }
       masterpieceTraceEnd("article/cache-load", {
         ms: Date.now() - started,
@@ -198,10 +215,10 @@ export function scheduleCachedEditionSave(
       : bundle.intelligence,
   };
   memoryBundles.set(
-    memoryKey(normalized.userId, normalized.editionDate),
+    memoryKey(normalized.userId, normalized.editionDate, normalized.metroKey),
     mergeMorningHeroIntoCachedBundle(normalized)
   );
-  const key = cacheKey(normalized.userId, normalized.editionDate);
+  const key = cacheKey(normalized.userId, normalized.editionDate, normalized.metroKey);
   const existing = pendingSaveTimers.get(key);
   if (existing) clearTimeout(existing);
   pendingSaveTimers.set(
@@ -231,25 +248,42 @@ export async function saveCachedEdition(bundle: CachedEditionBundle): Promise<vo
           }
         : bundle.intelligence,
     };
-    memoryBundles.set(memoryKey(normalized.userId, normalized.editionDate), normalized);
+    memoryBundles.set(
+      memoryKey(normalized.userId, normalized.editionDate, normalized.metroKey),
+      normalized
+    );
     try {
       await AsyncStorage.setItem(
-        cacheKey(normalized.userId, normalized.editionDate),
+        cacheKey(normalized.userId, normalized.editionDate, normalized.metroKey),
         JSON.stringify(normalized)
       );
     } catch {
       // Cache write is best-effort — never block the reader.
     }
-  }, { editionId: bundle.editionId });
+  }, { editionId: bundle.editionId, metroKey: bundle.metroKey });
 }
 
 export async function clearCachedEdition(
   userId: string,
-  editionDate: string
+  editionDate: string,
+  metroKey?: string | null
 ): Promise<void> {
-  memoryBundles.delete(memoryKey(userId, editionDate));
+  if (metroKey) {
+    memoryBundles.delete(memoryKey(userId, editionDate, metroKey));
+    try {
+      await AsyncStorage.removeItem(cacheKey(userId, editionDate, metroKey));
+    } catch {
+      // Best-effort.
+    }
+  }
+  // Legacy unscoped keys — pre-market-isolation Gilbert bundles must not reuse.
+  for (const [key] of memoryBundles) {
+    if (key.startsWith(`${userId}:${editionDate}:`)) {
+      memoryBundles.delete(key);
+    }
+  }
   try {
-    await AsyncStorage.removeItem(cacheKey(userId, editionDate));
+    await AsyncStorage.removeItem(legacyCacheKey(userId, editionDate));
   } catch {
     // Best-effort.
   }

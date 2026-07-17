@@ -469,7 +469,15 @@ export async function loadEventsCatalogForEdition(
   }
 
   const events = rows.map(rowToLocalEvent);
-  const ranked = rankLocalEventsForEdition(events, {
+  const familyFiltered = filterFamilyFriendlyEvents(events);
+  if (familyFiltered.filteredCount > 0) {
+    console.log("[events:catalog] family filter on read", {
+      metroKey,
+      filteredCount: familyFiltered.filteredCount,
+      samples: familyFiltered.samples,
+    });
+  }
+  const ranked = rankLocalEventsForEdition(familyFiltered.kept, {
     now,
     readerCity: location.city,
   });

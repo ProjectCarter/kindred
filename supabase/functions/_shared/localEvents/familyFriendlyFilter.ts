@@ -54,6 +54,8 @@ const ADULT_EXCLUSION_PATTERNS: Array<{ re: RegExp; signal: string }> = [
   { re: /\badult\s+arcade\b/i, signal: "adult arcade" },
   { re: /\bmale\s+strippers?\b/i, signal: "male strippers" },
   { re: /\bfemale\s+strippers?\b/i, signal: "female strippers" },
+  { re: /\bstrippers?\s+revue\b/i, signal: "stripper revue" },
+  { re: /\bmale\s+strippers?\s+revue\b/i, signal: "male stripper revue" },
   { re: /\bmale\s+revue\b/i, signal: "male revue" },
   { re: /\bfemale\s+revue\b/i, signal: "female revue" },
   { re: /\bbuffboyzz\b/i, signal: "BuffBoyzz" },

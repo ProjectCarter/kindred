@@ -28,10 +28,13 @@ import {
 } from "../lib/dev/editionOverrideStore";
 import { DEV_QA_CITY_PRESETS, searchDevEditionCities } from "../lib/dev/devCitySearch";
 import { setPendingDevEditionGenerate } from "../lib/dev/pendingDevGenerate";
+import { devGenerateTrace, createDevGenerateTraceId } from "../lib/dev/devGenerateTrace";
 import type { DevEditionHistoryEntry, EditionDateMode } from "../lib/dev/editionOverrideTypes";
 import { DevEditionHealthDashboard } from "../components/DevEditionHealthDashboard";
 import { healthScoreEmoji } from "../lib/dev/editionHealthReport";
 import { resolveEditionHealth } from "../lib/dev/resolveEditionHealth";
+import { isUsKindredPlace } from "../lib/markets/usOnly";
+import { SUPPORTED_REGION_MESSAGE } from "../lib/markets/constants";
 
 function tomorrowEditionDate(): string {
   const d = new Date();
@@ -47,7 +50,6 @@ export default function DevToolsScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
-  const [countryFilter, setCountryFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [results, setResults] = useState<KindredPlace[]>(DEV_QA_CITY_PRESETS);
   const [selected, setSelected] = useState<KindredPlace | null>(null);
@@ -78,12 +80,11 @@ export default function DevToolsScreen() {
   useEffect(() => {
     const t = setTimeout(() => {
       void searchDevEditionCities(query, {
-        country: countryFilter || undefined,
         state: stateFilter || undefined,
       }).then(setResults);
     }, 220);
     return () => clearTimeout(t);
-  }, [query, countryFilter, stateFilter]);
+  }, [query, stateFilter]);
 
   const effectiveState = useMemo(() => {
     void refreshKey;
@@ -140,12 +141,21 @@ export default function DevToolsScreen() {
       setMessage("Choose a city or enter city + latitude + longitude.");
       return;
     }
+    if (!isUsKindredPlace(place)) {
+      setMessage(SUPPORTED_REGION_MESSAGE);
+      return;
+    }
     setBusy(true);
     setMessage(null);
     try {
+      const traceId = createDevGenerateTraceId();
+      devGenerateTrace(traceId, "tap_queued", {
+        city: place.city,
+        state: place.state,
+      });
       await setDevEditionOverride({ place, dateMode, customEditionDate: customDate });
       await setDevEditionDateMode(dateMode, customDate);
-      await setPendingDevEditionGenerate(true);
+      await setPendingDevEditionGenerate(true, traceId);
       router.push("/home");
     } finally {
       setBusy(false);
@@ -198,9 +208,16 @@ export default function DevToolsScreen() {
         <Text style={styles.kicker}>Internal QA</Text>
         <Text style={styles.title}>Developer Tools</Text>
         <Text style={styles.subtitle}>
-          Generate and browse Kindred editions anywhere — production pipeline only, dev builds
-          only.
+          Generate and browse Kindred editions in the United States — production pipeline
+          only, dev builds only.
         </Text>
+
+        <Pressable
+          style={styles.secondaryBtn}
+          onPress={() => router.push("/dev-market-management")}
+        >
+          <Text style={styles.secondaryBtnText}>Market Management (US Rollout)</Text>
+        </Pressable>
 
         {activeEntry && activeHealthScore != null ? (
           <View style={styles.healthBanner}>
@@ -228,29 +245,20 @@ export default function DevToolsScreen() {
             style={styles.input}
             value={query}
             onChangeText={setQuery}
-            placeholder="Gilbert, Seattle, London…"
+            placeholder="Gilbert, Seattle, San Diego…"
             placeholderTextColor={paper.inkFaint}
           />
 
-          <Text style={styles.fieldLabel}>Filter by country</Text>
-          <TextInput
-            style={styles.input}
-            value={countryFilter}
-            onChangeText={setCountryFilter}
-            placeholder="United States, France, Japan…"
-            placeholderTextColor={paper.inkFaint}
-          />
-
-          <Text style={styles.fieldLabel}>Filter by state / province</Text>
+          <Text style={styles.fieldLabel}>Filter by state</Text>
           <TextInput
             style={styles.input}
             value={stateFilter}
             onChangeText={setStateFilter}
-            placeholder="Arizona, Washington, Ontario…"
+            placeholder="Arizona, California, Washington…"
             placeholderTextColor={paper.inkFaint}
           />
 
-          <Text style={styles.fieldLabel}>Quick presets</Text>
+          <Text style={styles.fieldLabel}>Quick presets (United States)</Text>
           <View style={styles.chipRow}>
             {DEV_QA_CITY_PRESETS.map((place) => (
               <Pressable

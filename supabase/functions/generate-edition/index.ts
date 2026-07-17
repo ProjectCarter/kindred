@@ -8,6 +8,10 @@ import {
   resolveEditionLocation,
   type BuildEditionOptions,
 } from "../_shared/buildEdition.ts";
+import {
+  assertLocationMatchesMarket,
+  resolveEditionMarket,
+} from "../_shared/markets/editionMarket.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import type { TemperatureUnitPreference } from "../_shared/weather/units.ts";
 
@@ -82,6 +86,7 @@ Deno.serve(async (req) => {
     let temperatureUnitPreference: TemperatureUnitPreference | null = null;
 
     let devPreview = false;
+    let editionTraceId: string | null = null;
     try {
       const body = await req.json();
       if (body?.location && typeof body.location === "object") {
@@ -101,6 +106,9 @@ Deno.serve(async (req) => {
         temperatureUnitPreference = body.temperatureUnit;
       }
       devPreview = body?.devPreview === true;
+      if (typeof body?.editionTraceId === "string" && body.editionTraceId.trim()) {
+        editionTraceId = body.editionTraceId.trim();
+      }
     } catch {
       // No JSON body
     }
@@ -125,6 +133,18 @@ Deno.serve(async (req) => {
       );
     }
 
+    const stateCode = clientLocation!.state?.trim().toUpperCase() ?? "";
+    if (!/^[A-Z]{2}$/.test(stateCode)) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Kindred is currently available in the United States. Choose a US city with a state code.",
+          code: "NON_US_REGION",
+        }),
+        { status: 403, headers: { "content-type": "application/json" } }
+      );
+    }
+
     const locationHint = {
       lat: clientLocation!.lat!,
       lon: clientLocation!.lon!,
@@ -132,6 +152,43 @@ Deno.serve(async (req) => {
       region: clientLocation!.region ?? null,
       state: clientLocation!.state ?? null,
     };
+
+    const resolvedMarket = resolveEditionMarket(locationHint);
+    if (!resolvedMarket) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Unsupported market — Kindred could not resolve a US market for this location.",
+          code: "UNSUPPORTED_MARKET",
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    const locationConsistency = assertLocationMatchesMarket(
+      locationHint,
+      resolvedMarket
+    );
+    if (!locationConsistency.ok) {
+      console.warn("[generate-edition] location market mismatch", {
+        traceId: editionTraceId,
+        city: locationHint.city,
+        state: locationHint.state,
+        lat: locationHint.lat,
+        lon: locationHint.lon,
+        market: resolvedMarket.metroKey,
+        reason: locationConsistency.reason,
+      });
+      return new Response(
+        JSON.stringify({
+          error:
+            "Location mismatch — city label and coordinates must belong to the same market.",
+          code: "LOCATION_MARKET_MISMATCH",
+          reason: locationConsistency.reason,
+        }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
+    }
 
     const supabaseAdmin = createServiceClient();
 
@@ -169,6 +226,7 @@ Deno.serve(async (req) => {
     }
 
     console.log("[generate-edition] location", {
+      traceId: editionTraceId,
       source: "client",
       mode: "explicit-body",
       city: location.city,
@@ -176,6 +234,8 @@ Deno.serve(async (req) => {
       state: location.state,
       lat: location.lat,
       lon: location.lon,
+      resolvedMarket: resolvedMarket.metroKey,
+      catalogMetroKey: `${location.city}-${location.state}`.toLowerCase(),
       editionDate,
       temperatureUnitPreference,
       temperatureResolvedHint:
@@ -189,6 +249,7 @@ Deno.serve(async (req) => {
     const buildOptions: BuildEditionOptions = {
       editionDate,
       temperatureUnitPreference: temperatureUnitPreference ?? "auto",
+      editionTraceId,
     };
 
     const result = await buildEditionForUser(
@@ -200,6 +261,21 @@ Deno.serve(async (req) => {
 
     if (!result.ok) {
       console.error("[generate-edition] build failed", result.error);
+      const jobDate =
+        editionDate && /^\d{4}-\d{2}-\d{2}$/.test(editionDate)
+          ? editionDate
+          : new Date().toISOString().slice(0, 10);
+      await supabaseAdmin.from("generation_jobs").upsert(
+        {
+          user_id: user.id,
+          edition_date: jobDate,
+          status: "failed",
+          attempts: 1,
+          last_error: result.error,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,edition_date" }
+      );
       return new Response(JSON.stringify({ error: result.error }), {
         status: 500,
         headers: { "content-type": "application/json" },
