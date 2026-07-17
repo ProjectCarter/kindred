@@ -48,14 +48,32 @@ const payload = JSON.stringify({ edition, sections: sections ?? [] });
 const checker = `
 import { assessPersistedEditionBuild, hasBanditsPickFromPayload } from "./supabase/functions/_shared/editionCompleteness.ts";
 import { isPersistedEditionComplete } from "./lib/perf/coldLaunchTrace.ts";
+import { metroKeyFromKindredPlace } from "./lib/location/metroKey.ts";
+import { metroExpectsStoryOf } from "./lib/edition/storyOfCoverage.ts";
 const { edition, sections } = JSON.parse(process.argv[1]);
+const loc = edition.discovery?.location;
+const expectStoryOf = loc?.city
+  ? metroExpectsStoryOf(
+      metroKeyFromKindredPlace({
+        city: loc.city,
+        state: loc.state ?? null,
+        region: loc.region ?? null,
+        lat: loc.lat ?? 0,
+        lon: loc.lon ?? 0,
+      })
+    )
+  : false;
+const hasStoryOf = sections.some(
+  (s) => s.section_type === "story_of" || s.section_type === "your_city"
+);
 const server = assessPersistedEditionBuild({
   sections,
   discovery: edition.discovery,
   hasBanditsPick: hasBanditsPickFromPayload(edition.bandit),
+  expectStoryOf,
 });
-const client = isPersistedEditionComplete(edition, sections);
-console.log(JSON.stringify({ server, client, status: edition.status, surfaceItems: ${surfaceItems} }));
+const client = isPersistedEditionComplete(edition, sections, { expectStoryOf });
+console.log(JSON.stringify({ server, client, status: edition.status, surfaceItems: ${surfaceItems}, expectStoryOf, hasStoryOf }));
 `;
 
 const run = spawnSync("npx", ["tsx", "-e", checker, payload], {

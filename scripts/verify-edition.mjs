@@ -62,6 +62,8 @@ const checks = {
   weather: sectionTypes.includes("weather"),
   local_events: sectionTypes.includes("local_events"),
   today_in_history: sectionTypes.includes("today_in_history"),
+  story_of:
+    sectionTypes.includes("story_of") || sectionTypes.includes("your_city"),
   discoverySurfaceItems: discoveryItems,
   discoverySurfaceBreakdown: surfaceCounts,
   bandits_pick: hasBanditsPick,

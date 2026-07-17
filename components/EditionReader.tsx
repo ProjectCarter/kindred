@@ -463,6 +463,7 @@ function EditionReaderInner({
       discovery: stableDiscovery ?? null,
       discoveryItems: stableDiscoveryItems ?? [],
       banditsPickPresent: Boolean(banditsPick),
+      storyOfPresent: Boolean(storyOf),
       leadStory: leadStory ?? null,
       morningHeroPresent: Boolean(morningHero),
       readerLocation: resolvedReaderLocation,
@@ -476,6 +477,7 @@ function EditionReaderInner({
     leadStory,
     morningHero,
     resolvedReaderLocation,
+    storyOf,
   ]);
 
   const activityArticlesById = useMemo(

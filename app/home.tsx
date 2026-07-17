@@ -73,10 +73,12 @@ import {
   loadCachedEdition,
   peekMemoryCachedEdition,
   saveCachedEdition,
+  clearCachedEdition,
   type CachedEditionBundle,
 } from "../lib/edition/editionCache";
 import {
   isCachedEditionPaintable,
+  isStaleCachedEdition,
   networkSectionsMatchCache,
 } from "../lib/edition/instantEdition";
 import { loadWithRetry } from "../lib/edition/loadWithRetry";
@@ -92,6 +94,8 @@ import {
 } from "../lib/edition/localEventsRecovery";
 import { recoverTodayInHistory } from "../lib/edition/todayInHistoryRecovery";
 import { recoverStoryOf } from "../lib/edition/storyOfRecovery";
+import { metroExpectsStoryOf } from "../lib/edition/storyOfCoverage";
+import { metroKeyFromKindredPlace } from "../lib/location/metroKey";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
@@ -858,9 +862,24 @@ export default function HomeScreen() {
     traceSupabaseEditionSections(loaded);
 
     let discoveryRaw = (edition as { discovery?: unknown }).discovery;
+    const editionDiscovery = parseDiscoveryPayload(discoveryRaw);
+    const editionMetroKey =
+      editionDiscovery?.location?.city != null
+        ? metroKeyFromKindredPlace({
+            city: editionDiscovery.location.city,
+            state: editionDiscovery.location.state ?? null,
+            region: editionDiscovery.location.region ?? null,
+            lat: editionDiscovery.location.lat ?? 0,
+            lon: editionDiscovery.location.lon ?? 0,
+          })
+        : activeLocationRef.current?.place
+          ? metroKeyFromKindredPlace(activeLocationRef.current.place)
+          : null;
+    const expectStoryOfForEdition = metroExpectsStoryOf(editionMetroKey);
     const persistedComplete = isPersistedEditionComplete(
       { ...edition, discovery: discoveryRaw },
-      loaded
+      loaded,
+      { expectStoryOf: expectStoryOfForEdition }
     );
 
     if (!persistedComplete.complete) {
@@ -908,6 +927,7 @@ export default function HomeScreen() {
       user,
       edition: { ...edition, discovery: discoveryRaw },
       loaded,
+      expectStoryOf: expectStoryOfForEdition,
     };
     };
 
@@ -1014,7 +1034,7 @@ export default function HomeScreen() {
       return;
     }
 
-    const { user, edition, loaded } = payload;
+    const { user, edition, loaded, expectStoryOf = false } = payload;
 
     // Use cached prefs for city check — never block first paint on GPS refresh.
     const active =
@@ -1110,6 +1130,33 @@ export default function HomeScreen() {
 
     setLocationMismatch(null);
     setBackgroundJob(null);
+
+    const staleCachedEdition = isStaleCachedEdition(
+      cachedBundleRef.current,
+      edition.id
+    );
+    if (staleCachedEdition || isRefresh) {
+      editionFrozenRef.current = false;
+      clearEditionFreeze();
+      if (staleCachedEdition) {
+        const supersededEditionId = cachedBundleRef.current?.editionId ?? null;
+        cachedBundleRef.current = null;
+        instantHydratedRef.current = false;
+        void clearCachedEdition(user.id, edition.edition_date);
+        if (__DEV__) {
+          console.log("[home] loadEdition: discarded stale cached edition", {
+            cachedEditionId: supersededEditionId,
+            networkEditionId: edition.id,
+          });
+        }
+      }
+    }
+
+    const expectStoryOfForMetro =
+      expectStoryOf ||
+      metroExpectsStoryOf(
+        active.place ? metroKeyFromKindredPlace(active.place) : null
+      );
 
     const frozenNow = isEditionFrozen({
       editionId: edition.id,
@@ -1279,6 +1326,7 @@ export default function HomeScreen() {
       readerLocation: active.place
         ? { lat: active.place.lat, lon: active.place.lon }
         : null,
+      expectStoryOf: expectStoryOfForMetro,
     });
     logEditionCompleteness(
       cachedBundleRef.current ? "repeat_launch" : "cold_launch",
@@ -1996,13 +2044,7 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() =>
-              loadEdition(
-                editionFrozenRef.current
-                  ? { quiet: true, eventsOnly: true }
-                  : true
-              )
-            }
+            onRefresh={() => void loadEdition(true)}
             tintColor={paper.terracotta}
             colors={[paper.terracotta]}
           />

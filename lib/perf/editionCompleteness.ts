@@ -41,6 +41,7 @@ export function assessEditionCompleteness(input: {
   bandit: BanditPayload | null;
   leadStory: LeadStory | null;
   readerLocation?: ReaderLocation | null;
+  expectStoryOf?: boolean;
 }): EditionCompleteness {
   const sectionTypes = input.sections.map((s) => s.section_type);
   const hasLocalEvents = sectionTypes.includes("local_events");
@@ -79,6 +80,7 @@ export function assessEditionCompleteness(input: {
   if (!hasBanditsPick) missing.push("bandits_pick");
   if (!hasLeadStory) missing.push("lead_story");
   if (!hasMorningHero) missing.push("morning_hero");
+  if (input.expectStoryOf && !hasStoryOf) missing.push("story_of");
 
   return {
     // Core desks that define a readable Kindred morning paper.
@@ -88,7 +90,8 @@ export function assessEditionCompleteness(input: {
       hasDiscovery &&
       allocation.activities.length > 0 &&
       allocation.recommendations.length > 0 &&
-      hasBanditsPick,
+      hasBanditsPick &&
+      (!input.expectStoryOf || hasStoryOf),
     missing,
     sectionTypes,
     hasDiscovery,
@@ -133,6 +136,7 @@ export function logEditionCompleteness(
       hasBanditsPick: report.hasBanditsPick,
       hasLeadStory: report.hasLeadStory,
       hasMorningHero: report.hasMorningHero,
+      hasStoryOf: report.hasStoryOf,
     }
   );
 }

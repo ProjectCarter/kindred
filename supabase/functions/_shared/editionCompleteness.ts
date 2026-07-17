@@ -7,6 +7,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import type { DiscoveryPayload } from "./discovery/types.ts";
 import { parseDiscoveryPayload } from "./discovery/discoveryPayload.ts";
 import { allocateDiscoverySections } from "./discovery/sectionAllocation.ts";
+import { metroKeyFromLocation } from "./storyOf/metroKey.ts";
 
 export type EditionSectionRow = {
   section_type: string;
@@ -36,6 +37,7 @@ export function assessPersistedEditionBuild(input: {
   sections: EditionSectionRow[];
   discovery: DiscoveryPayload | null | undefined;
   hasBanditsPick: boolean;
+  expectStoryOf?: boolean;
 }): { complete: boolean; reasons: string[] } {
   const types = input.sections.map((s) => s.section_type);
   const discovery =
@@ -43,12 +45,17 @@ export function assessPersistedEditionBuild(input: {
       ? input.discovery
       : parseDiscoveryPayload(input.discovery);
   const reasons: string[] = [];
+  const hasStoryOf =
+    types.includes("story_of") || types.includes("your_city");
 
   if (!types.includes("today_in_history")) {
     reasons.push("edition_sections missing today_in_history");
   }
   if (!types.includes("local_events")) {
     reasons.push("edition_sections missing local_events");
+  }
+  if (input.expectStoryOf && !hasStoryOf) {
+    reasons.push("edition_sections missing story_of");
   }
   if (!input.hasBanditsPick) {
     reasons.push("bandit pick missing");
@@ -73,7 +80,8 @@ export function assessPersistedEditionBuild(input: {
 /** Load persisted row + sections and assess — source of truth before ready. */
 export async function assessPersistedEditionRow(
   admin: SupabaseClient,
-  editionId: string
+  editionId: string,
+  options?: { expectStoryOf?: boolean }
 ): Promise<{ complete: boolean; reasons: string[] }> {
   const { data: edition, error: editionError } = await admin
     .from("editions")
@@ -97,10 +105,24 @@ export async function assessPersistedEditionRow(
     return { complete: false, reasons: [sectionsError.message] };
   }
 
+  const discovery = parseDiscoveryPayload(edition.discovery);
+  let expectStoryOf = options?.expectStoryOf;
+  if (expectStoryOf === undefined && discovery?.location?.city) {
+    const metroKey = metroKeyFromLocation(discovery.location);
+    const { data: article } = await admin
+      .from("kindred_city_articles")
+      .select("metro_key")
+      .eq("metro_key", metroKey)
+      .eq("approval_status", "approved")
+      .maybeSingle();
+    expectStoryOf = Boolean(article);
+  }
+
   return assessPersistedEditionBuild({
     sections: sections ?? [],
-    discovery: parseDiscoveryPayload(edition.discovery),
+    discovery,
     hasBanditsPick: hasBanditsPickFromPayload(edition.bandit),
+    expectStoryOf,
   });
 }
 

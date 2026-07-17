@@ -43,3 +43,11 @@ export function networkSectionsMatchCache(
   if (!cached || cached.editionId !== editionId) return false;
   return sectionsFingerprint(cached.sections) === sectionsFingerprint(loaded);
 }
+
+/** Cached bundle points at a superseded edition row — discard before merge. */
+export function isStaleCachedEdition(
+  cached: CachedEditionBundle | null,
+  editionId: string
+): boolean {
+  return Boolean(cached && cached.editionId !== editionId);
+}

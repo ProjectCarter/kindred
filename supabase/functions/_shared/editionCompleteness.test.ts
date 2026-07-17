@@ -138,6 +138,36 @@ Deno.test("assessPersistedEditionBuild accepts complete persisted payload", () =
   assertEquals(result.reasons.length, 0);
 });
 
+Deno.test("assessPersistedEditionBuild requires story_of when expected", () => {
+  const discovery = sampleDiscovery(
+    [ranked("act1", "activities")],
+    [ranked("rec1", "coffee")]
+  );
+
+  const withoutStory = assessPersistedEditionBuild({
+    sections: baseSections,
+    discovery,
+    hasBanditsPick: true,
+    expectStoryOf: true,
+  });
+  assertEquals(withoutStory.complete, false);
+  assertEquals(
+    withoutStory.reasons.includes("edition_sections missing story_of"),
+    true
+  );
+
+  const withStory = assessPersistedEditionBuild({
+    sections: [
+      ...baseSections,
+      { section_type: "story_of", headline: "The Story of Gilbert", body: "Body" },
+    ],
+    discovery,
+    hasBanditsPick: true,
+    expectStoryOf: true,
+  });
+  assertEquals(withStory.complete, true);
+});
+
 Deno.test("candidateDiscoveryPassesCompleteness blocks incomplete overwrite", () => {
   const valid = sampleDiscovery(
     [ranked("act1", "activities")],

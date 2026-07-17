@@ -108,6 +108,30 @@ export function mergeEventsSectionIntoSections(
   return mergeFrozenSections(current, [eventsSection]);
 }
 
+const NARRATIVE_SECTION_TYPES = new Set([
+  "story_of",
+  "your_city",
+  "today_in_history",
+  "looking_ahead",
+  "top_stories",
+]);
+
+function mergeNarrativeSectionsFromIncoming(
+  current: EditionSection[],
+  incoming: EditionSection[]
+): EditionSection[] {
+  let merged = [...current];
+  for (const section of incoming) {
+    if (!NARRATIVE_SECTION_TYPES.has(section.section_type)) continue;
+    const alreadyPresent = merged.some(
+      (s) => s.section_type === section.section_type
+    );
+    if (alreadyPresent) continue;
+    merged = [...merged, section].sort((a, b) => a.position - b.position);
+  }
+  return merged;
+}
+
 export function mergeFrozenSections(
   current: EditionSection[],
   incoming: EditionSection[]
@@ -120,7 +144,7 @@ export function mergeFrozenSections(
   // Never silently remove Local Events — keep the printed section if the
   // fresh fetch didn't include one or returned an empty body.
   if (!incomingEvents) {
-    return current;
+    return mergeNarrativeSectionsFromIncoming(current, incoming);
   }
 
   const currentHasEvents = current.some((s) => s.section_type === "local_events");
@@ -146,26 +170,33 @@ export function mergeFrozenSections(
   // First time events arrive — insert or replace even when parse is empty
   // but the section row exists (recovery path).
   if (!currentHasEvents) {
-    return [...current, incomingEvents];
+    return mergeNarrativeSectionsFromIncoming(
+      [...current, incomingEvents],
+      incoming
+    );
   }
 
   // Keep printed events if the fresh fetch failed parse or returned empty.
   if (incomingParsed === null) {
-    return currentCount > 0 ? current : current;
+    return mergeNarrativeSectionsFromIncoming(current, incoming);
   }
 
   if (incomingCount === 0 && currentCount > 0) {
-    return current;
+    return mergeNarrativeSectionsFromIncoming(current, incoming);
   }
 
   if (incomingCount === 0) {
     // Both empty — still keep the section shell so the desk stays visible.
-    return current.map((section) =>
-      section.section_type === "local_events" ? incomingEvents : section
+    return mergeNarrativeSectionsFromIncoming(
+      current.map((section) =>
+        section.section_type === "local_events" ? incomingEvents : section
+      ),
+      incoming
     );
   }
 
-  return current.map((section) =>
+  const withEvents = current.map((section) =>
     section.section_type === "local_events" ? incomingEvents : section
   );
+  return mergeNarrativeSectionsFromIncoming(withEvents, incoming);
 }

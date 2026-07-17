@@ -19,6 +19,7 @@ export type DeskId =
   | "local_events"
   | "activities"
   | "recommendations"
+  | "story_of"
   | "bandits_pick"
   | "today_in_history"
   | "local_news"
@@ -113,6 +114,12 @@ export function traceSupabaseEditionRow(edition: {
       detail: { note: "today_in_history lives in edition_sections" },
     },
     {
+      desk: "story_of",
+      stage: "supabase_editions_row",
+      present: false,
+      detail: { note: "story_of lives in edition_sections" },
+    },
+    {
       desk: "local_news",
       stage: "supabase_editions_row",
       present: Boolean(lead?.headline?.trim()),
@@ -163,6 +170,19 @@ export function traceSupabaseEditionSections(
         headline:
           sections.find((s) => s.section_type === "today_in_history")
             ?.headline ?? null,
+      },
+    },
+    {
+      desk: "story_of",
+      stage: "supabase_edition_sections",
+      present:
+        types.includes("story_of") || types.includes("your_city"),
+      detail: {
+        headline:
+          sections.find(
+            (s) =>
+              s.section_type === "story_of" || s.section_type === "your_city"
+          )?.headline ?? null,
       },
     },
     {
@@ -289,6 +309,11 @@ export function traceReactState(input: {
       present: types.includes("today_in_history"),
     },
     {
+      desk: "story_of",
+      stage: "react_state",
+      present: types.includes("story_of") || types.includes("your_city"),
+    },
+    {
       desk: "activities",
       stage: "react_state",
       present: allocation.activities.length > 0,
@@ -326,6 +351,7 @@ export function traceEditionReaderRender(input: {
   discovery: EditionIntelligence["discovery"];
   discoveryItems: EditionIntelligence["discoveryItems"];
   banditsPickPresent: boolean;
+  storyOfPresent: boolean;
   leadStory: LeadStory | null;
   morningHeroPresent: boolean;
   readerLocation: ReaderLocation | null;
@@ -338,6 +364,8 @@ export function traceEditionReaderRender(input: {
   );
 
   const historyInSections = types.includes("today_in_history");
+  const storyOfInSections =
+    types.includes("story_of") || types.includes("your_city");
   const weatherInSections = types.includes("weather");
   const localEventsInSections = types.includes("local_events");
   const activitiesRender = allocation.activities.length > 0;
@@ -380,6 +408,19 @@ export function traceEditionReaderRender(input: {
           ? null
           : "RecommendationsSection returns null when pool empty",
         poolSize: allocation.recommendations.length,
+      },
+    },
+    {
+      desk: "story_of",
+      stage: "render_gate",
+      present: input.storyOfPresent && storyOfInSections,
+      detail: {
+        skipReason:
+          input.storyOfPresent && storyOfInSections
+            ? null
+            : storyOfInSections
+              ? "StoryOfSection not mounted"
+              : "EditionReader only renders History of Your City when story_of section exists",
       },
     },
     {
@@ -452,17 +493,22 @@ function logDeskTraces(
 /** True when Supabase returned a ready row that is not a readable newspaper. */
 export function isPersistedEditionComplete(
   edition: { discovery?: unknown; lead_story?: unknown; bandit?: unknown; morning_edition?: unknown },
-  sections: EditionSection[]
+  sections: EditionSection[],
+  options?: { expectStoryOf?: boolean }
 ): { complete: boolean; reasons: string[] } {
   const types = sections.map((s) => s.section_type);
   const discovery = parseDiscoveryPayload(edition.discovery);
   const counts = surfaceCounts(discovery);
   const hasDiscoveryItems = Object.values(counts).some((n) => n > 0);
   const allocation = allocateDiscoverySections(discovery, null, { max: Infinity });
+  const hasStoryOf = types.includes("story_of") || types.includes("your_city");
 
   const reasons: string[] = [];
   if (!types.includes("today_in_history")) {
     reasons.push("edition_sections missing today_in_history");
+  }
+  if (options?.expectStoryOf && !hasStoryOf) {
+    reasons.push("edition_sections missing story_of");
   }
   if (!hasDiscoveryItems) {
     reasons.push("editions.discovery has zero surfaced items");
