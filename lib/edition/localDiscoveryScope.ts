@@ -1,35 +1,35 @@
 /**
- * Local discovery scope — 25-mile radius for Recommendations and Activities.
+ * Local discovery scope — 25-mile radius for Food & Drink and Activities.
  */
 
 import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
 import { distanceKm } from "../location/locationKey";
 import { KINDRED_LOCAL_RADIUS_KM } from "./editorialStandard";
+import {
+  DESTINATION_ACTIVITY_CATEGORIES,
+  FOOD_DRINK_CATEGORIES,
+  RECOMMENDATION_CATEGORIES,
+} from "./foodDrinkDesk";
+
+export {
+  DESTINATION_ACTIVITY_CATEGORIES,
+  FOOD_DRINK_CATEGORIES,
+  RECOMMENDATION_CATEGORIES,
+};
 
 /** @deprecated Use KINDRED_LOCAL_RADIUS_KM */
 export const RECOMMENDATIONS_RADIUS_MILES = 25;
 /** @deprecated Use KINDRED_LOCAL_RADIUS_KM */
 export const RECOMMENDATIONS_RADIUS_KM = KINDRED_LOCAL_RADIUS_KM;
 
-export const RECOMMENDATION_CATEGORIES: ReadonlySet<DiscoveryCategory> =
-  new Set([
-    "restaurants",
-    "coffee",
-    "bakeries",
-    "beaches",
-    "parks",
-    "museums",
-    "scenic_drives",
-    "gardens",
-  ]);
-
 export const ACTIVITY_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "activities",
   "hiking",
+  ...DESTINATION_ACTIVITY_CATEGORIES,
 ]);
 
 export const LOCAL_DISCOVERY_CATEGORIES: ReadonlySet<DiscoveryCategory> =
-  new Set([...RECOMMENDATION_CATEGORIES, ...ACTIVITY_CATEGORIES]);
+  new Set([...FOOD_DRINK_CATEGORIES, ...ACTIVITY_CATEGORIES]);
 
 function normalizeCoord(
   value: number | string | null | undefined

@@ -21,6 +21,12 @@
  */
 
 import { composeVerifiedAddress } from "./addressValidation.ts";
+import {
+  FOURSQUARE_MAX_PAGES,
+  mergePlacesByProviderId,
+  parseFoursquareNextPageUrl,
+  type FoursquarePaginationStats,
+} from "./foursquarePagination.ts";
 import type {
   NormalizedPlace,
   PlacesCategory,
@@ -35,8 +41,8 @@ const API_VERSION = "2025-06-17";
 // tips/popularity here without re-checking Foursquare's current billing
 // tier for that field.
 const PRO_FIELDS = "fsq_place_id,name,latitude,longitude,location,link,categories";
-const SEARCH_RADIUS_METERS = 16_000; // ~10 miles — a metro, not a block
-const RESULT_LIMIT = 50; // API max — one call, as many candidates as possible
+const SEARCH_RADIUS_METERS = 40_234; // ~25 miles — matches KINDRED_LOCAL_RADIUS
+const RESULT_LIMIT = 50; // API max per page — paginate until exhausted
 
 /**
  * Query text + a verified Foursquare category id (the current FSQ OS
@@ -238,6 +244,206 @@ function toNormalizedPlace(
   };
 }
 
+type SearchPageResult =
+  | {
+      ok: true;
+      places: NormalizedPlace[];
+      rawCount: number;
+      nextUrl: string | null;
+    }
+  | { ok: false; status: number };
+
+async function fetchSearchPage(
+  apiKey: string,
+  url: string,
+  category: PlacesCategory
+): Promise<SearchPageResult> {
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "X-Places-Api-Version": API_VERSION,
+      Accept: "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[places:foursquare] search HTTP error", {
+      status: res.status,
+      category,
+      url: url.slice(0, 180),
+      body: body.slice(0, 300),
+    });
+    return { ok: false, status: res.status };
+  }
+
+  const data = (await res.json()) as { results?: unknown[] };
+  const rawResults = Array.isArray(data.results) ? data.results : [];
+  const places = rawResults
+    .map((r) => toNormalizedPlace(r, category))
+    .filter((p): p is NormalizedPlace => Boolean(p));
+
+  return {
+    ok: true,
+    places,
+    rawCount: rawResults.length,
+    nextUrl: parseFoursquareNextPageUrl(res.headers.get("link")),
+  };
+}
+
+/** Daily incremental scan — stop after N consecutive pages with no new provider IDs. */
+export const FOURSQUARE_INCREMENTAL_KNOWN_PAGE_STOP = 2;
+/** Daily incremental scan — hard cap on pages per category. */
+export const FOURSQUARE_INCREMENTAL_MAX_PAGES = 12;
+
+export type CatalogSearchMode = "full" | "incremental";
+
+export type CatalogSearchStats = FoursquarePaginationStats & {
+  apiCalls: number;
+};
+
+export type CatalogSearchOptions = {
+  mode: CatalogSearchMode;
+  /** Provider IDs already in the metro catalog — used for incremental early-stop. */
+  knownProviderIds?: ReadonlySet<string>;
+  withCategoryIds?: boolean;
+};
+
+/** Paginated Foursquare search for catalog sync (full or incremental). */
+export async function searchFoursquareCategory(
+  category: PlacesCategory,
+  location: PlacesLocation,
+  options: CatalogSearchOptions
+): Promise<{ places: NormalizedPlace[]; stats: CatalogSearchStats }> {
+  const apiKey = Deno.env.get("FOURSQUARE_API_KEY") ?? "";
+  if (!apiKey) {
+    return {
+      places: [],
+      stats: {
+        pageCount: 0,
+        rawResultCount: 0,
+        uniquePlaceCount: 0,
+        stoppedReason: "error",
+        apiCalls: 0,
+      },
+    };
+  }
+
+  const withCategoryIds = options.withCategoryIds ?? true;
+  let result = await searchAllPages(apiKey, category, location, withCategoryIds, options);
+
+  if (
+    result.stats.stoppedReason === "error" &&
+    withCategoryIds &&
+    CATEGORY_QUERY[category].categoryIds.length > 0
+  ) {
+    result = await searchAllPages(apiKey, category, location, false, options);
+  }
+
+  return result;
+}
+
+async function searchAllPages(
+  apiKey: string,
+  category: PlacesCategory,
+  location: PlacesLocation,
+  withCategoryIds: boolean,
+  catalogOptions?: CatalogSearchOptions
+): Promise<{ places: NormalizedPlace[]; stats: CatalogSearchStats }> {
+  const spec = CATEGORY_QUERY[category];
+
+  function buildInitialUrl(): string {
+    const params = new URLSearchParams({
+      ll: `${location.lat},${location.lon}`,
+      radius: String(SEARCH_RADIUS_METERS),
+      query: spec.query,
+      limit: String(RESULT_LIMIT),
+      fields: PRO_FIELDS,
+      sort: "RELEVANCE",
+    });
+    if (withCategoryIds && spec.categoryIds.length > 0) {
+      params.set("fsq_category_ids", spec.categoryIds.join(","));
+    }
+    return `${FOURSQUARE_SEARCH_URL}?${params.toString()}`;
+  }
+
+  let merged: NormalizedPlace[] = [];
+  let nextUrl: string | null = buildInitialUrl();
+  let pageCount = 0;
+  let apiCalls = 0;
+  let rawResultCount = 0;
+  let stoppedReason: FoursquarePaginationStats["stoppedReason"] = "complete";
+  const mode = catalogOptions?.mode ?? "full";
+  const knownIds = catalogOptions?.knownProviderIds ?? new Set<string>();
+  let consecutiveKnownPages = 0;
+  const maxPages =
+    mode === "incremental"
+      ? FOURSQUARE_INCREMENTAL_MAX_PAGES
+      : FOURSQUARE_MAX_PAGES;
+
+  while (nextUrl && pageCount < maxPages) {
+    pageCount += 1;
+    apiCalls += 1;
+    const page = await fetchSearchPage(apiKey, nextUrl, category);
+    if (!page.ok) {
+      stoppedReason = "error";
+      break;
+    }
+
+    rawResultCount += page.rawCount;
+
+    if (mode === "incremental") {
+      const newOnPage = page.places.filter((p) => !knownIds.has(p.providerId));
+      merged = mergePlacesByProviderId(merged, page.places);
+      for (const p of page.places) knownIds.add(p.providerId);
+      if (newOnPage.length === 0) {
+        consecutiveKnownPages += 1;
+      } else {
+        consecutiveKnownPages = 0;
+      }
+      if (consecutiveKnownPages >= FOURSQUARE_INCREMENTAL_KNOWN_PAGE_STOP) {
+        stoppedReason = "complete";
+        break;
+      }
+    } else {
+      merged = mergePlacesByProviderId(merged, page.places);
+    }
+
+    if (page.rawCount === 0) {
+      stoppedReason = "empty_page";
+      break;
+    }
+
+    nextUrl = page.nextUrl;
+    if (!nextUrl) {
+      stoppedReason = "complete";
+      break;
+    }
+  }
+
+  if (pageCount >= maxPages && nextUrl) {
+    stoppedReason = "max_pages";
+    console.warn("[places:foursquare] pagination stopped at safety cap", {
+      category,
+      city: location.city,
+      mode,
+      pageCount,
+      uniquePlaceCount: merged.length,
+    });
+  }
+
+  return {
+    places: merged,
+    stats: {
+      pageCount,
+      rawResultCount,
+      uniquePlaceCount: merged.length,
+      stoppedReason,
+      apiCalls,
+    },
+  };
+}
+
 export function createFoursquareProvider(): PlacesProvider {
   const apiKey = Deno.env.get("FOURSQUARE_API_KEY") ?? "";
 
@@ -259,96 +465,57 @@ export function createFoursquareProvider(): PlacesProvider {
 
       const spec = CATEGORY_QUERY[category];
 
-      function buildParams(withCategoryIds: boolean): URLSearchParams {
-        const params = new URLSearchParams({
-          ll: `${location.lat},${location.lon}`,
-          radius: String(SEARCH_RADIUS_METERS),
-          query: spec.query,
-          limit: String(RESULT_LIMIT),
-          fields: PRO_FIELDS,
-          sort: "RELEVANCE",
-        });
-        // Query-only categories (see CATEGORY_QUERY comment) omit this param
-        // entirely rather than sending an empty string — Foursquare treats a
-        // present-but-empty fsq_category_ids as a 400, the same failure mode
-        // an invalid id would cause.
-        if (withCategoryIds && spec.categoryIds.length > 0) {
-          params.set("fsq_category_ids", spec.categoryIds.join(","));
-        }
-        return params;
-      }
-
-      async function run(
-        withCategoryIds: boolean
-      ): Promise<{ ok: true; result: PlacesSearchResult } | { ok: false; status: number }> {
-        const res = await fetch(
-          `${FOURSQUARE_SEARCH_URL}?${buildParams(withCategoryIds)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              "X-Places-Api-Version": API_VERSION,
-              Accept: "application/json",
-            },
-          }
-        );
-
-        if (!res.ok) {
-          const body = await res.text().catch(() => "");
-          console.error("[places:foursquare] search HTTP error", {
-            status: res.status,
-            category,
-            city: location.city,
-            withCategoryIds,
-            body: body.slice(0, 300),
-          });
-          return { ok: false, status: res.status };
-        }
-
-        const data = (await res.json()) as { results?: unknown[] };
-        const rawResults = Array.isArray(data.results) ? data.results : [];
-        const places = rawResults
-          .map((r) => toNormalizedPlace(r, category))
-          .filter((p): p is NormalizedPlace => Boolean(p));
-
-        console.log("[places:foursquare] search ok", {
-          category,
-          city: location.city,
-          withCategoryIds,
-          candidateCount: rawResults.length,
-          normalizedCount: places.length,
-        });
-
-        return {
-          ok: true,
-          result: { places, candidateCount: rawResults.length },
-        };
-      }
-
       try {
-        const first = await run(true);
-        if (first.ok) return first.result;
+        const first = await searchFoursquareCategory(category, location, {
+          mode: "full",
+          withCategoryIds: true,
+        });
+        if (first.stats.stoppedReason !== "error") {
+          console.log("[places:foursquare] search paginated ok", {
+            category,
+            city: location.city,
+            withCategoryIds: true,
+            ...first.stats,
+          });
+          return {
+            places: first.places,
+            candidateCount: first.stats.rawResultCount,
+            uniqueCount: first.stats.uniquePlaceCount,
+            pageCount: first.stats.pageCount,
+          };
+        }
 
-        // A category id that turns out to be wrong 400s the WHOLE request
-        // rather than just returning zero results — retry once, text-only,
-        // so one bad id degrades gracefully instead of silently emptying
-        // this category for the whole metro all week (cache is weekly).
-        if (first.status === 400 && spec.categoryIds.length > 0) {
-          console.warn("[places:foursquare] retrying without category ids", {
+        if (spec.categoryIds.length > 0) {
+          console.warn("[places:foursquare] retrying pagination without category ids", {
             category,
             city: location.city,
           });
-          const retry = await run(false);
-          if (retry.ok) return retry.result;
+          const retry = await searchFoursquareCategory(category, location, {
+            mode: "full",
+            withCategoryIds: false,
+          });
+          console.log("[places:foursquare] search paginated ok", {
+            category,
+            city: location.city,
+            withCategoryIds: false,
+            ...retry.stats,
+          });
+          return {
+            places: retry.places,
+            candidateCount: retry.stats.rawResultCount,
+            uniqueCount: retry.stats.uniquePlaceCount,
+            pageCount: retry.stats.pageCount,
+          };
         }
 
-        return { places: [], candidateCount: 0 };
+        return { places: [], candidateCount: 0, uniqueCount: 0, pageCount: 0 };
       } catch (err) {
         console.error("[places:foursquare] search failure", {
           category,
           city: location.city,
           error: err instanceof Error ? err.message : String(err),
         });
-        return { places: [], candidateCount: 0 };
+        return { places: [], candidateCount: 0, uniqueCount: 0, pageCount: 0 };
       }
     },
   };

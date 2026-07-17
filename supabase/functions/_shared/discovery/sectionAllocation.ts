@@ -1,5 +1,5 @@
 /**
- * Server mirror of lib/edition/sectionAllocation.ts — must stay aligned with
+ * Server mirror of lib/edition/sectionAllocator.ts — must stay aligned with
  * the client allocator used by isPersistedEditionComplete().
  */
 
@@ -20,8 +20,10 @@ import {
 import {
   passesActivitiesSectionRadius,
   passesLocalDiscoveryRadius,
+  DESTINATION_ACTIVITY_CATEGORIES,
   RECOMMENDATION_CATEGORIES,
 } from "./localDiscoveryScope.ts";
+import { isFoodEstablishmentItem } from "./foodDrinkDesk.ts";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -46,6 +48,7 @@ const ALL_SURFACES: DiscoverySurface[] = [
 const ACTIVITIES_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "hiking",
   "activities",
+  ...DESTINATION_ACTIVITY_CATEGORIES,
 ]);
 
 const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
@@ -55,15 +58,6 @@ const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "podcasts",
   "recipes",
 ]);
-
-const CONTEXTUAL_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
-  "beaches",
-  "museums",
-  "scenic_drives",
-]);
-
-const ACTIVE_PARTICIPATION_PATTERN =
-  /paddleboard|paddle board|kayak|surf|snorkel|scuba|dive|swim|hike|hiking|trail|climb|bike|cycling|kite|sail|canoe|walking tour|guided tour|workshop|class\b/i;
 
 /** Mirror client meetsDiscoveryPublishConfidence — missing stored score passes. */
 function meetsDiscoveryPublishConfidence(
@@ -75,8 +69,15 @@ function meetsDiscoveryPublishConfidence(
 }
 
 function belongsInActivities(item: RankedDiscoveryItem): boolean {
-  if (ACTIVITIES_CATEGORIES.has(item.item.category)) {
-    if (item.item.category === "hiking") return true;
+  if (isFoodEstablishmentItem(item)) return false;
+
+  if (DESTINATION_ACTIVITY_CATEGORIES.has(item.item.category)) {
+    return true;
+  }
+
+  if (item.item.category === "hiking") return true;
+
+  if (item.item.category === "activities") {
     const hay = venueHayFromParts([
       item.item.title,
       item.item.dek,
@@ -84,17 +85,8 @@ function belongsInActivities(item: RankedDiscoveryItem): boolean {
     ]);
     return isParticipatoryActivityVenue(hay);
   }
-  if (CONTEXTUAL_CATEGORIES.has(item.item.category) && readsAsActive(item)) {
-    return true;
-  }
-  return false;
-}
 
-function readsAsActive(item: RankedDiscoveryItem): boolean {
-  const hay = [item.item.title, item.item.dek, ...(item.item.venueCategories ?? [])]
-    .filter(Boolean)
-    .join(" ");
-  return ACTIVE_PARTICIPATION_PATTERN.test(hay);
+  return false;
 }
 
 function isRealEvent(item: RankedDiscoveryItem): boolean {

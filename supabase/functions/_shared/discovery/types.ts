@@ -119,6 +119,12 @@ export type DiscoveryItem = {
   knowledgeGrounding?: import("../knowledge/providers/types.ts").KnowledgeLookupResult | null;
   /** Internal editorial confidence — never shown to readers. */
   editorialConfidence?: import("../editorial/confidence.ts").EditorialConfidence | null;
+  /** Kindred Venue Editorial Score — recommendation strength, not provider rating. */
+  venueEditorial?: {
+    score: number;
+    labels: string[];
+    kindredVenueId?: string | null;
+  } | null;
 };
 
 export type RankedDiscoveryItem = {

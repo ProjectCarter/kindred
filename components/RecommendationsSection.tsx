@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
-import { selectRecommendationCards } from "../lib/edition/recommendations";
+import {
+  FOOD_DRINK_SECTION_KICKER,
+  FOOD_DRINK_SEE_ALL_LABEL,
+  selectHomepageRecommendationCards,
+} from "../lib/edition/recommendations";
 import { EditorialCardGrid } from "./EditorialCardGrid";
 import { RECOMMENDATIONS_GRID_LIMIT } from "../lib/edition/recommendationsListStore";
 import type { ReaderLocation } from "../lib/edition/localDiscoveryScope";
@@ -19,10 +23,9 @@ type Props = {
 };
 
 /**
- * Recommendations — "Where should I go?" Places worth discovering: coffee,
- * restaurants, bakeries, beaches, parks, museums, scenic drives, gardens.
+ * Food & Drink — Kindred's daily guide to the best local places to eat and drink.
  * Same grid, spacing, and "See More" rhythm as Local Events on purpose —
- * one paper, three desks, not three separate feeds.
+ * one paper, distinct desks, not separate feeds.
  */
 export function RecommendationsSection({
   items,
@@ -41,7 +44,10 @@ export function RecommendationsSection({
 
   const cards = useMemo(
     () =>
-      selectRecommendationCards(items, { city: locationCity, readerLocation }),
+      selectHomepageRecommendationCards(items, {
+        city: locationCity,
+        readerLocation,
+      }),
     [items, locationCity, readerLocation]
   );
 
@@ -49,12 +55,12 @@ export function RecommendationsSection({
 
   return (
     <EditorialCardGrid
-      kicker="Recommendations"
+      kicker={FOOD_DRINK_SECTION_KICKER}
       cards={cards}
       initialRenderCount={initialRenderCount ?? limit}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
-      seeAllLabel={(n) => `See all ${n} recommendations`}
-      emptyCopy="Nothing new to recommend nearby this month — check back tomorrow."
+      seeAllLabel={FOOD_DRINK_SEE_ALL_LABEL}
+      emptyCopy="Nothing new on the Food & Drink desk this month — check back tomorrow."
       onOpenCard={
         onOpenItem
           ? (card) => {

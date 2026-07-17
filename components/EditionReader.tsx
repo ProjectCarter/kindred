@@ -94,7 +94,7 @@ type Props = {
   /** Front-page "See all N activities →" — opens the full Activities list. */
   onSeeAllActivities?: () => void;
   /** Front-page "See all N recommendations →" — opens the full Recommendations list. */
-  onSeeAllRecommendations?: () => void;
+  onSeeAllRecommendations?: (items: RankedDiscoveryItem[]) => void;
   /** Stored knowledge payload — used when tapping explainer notes. */
   knowledge?: KnowledgePayload | null;
   heroImageUri?: string | null;
@@ -720,8 +720,10 @@ function EditionReaderInner({
               : undefined
           }
           onSeeAll={
-            curatedFullAllocation.recommendations.length > 0
-              ? onSeeAllRecommendations
+            curatedFullAllocation.recommendations.length > 0 &&
+            onSeeAllRecommendations
+              ? () =>
+                  onSeeAllRecommendations(curatedFullAllocation.recommendations)
               : undefined
           }
         />

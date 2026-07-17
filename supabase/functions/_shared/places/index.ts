@@ -7,26 +7,40 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getCachedPlaces } from "./cache.ts";
+import {
+  loadFoodDrinkCatalogPlaces,
+  metroKeyFromLocation,
+  registerFoodDrinkMetro,
+} from "./foodDrinkCatalogSync.ts";
 import type {
   NormalizedPlace,
   PlacesCategory,
   PlacesLocation,
 } from "./types.ts";
 
-export type { NormalizedPlace, PlacesCategory, PlacesLocation } from "./types.ts";
+export {
+  registerFoodDrinkMetro,
+  loadFoodDrinkCatalogPlaces,
+  metroKeyFromLocation,
+} from "./foodDrinkCatalogSync.ts";
 
-/** Every desk Recommendations covers with verified place data ("where should I go?"). */
+/** Every desk Food & Drink covers — eat and drink only. */
 export const RECOMMENDATION_PLACES_CATEGORIES: PlacesCategory[] = [
   "coffee",
   "restaurants",
+  "bakeries",
+];
+
+const FOOD_DRINK_CATEGORY_SET = new Set<PlacesCategory>(RECOMMENDATION_PLACES_CATEGORIES);
+
+/** Destination experiences claimed by Activities — museums, parks, beaches, etc. */
+export const DESTINATION_PLACES_CATEGORIES: PlacesCategory[] = [
   "parks",
   "museums",
-  "bookstores",
   "scenic_drives",
-  "attractions",
-  "bakeries",
   "gardens",
   "beaches",
+  "attractions",
 ];
 
 /** Every desk Activities covers with verified place data ("what should I go do?"). */
@@ -47,18 +61,33 @@ export const ACTIVITY_PLACES_CATEGORIES: PlacesCategory[] = [
   "ice_skating",
   "karaoke",
   "batting_cages",
+  ...DESTINATION_PLACES_CATEGORIES,
 ];
 
-/** Full roster fetched per metro — Recommendations + Activities combined. */
+/** Full roster fetched per metro — Food & Drink + Activities combined. */
 export const ALL_PLACES_CATEGORIES: PlacesCategory[] = [
   ...RECOMMENDATION_PLACES_CATEGORIES,
   ...ACTIVITY_PLACES_CATEGORIES,
 ];
 
+/** Dedupe provider rows when the same venue appears in multiple category searches. */
+export function dedupePlacesByProviderId(
+  places: NormalizedPlace[]
+): NormalizedPlace[] {
+  const byId = new Map<string, NormalizedPlace>();
+  for (const place of places) {
+    if (!byId.has(place.providerId)) byId.set(place.providerId, place);
+  }
+  return Array.from(byId.values());
+}
+
 /**
- * Fetch verified local places for a metro across every category, sharing
- * the cache with every other reader in that metro. Categories are fetched
- * in parallel; each one independently hits cache or (rarely) refreshes.
+ * Fetch verified local places for a metro across every category.
+ *
+ * Food & Drink (coffee, restaurants, bakeries) reads the shared
+ * `food_drink_catalog` table — zero Foursquare calls at edition time.
+ * Activities and other categories use `local_places_cache` with the
+ * existing single-flight refresh model.
  */
 export async function getLocalPlaces(
   admin: SupabaseClient,
@@ -68,10 +97,30 @@ export async function getLocalPlaces(
   if (!location.city || location.city === "your area") return [];
 
   try {
+    await registerFoodDrinkMetro(admin, location);
+    const metroKey = metroKeyFromLocation(location);
+
     const results = await Promise.all(
-      categories.map((category) => getCachedPlaces(admin, location, category))
+      categories.map(async (category) => {
+        if (FOOD_DRINK_CATEGORY_SET.has(category)) {
+          return loadFoodDrinkCatalogPlaces(admin, metroKey, category);
+        }
+        return getCachedPlaces(admin, location, category);
+      })
     );
-    return results.flat();
+    const merged = dedupePlacesByProviderId(results.flat());
+    const foodDiscovered = merged.filter((p) =>
+      RECOMMENDATION_PLACES_CATEGORIES.includes(p.category)
+    ).length;
+    if (foodDiscovered > 0) {
+      console.log("[places] metro catalog merged", {
+        city: location.city,
+        categories: categories.length,
+        uniquePlaces: merged.length,
+        foodDrinkDiscovered: foodDiscovered,
+      });
+    }
+    return merged;
   } catch (err) {
     console.error("[places] getLocalPlaces failure", {
       city: location.city,

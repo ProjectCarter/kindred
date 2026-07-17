@@ -11,6 +11,7 @@
 import type { RankedDiscoveryItem } from "./discovery";
 import type { SectionAllocation } from "./sectionAllocator";
 import { inferActivitySubtype } from "./activities";
+import { curateFoodDrinkEdition } from "./foodDrinkCuration";
 import { resolveVenueClassification } from "./venueClassification";
 import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
@@ -509,11 +510,8 @@ export function applyEditionCurationToAllocation(
     tieScoreDelta: DISCOVERY_CURATION_TIE_DELTA,
   });
 
-  const recommendations = curateOrderedList(allocation.recommendations, {
+  const recommendations = curateFoodDrinkEdition(allocation.recommendations, {
     getScore: (item) => item.score,
-    getFingerprint: inferEditionFingerprintFromDiscoveryItem,
-    context,
-    tieScoreDelta: DISCOVERY_CURATION_TIE_DELTA,
   });
 
   return {

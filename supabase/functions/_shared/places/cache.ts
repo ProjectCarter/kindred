@@ -30,6 +30,13 @@ import type {
   PlacesProvider,
 } from "./types.ts";
 
+/** Food & Drink is served from food_drink_catalog — never this cache. */
+const FOOD_DRINK_CATEGORIES = new Set<PlacesCategory>([
+  "coffee",
+  "restaurants",
+  "bakeries",
+]);
+
 /** Places don't turn over often — a week-old cache is still accurate. */
 const REFRESH_INTERVAL_DAYS = 7;
 /** Backstop for a refresh that crashed without clearing its own claim. */
@@ -65,6 +72,10 @@ export async function getCachedPlaces(
   location: PlacesLocation,
   category: PlacesCategory
 ): Promise<NormalizedPlace[]> {
+  if (FOOD_DRINK_CATEGORIES.has(category)) {
+    return [];
+  }
+
   const provider = activeProvider();
   // No key configured yet — never touch the cache table. Writing a
   // placeholder row here would look "fresh" for a full week once a real
@@ -196,10 +207,8 @@ async function refreshAndStore(
       return [];
     }
 
-    const { places: rawPlaces, candidateCount } = await provider.search(
-      location,
-      category
-    );
+    const { places: rawPlaces, candidateCount, uniqueCount, pageCount } =
+      await provider.search(location, category);
     const places = await writeEditorialNotesForPlaces(
       rawPlaces,
       category,
@@ -221,7 +230,9 @@ async function refreshAndStore(
     console.log("[places:cache] refreshed", {
       category,
       city: location.city,
-      candidateCount,
+      pageCount,
+      rawCandidateCount: candidateCount,
+      uniquePlaceCount: uniqueCount,
       placeCount: places.length,
     });
 

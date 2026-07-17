@@ -82,6 +82,10 @@ import {
 } from "./editionCompleteness.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlaces } from "./places/index.ts";
+import {
+  auditFoodDrinkPipeline,
+  logFoodDrinkPipelineAudit,
+} from "./places/foodDrinkPipelineAudit.ts";
 
 export type { LocalEvent } from "./localEvents/provider.ts";
 export {
@@ -1045,6 +1049,20 @@ export async function buildEditionForUser(
     console.warn("[buildEdition] discovery still empty after recentKeys retry", {
       candidateCount: discoveryForBuild.selectionMeta.candidateCount,
     });
+  }
+
+  try {
+    logFoodDrinkPipelineAudit(
+      auditFoodDrinkPipeline({
+        localPlaces,
+        discovery: discoveryForBuild,
+        readerLat: weatherLat,
+        readerLon: weatherLon,
+      }),
+      city ?? location.city
+    );
+  } catch (auditErr) {
+    console.warn("[buildEdition] food drink pipeline audit failed", auditErr);
   }
 
   let discoveryWithImages: DiscoveryPayload = discoveryForBuild;

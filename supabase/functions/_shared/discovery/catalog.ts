@@ -747,12 +747,17 @@ export function localPlacesAsDiscoveryItems(
     category: string;
     address: string | null;
     city: string | null;
+    state?: string | null;
     url: string | null;
     officialWebsite?: string | null;
     lat?: number | null;
     lon?: number | null;
     note?: string | null;
     providerCategories?: string[];
+    editorialScore?: number | null;
+    editorialLabels?: string[];
+    kindredVenueId?: string | null;
+    priceTier?: number | null;
   }>
 ): DiscoveryItem[] {
   return places.map((p) => {
@@ -804,6 +809,15 @@ export function localPlacesAsDiscoveryItems(
       uniqueness: chain ? 0.25 : scenic ? 0.72 : 0.4,
       localExpertise: chain ? 0.2 : scenic ? 0.9 : 0.85,
       quality: chain ? 0.48 : scenic ? 0.82 : 0.65,
+      ...(typeof p.editorialScore === "number"
+        ? {
+            venueEditorial: {
+              score: p.editorialScore,
+              labels: p.editorialLabels ?? [],
+              kindredVenueId: p.kindredVenueId ?? null,
+            },
+          }
+        : {}),
     });
   });
 }

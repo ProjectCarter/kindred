@@ -1,0 +1,121 @@
+---
+description: Kindred Editorial Database — provider discovery, source provenance, venue lifecycle
+globs: lib/edition/sourceManager.ts,lib/edition/venueLifecycle.ts,supabase/functions/_shared/places/foodDrink*.ts,supabase/functions/_shared/places/venueImporter.ts,supabase/functions/_shared/editorial/sourceManager.ts,supabase/functions/_shared/editorial/venueLifecycle.ts
+alwaysApply: false
+---
+
+# Kindred Editorial Database
+
+Kindred is **not** a consumer of Foursquare, Google, or Yelp.
+Provider APIs are **discovery tools**. The **Kindred Editorial Database** is the source of truth.
+
+```
+Provider APIs → Discovery Pipeline → Kindred Editorial Database → Editorial Ranking → Daily Newspaper
+```
+
+## Philosophy
+
+- Once a restaurant is discovered, Kindred **owns** the editorial record.
+- Each venue has a **permanent Kindred ID** (`food_drink_catalog.id` UUID).
+- **Never blind-overwrite** provider data — merge via Source Manager with confidence scores.
+- **Nothing is permanently deleted** — closed venues are archived for historical editions.
+- Adding a provider = wiring another **importer** into the same Kindred record.
+
+## Venue record
+
+| Field | Notes |
+| --- | --- |
+| Kindred ID | Permanent UUID — never changes |
+| Name, address, coordinates, website, phone | Resolved via Source Manager |
+| Cuisine, editorial categories, editorial tags | Kindred-verified taxonomy |
+| Editorial teaser, editorial article | Kindred editorial desk |
+| Opening hours, price level, photos | Merged from providers + licensed sources |
+| Confidence score (0–100) | Weighted aggregate of field provenance |
+| Verification status | pending · verified · needs_review · rejected |
+| Lifecycle | new → verified → featured → evergreen → needs_review → closed |
+| field_sources | Per-field value, source, confidence, alternatives |
+| source_history | Append-only merge audit trail |
+
+## Source Manager
+
+Every field knows where it came from. Trust tiers (highest wins on conflict):
+
+| Source | Default confidence |
+| --- | --- |
+| Official Website | 99 |
+| Kindred | 98 |
+| Michelin / James Beard | 95 |
+| Licensed photo | 90 |
+| Google Places | 85 |
+| OpenTable / Resy | 82 |
+| Foursquare | 75 |
+| Yelp | 70 |
+| Community correction | 60 |
+
+Implementation: `lib/edition/sourceManager.ts` · `places/venueImporter.ts`
+
+## Editorial lifecycle
+
+```
+NEW → Verified → Featured → Evergreen → Needs Review → Closed
+```
+
+- **NEW** — discovered, not yet publish-ready
+- **Verified** — passes confidence threshold; eligible for guide
+- **Featured / Evergreen** — editorial promotions (manual; sync never auto-demotes)
+- **Needs Review** — confidence dropped or missing from full sync — **not removed**
+- **Closed** — archived; historical links keep working
+
+Guide eligibility: `verified`, `featured`, `evergreen` only.
+Homepage featured 8: still **editor-curated** — never auto-promote because a venue is new.
+
+## Confidence thresholds
+
+| Score | Action |
+| --- | --- |
+| ≥ 70 | Eligible for Food & Drink guide (`verified`) |
+| < 50 | Mark `needs_review` — do not remove |
+| Rejected discovery | `rejected` lifecycle — never published |
+
+## Multi-provider links
+
+`kindred_venue_provider_links` maps external IDs (Foursquare, Google, Yelp, …) to one Kindred venue.
+Future importers merge observations into the same record — no duplicates.
+
+## Cost controls (unchanged)
+
+- Foursquare / Google / Yelp **never** called per user or session
+- Shared metro catalog + scheduled incremental / full sync
+- Skip unchanged records; regenerate editorial only on material change
+
+## Editorial Score (venue recommendation strength)
+
+Separate from verification confidence, provider ratings, and review counts.
+
+| Field | Purpose |
+| --- | --- |
+| `editorial_score` | 0–100 — "Would the desk recommend this?" |
+| `editorial_labels` | Structured tags (`editors_pick`, `hidden_gem`, …) |
+| `editorial_reason` | Internal scoring explanation (not reader-facing) |
+| `editorial_lock` | Manual override — sync updates facts only |
+
+Implementation: `venueEditorialScore.ts` · `venueEditorialScoring.ts`
+
+**Tiers:** 90+ signature · 80+ strong · 70+ useful · 60+ guide eligible · below 60 needs review
+
+**Homepage:** `selectHomepageRecommendationCards()` — editorial score + daily rotation, still exactly 8 diverse picks.
+
+**Guide:** `organizeFoodDrinkGuide()` — sort by editorial score within categories.
+
+## Engineering map
+
+| Concern | Module |
+| --- | --- |
+| Source Manager | `sourceManager.ts` |
+| Lifecycle | `venueLifecycle.ts` |
+| Foursquare importer | `venueImporter.ts` |
+| Catalog sync | `foodDrinkCatalogSync.ts` |
+| DB schema | `0032_kindred_venue_editorial.sql` |
+| Edition read | `loadFoodDrinkCatalogPlaces()` — DB only |
+| Homepage 8 | `selectHomepageRecommendationCards()` |
+| Complete guide | `organizeFoodDrinkGuide()` |

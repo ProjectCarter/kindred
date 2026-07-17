@@ -1,53 +1,53 @@
 /**
- * Local discovery scope — 25-mile radius for Recommendations and Activities.
+ * Local discovery scope — 25-mile radius for Food & Drink and Activities.
  */
 
 import { KINDRED_LOCAL_RADIUS_KM } from "../editorial/editorialStandard.ts";
 import { haversineKm } from "./geo.ts";
 import type { DiscoveryCategory, DiscoveryItem, RankedDiscoveryItem } from "./types.ts";
 import type { DiscoveryRankingContext } from "./types.ts";
+import {
+  DESTINATION_ACTIVITY_CATEGORIES,
+  FOOD_DRINK_CATEGORIES,
+  RECOMMENDATION_CATEGORIES,
+} from "./foodDrinkDesk.ts";
+
+export {
+  DESTINATION_ACTIVITY_CATEGORIES,
+  FOOD_DRINK_CATEGORIES,
+  RECOMMENDATION_CATEGORIES,
+};
 
 /** @deprecated Use KINDRED_LOCAL_RADIUS_KM from editorialStandard.ts */
 export const RECOMMENDATIONS_RADIUS_MILES = 25;
 /** @deprecated Use KINDRED_LOCAL_RADIUS_KM */
 export const RECOMMENDATIONS_RADIUS_KM = KINDRED_LOCAL_RADIUS_KM;
 
-export const RECOMMENDATION_CATEGORIES: ReadonlySet<DiscoveryCategory> =
-  new Set([
-    "restaurants",
-    "coffee",
-    "bakeries",
-    "beaches",
-    "parks",
-    "museums",
-    "scenic_drives",
-    "gardens",
-  ]);
-
 export const ACTIVITY_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "activities",
   "hiking",
+  ...DESTINATION_ACTIVITY_CATEGORIES,
 ]);
 
 /** Desks that share the 25-mile local newspaper radius. */
 export const LOCAL_DISCOVERY_CATEGORIES: ReadonlySet<DiscoveryCategory> =
-  new Set([...RECOMMENDATION_CATEGORIES, ...ACTIVITY_CATEGORIES]);
+  new Set([...FOOD_DRINK_CATEGORIES, ...ACTIVITY_CATEGORIES]);
 
 export const RECOMMENDATION_SURFACES = new Set([
   "coffee",
   "restaurants",
   "bakeries",
-  "beaches",
-  "parks",
-  "museums",
-  "scenic_drives",
-  "gardens",
 ]);
 
 export const LOCAL_DISCOVERY_SURFACES = new Set([
   ...RECOMMENDATION_SURFACES,
   "activities",
   "hiking",
+  "museums",
+  "parks",
+  "beaches",
+  "gardens",
+  "scenic_drives",
 ]);
 
 function normalizeCoord(

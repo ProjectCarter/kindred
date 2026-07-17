@@ -73,14 +73,23 @@ export type NormalizedPlace = {
   /** Present only when the provider actually returned one — never invented. */
   rating: number | null;
   priceTier: number | null;
-  /** Kindred's own one- or two-sentence note, written from the fields above. */
+  /** Kindred editorial score (0–100) — separate from provider rating. */
+  editorialScore?: number | null;
+  /** Structured editorial label ids. */
+  editorialLabels?: string[];
+  /** Permanent Kindred venue UUID when loaded from catalog. */
+  kindredVenueId?: string | null;
   note?: string | null;
 };
 
 export type PlacesSearchResult = {
   places: NormalizedPlace[];
-  /** Raw candidate count before any filtering — observability only. */
+  /** Raw API rows returned across all pages (includes duplicate ids). */
   candidateCount: number;
+  /** Unique provider ids after merge — editorial catalog size. */
+  uniqueCount: number;
+  /** Pages fetched from Foursquare for this category search. */
+  pageCount: number;
 };
 
 /** Every provider (Foursquare today, Google Places tomorrow) implements this. */

@@ -17,28 +17,20 @@
  *                        it reads edition_sections.local_events directly.
  *                        Every bucket below excludes real events so they never
  *                        duplicate here.
- *   Activities         — "What should I go do?" Real, bookable venues for
- *                        active participation within 25 miles — hiking, plus
- *                        the Activities desk (kayaking, escape rooms,
- *                        bowling, mini golf, rock climbing, axe
- *                        throwing, go-karts, pickleball) — plus any
- *                        beach/museum/scenic-drive item whose own
- *                        editorial note reads as something to *do*
- *                        (paddleboarding, a guided tour, a climb), not
- *                        just see. Claims first — this is the section's
- *                        clearest, most literal territory.
+ *   Activities         — "What should I go do?" Recreational experiences within
+ *                        25 miles — hiking, kayaking, museums, parks, beaches,
+ *                        escape rooms, bowling, and every other participatory
+ *                        venue. Never restaurants or food establishments.
  *   Bandit's Notebook   — discovery and hidden gems: the "experiences"
  *                        category outright, plus quiet media (books,
  *                        movies, podcasts) that reads as a personal find
  *                        rather than a place. Claims second, so this
  *                        locked section always has enough for a full
  *                        carousel.
- *   Recommendations    — "Where should I go?" Places worth discovering within
- *                        25 miles: coffee, restaurants, bakeries, beaches,
- *                        parks, museums, scenic drives, gardens. Claims last,
- *                        from what's left — so a place already claimed
- *                        by Activities (e.g. a beach shown for
- *                        paddleboarding) never also shows up here.
+ *   Food & Drink       — "Where should I eat and drink?" Coffee, restaurants,
+ *                        bakeries, breweries, and every curated food experience.
+ *                        Claims last, from what's left — so a venue already
+ *                        claimed by Activities never also shows up here.
  *
  * Front Page (Lead + Top Stories) is untouched: it is a completely
  * separate pipeline (news wires + Story Editor) that never reads from
@@ -64,12 +56,14 @@ import {
 } from "./venueQuality";
 import {
   compareByLocalProximity,
+  DESTINATION_ACTIVITY_CATEGORIES,
   isWithinActivitiesSectionRadius,
   isWithinLocalDiscoveryRadius,
   RECOMMENDATION_CATEGORIES,
   resolveReaderLocation,
   type ReaderLocation,
 } from "./localDiscoveryScope";
+import { isFoodEstablishmentItem } from "./foodDrinkDesk";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -91,10 +85,11 @@ const ALL_SURFACES: DiscoverySurface[] = [
   "gardens",
 ];
 
-/** "What should I go do?" — active participation, not just a place to look at. */
+/** "What should I go do?" — recreational experiences, never food establishments. */
 const ACTIVITIES_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "hiking",
   "activities",
+  ...DESTINATION_ACTIVITY_CATEGORIES,
 ]);
 
 // Recipes read as "a personal find, not a place" — same territory as
@@ -108,32 +103,22 @@ const NOTEBOOK_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "recipes",
 ]);
 
-/** "Where should I go?" — places worth discovering, not activities to do. */
+/** "Where should I eat and drink?" — food & drink only (internal key: recommendations). */
 // RECOMMENDATION_CATEGORIES imported from localDiscoveryScope.ts
 
-
-/**
- * A handful of categories are editorially ambiguous — the same beach can
- * be an Activity (a great place to paddleboard) or a Recommendation (a
- * beautiful place to see), depending on why it's actually being featured.
- * Rather than a rigid category → section map, read Kindred's own editorial
- * note for that item: if it frames the place around active participation
- * it belongs in Activities; otherwise it falls through to Recommendations,
- * where a place worth discovering naturally belongs.
- */
-const CONTEXTUAL_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
-  "beaches",
-  "museums",
-  "scenic_drives",
-]);
-
-const ACTIVE_PARTICIPATION_PATTERN =
-  /paddleboard|paddle board|kayak|surf|snorkel|scuba|dive|swim|hike|hiking|trail|climb|bike|cycling|kite|sail|canoe|walking tour|guided tour|workshop|class\b/i;
+const DESTINATION_EXPERIENCE_CATEGORIES = DESTINATION_ACTIVITY_CATEGORIES;
 
 /** Does this item belong in Activities — a real thing to go do? */
 function belongsInActivities(item: RankedDiscoveryItem): boolean {
-  if (ACTIVITIES_CATEGORIES.has(item.item.category)) {
-    if (item.item.category === "hiking") return true;
+  if (isFoodEstablishmentItem(item)) return false;
+
+  if (DESTINATION_EXPERIENCE_CATEGORIES.has(item.item.category)) {
+    return true;
+  }
+
+  if (item.item.category === "hiking") return true;
+
+  if (item.item.category === "activities") {
     const hay = venueHayFromParts([
       item.item.title,
       item.item.dek,
@@ -141,24 +126,9 @@ function belongsInActivities(item: RankedDiscoveryItem): boolean {
     ]);
     return isParticipatoryActivityVenue(hay);
   }
-  if (
-    CONTEXTUAL_CATEGORIES.has(item.item.category) &&
-    readsAsActive(item)
-  ) {
-    return true;
-  }
+
   return false;
 }
-
-/** Does this item's own copy frame it as something to *do*, not just see? */
-function readsAsActive(item: RankedDiscoveryItem): boolean {
-  const hay = [item.item.title, item.item.dek, ...(item.item.venueCategories ?? [])]
-    .filter(Boolean)
-    .join(" ");
-  return ACTIVE_PARTICIPATION_PATTERN.test(hay);
-}
-
-/** Real, scheduled local events — these belong to Local Events only. */
 function isRealEvent(item: RankedDiscoveryItem): boolean {
   return Boolean(item.item.tags?.includes("local_event"));
 }

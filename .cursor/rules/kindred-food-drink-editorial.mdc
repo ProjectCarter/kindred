@@ -1,0 +1,72 @@
+---
+description: Food & Drink homepage vs guide — featured picks and definitive dining guide
+globs: lib/edition/foodDrink*.ts,lib/edition/recommendations*.ts,components/RecommendationsSection.tsx,app/recommendations.tsx,supabase/functions/_shared/places/foodDrink*.ts,supabase/functions/sync-food-drink-catalog/**
+alwaysApply: false
+---
+
+# Food & Drink Editorial Rules
+
+The homepage and the Food & Drink guide serve **different purposes**.
+
+## Homepage — today's front page
+
+Show **exactly 8 featured** restaurants. Inspire discovery in under 10 seconds — not a directory.
+
+**Hard rules:**
+- Never repeat a cuisine or category in the featured 8
+- Never show two coffee shops, two pizza places, or two bakeries
+- Never repeat the same restaurant anywhere else on the homepage (cross-section dedupe)
+- Every pick should offer a **different dining experience**
+- Chains rank below outstanding local restaurants unless truly exceptional or locally iconic
+
+**Typical spread:** coffee · bakery · burgers · Mexican · sushi · pizza · steakhouse · dessert
+
+Implementation: `selectHomepageRecommendationCards()` with `depth: 8`, `maxPerFingerprint: 1`.
+
+## Food & Drink guide — complete dining guide
+
+Kindred's **definitive local dining guide** for every city served.
+
+**Do NOT** impose artificial limits (50, 100, 250). Include every restaurant within **~25 miles** that meets editorial standards. If 163 qualify, show 163.
+
+**Organize** into editorial category sections (see `FOOD_DRINK_GUIDE_SECTIONS` in `foodDrinkGuide.ts`).
+
+**Every listing includes:** editorial summary, full article, atmosphere, signature dishes, what locals order, best time to visit, nearby suggestions, Open in Maps, official website, editorial closing note.
+
+Implementation: `organizeFoodDrinkGuide()` — full qualifying pool, grouped by section, no publication cap.
+
+## Shared catalog sync (server-side only)
+
+Food & Drink venues live in the **Kindred Editorial Database** (`food_drink_catalog`).
+See `kindred-editorial-database.mdc` for Source Manager, lifecycle, and provenance rules.
+
+Foursquare is **never** queried per user, per session, or during edition build.
+
+| Schedule | Mode | Purpose |
+| --- | --- | --- |
+| First cron for a metro | `full` | Initial metro-area import |
+| Daily ~3:15 UTC | `incremental` | New/changed restaurants (~24h discovery) |
+| Weekly Sunday ~4:30 UTC | `full` | Reconciliation, closures, duplicates, missed venues |
+
+**Edition reads:** `getLocalPlaces()` → `loadFoodDrinkCatalogPlaces()` (DB only).
+**Metro enrollment:** `registerFoodDrinkMetro()` on edition build — no provider calls.
+**Scheduled sync:** `sync-food-drink-catalog` edge function (CRON_SECRET).
+
+New restaurants pass verification before publication. Homepage still shows **exactly 8**
+diverse featured picks — never auto-promote a venue because it is new.
+
+## Engineering pointers
+
+| Concern | Module |
+| --- | --- |
+| Homepage featured 8 | `recommendations.ts` → `selectHomepageRecommendationCards` |
+| Guide sections | `foodDrinkGuide.ts` → `organizeFoodDrinkGuide` |
+| Fingerprint variety | `foodDrinkCuration.ts` → `curateFoodDrinkEdition` |
+| 25-mile radius | `localDiscoveryScope.ts` |
+| Catalog sync | `places/foodDrinkCatalogSync.ts` + `sync-food-drink-catalog` |
+| Provider retrieval | Scheduled sync only — `foursquareProvider.ts` (`full` / `incremental`) |
+| Edition read path | `places/index.ts` → `loadFoodDrinkCatalogPlaces` |
+| Article fields | `discoveryArticles.ts` → `composePlaceDiscoveryArticle` |
+| Cross-section dedupe | `sectionAllocator.ts` |
+
+**The Kindred test:** Would an experienced food editor put this on tomorrow's front page (homepage) or in the city dining guide (See All)?

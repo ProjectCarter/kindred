@@ -1,27 +1,43 @@
 /**
- * Recommendations — Kindred's "where should I go?" desk.
- * Places worth discovering: coffee, restaurants, bakeries, beaches, parks,
- * museums, scenic drives, gardens. Presentation mirrors Local Events and
- * Activities on purpose — same grid, same rhythm, its own editorial voice.
- * (This replaces the earlier text-list "From the desk" design; recipes
- * moved to Bandit's Notebook, where "a personal find, not a place" already
- * lives — see sectionAllocator.ts.)
+ * Food & Drink — Kindred's daily editorial guide to the best local places
+ * to eat and drink. Presentation mirrors Local Events and Activities on
+ * purpose — same grid, same rhythm, its own editorial voice.
  */
 
 import type { RankedDiscoveryItem } from "./discovery";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
 import { resolveVenueClassification } from "./venueClassification";
 import {
-  compareByLocalProximity,
-  isWithinLocalDiscoveryRadius,
-  RECOMMENDATION_CATEGORIES,
   type ReaderLocation,
 } from "./localDiscoveryScope";
+import {
+  foodDrinkSortScore,
+  FOOD_DRINK_SECTION_INTRO,
+} from "./foodDrinkDesk";
+import {
+  curateFoodDrinkEdition,
+  foodEditorFingerprintLabel,
+} from "./foodDrinkCuration";
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing";
+import { prepareFoodDrinkPool } from "./foodDrinkGuide";
+import {
+  homepageVenueEditorialSortScore,
+  VENUE_EDITORIAL_TIER_STRONG,
+} from "./venueEditorialScore";
 import {
   isLowValueVenue,
   isScenicOrHiddenGem,
   venueHayFromParts,
 } from "./venueQuality";
+import { resolveDiscoveryCategoryIcon } from "./categoryIcon";
+
+export {
+  FOOD_DRINK_SECTION_INTRO,
+  FOOD_DRINK_SECTION_KICKER,
+  FOOD_DRINK_SECTION_TITLE,
+  FOOD_DRINK_SECTION_QUESTION,
+  FOOD_DRINK_SEE_ALL_LABEL,
+} from "./foodDrinkDesk";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -31,75 +47,129 @@ const CATEGORY_LABEL: Record<string, string> = {
   coffee: "Coffee",
   restaurants: "Restaurant",
   bakeries: "Bakery",
-  beaches: "Beach",
-  parks: "Park",
-  museums: "Museum",
-  scenic_drives: "Scenic Drive",
-  gardens: "Garden",
 };
 
 export function recommendationCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category] ?? category.replace(/_/g, " ");
 }
 
-function isRecommendationItem(d: RankedDiscoveryItem): boolean {
-  return RECOMMENDATION_CATEGORIES.has(d.item.category);
-}
+function recommendationSortScore(
+  d: RankedDiscoveryItem,
+  editionDate?: string | null
+): number {
+  const editorial = d.item.venueEditorial?.score;
+  if (typeof editorial === "number" && editorial > 0) {
+    const venueId =
+      d.item.venueEditorial?.kindredVenueId ?? d.item.id;
+    const base =
+      editionDate != null
+        ? homepageVenueEditorialSortScore(editorial, venueId, editionDate)
+        : editorial;
+    let s = base;
+    const hay = venueHayFromParts([
+      d.item.title,
+      d.item.dek,
+      ...(d.item.venueCategories ?? []),
+      d.item.address,
+    ]);
+    if (isScenicOrHiddenGem(hay)) s += 3;
+    if (isLowValueVenue(hay)) s -= 20;
+    if (d.item.tags?.includes("chain")) s -= 8;
+    return s;
+  }
 
-function recommendationSortScore(d: RankedDiscoveryItem): number {
-  let s = d.score ?? 0;
-  if (d.surfaces.includes("hidden_gems")) s += 6;
-  if (d.item.tags?.includes("hidden_gem")) s += 4;
-  if (d.item.tags?.includes("chain")) s -= 8;
+  let s = foodDrinkSortScore(d);
   const hay = venueHayFromParts([
     d.item.title,
     d.item.dek,
     ...(d.item.venueCategories ?? []),
     d.item.address,
   ]);
-  if (isScenicOrHiddenGem(hay)) s += 6;
+  if (isScenicOrHiddenGem(hay)) s += 4;
   if (isLowValueVenue(hay)) s -= 20;
   return s;
 }
 
 function recommendationOverline(item: RankedDiscoveryItem["item"]): string {
-  if (item.tags?.includes("local_place")) {
-    const venue = resolveVenueClassification({
-      title: item.title,
-      venueCategories: item.venueCategories,
-      discoveryCategory: item.category,
-      dek: item.dek,
-    });
-    if (venue.confidence !== "low") {
-      const label = venue.displayLabel;
-      return label.charAt(0).toUpperCase() + label.slice(1);
-    }
-  }
-  return recommendationCategoryLabel(item.category);
+  return foodEditorFingerprintLabel(item);
 }
 
 export function selectRecommendationCards(
   items: RankedDiscoveryItem[] | null | undefined,
-  options?: { city?: string | null; readerLocation?: ReaderLocation | null }
+  options?: {
+    city?: string | null;
+    readerLocation?: ReaderLocation | null;
+    /** @deprecated Use selectHomepageRecommendationCards or organizeFoodDrinkGuide */
+    mode?: "homepage" | "guide";
+  }
+): EditorialGridCard[] {
+  if (options?.mode === "guide") {
+    const pool = prepareFoodDrinkPool(items, options);
+    return pool.map((d) => toRecommendationCard(d, options?.city));
+  }
+  return selectHomepageRecommendationCards(items, options);
+}
+
+/** Homepage front page — exactly 8 featured experiences, no cuisine repeat. */
+export function selectHomepageRecommendationCards(
+  items: RankedDiscoveryItem[] | null | undefined,
+  options?: {
+    city?: string | null;
+    readerLocation?: ReaderLocation | null;
+    editionDate?: string | null;
+  }
 ): EditorialGridCard[] {
   const readerLocation = options?.readerLocation ?? null;
-  const ranked = [...(items ?? [])]
-    .filter(isRecommendationItem)
-    .filter((d) => isWithinLocalDiscoveryRadius(d, readerLocation))
-    .filter((d) => isCompleteCard(d.item))
-    .sort((a, b) => {
-      const proximity = compareByLocalProximity(a, b, readerLocation);
-      if (proximity !== 0) return proximity;
-      return recommendationSortScore(b) - recommendationSortScore(a);
-    });
+  const editionDate = options?.editionDate ?? null;
+  const pool = prepareFoodDrinkPool(items, { readerLocation }).filter((d) => {
+    const score = d.item.venueEditorial?.score;
+    if (typeof score === "number" && score < VENUE_EDITORIAL_TIER_STRONG - 10) {
+      return false;
+    }
+    return true;
+  });
 
-  return ranked.map((d) => ({
-    id: d.item.id,
-    overline: recommendationOverline(d.item),
-    title: d.item.title.trim(),
-    subtitle: recommendationLocationLine(d.item, options?.city),
-    note: recommendationNote(d.item),
-  }));
+  const ranked = curateFoodDrinkEdition(pool, {
+    getScore: (d) => recommendationSortScore(d, editionDate),
+    depth: HOMEPAGE_INITIAL_RENDER_COUNT,
+    maxPerFingerprint: 1,
+    repeatScoreGap: Number.POSITIVE_INFINITY,
+  });
+
+  return ranked
+    .slice(0, HOMEPAGE_INITIAL_RENDER_COUNT)
+    .map((d) => toRecommendationCard(d, options?.city));
+}
+
+function toRecommendationCard(
+  d: RankedDiscoveryItem,
+  city?: string | null
+): EditorialGridCard {
+    const venue = resolveVenueClassification({
+      title: d.item.title,
+      venueCategories: d.item.venueCategories,
+      discoveryCategory: d.item.category,
+      dek: d.item.dek,
+    });
+    return {
+      id: d.item.id,
+      overline: recommendationOverline(d.item),
+      categoryIcon: resolveDiscoveryCategoryIcon(
+        {
+          title: d.item.title,
+          dek: d.item.dek,
+          category: d.item.category,
+          venueCategories: d.item.venueCategories,
+          tags: d.item.tags,
+          editorialCategoryId:
+            venue.confidence !== "low" ? venue.categoryId : null,
+        },
+        "recommendation"
+      ),
+      title: d.item.title.trim(),
+      subtitle: recommendationLocationLine(d.item, city),
+      note: recommendationNote(d.item),
+    };
 }
 
 export function recommendationLocationLine(
@@ -111,11 +181,11 @@ export function recommendationLocationLine(
   return city || null;
 }
 
-/** Real venues already carry Kindred's own AI-written note (places/notes.ts) — use it as-is. */
-export function recommendationNote(item: RankedDiscoveryItem["item"]): string | null {
+export function recommendationNote(
+  item: RankedDiscoveryItem["item"]
+): string | null {
   const dek = item.dek?.trim();
   if (!dek) return null;
   if (dek === item.title.trim()) return null;
   return dek;
 }
-

@@ -2311,21 +2311,9 @@ export default function HomeScreen() {
                 stashTodaysActivities(full.activities);
                 router.push("/activities");
               }}
-              onSeeAllRecommendations={() => {
-                const full = allocateDiscoverySections(
-                  intelligence?.discovery,
-                  intelligence?.discoveryItems,
-                  {
-                    readerLocation: activeLocation?.place
-                      ? {
-                          lat: activeLocation.place.lat,
-                          lon: activeLocation.place.lon,
-                        }
-                      : null,
-                  }
-                );
+              onSeeAllRecommendations={(items) => {
                 persistHomeScrollNow();
-                stashTodaysRecommendations(full.recommendations);
+                stashTodaysRecommendations(items);
                 router.push("/recommendations");
               }}
               knowledge={intelligence?.knowledge}

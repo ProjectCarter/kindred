@@ -5,6 +5,7 @@
 
 import type { RankedDiscoveryItem } from "../discovery/types.ts";
 import type { SectionAllocation } from "../discovery/sectionAllocation.ts";
+import { curateFoodDrinkEdition } from "./foodDrinkCuration.ts";
 import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../editorial/publishing.ts";
 
 export type EditionTone =
@@ -324,11 +325,8 @@ export function applyEditionCurationToAllocation(
     tieScoreDelta: DISCOVERY_CURATION_TIE_DELTA,
   });
 
-  const recommendations = curateOrderedList(allocation.recommendations, {
+  const recommendations = curateFoodDrinkEdition(allocation.recommendations, {
     getScore: (item) => item.score,
-    getFingerprint: inferEditionFingerprintFromDiscoveryItem,
-    context,
-    tieScoreDelta: DISCOVERY_CURATION_TIE_DELTA,
   });
 
   return { activities, notebook, recommendations };

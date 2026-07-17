@@ -6,7 +6,16 @@ import { EditorialCardGrid } from "../components/EditorialCardGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
-import { selectRecommendationCards } from "../lib/edition/recommendations";
+import {
+  FOOD_DRINK_SECTION_INTRO,
+  FOOD_DRINK_SECTION_KICKER,
+  FOOD_DRINK_SECTION_QUESTION,
+  FOOD_DRINK_SECTION_TITLE,
+} from "../lib/edition/recommendations";
+import {
+  foodDrinkGuidePlaceCount,
+  organizeFoodDrinkGuide,
+} from "../lib/edition/foodDrinkGuide";
 import { getTodaysRecommendations } from "../lib/edition/recommendationsListStore";
 import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
 import { getActiveEditionId } from "../lib/edition/editionContext";
@@ -15,14 +24,15 @@ import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Full published Recommendations list — every qualifying place in this edition. */
+/** Complete Food & Drink guide — every qualifying place within ~25 miles. */
 export default function RecommendationsScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.recommendations
   );
   const items = useMemo(() => getTodaysRecommendations(), []);
-  const cards = useMemo(() => selectRecommendationCards(items), [items]);
+  const sections = useMemo(() => organizeFoodDrinkGuide(items), [items]);
+  const placeCount = useMemo(() => foodDrinkGuidePlaceCount(items), [items]);
   const articlesById = useMemo(
     () => discoveryArticlesById(items, "recommendation"),
     [items]
@@ -35,7 +45,7 @@ export default function RecommendationsScreen() {
 
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
-    title: "Recommendations",
+    title: FOOD_DRINK_SECTION_TITLE,
     backAccessibilityLabel: "Back to today’s paper",
     onScrollOffset,
   });
@@ -52,28 +62,42 @@ export default function RecommendationsScreen() {
           <KindredDetailBackButton onPress={handleBack} />
         </View>
 
-        <Text style={styles.kicker}>Where should I go?</Text>
-        <Text style={styles.title}>Recommendations</Text>
-        <Text style={styles.subtitle}>
-          Places worth discovering nearby this month.
-        </Text>
+        <Text style={styles.kicker}>{FOOD_DRINK_SECTION_QUESTION}</Text>
+        <Text style={styles.title}>{FOOD_DRINK_SECTION_TITLE}</Text>
+        <Text style={styles.subtitle}>{FOOD_DRINK_SECTION_INTRO}</Text>
+        {placeCount > 0 ? (
+          <Text style={styles.countLine}>
+            {placeCount} {placeCount === 1 ? "place" : "places"} within 25 miles
+          </Text>
+        ) : null}
 
-        <EditorialCardGrid
-          kicker="Recommendations"
-          cards={cards}
-          initialRenderCount={Math.max(cards.length, 1)}
-          emptyCopy="Nothing new to recommend nearby this month — check back tomorrow."
-          showBanditWhenEmpty
-          onOpenCard={(card) => {
-            const article = articlesById.get(card.id);
-            if (!article) return;
-            persistNow();
-            openKindredArticle(router, article, {
-              editionId: getActiveEditionId(),
-              backLabel: "← Recommendations",
-            });
-          }}
-        />
+        {sections.length === 0 ? (
+          <Text style={styles.emptyCopy}>
+            Nothing on the Food & Drink desk this month — check back tomorrow.
+          </Text>
+        ) : (
+          sections.map((section) => (
+            <View key={section.id} style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {section.icon} {section.label}
+              </Text>
+              <EditorialCardGrid
+                kicker={FOOD_DRINK_SECTION_KICKER}
+                cards={section.cards}
+                initialRenderCount={Math.max(section.cards.length, 1)}
+                onOpenCard={(card) => {
+                  const article = articlesById.get(card.id);
+                  if (!article) return;
+                  persistNow();
+                  openKindredArticle(router, article, {
+                    editionId: getActiveEditionId(),
+                    backLabel: `← ${FOOD_DRINK_SECTION_TITLE}`,
+                  });
+                }}
+              />
+            </View>
+          ))
+        )}
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
@@ -83,7 +107,7 @@ export default function RecommendationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.sky,
+    backgroundColor: paper.page,
   },
   content: {
     paddingHorizontal: 24,
@@ -111,7 +135,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 25,
     color: paper.inkBody,
-    marginBottom: 32,
+    marginBottom: 12,
     maxWidth: 400,
+  },
+  countLine: {
+    fontFamily: "Georgia",
+    fontSize: 14,
+    lineHeight: 20,
+    color: paper.inkFaint,
+    marginBottom: 28,
+  },
+  section: {
+    marginBottom: 36,
+  },
+  sectionTitle: {
+    ...type.sectionHeadline,
+    fontSize: 20,
+    lineHeight: 26,
+    color: paper.ink,
+    marginBottom: 14,
+  },
+  emptyCopy: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
+    color: paper.inkFaint,
   },
 });

@@ -21,6 +21,7 @@ import {
   isScenicOrHiddenGem,
   venueHayFromParts,
 } from "../editorial/venueQuality.ts";
+import { isEditoriallyExcludedListing } from "../localEvents/familyFriendlyFilter.ts";
 import type {
   DiscoveryItem,
   DiscoveryRankingContext,
@@ -81,6 +82,26 @@ export function scoreDiscoveryItem(
   const weather = ctx.weatherIntel?.bucket ?? weatherBucket(ctx.weatherSummary);
   const reasons: DiscoveryReason[] = [];
   let score = 0;
+
+  const listingHay = venueHayFromParts([
+    item.title,
+    item.dek,
+    item.place?.name,
+    item.place?.city,
+    item.place?.address,
+    ...item.tags,
+    ...(item.venueCategories ?? []),
+  ]);
+  const editorialExclusion = isEditoriallyExcludedListing(listingHay);
+  if (editorialExclusion.excluded) {
+    score -= 500;
+    reasons.push({
+      code: "editorially_excluded",
+      label: `Excluded — ${editorialExclusion.signal ?? "not family-friendly editorial"}`,
+      weight: -500,
+    });
+    return { item, score, reasons };
+  }
 
   // Editorial quality
   const quality = item.quality * 22;
@@ -313,11 +334,32 @@ export function scoreDiscoveryItem(
   // Local first: a chain is still allowed, but it should never crowd out
   // a strong local alternative a reader couldn't have found on their own.
   if (item.tags.includes("chain")) {
-    score -= 20;
+    const chainPenalty =
+      item.category === "coffee" ||
+      item.category === "restaurants" ||
+      item.category === "bakeries"
+        ? -35
+        : -20;
+    score += chainPenalty;
     reasons.push({
       code: "chain_deprioritized",
       label: "A local alternative is usually the better find",
-      weight: -20,
+      weight: chainPenalty,
+    });
+  }
+
+  if (
+    item.tags.includes("local_place") &&
+    !item.tags.includes("chain") &&
+    (item.category === "coffee" ||
+      item.category === "restaurants" ||
+      item.category === "bakeries")
+  ) {
+    score += 12;
+    reasons.push({
+      code: "local_food_gem",
+      label: "Independently owned — worth discovering",
+      weight: 12,
     });
   }
 
