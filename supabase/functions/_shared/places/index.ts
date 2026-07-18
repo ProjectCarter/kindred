@@ -6,6 +6,10 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {
+  EDITION_ACTIVITIES_READ_LIMIT,
+  EDITION_FOOD_DRINK_READ_LIMIT,
+} from "../editorial/publishing.ts";
 import { getCachedPlaces } from "./cache.ts";
 import {
   loadActivitiesCatalogPlaces,
@@ -91,6 +95,105 @@ export function dedupePlacesByProviderId(
   return Array.from(byId.values());
 }
 
+const EDITION_ACTIVITY_SELECT =
+  "id, provider_id, provider_category, name, address, city, state, lat, lon, url, provider_categories, price_level, editorial_teaser, note";
+
+const EDITION_FOOD_SELECT =
+  "id, provider_id, provider_category, name, address, city, state, lat, lon, url, provider_categories, price_level, editorial_teaser, note, editorial_score, editorial_labels";
+
+/**
+ * Edition read path — two bulk catalog queries instead of 25 category round trips.
+ * Zero provider calls; reuses prebuilt market catalogs.
+ */
+export async function getLocalPlacesForEdition(
+  admin: SupabaseClient,
+  location: PlacesLocation
+): Promise<NormalizedPlace[]> {
+  if (!location.city || location.city === "your area") return [];
+
+  try {
+    await registerFoodDrinkMetro(admin, location);
+    await registerActivitiesMetro(admin, location);
+    const metroKey = metroKeyFromLocation(location);
+
+    const [activitiesRes, foodRes] = await Promise.all([
+      admin
+        .from("activities_catalog")
+        .select(EDITION_ACTIVITY_SELECT)
+        .eq("metro_key", metroKey)
+        .in("lifecycle", ["verified", "active", "featured"])
+        .order("confidence_score", { ascending: false })
+        .limit(EDITION_ACTIVITIES_READ_LIMIT),
+      admin
+        .from("food_drink_catalog")
+        .select(EDITION_FOOD_SELECT)
+        .eq("metro_key", metroKey)
+        .eq("status", "active")
+        .order("confidence_score", { ascending: false })
+        .limit(EDITION_FOOD_DRINK_READ_LIMIT),
+    ]);
+
+    if (activitiesRes.error) {
+      console.error("[places] edition activities read failure", activitiesRes.error);
+    }
+    if (foodRes.error) {
+      console.error("[places] edition food read failure", foodRes.error);
+    }
+
+    const activityPlaces = (activitiesRes.data ?? []).map((row) => ({
+      providerId: String(row.provider_id),
+      name: String(row.name),
+      category: row.provider_category as PlacesCategory,
+      address: row.address as string | null,
+      city: row.city as string | null,
+      state: row.state as string | null,
+      lat: row.lat as number | null,
+      lon: row.lon as number | null,
+      url: row.url as string | null,
+      providerCategories: (row.provider_categories as string[] | null) ?? [],
+      rating: null,
+      priceTier: row.price_level as number | null,
+      kindredVenueId: String(row.id),
+      note: (row.editorial_teaser as string | null) ?? (row.note as string | null),
+    }));
+
+    const foodPlaces = (foodRes.data ?? []).map((row) => ({
+      providerId: String(row.provider_id),
+      name: String(row.name),
+      category: row.provider_category as PlacesCategory,
+      address: row.address as string | null,
+      city: row.city as string | null,
+      state: row.state as string | null,
+      lat: row.lat as number | null,
+      lon: row.lon as number | null,
+      url: row.url as string | null,
+      providerCategories: (row.provider_categories as string[] | null) ?? [],
+      rating: null,
+      priceTier: row.price_level as number | null,
+      editorialScore: row.editorial_score as number | null | undefined,
+      editorialLabels: (row.editorial_labels as string[] | null) ?? [],
+      kindredVenueId: String(row.id),
+      note: (row.editorial_teaser as string | null) ?? (row.note as string | null),
+    }));
+
+    const merged = dedupePlacesByProviderId([...activityPlaces, ...foodPlaces]);
+    console.log("[places] edition catalog merged", {
+      city: location.city,
+      metroKey,
+      uniquePlaces: merged.length,
+      activities: activityPlaces.length,
+      foodDrink: foodPlaces.length,
+    });
+    return merged;
+  } catch (err) {
+    console.error("[places] getLocalPlacesForEdition failure", {
+      city: location.city,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  }
+}
+
 /**
  * Fetch verified local places for a metro across every category.
  *
@@ -103,6 +206,10 @@ export async function getLocalPlaces(
   categories: PlacesCategory[] = ALL_PLACES_CATEGORIES
 ): Promise<NormalizedPlace[]> {
   if (!location.city || location.city === "your area") return [];
+
+  if (categories.length === ALL_PLACES_CATEGORIES.length) {
+    return getLocalPlacesForEdition(admin, location);
+  }
 
   try {
     await registerFoodDrinkMetro(admin, location);

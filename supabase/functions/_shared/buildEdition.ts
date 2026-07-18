@@ -5,6 +5,7 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { primaryNewsCategory } from "./stories/sources.ts";
 import { buildEditionEditorialContext, buildLookingAheadGrounding } from "./editorial/index.ts";
+import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "./editorial/publishing.ts";
 import { loadPersonalizationProfile } from "./personalization/index.ts";
 import { generateBanditPayload, loadBanditReaderProfile } from "./bandit/index.ts";
 import {
@@ -74,6 +75,7 @@ import {
   type LocalEvent,
 } from "./localEvents/provider.ts";
 import { resolveEventTimezone } from "./localEvents/eventTimezone.ts";
+import { allocateLocalEventsByHorizon } from "./localEvents/horizonAllocator.ts";
 import { assertEventsVerifiedForPublication } from "./localEvents/eventDateVerification.ts";
 import { enrichDiscoveryImages, findDiscoveryItemById } from "./images/enrichDiscovery.ts";
 import { V1_SKIP_DISCOVERY_IMAGE_ENRICHMENT } from "./editorial/v1ImagePolicy.ts";
@@ -83,7 +85,7 @@ import {
   discoverySurfaceItemCount,
 } from "./editionCompleteness.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
-import { getLocalPlaces } from "./places/index.ts";
+import { getLocalPlacesForEdition } from "./places/index.ts";
 import {
   auditFoodDrinkPipeline,
   logFoodDrinkPipelineAudit,
@@ -774,7 +776,7 @@ export async function buildEditionForUser(
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
     timer.timed("Food & Drink - Places", () =>
-      getLocalPlaces(supabaseAdmin, eventsLocation)
+      getLocalPlacesForEdition(supabaseAdmin, eventsLocation)
     ),
     timer.timed("News - Editorial Decisions", () =>
       runEditorialDecisions({
@@ -980,80 +982,82 @@ export async function buildEditionForUser(
       ? npsParks.filter((p) => p.parkCode !== claim.parkCode)
       : npsParks;
 
-  // Story Editor — lead + every Top Story + Bandit's Pick, all in parallel,
-  // alongside the (independent) Local Events Bandit Notes pass. Each Story
-  // Editor call is independent (never a multi-wire mashup article) and can
-  // internally retry up to STORY_EDITOR_MAX_PASSES times, so running these
-  // one at a time was the single biggest reason full edition builds were
-  // timing out on Supabase's compute budget. Same total work, now bounded
-  // by the slowest single call instead of the sum of all of them.
-  const [editedBatch, localEvents] = await Promise.all([
-    timer.timed(
-      "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
-      () =>
-        Promise.all([
-          leadStory && anthropicApiKey
-            ? runStoryEditorSafe(
-                {
-                  id: leadStory.id,
-                  headline: leadStory.headline,
-                  sourceText: leadStory.summary || leadStory.headline,
-                  source: leadStory.source,
-                  url: leadStory.url,
-                  publishedAt: leadStory.publishedAt,
-                  surfaceRole: "lead",
-                  locale: "en",
-                  selectionWhy: leadStory.selection.reasons
-                    .map((r) => r.label)
-                    .slice(0, 4),
-                },
-                anthropicApiKey
-              )
-            : Promise.resolve(null),
-          // Only articles need the Story Editor's AI rewrite — an event,
-          // place, hidden gem, or seasonal moment already carries its own
-          // Kindred-voiced copy (places/notes.ts, the events desk, or
-          // Bandit's own seasonal line), so skip the extra AI round trip
-          // whenever the winner isn't an article.
-          banditsPickStory?.kind === "article" && anthropicApiKey
-            ? runStoryEditorSafe(
-                {
-                  id: banditsPickStory.id,
-                  headline: banditsPickStory.headline,
-                  sourceText:
-                    banditsPickStory.summary || banditsPickStory.headline,
-                  source: banditsPickStory.source,
-                  url: banditsPickStory.url,
-                  publishedAt: banditsPickStory.publishedAt,
-                  surfaceRole: "bandits_pick",
-                  locale: "en",
-                  selectionWhy: [banditsPickStory.why].filter(Boolean),
-                },
-                anthropicApiKey
-              )
-            : Promise.resolve(null),
-          ...topStories.map((ranked) =>
-            runStoryEditorSafe(
+  const localEventsForEdition = allocateLocalEventsByHorizon(localEventsForBandit, {
+    maxTotal: LOCAL_EVENTS_EDITION_SURFACED_MAX,
+    now: editionDateObj,
+    weatherIntel,
+    readerCity: city ?? eventsLocation.city,
+  });
+
+  console.log("[buildEdition] local events edition surface", {
+    ranked: localEventsForBandit.length,
+    surfaced: localEventsForEdition.length,
+  });
+
+  // Story Editor first, then Local Events Bandit Notes — sequential to stay
+  // within Edge memory/CPU budget (parallel Claude fan-out + full catalog reads
+  // was triggering WORKER_RESOURCE_LIMIT on large metros like Seattle).
+  const editedBatch = await timer.timed(
+    "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
+    () =>
+      Promise.all([
+        leadStory && anthropicApiKey
+          ? runStoryEditorSafe(
               {
-                id: ranked.story.id,
-                headline: ranked.story.title,
-                sourceText: ranked.story.description || ranked.story.title,
-                source: ranked.story.source,
-                url: ranked.story.url,
-                publishedAt: ranked.story.publishedAt,
-                surfaceRole: "top_story",
+                id: leadStory.id,
+                headline: leadStory.headline,
+                sourceText: leadStory.summary || leadStory.headline,
+                source: leadStory.source,
+                url: leadStory.url,
+                publishedAt: leadStory.publishedAt,
+                surfaceRole: "lead",
                 locale: "en",
-                selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
+                selectionWhy: leadStory.selection.reasons
+                  .map((r) => r.label)
+                  .slice(0, 4),
               },
               anthropicApiKey
             )
-          ),
-        ])
-    ),
-    timer.timed("Local Events - Bandit Notes (AI)", () =>
-      enrichEventsWithBanditNotes(localEventsForBandit, { editionDate })
-    ),
-  ]);
+          : Promise.resolve(null),
+        banditsPickStory?.kind === "article" && anthropicApiKey
+          ? runStoryEditorSafe(
+              {
+                id: banditsPickStory.id,
+                headline: banditsPickStory.headline,
+                sourceText:
+                  banditsPickStory.summary || banditsPickStory.headline,
+                source: banditsPickStory.source,
+                url: banditsPickStory.url,
+                publishedAt: banditsPickStory.publishedAt,
+                surfaceRole: "bandits_pick",
+                locale: "en",
+                selectionWhy: [banditsPickStory.why].filter(Boolean),
+              },
+              anthropicApiKey
+            )
+          : Promise.resolve(null),
+        ...topStories.map((ranked) =>
+          runStoryEditorSafe(
+            {
+              id: ranked.story.id,
+              headline: ranked.story.title,
+              sourceText: ranked.story.description || ranked.story.title,
+              source: ranked.story.source,
+              url: ranked.story.url,
+              publishedAt: ranked.story.publishedAt,
+              surfaceRole: "top_story",
+              locale: "en",
+              selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
+            },
+            anthropicApiKey
+          )
+        ),
+      ])
+  );
+
+  const localEvents = await timer.timed("Local Events - Bandit Notes (AI)", () =>
+    enrichEventsWithBanditNotes(localEventsForEdition, { editionDate })
+  );
   const [editedLead, editedPick, ...editedTopStories] = editedBatch;
 
   if (leadStory && editedLead) {

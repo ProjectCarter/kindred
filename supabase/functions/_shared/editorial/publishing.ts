@@ -26,6 +26,13 @@ export const LOCAL_EVENT_PUBLISH_MIN_SCORE = 14;
 /** Homepage first paint — rendering only. */
 export const HOMEPAGE_INITIAL_RENDER_COUNT = 8;
 
+/** Max Local Events persisted per edition (See All cap — kindred-mission.mdc). */
+export const LOCAL_EVENTS_EDITION_SURFACED_MAX = 20;
+
+/** Edition-time catalog read caps — discovery scoring pool, not full metro dump. */
+export const EDITION_ACTIVITIES_READ_LIMIT = 250;
+export const EDITION_FOOD_DRINK_READ_LIMIT = 150;
+
 /** SerpAPI pagination safety — provider retrieval, not publication. */
 export const SERPAPI_MAX_PAGES = 3;
 

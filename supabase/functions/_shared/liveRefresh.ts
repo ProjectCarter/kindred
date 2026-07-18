@@ -24,9 +24,11 @@ import {
 } from "./localEvents/provider.ts";
 import { resolveEventTimezone } from "./localEvents/eventTimezone.ts";
 import { assertEventsVerifiedForPublication } from "./localEvents/eventDateVerification.ts";
+import { allocateLocalEventsByHorizon } from "./localEvents/horizonAllocator.ts";
 import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "./editorial/publishing.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
-import { getLocalPlaces } from "./places/index.ts";
+import { getLocalPlacesForEdition } from "./places/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
 import {
   tryPersistDiscoveryUpdate,
@@ -80,8 +82,16 @@ export async function refreshEventsSection(
       return { ok: true, changed: false, count: 0 };
     }
 
+    const surfaced = allocateLocalEventsByHorizon(fetched, {
+      maxTotal: LOCAL_EVENTS_EDITION_SURFACED_MAX,
+      now: new Date(),
+      readerCity: input.location.city,
+    });
+
     const events = assertEventsVerifiedForPublication(
-      await enrichEventsWithBanditNotes(fetched),
+      await enrichEventsWithBanditNotes(surfaced, {
+        editionDate: input.editionDate,
+      }),
       {
         now: new Date(),
         location: input.location,
@@ -185,7 +195,7 @@ export async function refreshDiscoveryData(
         timezone: eventTimezone,
         admin,
       }),
-      getLocalPlaces(admin, input.location),
+      getLocalPlacesForEdition(admin, input.location),
     ]);
 
     const discovery = runDiscoveryDecisions({
