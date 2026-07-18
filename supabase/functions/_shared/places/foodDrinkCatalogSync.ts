@@ -5,7 +5,11 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { GUIDE_ELIGIBLE_LIFECYCLES, lifecycleAfterMissingFromSync } from "../editorial/venueLifecycle.ts";
-import { writeEditorialNotesForPlaces } from "./notes.ts";
+import {
+  batchTouchByIds,
+  batchUpsertRows,
+  queueEditorialNotes,
+} from "../markets/batchCatalogWrites.ts";
 import {
   catalogContentFingerprint,
   estimatedCostPerApiCall,
@@ -19,7 +23,7 @@ import { scoreVenueEditorialRecord } from "./venueEditorialScoring.ts";
 import { searchFoursquareCategory, type CatalogSearchMode } from "./foursquareProvider.ts";
 import type { NormalizedPlace, PlacesCategory, PlacesLocation } from "./types.ts";
 
-const FOOD_CATEGORIES: PlacesCategory[] = ["coffee", "restaurants", "bakeries"];
+export const FOOD_CATEGORIES: PlacesCategory[] = ["coffee", "restaurants", "bakeries"];
 
 async function applyVenueEditorialScore(
   admin: SupabaseClient,
@@ -68,7 +72,8 @@ async function upsertProviderLink(
 function mergedRowToDbPatch(
   merged: ReturnType<typeof mergeProviderImport>,
   place: NormalizedPlace,
-  now: string
+  now: string,
+  deferEditorialNotes: boolean
 ): Record<string, unknown> {
   return {
     name: merged.name,
@@ -93,6 +98,7 @@ function mergedRowToDbPatch(
     status: merged.status,
     last_verified_at: now,
     updated_at: now,
+    editorial_note_pending: deferEditorialNotes,
   };
 }
 
@@ -121,6 +127,10 @@ export type FoodDrinkSyncRunStats = {
   editorialQueued: number;
   estimatedCostUsd: number;
   possiblyClosed: number;
+};
+
+export type SyncFoodDrinkOptions = {
+  deferEditorialNotes?: boolean;
 };
 
 export function metroKeyFromLocation(location: PlacesLocation): string {
@@ -189,12 +199,281 @@ export async function loadFoodDrinkCatalogPlaces(
   }));
 }
 
+async function syncFoodCategory(
+  admin: SupabaseClient,
+  input: {
+    category: PlacesCategory;
+    metro: FoodDrinkMetroRow;
+    mode: CatalogSearchMode;
+    now: string;
+    location: PlacesLocation;
+    existing: FoodDrinkCatalogRow[];
+    existingByProviderId: Map<string, FoodDrinkCatalogRow>;
+    knownProviderIds: Set<string>;
+    seenProviderIds: Set<string>;
+    deferEditorialNotes: boolean;
+  }
+): Promise<{
+  stats: Pick<
+    FoodDrinkSyncRunStats,
+    | "apiCalls"
+    | "rawPlacesReturned"
+    | "existingSkipped"
+    | "newDiscovered"
+    | "changedUpdated"
+    | "duplicatesMerged"
+    | "placesRejected"
+    | "editorialQueued"
+  >;
+  noteQueue: Array<{ providerId: string; category: string }>;
+}> {
+  const stats = {
+    apiCalls: 0,
+    rawPlacesReturned: 0,
+    existingSkipped: 0,
+    newDiscovered: 0,
+    changedUpdated: 0,
+    duplicatesMerged: 0,
+    placesRejected: 0,
+    editorialQueued: 0,
+  };
+  const noteQueue: Array<{ providerId: string; category: string }> = [];
+  const toUpsert: Record<string, unknown>[] = [];
+  const touchIds: string[] = [];
+  const rejectedInserts: Record<string, unknown>[] = [];
+  const postScore: Array<{
+    venueId: string;
+    row: FoodDrinkCatalogRow;
+    merged: ReturnType<typeof mergeProviderImport>;
+    place: NormalizedPlace;
+    force: boolean;
+  }> = [];
+
+  const searchMode: CatalogSearchMode =
+    input.mode === "full" || !input.metro.initial_import_completed_at
+      ? "full"
+      : "incremental";
+
+  const { places: fetched, stats: searchStats } = await searchFoursquareCategory(
+    input.category,
+    input.location,
+    {
+      mode: searchMode,
+      knownProviderIds: new Set(input.knownProviderIds),
+      withCategoryIds: true,
+    }
+  );
+
+  stats.apiCalls += searchStats.apiCalls;
+  stats.rawPlacesReturned += searchStats.rawResultCount;
+
+  for (const place of fetched) {
+    input.seenProviderIds.add(place.providerId);
+
+    const verification = verifyFoodDrinkPlace(place, input.metro);
+    if (!verification.ok) {
+      stats.placesRejected += 1;
+      const priorRejected = input.existingByProviderId.get(place.providerId);
+      if (priorRejected?.status === "rejected") {
+        stats.existingSkipped += 1;
+        touchIds.push(priorRejected.id);
+      } else if (!priorRejected) {
+        rejectedInserts.push({
+          metro_key: input.metro.metro_key,
+          provider: "foursquare",
+          provider_id: place.providerId,
+          provider_category: place.category,
+          name: place.name.trim(),
+          normalized_name: normalizeCatalogName(place.name),
+          address: place.address,
+          city: place.city,
+          state: place.state,
+          lat: place.lat,
+          lon: place.lon,
+          url: place.url,
+          provider_categories: place.providerCategories ?? [],
+          content_fingerprint: catalogContentFingerprint(place),
+          status: "rejected",
+          lifecycle: "rejected",
+          verification_status: "rejected",
+          confidence_score: 0,
+          field_sources: {},
+          source_history: [],
+          rejection_reason: verification.reason,
+          first_seen_at: input.now,
+          last_verified_at: input.now,
+          editorial_note_pending: false,
+        });
+        input.knownProviderIds.add(place.providerId);
+      }
+      continue;
+    }
+
+    const duplicate = findCatalogDuplicate(place, input.existing);
+    if (duplicate) {
+      stats.duplicatesMerged += 1;
+      input.knownProviderIds.add(place.providerId);
+      touchIds.push(duplicate.id);
+      await upsertProviderLink(admin, duplicate.id, input.metro.metro_key, place, input.now);
+      continue;
+    }
+
+    const prior = input.existingByProviderId.get(place.providerId);
+    const merged = mergeProviderImport({
+      place,
+      existingFieldSources: prior?.field_sources,
+      existingHistory: prior?.source_history,
+      currentLifecycle: prior?.lifecycle ?? "new",
+      ctx: {
+        source: "foursquare",
+        observedAt: input.now,
+        passesVerification: true,
+        isNewDiscovery: !prior,
+        missingFromFullSync: false,
+      },
+    });
+
+    if (prior) {
+      if (
+        !merged.materialChanged &&
+        prior.content_fingerprint === merged.content_fingerprint &&
+        prior.lifecycle === merged.lifecycle
+      ) {
+        stats.existingSkipped += 1;
+        touchIds.push(prior.id);
+        await upsertProviderLink(admin, prior.id, input.metro.metro_key, place, input.now);
+        continue;
+      }
+
+      stats.changedUpdated += 1;
+      toUpsert.push({
+        id: prior.id,
+        metro_key: input.metro.metro_key,
+        provider: "foursquare",
+        provider_id: place.providerId,
+        provider_category: place.category,
+        ...mergedRowToDbPatch(merged, place, input.now, input.deferEditorialNotes),
+      });
+      postScore.push({
+        venueId: prior.id,
+        row: prior,
+        merged,
+        place,
+        force: merged.materialChanged,
+      });
+      if (merged.materialChanged) {
+        noteQueue.push({ providerId: place.providerId, category: place.category });
+      }
+      continue;
+    }
+
+    stats.newDiscovered += 1;
+    toUpsert.push({
+      metro_key: input.metro.metro_key,
+      provider: "foursquare",
+      provider_id: place.providerId,
+      provider_category: place.category,
+      ...mergedRowToDbPatch(merged, place, input.now, input.deferEditorialNotes),
+      first_seen_at: input.now,
+      discovered_at: input.now,
+      editorial_note_at: null,
+      rejection_reason: null,
+      editorial_tags: [],
+      editorial_article: null,
+      opening_hours: null,
+      photos: [],
+      note: null,
+      editorial_teaser: null,
+    });
+    noteQueue.push({ providerId: place.providerId, category: place.category });
+    input.knownProviderIds.add(place.providerId);
+  }
+
+  await batchTouchByIds(admin, "food_drink_catalog", touchIds, {
+    last_verified_at: input.now,
+    updated_at: input.now,
+  });
+  if (rejectedInserts.length) {
+    await batchUpsertRows(
+      admin,
+      "food_drink_catalog",
+      rejectedInserts,
+      "metro_key,provider,provider_id"
+    );
+  }
+  if (toUpsert.length) {
+    await batchUpsertRows(
+      admin,
+      "food_drink_catalog",
+      toUpsert,
+      "metro_key,provider,provider_id"
+    );
+  }
+
+  for (const item of postScore) {
+    await applyVenueEditorialScore(
+      admin,
+      item.venueId,
+      {
+        ...item.row,
+        ...item.merged,
+        verification_status: item.merged.verification_status,
+        confidence_score: item.merged.confidence_score,
+      },
+      item.place,
+      input.now,
+      {
+        previousFingerprint: item.row.editorial_score_material_fingerprint,
+        force: item.force,
+      }
+    );
+    await upsertProviderLink(admin, item.venueId, input.metro.metro_key, item.place, input.now);
+  }
+
+  for (const row of toUpsert) {
+    if (row.id) continue;
+    const providerId = String(row.provider_id);
+    const { data: inserted } = await admin
+      .from("food_drink_catalog")
+      .select("id")
+      .eq("metro_key", input.metro.metro_key)
+      .eq("provider_id", providerId)
+      .maybeSingle();
+    if (inserted?.id) {
+      const place = fetched.find((p) => p.providerId === providerId);
+      if (place) {
+        await upsertProviderLink(
+          admin,
+          inserted.id as string,
+          input.metro.metro_key,
+          place,
+          input.now
+        );
+        await applyVenueEditorialScore(
+          admin,
+          inserted.id as string,
+          row as FoodDrinkCatalogRow,
+          place,
+          input.now,
+          { force: true }
+        );
+      }
+    }
+  }
+
+  stats.editorialQueued = noteQueue.length;
+  return { stats, noteQueue };
+}
+
 export async function syncFoodDrinkCatalogForMetro(
   admin: SupabaseClient,
   metro: FoodDrinkMetroRow,
-  mode: CatalogSearchMode
+  mode: CatalogSearchMode,
+  options: SyncFoodDrinkOptions = {}
 ): Promise<FoodDrinkSyncRunStats> {
   const now = new Date().toISOString();
+  const deferEditorialNotes = options.deferEditorialNotes ?? true;
+
   const stats: FoodDrinkSyncRunStats = {
     metroKey: metro.metro_key,
     mode,
@@ -212,11 +491,7 @@ export async function syncFoodDrinkCatalogForMetro(
 
   const { data: runRow } = await admin
     .from("food_drink_catalog_sync_runs")
-    .insert({
-      metro_key: metro.metro_key,
-      mode,
-      started_at: now,
-    })
+    .insert({ metro_key: metro.metro_key, mode, started_at: now })
     .select("id")
     .single();
 
@@ -228,9 +503,7 @@ export async function syncFoodDrinkCatalogForMetro(
     .eq("metro_key", metro.metro_key);
 
   const existing = (existingRows ?? []) as FoodDrinkCatalogRow[];
-  const existingByProviderId = new Map(
-    existing.map((row) => [row.provider_id, row])
-  );
+  const existingByProviderId = new Map(existing.map((row) => [row.provider_id, row]));
   const knownProviderIds = new Set(existing.map((row) => row.provider_id));
 
   const location: PlacesLocation = {
@@ -242,261 +515,69 @@ export async function syncFoodDrinkCatalogForMetro(
   };
 
   const seenProviderIds = new Set<string>();
-  const needsEditorialNote: NormalizedPlace[] = [];
+  const allNoteQueue: Array<{ providerId: string; category: string }> = [];
 
-  for (const category of FOOD_CATEGORIES) {
-    const searchMode: CatalogSearchMode =
-      mode === "full" || !metro.initial_import_completed_at ? "full" : "incremental";
+  const categoryResults = await Promise.all(
+    FOOD_CATEGORIES.map((category) =>
+      syncFoodCategory(admin, {
+        category,
+        metro,
+        mode,
+        now,
+        location,
+        existing,
+        existingByProviderId,
+        knownProviderIds,
+        seenProviderIds,
+        deferEditorialNotes,
+      })
+    )
+  );
 
-    const { places: fetched, stats: searchStats } = await searchFoursquareCategory(
-      category,
-      location,
-      {
-        mode: searchMode,
-        knownProviderIds: new Set(knownProviderIds),
-        withCategoryIds: true,
-      }
-    );
-
-    stats.apiCalls += searchStats.apiCalls;
-    stats.rawPlacesReturned += searchStats.rawResultCount;
-
-    for (const place of fetched) {
-      seenProviderIds.add(place.providerId);
-
-      const verification = verifyFoodDrinkPlace(place, metro);
-      if (!verification.ok) {
-        stats.placesRejected += 1;
-        const priorRejected = existingByProviderId.get(place.providerId);
-        if (priorRejected?.status === "rejected") {
-          stats.existingSkipped += 1;
-          await admin
-            .from("food_drink_catalog")
-            .update({ last_verified_at: now, updated_at: now })
-            .eq("id", priorRejected.id);
-        } else if (!priorRejected) {
-          await admin.from("food_drink_catalog").insert({
-            metro_key: metro.metro_key,
-            provider: "foursquare",
-            provider_id: place.providerId,
-            provider_category: place.category,
-            name: place.name.trim(),
-            normalized_name: normalizeCatalogName(place.name),
-            address: place.address,
-            city: place.city,
-            state: place.state,
-            lat: place.lat,
-            lon: place.lon,
-            url: place.url,
-            provider_categories: place.providerCategories ?? [],
-            note: null,
-            editorial_teaser: null,
-            editorial_article: null,
-            editorial_categories: [],
-            editorial_tags: [],
-            opening_hours: null,
-            photos: [],
-            phone: null,
-            cuisine: null,
-            price_level: place.priceTier,
-            content_fingerprint: catalogContentFingerprint(place),
-            status: "rejected",
-            lifecycle: "rejected",
-            verification_status: "rejected",
-            confidence_score: 0,
-            field_sources: {},
-            source_history: [],
-            rejection_reason: verification.reason,
-            first_seen_at: now,
-            last_verified_at: now,
-            discovered_at: null,
-            editorial_note_at: null,
-          });
-          knownProviderIds.add(place.providerId);
-        }
-        continue;
-      }
-
-      const duplicate = findCatalogDuplicate(place, existing);
-      if (duplicate) {
-        stats.duplicatesMerged += 1;
-        knownProviderIds.add(place.providerId);
-        await upsertProviderLink(admin, duplicate.id, metro.metro_key, place, now);
-        await admin
-          .from("food_drink_catalog")
-          .update({
-            last_verified_at: now,
-            updated_at: now,
-          })
-          .eq("id", duplicate.id);
-        continue;
-      }
-
-      const prior = existingByProviderId.get(place.providerId);
-      const merged = mergeProviderImport({
-        place,
-        existingFieldSources: prior?.field_sources,
-        existingHistory: prior?.source_history,
-        currentLifecycle: prior?.lifecycle ?? "new",
-        ctx: {
-          source: "foursquare",
-          observedAt: now,
-          passesVerification: true,
-          isNewDiscovery: !prior,
-          missingFromFullSync: false,
-        },
-      });
-
-      if (prior) {
-        if (
-          !merged.materialChanged &&
-          prior.content_fingerprint === merged.content_fingerprint &&
-          prior.lifecycle === merged.lifecycle
-        ) {
-          stats.existingSkipped += 1;
-          await upsertProviderLink(admin, prior.id, metro.metro_key, place, now);
-          await admin
-            .from("food_drink_catalog")
-            .update({ last_verified_at: now, updated_at: now })
-            .eq("id", prior.id);
-          continue;
-        }
-
-        stats.changedUpdated += 1;
-        await admin
-          .from("food_drink_catalog")
-          .update(mergedRowToDbPatch(merged, place, now))
-          .eq("id", prior.id);
-        await upsertProviderLink(admin, prior.id, metro.metro_key, place, now);
-        await applyVenueEditorialScore(
-          admin,
-          prior.id,
-          {
-            ...prior,
-            ...merged,
-            verification_status: merged.verification_status,
-            confidence_score: merged.confidence_score,
-          },
-          place,
-          now,
-          {
-            previousFingerprint: prior.editorial_score_material_fingerprint,
-            force: merged.materialChanged,
-          }
-        );
-
-        if (merged.materialChanged) needsEditorialNote.push(place);
-        continue;
-      }
-
-      stats.newDiscovered += 1;
-      const { data: inserted } = await admin
-        .from("food_drink_catalog")
-        .insert({
-          metro_key: metro.metro_key,
-          provider: "foursquare",
-          provider_id: place.providerId,
-          provider_category: place.category,
-          ...mergedRowToDbPatch(merged, place, now),
-          first_seen_at: now,
-          discovered_at: now,
-          editorial_note_at: null,
-          rejection_reason: null,
-        })
-        .select("id")
-        .single();
-
-      if (inserted) {
-        const venueId = inserted.id as string;
-        const row: FoodDrinkCatalogRow = {
-          id: venueId,
-          metro_key: metro.metro_key,
-          provider: "foursquare",
-          provider_id: place.providerId,
-          provider_category: place.category,
-          duplicate_of: null,
-          editorial_tags: [],
-          editorial_article: null,
-          opening_hours: null,
-          photos: [],
-          note: null,
-          editorial_teaser: null,
-          discovered_at: now,
-          editorial_note_at: null,
-          rejection_reason: null,
-          provider_categories: place.providerCategories ?? [],
-          ...merged,
-        } as FoodDrinkCatalogRow;
-
-        existingByProviderId.set(place.providerId, row);
-        knownProviderIds.add(place.providerId);
-        existing.push(row);
-        await upsertProviderLink(admin, venueId, metro.metro_key, place, now);
-        await applyVenueEditorialScore(
-          admin,
-          venueId,
-          {
-            ...row,
-            verification_status: merged.verification_status,
-            confidence_score: merged.confidence_score,
-          },
-          place,
-          now,
-          { force: true }
-        );
-        needsEditorialNote.push(place);
-      }
-    }
+  for (const { stats: partial, noteQueue } of categoryResults) {
+    stats.apiCalls += partial.apiCalls;
+    stats.rawPlacesReturned += partial.rawPlacesReturned;
+    stats.existingSkipped += partial.existingSkipped;
+    stats.newDiscovered += partial.newDiscovered;
+    stats.changedUpdated += partial.changedUpdated;
+    stats.duplicatesMerged += partial.duplicatesMerged;
+    stats.placesRejected += partial.placesRejected;
+    stats.editorialQueued += partial.editorialQueued;
+    allNoteQueue.push(...noteQueue);
   }
 
   if (mode === "full") {
+    const closedIds: string[] = [];
     for (const row of existing) {
       if (row.lifecycle === "rejected" || row.lifecycle === "duplicate" || row.lifecycle === "closed") {
         continue;
       }
       if (seenProviderIds.has(row.provider_id)) continue;
       stats.possiblyClosed += 1;
-      const nextLifecycle = lifecycleAfterMissingFromSync(row.lifecycle);
+      closedIds.push(row.id);
+    }
+    for (const id of closedIds) {
+      const row = existing.find((r) => r.id === id);
+      if (!row) continue;
       await admin
         .from("food_drink_catalog")
         .update({
-          lifecycle: nextLifecycle,
+          lifecycle: lifecycleAfterMissingFromSync(row.lifecycle),
           verification_status: "needs_review",
           status: "possibly_closed",
           updated_at: now,
         })
-        .eq("id", row.id);
+        .eq("id", id);
     }
   }
 
-  if (needsEditorialNote.length) {
-    stats.editorialQueued = needsEditorialNote.length;
-    const byCategory = new Map<PlacesCategory, NormalizedPlace[]>();
-    for (const place of needsEditorialNote) {
-      const bucket = byCategory.get(place.category) ?? [];
-      bucket.push(place);
-      byCategory.set(place.category, bucket);
-    }
-
-    for (const [category, places] of byCategory) {
-      const withNotes = await writeEditorialNotesForPlaces(
-        places,
-        category,
-        metro.city
-      );
-      for (const noted of withNotes) {
-        await admin
-          .from("food_drink_catalog")
-          .update({
-            note: noted.note ?? null,
-            editorial_teaser: noted.note ?? null,
-            editorial_note_at: now,
-            updated_at: now,
-          })
-          .eq("metro_key", metro.metro_key)
-          .eq("provider_id", noted.providerId);
-      }
-    }
+  if (deferEditorialNotes && allNoteQueue.length) {
+    await queueEditorialNotes(admin, {
+      metroKey: metro.metro_key,
+      catalog: "food_drinks",
+      city: metro.city,
+      places: allNoteQueue,
+    });
   }
 
   stats.estimatedCostUsd = stats.apiCalls * estimatedCostPerApiCall();
@@ -527,7 +608,7 @@ export async function syncFoodDrinkCatalogForMetro(
         places_rejected: stats.placesRejected,
         editorial_queued: stats.editorialQueued,
         estimated_cost_usd: stats.estimatedCostUsd,
-        diagnostics: { possiblyClosed: stats.possiblyClosed },
+        diagnostics: { possiblyClosed: stats.possiblyClosed, deferEditorialNotes },
       })
       .eq("id", runId);
   }

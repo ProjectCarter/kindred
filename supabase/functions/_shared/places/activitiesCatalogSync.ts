@@ -13,7 +13,12 @@ import {
   recordApiCalls,
   type CatalogSyncMode,
 } from "../editorial/catalogSyncBudget.ts";
-import { writeEditorialNotesForPlaces } from "./notes.ts";
+import { ACTIVITY_CATEGORY_CONCURRENCY } from "../../../../lib/markets/marketBuildEngine.ts";
+import {
+  batchTouchByIds,
+  batchUpsertRows,
+  queueEditorialNotes,
+} from "../markets/batchCatalogWrites.ts";
 import {
   activityContentFingerprint,
   activityExperienceFingerprint,
@@ -30,7 +35,7 @@ import { metroKeyFromLocation } from "./foodDrinkCatalogSync.ts";
 import type { NormalizedPlace, PlacesCategory, PlacesLocation } from "./types.ts";
 
 /** Keep in sync with ACTIVITY_PLACES_CATEGORIES in places/index.ts */
-const ACTIVITY_CATEGORIES: PlacesCategory[] = [
+export const ACTIVITY_CATEGORIES: PlacesCategory[] = [
   "water_recreation",
   "escape_rooms",
   "bowling",
@@ -82,6 +87,19 @@ export type ActivitiesSyncRunStats = {
   possiblyInactive: number;
 };
 
+export type SyncActivitiesOptions = {
+  skipCategories?: Set<string>;
+  deferEditorialNotes?: boolean;
+  categoryConcurrency?: number;
+  onCategoryComplete?: (
+    category: PlacesCategory,
+    partial: Pick<
+      ActivitiesSyncRunStats,
+      "apiCalls" | "rawPlacesReturned" | "newDiscovered" | "changedUpdated"
+    >
+  ) => Promise<void>;
+};
+
 export { metroKeyFromLocation as activitiesMetroKeyFromLocation };
 
 export async function registerActivitiesMetro(
@@ -124,15 +142,209 @@ export async function loadActivitiesCatalogPlaces(
   return (data as ActivitiesCatalogRow[]).map(rowToNormalizedPlace);
 }
 
+async function processActivityCategory(
+  admin: SupabaseClient,
+  input: {
+    category: PlacesCategory;
+    metro: ActivitiesMetroRow;
+    mode: CatalogSyncMode;
+    now: string;
+    location: PlacesLocation;
+    existing: ActivitiesCatalogRow[];
+    existingByProviderId: Map<string, ActivitiesCatalogRow>;
+    knownProviderIds: Set<string>;
+    seenProviderIds: Set<string>;
+    deferEditorialNotes: boolean;
+    budgetTracker: ReturnType<typeof createBudgetTracker>;
+    budget: ReturnType<typeof loadCatalogSyncBudget>;
+  }
+): Promise<{
+  stats: Pick<
+    ActivitiesSyncRunStats,
+    | "apiCalls"
+    | "rawPlacesReturned"
+    | "existingSkipped"
+    | "newDiscovered"
+    | "changedUpdated"
+    | "duplicatesMerged"
+    | "placesRejected"
+    | "editorialQueued"
+  >;
+  noteQueue: Array<{ providerId: string; category: string }>;
+}> {
+  const stats = {
+    apiCalls: 0,
+    rawPlacesReturned: 0,
+    existingSkipped: 0,
+    newDiscovered: 0,
+    changedUpdated: 0,
+    duplicatesMerged: 0,
+    placesRejected: 0,
+    editorialQueued: 0,
+  };
+  const noteQueue: Array<{ providerId: string; category: string }> = [];
+  const toUpsert: Record<string, unknown>[] = [];
+  const touchIds: string[] = [];
+  const duplicateTouchIds: string[] = [];
+
+  const searchMode: CatalogSearchMode =
+    input.mode === "full" || !input.metro.initial_import_completed_at
+      ? "full"
+      : "incremental";
+
+  const { places: fetched, stats: searchStats } = await searchFoursquareCategory(
+    input.category,
+    input.location,
+    {
+      mode: searchMode,
+      knownProviderIds: new Set(input.knownProviderIds),
+      withCategoryIds: true,
+    }
+  );
+
+  if (
+    !recordApiCalls(
+      input.budgetTracker,
+      input.budget,
+      searchStats.apiCalls,
+      input.category
+    )
+  ) {
+    return { stats, noteQueue };
+  }
+
+  stats.apiCalls += searchStats.apiCalls;
+  stats.rawPlacesReturned += searchStats.rawResultCount;
+
+  for (const place of fetched) {
+    input.seenProviderIds.add(place.providerId);
+
+    const verification = verifyActivityPlace(place, input.metro);
+    if (!verification.ok) {
+      stats.placesRejected += 1;
+      continue;
+    }
+
+    const duplicate = findActivityCatalogDuplicate(place, input.existing);
+    if (duplicate && duplicate.provider_id !== place.providerId) {
+      stats.duplicatesMerged += 1;
+      duplicateTouchIds.push(duplicate.id);
+      continue;
+    }
+
+    const prior = input.existingByProviderId.get(place.providerId);
+    const fingerprint = activityContentFingerprint(place);
+    const lifecycle = resolveActivityLifecycleAfterImport({
+      current: prior?.lifecycle ?? "discovered",
+      confidence: verification.confidence,
+      passesVerification: true,
+      isNewDiscovery: !prior,
+      missingFromFullSync: false,
+    });
+
+    const patch = {
+      name: place.name,
+      normalized_name: normalizeActivityName(place.name),
+      address: place.address,
+      city: place.city,
+      state: place.state,
+      lat: place.lat,
+      lon: place.lon,
+      url: place.url,
+      provider_categories: place.providerCategories ?? [],
+      experience_fingerprint: activityExperienceFingerprint(place),
+      content_fingerprint: fingerprint,
+      lifecycle,
+      verification_status: "verified",
+      confidence_score: verification.confidence,
+      status: "active",
+      last_verified_at: input.now,
+      updated_at: input.now,
+    };
+
+    if (prior) {
+      if (prior.content_fingerprint === fingerprint && prior.lifecycle === lifecycle) {
+        stats.existingSkipped += 1;
+        touchIds.push(prior.id);
+        continue;
+      }
+
+      stats.changedUpdated += 1;
+      toUpsert.push({
+        id: prior.id,
+        metro_key: input.metro.metro_key,
+        provider: "foursquare",
+        provider_id: place.providerId,
+        provider_category: place.category,
+        ...patch,
+        last_material_change_at: input.now,
+        editorial_note_pending: input.deferEditorialNotes,
+      });
+      noteQueue.push({ providerId: place.providerId, category: place.category });
+      continue;
+    }
+
+    stats.newDiscovered += 1;
+    toUpsert.push({
+      metro_key: input.metro.metro_key,
+      provider: "foursquare",
+      provider_id: place.providerId,
+      provider_category: place.category,
+      ...patch,
+      first_seen_at: input.now,
+      last_material_change_at: input.now,
+      note: null,
+      editorial_teaser: null,
+      editorial_article: null,
+      field_sources: {},
+      source_history: [],
+      rejection_reason: null,
+      editorial_note_pending: input.deferEditorialNotes,
+    });
+    noteQueue.push({ providerId: place.providerId, category: place.category });
+    input.knownProviderIds.add(place.providerId);
+  }
+
+  await batchTouchByIds(admin, "activities_catalog", touchIds, {
+    last_verified_at: input.now,
+    updated_at: input.now,
+  });
+  await batchTouchByIds(admin, "activities_catalog", duplicateTouchIds, {
+    last_verified_at: input.now,
+    updated_at: input.now,
+  });
+  await batchUpsertRows(
+    admin,
+    "activities_catalog",
+    toUpsert,
+    "metro_key,provider,provider_id"
+  );
+
+  for (const row of toUpsert) {
+    const providerId = String(row.provider_id);
+    if (!input.existingByProviderId.has(providerId)) {
+      input.existingByProviderId.set(providerId, row as ActivitiesCatalogRow);
+      input.existing.push(row as ActivitiesCatalogRow);
+    }
+  }
+
+  stats.editorialQueued = noteQueue.length;
+  return { stats, noteQueue };
+}
+
 export async function syncActivitiesCatalogForMetro(
   admin: SupabaseClient,
   metro: ActivitiesMetroRow,
-  mode: CatalogSyncMode
+  mode: CatalogSyncMode,
+  options: SyncActivitiesOptions = {}
 ): Promise<ActivitiesSyncRunStats> {
   const started = Date.now();
   const now = new Date().toISOString();
   const budgetTracker = createBudgetTracker();
   const budget = loadCatalogSyncBudget("foursquare");
+  const deferEditorialNotes = options.deferEditorialNotes ?? true;
+  const concurrency = options.categoryConcurrency ?? ACTIVITY_CATEGORY_CONCURRENCY;
+  const skipCategories = options.skipCategories ?? new Set<string>();
 
   const stats: ActivitiesSyncRunStats = {
     metroKey: metro.metro_key,
@@ -156,11 +368,7 @@ export async function syncActivitiesCatalogForMetro(
 
   const { data: runRow } = await admin
     .from("activities_catalog_sync_runs")
-    .insert({
-      metro_key: metro.metro_key,
-      mode,
-      started_at: now,
-    })
+    .insert({ metro_key: metro.metro_key, mode, started_at: now })
     .select("id")
     .single();
 
@@ -184,153 +392,55 @@ export async function syncActivitiesCatalogForMetro(
   };
 
   const seenProviderIds = new Set<string>();
-  const needsEditorialNote: NormalizedPlace[] = [];
+  const allNoteQueue: Array<{ providerId: string; category: string }> = [];
+
+  const categories = ACTIVITY_CATEGORIES.filter((c) => !skipCategories.has(c));
 
   try {
-    for (const category of ACTIVITY_CATEGORIES) {
+    for (let i = 0; i < categories.length; i += concurrency) {
       if (budgetTracker.aborted) break;
+      const batch = categories.slice(i, i + concurrency);
 
-      const searchMode: CatalogSearchMode =
-        mode === "full" || !metro.initial_import_completed_at ? "full" : "incremental";
-
-      const { places: fetched, stats: searchStats } = await searchFoursquareCategory(
-        category,
-        location,
-        {
-          mode: searchMode,
-          knownProviderIds: new Set(knownProviderIds),
-          withCategoryIds: true,
-        }
+      const results = await Promise.all(
+        batch.map((category) =>
+          processActivityCategory(admin, {
+            category,
+            metro,
+            mode,
+            now,
+            location,
+            existing,
+            existingByProviderId,
+            knownProviderIds,
+            seenProviderIds,
+            deferEditorialNotes,
+            budgetTracker,
+            budget,
+          })
+        )
       );
 
-      if (!recordApiCalls(budgetTracker, budget, searchStats.apiCalls, category)) {
-        break;
-      }
+      for (let j = 0; j < batch.length; j++) {
+        const category = batch[j]!;
+        const { stats: partial, noteQueue } = results[j]!;
+        stats.apiCalls += partial.apiCalls;
+        stats.rawPlacesReturned += partial.rawPlacesReturned;
+        stats.existingSkipped += partial.existingSkipped;
+        stats.newDiscovered += partial.newDiscovered;
+        stats.changedUpdated += partial.changedUpdated;
+        stats.duplicatesMerged += partial.duplicatesMerged;
+        stats.placesRejected += partial.placesRejected;
+        stats.editorialQueued += partial.editorialQueued;
+        allNoteQueue.push(...noteQueue);
 
-      stats.apiCalls += searchStats.apiCalls;
-      stats.rawPlacesReturned += searchStats.rawResultCount;
-
-      for (const place of fetched) {
-        seenProviderIds.add(place.providerId);
-
-        const verification = verifyActivityPlace(place, metro);
-        if (!verification.ok) {
-          stats.placesRejected += 1;
-          continue;
+        if (options.onCategoryComplete) {
+          await options.onCategoryComplete(category, partial);
         }
-
-        const duplicate = findActivityCatalogDuplicate(place, existing);
-        if (duplicate && duplicate.provider_id !== place.providerId) {
-          stats.duplicatesMerged += 1;
-          await admin
-            .from("activities_catalog")
-            .update({ last_verified_at: now, updated_at: now })
-            .eq("id", duplicate.id);
-          continue;
-        }
-
-        const prior = existingByProviderId.get(place.providerId);
-        const fingerprint = activityContentFingerprint(place);
-        const lifecycle = resolveActivityLifecycleAfterImport({
-          current: prior?.lifecycle ?? "discovered",
-          confidence: verification.confidence,
-          passesVerification: true,
-          isNewDiscovery: !prior,
-          missingFromFullSync: false,
-        });
-
-        const patch = {
-          name: place.name,
-          normalized_name: normalizeActivityName(place.name),
-          address: place.address,
-          city: place.city,
-          state: place.state,
-          lat: place.lat,
-          lon: place.lon,
-          url: place.url,
-          provider_categories: place.providerCategories ?? [],
-          experience_fingerprint: activityExperienceFingerprint(place),
-          content_fingerprint: fingerprint,
-          lifecycle,
-          verification_status: "verified",
-          confidence_score: verification.confidence,
-          status: "active",
-          last_verified_at: now,
-          updated_at: now,
-        };
-
-        if (prior) {
-          if (
-            prior.content_fingerprint === fingerprint &&
-            prior.lifecycle === lifecycle
-          ) {
-            stats.existingSkipped += 1;
-            await admin
-              .from("activities_catalog")
-              .update({ last_verified_at: now, updated_at: now })
-              .eq("id", prior.id);
-            continue;
-          }
-
-          stats.changedUpdated += 1;
-          await admin
-            .from("activities_catalog")
-            .update({ ...patch, last_material_change_at: now })
-            .eq("id", prior.id);
-          needsEditorialNote.push(place);
-          continue;
-        }
-
-        stats.newDiscovered += 1;
-        const { data: inserted } = await admin
-          .from("activities_catalog")
-          .insert({
-            metro_key: metro.metro_key,
-            provider: "foursquare",
-            provider_id: place.providerId,
-            provider_category: place.category,
-            ...patch,
-            first_seen_at: now,
-            last_material_change_at: now,
-            note: null,
-            editorial_teaser: null,
-            editorial_article: null,
-            field_sources: {},
-            source_history: [],
-            rejection_reason: null,
-          })
-          .select("id")
-          .single();
-
-        if (inserted) {
-          existingByProviderId.set(place.providerId, {
-            id: inserted.id as string,
-            metro_key: metro.metro_key,
-            provider: "foursquare",
-            provider_id: place.providerId,
-            provider_category: place.category,
-            ...patch,
-            phone: null,
-            opening_hours: null,
-            price_level: place.priceTier,
-            note: null,
-            editorial_teaser: null,
-            editorial_article: null,
-            field_sources: {},
-            source_history: [],
-            rejection_reason: null,
-            duplicate_of: null,
-            first_seen_at: now,
-            last_material_change_at: now,
-          } as ActivitiesCatalogRow);
-          knownProviderIds.add(place.providerId);
-          existing.push(existingByProviderId.get(place.providerId)!);
-        }
-        needsEditorialNote.push(place);
       }
     }
 
     if (mode === "full") {
+      const inactiveIds: string[] = [];
       for (const row of existing) {
         if (
           row.lifecycle === "rejected" ||
@@ -342,46 +452,33 @@ export async function syncActivitiesCatalogForMetro(
         }
         if (seenProviderIds.has(row.provider_id)) continue;
         stats.possiblyInactive += 1;
-        const nextLifecycle = activityLifecycleAfterMissingFromSync(row.lifecycle);
+        inactiveIds.push(row.id);
+      }
+      const nextLifecyclePatch = {
+        lifecycle: activityLifecycleAfterMissingFromSync("active"),
+        verification_status: "needs_review",
+        status: "possibly_closed",
+        updated_at: now,
+      };
+      for (const row of existing) {
+        if (!inactiveIds.includes(row.id)) continue;
         await admin
           .from("activities_catalog")
           .update({
-            lifecycle: nextLifecycle,
-            verification_status: "needs_review",
-            status: "possibly_closed",
-            updated_at: now,
+            ...nextLifecyclePatch,
+            lifecycle: activityLifecycleAfterMissingFromSync(row.lifecycle),
           })
           .eq("id", row.id);
       }
     }
 
-    if (needsEditorialNote.length) {
-      stats.editorialQueued = needsEditorialNote.length;
-      const byCategory = new Map<PlacesCategory, NormalizedPlace[]>();
-      for (const place of needsEditorialNote) {
-        const bucket = byCategory.get(place.category) ?? [];
-        bucket.push(place);
-        byCategory.set(place.category, bucket);
-      }
-
-      for (const [category, places] of byCategory) {
-        const withNotes = await writeEditorialNotesForPlaces(
-          places,
-          category,
-          metro.city
-        );
-        for (const noted of withNotes) {
-          await admin
-            .from("activities_catalog")
-            .update({
-              note: noted.note ?? null,
-              editorial_teaser: noted.note ?? null,
-              updated_at: now,
-            })
-            .eq("metro_key", metro.metro_key)
-            .eq("provider_id", noted.providerId);
-        }
-      }
+    if (deferEditorialNotes && allNoteQueue.length) {
+      await queueEditorialNotes(admin, {
+        metroKey: metro.metro_key,
+        catalog: "activities",
+        city: metro.city,
+        places: allNoteQueue,
+      });
     }
 
     stats.estimatedCostUsd = stats.apiCalls * estimateProviderCallCost("foursquare");
@@ -417,6 +514,7 @@ export async function syncActivitiesCatalogForMetro(
           diagnostics: {
             budgetAborted: budgetTracker.aborted,
             budgetAbortReason: budgetTracker.abortReason,
+            deferEditorialNotes,
           },
         })
         .eq("id", runId);
@@ -437,6 +535,7 @@ export async function syncActivitiesCatalogForMetro(
         })
         .eq("id", runId);
     }
+    throw err;
   }
 
   return stats;

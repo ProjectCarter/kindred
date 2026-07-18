@@ -213,7 +213,7 @@ export async function assessUsMarketCompleteness(
   const { count: artworkCount } = await admin
     .from("kindred_hero_artwork")
     .select("id", { count: "exact", head: true })
-    .eq("validation_status", "ready");
+    .eq("validation_status", "approved");
   const artworkComplete = (artworkCount ?? 0) >= MIN_HERO_ARTWORK;
   pushSection(sections, deficiencies, {
     id: "artwork",

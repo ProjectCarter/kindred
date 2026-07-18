@@ -19,6 +19,8 @@ import {
 } from "./marketCompleteness.ts";
 import { assertUsCountryCode, MARKET_BUILD_LOCK_MS } from "./usOnly.ts";
 
+export { runMarketBuildPhase } from "./marketBuildPhases.ts";
+
 /** Batch controls — intentionally disabled for V1 rollout infrastructure. */
 export function assertBatchMarketActionsAllowed(): void {
   throw new Error(
@@ -201,6 +203,8 @@ async function finalizeBuildLog(
  * Build Market — initialize reusable evergreen foundation for one US market.
  * Reuses existing catalog sync pipelines; does not generate user editions.
  */
+export type MarketCatalogSyncDesk = "events" | "activities" | "food_drinks";
+
 export async function buildUsMarket(
   admin: SupabaseClient,
   input: {
@@ -208,6 +212,8 @@ export async function buildUsMarket(
     jobType?: "build" | "refresh" | "retry";
     retryCount?: number;
     skipCatalogSync?: boolean;
+    /** When set, sync only these catalogs — used to finish one desk per invocation. */
+    syncCatalogs?: MarketCatalogSyncDesk[];
   }
 ): Promise<BuildMarketResult> {
   const startedAt = Date.now();
@@ -260,6 +266,9 @@ export async function buildUsMarket(
     await registerActivitiesMetro(admin, loc);
     await registerFoodDrinkMetro(admin, loc);
 
+    const syncCatalogs: MarketCatalogSyncDesk[] =
+      input.syncCatalogs ?? ["events", "activities", "food_drinks"];
+
     if (!input.skipCatalogSync) {
       const { data: eventsMetro } = await admin
         .from("events_catalog_metros")
@@ -267,7 +276,7 @@ export async function buildUsMarket(
         .eq("metro_key", market.metro_key)
         .maybeSingle();
 
-      if (eventsMetro) {
+      if (syncCatalogs.includes("events") && eventsMetro) {
         try {
           const mode =
             eventsMetro.initial_import_completed_at ? "incremental" : "full";
@@ -292,7 +301,7 @@ export async function buildUsMarket(
         .eq("metro_key", market.metro_key)
         .maybeSingle();
 
-      if (activitiesMetro) {
+      if (syncCatalogs.includes("activities") && activitiesMetro) {
         try {
           const mode =
             activitiesMetro.initial_import_completed_at ? "incremental" : "full";
@@ -319,7 +328,7 @@ export async function buildUsMarket(
         .eq("metro_key", market.metro_key)
         .maybeSingle();
 
-      if (foodMetro) {
+      if (syncCatalogs.includes("food_drinks") && foodMetro) {
         try {
           const mode = foodMetro.initial_import_completed_at ? "incremental" : "full";
           const stats = await syncFoodDrinkCatalogForMetro(
