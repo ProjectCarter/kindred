@@ -157,3 +157,84 @@ test("prioritizes major teams within the sports desk without dominating the page
       scoreEventForHomepageSelection(minorLeague, reference, { sportsMarketId: "phoenix-metro" })
   );
 });
+
+test("homepage spreads geography across the valley when alternatives exist", () => {
+  const chandlerStack = Array.from({ length: 6 }, (_, i) =>
+    card({
+      name: `Chandler Concert ${i + 1}`,
+      category: "music",
+      venue: `Chandler Venue ${i + 1}`,
+      city: "Chandler",
+      editorialScore: 28 - i,
+      date: `Jul ${18 + i}, 2026`,
+      startDateIso: `2026-07-${String(18 + i).padStart(2, "0")}`,
+    })
+  );
+  const valley = [
+    card({ name: "Mesa Night Market", category: "food", venue: "Mesa Park", city: "Mesa", editorialScore: 22 }),
+    card({ name: "Gilbert Art Walk", category: "arts", venue: "Heritage District", city: "Gilbert", editorialScore: 21 }),
+    card({ name: "Tempe Comedy Night", category: "comedy", venue: "Tempe Improv", city: "Tempe", editorialScore: 20 }),
+    card({ name: "Scottsdale Jazz", category: "music", venue: "Western Spirit", city: "Scottsdale", editorialScore: 19 }),
+    card({
+      name: "Arizona Diamondbacks vs. St. Louis Cardinals",
+      category: "sports",
+      venue: "Chase Field",
+      city: "Phoenix",
+      editorialScore: 24,
+    }),
+  ];
+
+  const { homepage } = selectEditorialHomepageLocalEvents([...chandlerStack, ...valley], {
+    maxTotal: 8,
+    reference: new Date("2026-07-17T12:00:00-07:00"),
+    sportsMarketId: "phoenix-metro",
+  });
+
+  assert.equal(homepage.length, 8);
+  const chandlerCount = homepage.filter((e) => e.city === "Chandler").length;
+  assert.ok(chandlerCount <= 4, `expected at most 4 Chandler picks, got ${chandlerCount}`);
+  assert.ok(new Set(homepage.map((e) => e.city)).size >= 4);
+});
+
+test("homepage keeps the strongest event at a venue even when the venue repeats later in the edition pool", () => {
+  const chaseField = [
+    card({
+      name: "Arizona Diamondbacks vs. St. Louis Cardinals",
+      category: "sports",
+      venue: "Chase Field",
+      city: "Phoenix",
+      editorialScore: 30,
+      date: "Jul 17, 2026",
+      startDateIso: "2026-07-17",
+    }),
+    card({
+      name: "Arizona Diamondbacks vs. San Diego Padres",
+      category: "sports",
+      venue: "Chase Field",
+      city: "Phoenix",
+      editorialScore: 28,
+      date: "Jul 18, 2026",
+      startDateIso: "2026-07-18",
+    }),
+  ];
+  const others = Array.from({ length: 8 }, (_, i) =>
+    card({
+      name: `Valley Event ${i + 1}`,
+      category: i % 2 === 0 ? "music" : "community",
+      venue: `Venue ${i + 1}`,
+      city: ["Mesa", "Gilbert", "Tempe", "Scottsdale"][i % 4],
+      editorialScore: 20 - i,
+      date: `Jul ${20 + i}, 2026`,
+      startDateIso: `2026-07-${String(20 + i).padStart(2, "0")}`,
+    })
+  );
+
+  const { homepage } = selectEditorialHomepageLocalEvents([...chaseField, ...others], {
+    maxTotal: 8,
+    reference: new Date("2026-07-17T12:00:00-07:00"),
+    sportsMarketId: "phoenix-metro",
+  });
+
+  assert.equal(homepage.filter((e) => e.venue === "Chase Field").length, 1);
+  assert.ok(homepage.some((e) => e.name.includes("Cardinals")));
+});

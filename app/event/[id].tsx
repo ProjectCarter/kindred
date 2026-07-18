@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -21,6 +21,7 @@ import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { ArticleActionList } from "../../components/ArticleActionList";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
+import { articleBackRowInsets } from "../../lib/navigation/articleBackLayout";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -32,6 +33,7 @@ export default function EventDetailScreen() {
     backLabel?: string;
   }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const eventId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
   const event = useMemo(
@@ -65,7 +67,7 @@ export default function EventDetailScreen() {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <StatusBar style="dark" />
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
+        <Pressable onPress={() => router.back()} style={[styles.backRow, articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true })]}>
           <Text style={styles.back}>{back}</Text>
         </Pressable>
         <Text style={styles.missing}>This event is no longer available.</Text>
@@ -83,7 +85,7 @@ export default function EventDetailScreen() {
       >
         <Pressable
           onPress={handleBack}
-          style={styles.backRow}
+          style={[styles.backRow, articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true })]}
           accessibilityRole="button"
           accessibilityLabel={back.replace(/^←\s*/, "Back to ")}
         >
@@ -161,7 +163,7 @@ const styles = StyleSheet.create({
   },
   backRow: {
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingBottom: 14,
   },
   back: {
     fontSize: 15,

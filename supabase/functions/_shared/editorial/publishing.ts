@@ -29,6 +29,9 @@ export const HOMEPAGE_INITIAL_RENDER_COUNT = 8;
 /** Max Local Events persisted per edition (See All cap — kindred-mission.mdc). */
 export const LOCAL_EVENTS_EDITION_SURFACED_MAX = 20;
 
+/** See All destination cap — curated exploration, not a directory dump. */
+export const SEE_ALL_MAX_ITEMS = 20;
+
 /** Edition-time catalog read caps — discovery scoring pool, not full metro dump. */
 export const EDITION_ACTIVITIES_READ_LIMIT = 250;
 export const EDITION_FOOD_DRINK_READ_LIMIT = 150;
@@ -63,6 +66,13 @@ export function publishDiscoveryItems(
 export function sliceForInitialRender<T>(
   items: readonly T[],
   count: number = HOMEPAGE_INITIAL_RENDER_COUNT
+): T[] {
+  return items.slice(0, count);
+}
+
+export function sliceForSeeAll<T>(
+  items: readonly T[],
+  count: number = SEE_ALL_MAX_ITEMS
 ): T[] {
   return items.slice(0, count);
 }

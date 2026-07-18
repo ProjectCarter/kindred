@@ -103,6 +103,8 @@ Deno.serve(async (req) => {
         city,
         state: location?.state ?? null,
         region: location?.region ?? null,
+        lat: clientLocation?.lat ?? location?.lat,
+        lon: clientLocation?.lon ?? location?.lon,
       },
     });
 

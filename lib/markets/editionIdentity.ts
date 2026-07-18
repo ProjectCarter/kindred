@@ -35,6 +35,10 @@ export function editionsConflictTarget(): "user_id,edition_date,metro_key" {
   return "user_id,edition_date,metro_key";
 }
 
+export function generationJobsConflictTarget(): "user_id,edition_date,metro_key" {
+  return "user_id,edition_date,metro_key";
+}
+
 export function canRecoverLocalEventsForMetro(input: {
   place: KindredPlace;
   expectedMetroKey?: string | null;

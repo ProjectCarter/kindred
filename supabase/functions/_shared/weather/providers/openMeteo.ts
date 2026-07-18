@@ -1,4 +1,5 @@
 import type { NormalizedWeatherForecast, WeatherProvider } from "./types.ts";
+import { fetchWithTimeout } from "../../http/fetchWithTimeout.ts";
 
 type OpenMeteoResponse = {
   current?: {
@@ -70,7 +71,7 @@ export async function fetchOpenMeteoForecast(
 
   let res: Response;
   try {
-    res = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    res = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?${params}`, {}, 20_000);
   } catch (err) {
     console.warn("[weather:open_meteo] network error", err);
     return null;

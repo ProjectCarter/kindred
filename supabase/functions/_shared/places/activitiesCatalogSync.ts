@@ -277,6 +277,9 @@ async function processActivityCategory(
         provider_id: place.providerId,
         provider_category: place.category,
         ...patch,
+        field_sources: prior.field_sources ?? {},
+        source_history: prior.source_history ?? [],
+        first_seen_at: prior.first_seen_at,
         last_material_change_at: input.now,
         editorial_note_pending: input.deferEditorialNotes,
       });
@@ -285,7 +288,9 @@ async function processActivityCategory(
     }
 
     stats.newDiscovered += 1;
+    const newId = crypto.randomUUID();
     toUpsert.push({
+      id: newId,
       metro_key: input.metro.metro_key,
       provider: "foursquare",
       provider_id: place.providerId,

@@ -1,6 +1,7 @@
 import type { ResolvedEditionMarket } from "./resolveEditionMarket";
 import { filterLocalEventsByMarket, filterPlacesByMarket } from "./editionMarketIsolation";
 import type { EditionMarketAnchor } from "./editionMarketIsolation";
+import { citiesMatch } from "../location/locationKey.ts";
 
 export type EditionSectionWriteRow = {
   edition_id: string;
@@ -43,6 +44,11 @@ function parseLocalEventsBody(body: string): Array<{ city?: string; name?: strin
   } catch {
     return [];
   }
+}
+
+function parseStoryOfHeadlineCity(headline: string | null | undefined): string | null {
+  const match = headline?.trim().match(/^The Story of\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
 }
 
 function parseStoryOfMetroKey(sourceNote: string | null | undefined): string | null {
@@ -119,10 +125,18 @@ export function auditEditionSectionRow(input: {
     }
     case "story_of": {
       const storyMetro = parseStoryOfMetroKey(row.source_note);
-      base.sourceCatalog = storyMetro ? `kindred_city_articles:${storyMetro}` : "kindred_city_articles";
-      if (storyMetro && storyMetro !== catalogMetroKey && storyMetro !== market.metroKey) {
+      const headlineCity = parseStoryOfHeadlineCity(row.headline);
+      base.sourceCatalog = storyMetro
+        ? `kindred_city_articles:${storyMetro}`
+        : "kindred_city_articles";
+      // Story of must match the reader's edition city — not merely the catalog metro key.
+      if (
+        anchor.city &&
+        headlineCity &&
+        !citiesMatch(anchor.city, headlineCity)
+      ) {
         base.crossMetroRejected = true;
-        base.rejectReason = `story_of_metro_mismatch:${storyMetro}`;
+        base.rejectReason = `story_of_city_mismatch:${headlineCity}`;
       }
       return base;
     }

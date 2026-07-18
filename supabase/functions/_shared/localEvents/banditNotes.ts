@@ -7,6 +7,7 @@
 import type { LocalEvent } from "./provider.ts";
 import {
   EVENT_EDITORIAL_SYSTEM_PROMPT,
+  EVENT_EDITORIAL_MIN_PARAGRAPHS,
   buildVerifiedEventBrief,
   diagnoseGeneratedEventEditorial,
   parseGeneratedEventEditorial,
@@ -17,6 +18,7 @@ import {
   type GeneratedEventEditorial,
 } from "./eventEditorial.ts";
 import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
+import { fetchWithTimeout } from "../http/fetchWithTimeout.ts";
 import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "../editorial/publishing.ts";
 import { passesEventGoldenTest } from "./eventStorytelling.ts";
 import {
@@ -59,10 +61,11 @@ function editorialCopyFromEvent(event: LocalEvent): GeneratedEventEditorial {
   const existingHeadline = resolveEditorialHeadline(
     event.editorialHeadline ?? null,
     event,
-    existingBody.length >= 3 ? existingBody : [],
+    existingBody.length >= EVENT_EDITORIAL_MIN_PARAGRAPHS ? existingBody : [],
     existingNote
   );
-  const editorialBody = existingBody.length >= 3 ? existingBody : null;
+  const editorialBody =
+    existingBody.length >= EVENT_EDITORIAL_MIN_PARAGRAPHS ? existingBody : null;
   return {
     editorialHeadline: existingHeadline,
     banditNote: existingNote,
@@ -77,7 +80,7 @@ function copyPassesPublishGate(
   if (!copy.editorialHeadline || !copy.banditNote || !copy.editorialBody?.length) {
     return false;
   }
-  if (copy.editorialBody.length < 3) return false;
+  if (copy.editorialBody.length < EVENT_EDITORIAL_MIN_PARAGRAPHS) return false;
   return passesEventGoldenTest({
     name: event.name,
     venue: event.venue,
@@ -115,30 +118,34 @@ async function generateSingleEventEditorial(
 ): Promise<GeneratedEventEditorial> {
   const varietySeed = buildVarietySeed(options.editionDate, event.name);
   const verified = buildVerifiedEventBrief(event, 0);
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": options.apiKey,
-      "anthropic-version": "2023-06-01",
+  const response = await fetchWithTimeout(
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": options.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2800,
+        system: EVENT_EDITORIAL_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content:
+              "Write one original newspaper headline, Bandit note, and editorial article body " +
+              "for this verified event. Summarize the experience, not the listing. " +
+              "Apply the golden test before you finalize.\n\n" +
+              (options.retryHint ? `${options.retryHint}\n\n` : "") +
+              `${verified}\n\n${buildEditionVarietyPromptBlock(varietySeed)}`,
+          },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 1200,
-      system: EVENT_EDITORIAL_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content:
-            "Write one original newspaper headline, Bandit note, and editorial article body " +
-            "for this verified event. Summarize the experience, not the listing. " +
-            "Apply the golden test before you finalize.\n\n" +
-            (options.retryHint ? `${options.retryHint}\n\n` : "") +
-            `${verified}\n\n${buildEditionVarietyPromptBlock(varietySeed)}`,
-        },
-      ],
-    }),
-  });
+    60_000
+  );
 
     if (!response.ok) {
       const errBody = await response.text().catch(() => "");
@@ -229,7 +236,7 @@ export async function enrichEventsWithBanditNotes(
           retryHint:
             attempt === 1
               ? "Previous draft failed editorial validation — write a fresh headline, " +
-                "Bandit note, and 3–4 distinct paragraphs with a specific closing thought."
+                `Bandit note, and ${EVENT_EDITORIAL_MIN_PARAGRAPHS}–10 distinct paragraphs with a specific closing thought.`
               : undefined,
         });
         if (copyPassesPublishGate(generated, event)) {

@@ -3,6 +3,11 @@
 
 import { createServiceClient } from "../_shared/buildEdition.ts";
 import {
+  isCronAuthorized,
+  cronUnauthorizedResponse,
+} from "../_shared/auth/cronSecret.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {
   assertBatchMarketActionsAllowed,
   buildUsMarket,
   manageUsMarket,
@@ -18,10 +23,31 @@ function json(body: unknown, status = 200) {
   });
 }
 
+async function isBuildMarketAuthorized(req: Request): Promise<boolean> {
+  if (isCronAuthorized(req)) return true;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const authHeader = req.headers.get("Authorization");
+  if (!supabaseUrl || !serviceKey || !authHeader) return false;
+
+  const supabaseUser = createClient(supabaseUrl, serviceKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const {
+    data: { user },
+  } = await supabaseUser.auth.getUser();
+  return Boolean(user);
+}
+
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") {
       return json({ error: "Method not allowed" }, 405);
+    }
+
+    if (!(await isBuildMarketAuthorized(req))) {
+      return cronUnauthorizedResponse();
     }
 
     const body = (await req.json().catch(() => ({}))) as {

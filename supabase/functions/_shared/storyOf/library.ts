@@ -3,8 +3,12 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { metroKeyFromLocation } from "./metroKey.ts";
+import { storyOfMetroKeysForLocation } from "../../../../lib/markets/libraryMetroKeys.ts";
+import { citiesMatch } from "../../../../lib/location/locationKey.ts";
 import { storyOfHeadline, type CityArticleRow, type CityArticleSnapshot } from "./types.ts";
+
+const STORY_OF_SELECT =
+  "id, metro_key, city_name, state, region, headline, subtitle, body, image_url, image_caption, image_credit, image_source_url, image_license, sources, verification_notes, word_count, approval_status, published_at";
 
 function rowToSnapshot(row: CityArticleRow): CityArticleSnapshot {
   return {
@@ -26,55 +30,78 @@ function rowToSnapshot(row: CityArticleRow): CityArticleSnapshot {
 
 export async function fetchApprovedCityArticle(
   admin: SupabaseClient,
-  location: { city: string; state?: string | null; region?: string | null }
+  location: {
+    city: string;
+    state?: string | null;
+    region?: string | null;
+    lat?: number;
+    lon?: number;
+  }
 ): Promise<CityArticleSnapshot | null> {
   const city = location.city?.trim();
   if (!city || city.toLowerCase() === "your area") return null;
 
-  const metroKey = metroKeyFromLocation(location);
-
-  const { data, error } = await admin
-    .from("kindred_city_articles")
-    .select(
-      "id, metro_key, city_name, state, region, headline, subtitle, body, image_url, image_caption, image_credit, image_source_url, image_license, sources, verification_notes, word_count, approval_status, published_at"
-    )
-    .eq("metro_key", metroKey)
-    .eq("approval_status", "approved")
-    .maybeSingle();
-
-  if (error) {
-    console.warn("[storyOf] library lookup failed", {
-      metroKey,
-      message: error.message,
-    });
-    return null;
-  }
-
-  if (!data?.headline?.trim() || !data?.body?.trim()) {
-    return null;
-  }
-
-  const snapshot = rowToSnapshot(data as CityArticleRow);
-  if (!snapshot.subtitle) {
-    console.warn("[storyOf] approved article missing subtitle", { metroKey });
-    return null;
-  }
-
-  const expectedHeadline = storyOfHeadline(snapshot.cityName);
-  if (snapshot.headline.trim() !== expectedHeadline) {
-    console.warn("[storyOf] headline mismatch — expected canonical title", {
-      metroKey,
-      expected: expectedHeadline,
-      got: snapshot.headline.slice(0, 80),
-    });
-    return null;
-  }
-
-  console.log("[storyOf] library hit", {
-    metroKey,
-    cityName: data.city_name,
-    wordCount: data.word_count,
+  const metroKeys = storyOfMetroKeysForLocation({
+    city,
+    state: location.state,
+    region: location.region,
+    lat: location.lat ?? NaN,
+    lon: location.lon ?? NaN,
   });
 
-  return snapshot;
+  for (const metroKey of metroKeys) {
+    const { data, error } = await admin
+      .from("kindred_city_articles")
+      .select(STORY_OF_SELECT)
+      .eq("metro_key", metroKey)
+      .eq("approval_status", "approved")
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[storyOf] library lookup failed", {
+        metroKey,
+        message: error.message,
+      });
+      continue;
+    }
+
+    if (!data?.headline?.trim() || !data?.body?.trim()) {
+      continue;
+    }
+
+    const snapshot = rowToSnapshot(data as CityArticleRow);
+    if (!snapshot.subtitle) {
+      console.warn("[storyOf] approved article missing subtitle", { metroKey });
+      continue;
+    }
+
+    if (!citiesMatch(snapshot.cityName, city)) {
+      console.warn("[storyOf] city name mismatch — skipping article", {
+        metroKey,
+        editionCity: city,
+        articleCity: snapshot.cityName,
+      });
+      continue;
+    }
+
+    const expectedHeadline = storyOfHeadline(snapshot.cityName);
+    if (snapshot.headline.trim() !== expectedHeadline) {
+      console.warn("[storyOf] headline mismatch — expected canonical title", {
+        metroKey,
+        expected: expectedHeadline,
+        got: snapshot.headline.slice(0, 80),
+      });
+      continue;
+    }
+
+    console.log("[storyOf] library hit", {
+      metroKey,
+      cityName: data.city_name,
+      wordCount: data.word_count,
+    });
+
+    return snapshot;
+  }
+
+  return null;
 }

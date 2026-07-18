@@ -40,6 +40,7 @@ import {
   trackReadingSignal,
 } from "../../lib/personalization";
 import { stashTodaysHistoryPlaces } from "../../lib/edition/historyAroundTownListStore";
+import { sliceForSeeAll } from "../../lib/edition/editorialPublishing";
 import { EditionReader } from "../../components/EditionReader";
 import { EditionAdjacentNav } from "../../components/EditionAdjacentNav";
 import {
@@ -112,7 +113,7 @@ export default function EditionScreen() {
         const { data: edition, error: editionError } = await supabase
           .from("editions")
           .select(
-            "id, edition_date, status, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context"
+            "id, edition_date, status, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context, metro_key"
           )
           .eq("id", editionId)
           .eq("user_id", user.id)
@@ -169,7 +170,11 @@ export default function EditionScreen() {
             .select("id, section_type, position, headline, body, source_note")
             .eq("edition_id", edition.id)
             .order("position", { ascending: true }),
-          fetchAdjacentEditions(user.id, edition.edition_date),
+          fetchAdjacentEditions(
+            user.id,
+            edition.edition_date,
+            (edition as { metro_key?: string | null }).metro_key
+          ),
         ]);
 
         if (cancelled) return;
@@ -375,7 +380,7 @@ export default function EditionScreen() {
               onSeeAllHistoryAroundTown={() => {
                 persistNow();
                 stashTodaysHistoryPlaces(
-                  intelligence?.historyAroundTown?.places ?? []
+                  sliceForSeeAll(intelligence?.historyAroundTown?.places ?? [])
                 );
                 router.push("/history-around-town");
               }}

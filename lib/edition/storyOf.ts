@@ -5,6 +5,7 @@
 
 import type { HistoricalImageAsset } from "./knowledgeGrounding";
 import type { EditionSection } from "./types";
+import { citiesMatch } from "../location/locationKey.ts";
 import { normalizeStoryOfImageUrl, storyOfImageAssetFromSourceNote } from "./storyOfImage";
 
 export const STORY_OF_SECTION_TYPE = "story_of";
@@ -55,6 +56,25 @@ function isStoryOfKind(kind: string | undefined): boolean {
 export function storyOfTitle(cityName: string): string {
   const name = cityName.trim();
   return name ? `The Story of ${name}` : "The Story of…";
+}
+
+/** Parse city name from a persisted story_of headline. */
+export function parseStoryOfHeadlineCity(
+  headline: string | null | undefined
+): string | null {
+  const match = headline?.trim().match(/^The Story of\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
+/** True when the story_of section headline matches the reader's edition city. */
+export function storyOfSectionMatchesCity(
+  section: EditionSection,
+  city: string
+): boolean {
+  if (!isStoryOfSection(section.section_type)) return false;
+  const headlineCity = parseStoryOfHeadlineCity(section.headline);
+  if (!headlineCity) return false;
+  return citiesMatch(headlineCity, city);
 }
 
 function words(text: string): string[] {

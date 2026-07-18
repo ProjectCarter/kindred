@@ -19,6 +19,9 @@ export const SPORT_EVENT_ICONS = {
   wrestling: "🤼",
   tennis: "🎾",
   pickleball: "🏓",
+  softball: "⚾",
+  curling: "🥌",
+  billiards: "🎱",
   table_tennis: "🏓",
   volleyball: "🏐",
   running: "🏃",
@@ -68,7 +71,8 @@ const SPORT_ICON_RULES: SportIconRule[] = [
   { test: /\bbadminton\b/i, icon: SPORT_EVENT_ICONS.badminton },
 
   // Field & diamond sports
-  { test: /\b(baseball|softball|\bmlb\b|\bllws\b|little league world series)\b/i, icon: SPORT_EVENT_ICONS.baseball },
+  { test: /\b(baseball|\bmlb\b|\bllws\b|little league world series)\b/i, icon: SPORT_EVENT_ICONS.baseball },
+  { test: /\bsoftball\b/i, icon: SPORT_EVENT_ICONS.softball },
   { test: /\b(basketball|\bwnba\b|\bnba\b|\bncaa\b.*basketball)\b/i, icon: SPORT_EVENT_ICONS.basketball },
   {
     test: /\b(soccer|futbol|\bmls\b|\bfifa\b|world cup qualifier)\b/i,
@@ -94,6 +98,8 @@ const SPORT_ICON_RULES: SportIconRule[] = [
     icon: SPORT_EVENT_ICONS.motorsports,
   },
   { test: /\bbowling\b/i, icon: SPORT_EVENT_ICONS.bowling },
+  { test: /\b(billiards|pool hall|snooker)\b/i, icon: SPORT_EVENT_ICONS.billiards },
+  { test: /\bcurling\b/i, icon: SPORT_EVENT_ICONS.curling },
   { test: /\bdarts\b/i, icon: SPORT_EVENT_ICONS.darts },
   { test: /\b(fishing|fish(?:ing)? tournament)\b/i, icon: SPORT_EVENT_ICONS.fishing },
   { test: /\bskateboard/i, icon: SPORT_EVENT_ICONS.skateboarding },

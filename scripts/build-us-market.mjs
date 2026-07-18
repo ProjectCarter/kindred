@@ -15,6 +15,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { catalogAuthHeaders, supabaseUrl } from "./lib/catalogAuth.mjs";
 
 const MARKET_BUILD_PHASES = [
   "preflight",
@@ -30,8 +31,7 @@ const CATALOG_PHASES = new Set(["events", "activities", "food_drinks"]);
 const PHASE_MAX_ATTEMPTS = 3;
 const PHASE_RETRY_WAIT_MS = 30_000;
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ?? "https://zdqjeocdsbdzecawumdp.supabase.co";
+const SUPABASE_URL = supabaseUrl();
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const args = process.argv.slice(2);
@@ -49,6 +49,13 @@ if (!slug) {
 
 if (!SERVICE_KEY) {
   console.error("SUPABASE_SERVICE_ROLE_KEY required");
+  process.exit(1);
+}
+
+try {
+  catalogAuthHeaders();
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 }
 
@@ -153,10 +160,7 @@ function shouldSkipCatalogPhase(phase, bootstrap, marketStatus) {
 async function invokePhase(runId, phase, attempt) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/build-market`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_KEY}`,
-    },
+    headers: catalogAuthHeaders(),
     body: JSON.stringify({
       slug,
       action: "phase",

@@ -65,6 +65,7 @@ import {
   usePullDownNavScreen,
 } from "../lib/navigation/usePullDownNavScreen";
 import { mergePullDownNavOnScroll } from "../lib/navigation/pullDownNavScrollProps";
+import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
 import { ContentTemplateModules } from "./ContentTemplateModules";
 import {
   categoryLabelForType,
@@ -710,7 +711,12 @@ export function ArticleReader({
             alignItems: "center",
           }}
         >
-          <View style={styles.inScrollBack}>
+          <View
+            style={[
+              styles.inScrollBack,
+              articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true }),
+            ]}
+          >
             <MastheadLink
               label={backLabel}
               onPress={handleBack}
@@ -1429,7 +1435,6 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     width: "100%",
     paddingHorizontal: reader.gutter,
-    paddingTop: 10,
     paddingBottom: 6,
   },
   stickyMasthead: {

@@ -29,6 +29,10 @@ import {
   passesEventGoldenTest,
 } from "./eventStorytelling.ts";
 
+/** Kindred Local Events desk — full newspaper article per verified listing. */
+export const EVENT_EDITORIAL_MIN_PARAGRAPHS = 6;
+export const EVENT_EDITORIAL_MAX_PARAGRAPHS = 10;
+
 const CATEGORY_LABEL: Record<string, string> = {
   music: "Music",
   comedy: "Comedy",
@@ -190,7 +194,7 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "A concert reads differently from a farmers market. A theater performance reads differently from a food festival.\n" +
   "Do NOT use one writing style for every category.\n\n" +
   "Return ONLY JSON:\n" +
-  '{"events":[{"editorialHeadline":"...","banditNote":"...","editorialBody":["paragraph1","paragraph2","paragraph3","paragraph4"]}]}\n\n' +
+  '{"events":[{"editorialHeadline":"...","banditNote":"...","editorialBody":["p1","p2","p3","p4","p5","p6"]}]}\n\n' +
   "editorialHeadline: ONE newspaper-quality headline (12–90 chars) — specific to THIS event, " +
   "not the raw listing title, no exclamation points\n" +
   "SUMMARIZE THE EXPERIENCE — do not restate the listing:\n" +
@@ -203,7 +207,9 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "- End with a closing thought specific to THIS event — never a reusable Kindred wrap-up\n\n" +
   "Rules:\n" +
   "- banditNote: ONE sentence, max 18 words, specific to THIS event\n" +
-  "- editorialBody: 3-4 paragraphs; each adds NEW verified facts or honest context\n" +
+  "- editorialBody: 6–10 paragraphs; each adds NEW verified facts, practical context, or honest atmosphere\n" +
+  "- Paragraph roles ( weave naturally — do not label them ): what it is · who it suits · when to go · " +
+  "venue or format detail · planning tip from verified badges/schedule · one quiet closing thought\n" +
   "- Use ONLY facts from the event brief — never invent parking, menus, crowd counts, or nearby places\n" +
   "- If verified detail is missing, write less — never fill with guesses\n" +
   "- Calm newspaper voice; no exclamation points; no hashtags\n" +
@@ -215,7 +221,8 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "- Name the venue, format, activity, or detail that makes this event distinct\n\n" +
   "Validation checklist (every event must pass before you return JSON):\n" +
   "- editorialHeadline: 12–90 chars, NOT the same words as Title\n" +
-  "- editorialBody: exactly 3–4 paragraphs; the full article must include one memorable-idea phrase " +
+  "- editorialBody: exactly 6–10 paragraphs; every introduction must be unique; " +
+  "the full article must include one memorable-idea phrase " +
   "(e.g. \"next time you\", \"easy to overlook\", a specific year, \"instead of\")\n" +
   "- Final paragraph: one quiet observation about THIS event — never \"in summary\", \"don't miss\", " +
   "\"locals love\", crowd claims, or reusable wrap-ups\n" +
@@ -301,7 +308,12 @@ export function diagnoseGeneratedEventEditorial(
   );
   if (!editorialHeadline) return reject("headline_invalid");
   if (!banditNote) return reject("bandit_note_invalid");
-  if (!editorialBody || editorialBody.length < 3) return reject("body_too_short");
+  if (!editorialBody || editorialBody.length < EVENT_EDITORIAL_MIN_PARAGRAPHS) {
+    return reject("body_too_short");
+  }
+  if (editorialBody.length > EVENT_EDITORIAL_MAX_PARAGRAPHS) {
+    return reject("body_too_long");
+  }
 
   const candidate = {
     editorialHeadline,

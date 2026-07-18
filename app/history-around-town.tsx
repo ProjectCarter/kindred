@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Text, StyleSheet, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { EditorialCardGrid } from "../components/EditorialCardGrid";
+import { HistoryAroundTownDirectory } from "../components/HistoryAroundTownDirectory";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
@@ -13,16 +13,17 @@ import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
+import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
 import { paper, type } from "../lib/edition/newspaperTheme";
 import { HISTORY_AROUND_TOWN_SUBTITLE } from "../lib/edition/historyAroundTown/types";
 
-/** Full History Around Town directory — every approved place in this edition. */
+/** History Around Town — up to 20 curated historic places in this edition. */
 export default function HistoryAroundTownScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.historyAroundTown
   );
-  const places = useMemo(() => getTodaysHistoryPlaces(), []);
+  const places = useMemo(() => sliceForSeeAll(getTodaysHistoryPlaces()), []);
   const cards = useMemo(() => selectHistoryAroundTownGridCards(places), [places]);
   const articlesById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof articleFromHistoryPlace>>();
@@ -59,13 +60,12 @@ export default function HistoryAroundTownScreen() {
         <Text style={styles.kicker}>Around town</Text>
         <Text style={styles.title}>History Around Town</Text>
         <Text style={styles.subtitle}>{HISTORY_AROUND_TOWN_SUBTITLE}</Text>
+        <Text style={styles.count}>
+          {cards.length} {cards.length === 1 ? "place" : "places"}
+        </Text>
 
-        <EditorialCardGrid
-          kicker="History Around Town"
+        <HistoryAroundTownDirectory
           cards={cards}
-          initialRenderCount={Math.max(cards.length, 1)}
-          emptyCopy="No historic places are ready for this city yet — check back as the library grows."
-          showBanditWhenEmpty
           onOpenCard={(card) => {
             const article = articlesById.get(card.id);
             if (!article) return;
@@ -114,7 +114,15 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontStyle: "italic",
     color: paper.inkMuted,
-    marginBottom: 28,
+    marginBottom: 10,
     maxWidth: 340,
+  },
+  count: {
+    fontSize: 12,
+    letterSpacing: 1.2,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    color: paper.inkFaint,
+    marginBottom: 24,
   },
 });

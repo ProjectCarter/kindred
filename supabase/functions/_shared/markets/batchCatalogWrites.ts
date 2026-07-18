@@ -49,7 +49,13 @@ export async function queueEditorialNotes(
   }
 ): Promise<number> {
   if (!input.places.length) return 0;
-  const rows = input.places.map((p) => ({
+
+  const deduped = new Map<string, { providerId: string; category: string }>();
+  for (const place of input.places) {
+    deduped.set(place.providerId, place);
+  }
+
+  const rows = [...deduped.values()].map((p) => ({
     metro_key: input.metroKey,
     catalog: input.catalog,
     provider_id: p.providerId,
@@ -59,6 +65,7 @@ export async function queueEditorialNotes(
     updated_at: new Date().toISOString(),
   }));
 
+  if (!rows.length) return 0;
   const { error } = await admin
     .from("kindred_market_editorial_note_queue")
     .upsert(rows, { onConflict: "metro_key,catalog,provider_id" });

@@ -11,7 +11,7 @@ export const FOOD_DRINK_SECTION_KICKER = "🍽️ Food & Drink";
 export const FOOD_DRINK_SECTION_TITLE = "Food & Drink";
 export const FOOD_DRINK_SECTION_QUESTION = "Where should I eat and drink?";
 export const FOOD_DRINK_SECTION_INTRO =
-  "Kindred's complete local dining guide — every qualifying place within 25 miles, curated by our food editors.";
+  "Kindred's curated local dining guide — up to 20 editor-selected places within 25 miles.";
 export const FOOD_DRINK_SEE_ALL_LABEL = (count: number) =>
   `See all ${count} places`;
 

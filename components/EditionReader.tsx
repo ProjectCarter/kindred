@@ -41,6 +41,10 @@ import {
   articleFromTopStory,
   type TopStoryItem,
 } from "../lib/edition/topStories";
+import {
+  articleFromNationalNewsStory,
+  type NationalNewsPackage,
+} from "../lib/edition/nationalNews";
 import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
@@ -134,6 +138,8 @@ type Props = {
    * When present, the combined top_stories section body is not opened as a mashup.
    */
   topStories?: TopStoryItem[];
+  /** Shared U.S. national news package — identical in every city on this date. */
+  nationalNews?: NationalNewsPackage | null;
   clippedSectionIds?: Set<string>;
   onToggleClip?: (section: EditionSection) => void;
   clipPendingId?: string | null;
@@ -234,6 +240,7 @@ function EditionReaderInner({
   discovery,
   banditsPick,
   topStories = [],
+  nationalNews = null,
   clippedSectionIds,
   onToggleClip,
   clipPendingId,
@@ -563,6 +570,12 @@ function EditionReaderInner({
   const nationalTopStories = topStories.filter(
     (s) => !/local/i.test(s.role ?? "")
   );
+  const nationalNewsStories = nationalNews?.stories ?? [];
+  const showLegacyNationalNews =
+    nationalNewsStories.length === 0 &&
+    (Boolean(leadStory && !/local/i.test(leadStory.role ?? "")) ||
+      nationalTopStories.length > 0 ||
+      Boolean(topStoriesSection));
 
   let folioCursor = 0;
 
@@ -917,7 +930,49 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {leadStory && !/local/i.test(leadStory.role ?? "") ? (
+      {nationalNewsStories.length > 0 ? (
+        <FolioReveal index={folioCursor++}>
+          <TimeStylePackage
+            sectionLabel="National News"
+            feature={{
+              id: nationalNewsStories[0].id,
+              kicker: nationalNewsStories[0].category ?? "National",
+              headline: nationalNewsStories[0].headline,
+              dek: nationalNewsStories[0].summary,
+              byline: nationalNewsStories[0].sourceName,
+              image: wireOrFallbackImage({
+                imageUrl: nationalNewsStories[0].image?.url,
+                headline: nationalNewsStories[0].headline,
+                section: "national_news",
+                summary: nationalNewsStories[0].summary,
+                source: nationalNewsStories[0].sourceName,
+              }),
+            }}
+            sides={nationalNewsStories.slice(1, 3).map((s) => ({
+              id: s.id,
+              headline: s.headline,
+              byline: s.sourceName,
+              image: wireOrFallbackImage({
+                imageUrl: s.image?.url,
+                headline: s.headline,
+                section: "national_news",
+                summary: s.summary,
+                source: s.sourceName,
+              }),
+            }))}
+            onOpen={
+              onOpenArticle
+                ? (id) => {
+                    const story = nationalNewsStories.find((s) => s.id === id);
+                    if (story) onOpenArticle(articleFromNationalNewsStory(story));
+                  }
+                : undefined
+            }
+          />
+        </FolioReveal>
+      ) : null}
+
+      {showLegacyNationalNews && leadStory && !/local/i.test(leadStory.role ?? "") ? (
         <FolioReveal index={folioCursor++}>
           <TimeStylePackage
             sectionLabel="From the wider world"
@@ -961,7 +1016,7 @@ function EditionReaderInner({
             }
           />
         </FolioReveal>
-      ) : nationalTopStories.length > 0 || topStoriesSection ? (
+      ) : showLegacyNationalNews && (nationalTopStories.length > 0 || topStoriesSection) ? (
         <FolioReveal index={folioCursor++}>
           <View style={styles.sectionCard}>
             <View style={styles.sectionLabelRow}>
@@ -1041,6 +1096,7 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
     prev.clippedSectionIds === next.clippedSectionIds &&
     prev.readerLocation === next.readerLocation &&
     prev.topStories === next.topStories &&
+    prev.nationalNews === next.nationalNews &&
     prev.heroImageUri === next.heroImageUri
   );
 }

@@ -279,6 +279,7 @@ async function syncFoodCategory(
         touchIds.push(priorRejected.id);
       } else if (!priorRejected) {
         rejectedInserts.push({
+          id: crypto.randomUUID(),
           metro_key: input.metro.metro_key,
           provider: "foursquare",
           provider_id: place.providerId,
@@ -353,6 +354,7 @@ async function syncFoodCategory(
         provider_id: place.providerId,
         provider_category: place.category,
         ...mergedRowToDbPatch(merged, place, input.now, input.deferEditorialNotes),
+        first_seen_at: prior.first_seen_at,
       });
       postScore.push({
         venueId: prior.id,
@@ -368,7 +370,9 @@ async function syncFoodCategory(
     }
 
     stats.newDiscovered += 1;
+    const newId = crypto.randomUUID();
     toUpsert.push({
+      id: newId,
       metro_key: input.metro.metro_key,
       provider: "foursquare",
       provider_id: place.providerId,

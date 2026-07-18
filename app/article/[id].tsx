@@ -4,9 +4,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArticleReader } from "../../components/ArticleReader";
+import { HistoryPlaceReader } from "../../components/HistoryPlaceReader";
 import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
 import { articleFromSectionItem, articleFromBanditsPick } from "../../lib/edition/article";
+import { articleFromHistoryPlace } from "../../lib/edition/historyAroundTown/article";
+import { getHistoryPlaceById } from "../../lib/edition/historyAroundTownListStore";
 import { getStashedArticle } from "../../lib/edition/articleStore";
 import {
   getArticleCompanion,
@@ -223,16 +226,34 @@ export default function ArticleScreen() {
   return (
     <View style={styles.flex}>
       <StatusBar style="dark" />
-      <ArticleReader
-        article={article}
-        onBack={goBack}
-        editionId={resolvedEdition}
-        companion={session.companion ?? getArticleCompanion(article.id)}
-        backLabel={resolvedBack}
-        initialScrollY={session.scrollY ?? 0}
-        onOpenContinue={openContinue}
-        instantEnter
-      />
+      {article.section === "history_around_town" &&
+      article.historyPlaceSnapshot ? (
+        <HistoryPlaceReader
+          article={article}
+          place={article.historyPlaceSnapshot}
+          onBack={goBack}
+          backLabel={resolvedBack}
+          onOpenNearby={(placeId) => {
+            const nearby = getHistoryPlaceById(placeId);
+            if (!nearby) return;
+            openKindredArticle(router, articleFromHistoryPlace(nearby), {
+              editionId: resolvedEdition,
+              backLabel: resolvedBack,
+            });
+          }}
+        />
+      ) : (
+        <ArticleReader
+          article={article}
+          onBack={goBack}
+          editionId={resolvedEdition}
+          companion={session.companion ?? getArticleCompanion(article.id)}
+          backLabel={resolvedBack}
+          initialScrollY={session.scrollY ?? 0}
+          onOpenContinue={openContinue}
+          instantEnter
+        />
+      )}
     </View>
   );
 }

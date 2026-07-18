@@ -120,6 +120,18 @@ If no authentic image can be verified → `needs_review`. Accuracy beats filling
 
 ---
 
+## v1.1 — Premium editorial guide (2026)
+
+Each approved library row now stores structured fields for carousel metadata, visitor information, timeline, looking-closer observations, nearby slug links, and designation badges. Edition build freezes the full `HistoryPlaceSnapshot` — client reads only.
+
+**Article reader:** `components/HistoryPlaceReader.tsx` (Introduction · Visitor Information · The Story · Why It Matters · Looking Closer · Timeline · Did You Know? · Visiting Today · Nearby · Before You Go · Closing Note)
+
+**Migration:** `0043_history_places_v11_enrichment.sql`
+
+**Re-seed + repair:** After schema apply, run `seed-history-around-town-gilbert.mjs` and `repair-history-around-town-editions.mjs --force` to refresh frozen snapshots.
+
+---
+
 ## Operations scripts
 
 | Script | Purpose |

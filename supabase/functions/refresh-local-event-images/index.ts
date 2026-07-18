@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = buildLocalEventsBody(events);
+    const body = buildLocalEventsBody(events, { editionCity: location.city });
     const { data: existing } = await admin
       .from("edition_sections")
       .select("id, position")

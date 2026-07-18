@@ -22,15 +22,16 @@ import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
+import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Complete Food & Drink guide — every qualifying place within ~25 miles. */
+/** Complete Food & Drink guide — up to 20 curated places within ~25 miles. */
 export default function RecommendationsScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.recommendations
   );
-  const items = useMemo(() => getTodaysRecommendations(), []);
+  const items = useMemo(() => sliceForSeeAll(getTodaysRecommendations()), []);
   const sections = useMemo(() => organizeFoodDrinkGuide(items), [items]);
   const placeCount = useMemo(() => foodDrinkGuidePlaceCount(items), [items]);
   const articlesById = useMemo(

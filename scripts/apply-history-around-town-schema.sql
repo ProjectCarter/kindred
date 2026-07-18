@@ -142,3 +142,23 @@ begin
       using (true);
   end if;
 end $$;
+
+-- v1.1 enrichment columns (0043)
+alter table public.kindred_history_places
+  add column if not exists phone text,
+  add column if not exists year_established text,
+  add column if not exists historical_era text,
+  add column if not exists historical_metadata_line text,
+  add column if not exists historic_designation text,
+  add column if not exists historic_designations text[] not null default '{}',
+  add column if not exists historical_significance text,
+  add column if not exists editorial_introduction text,
+  add column if not exists looking_closer text[] not null default '{}',
+  add column if not exists timeline_entries jsonb not null default '[]'::jsonb,
+  add column if not exists visiting_today_text text,
+  add column if not exists before_you_go_text text,
+  add column if not exists visit_duration_text text,
+  add column if not exists dog_policy_text text,
+  add column if not exists google_maps_url text,
+  add column if not exists admission_url text,
+  add column if not exists nearby_place_slugs text[] not null default '{}';

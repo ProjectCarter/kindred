@@ -30,6 +30,7 @@ export {
 } from "./whyChosen.ts";
 export {
   runEditorialDecisions,
+  runLocalEditorialDecisions,
   type EditorialDecisionsResult,
   type RunEditorialDecisionsInput,
 } from "./decide.ts";

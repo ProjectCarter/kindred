@@ -114,6 +114,15 @@ export async function setDevEditionOverride(
   patch: Partial<DevEditionOverride>
 ): Promise<DevEditionOverrideState> {
   await hydrateDevEditionOverrideState();
+  const prevPlace = memoryState.override.place;
+  const nextPlace = patch.place ?? prevPlace;
+  if (
+    prevPlace &&
+    nextPlace &&
+    placeKey(prevPlace) !== placeKey(nextPlace)
+  ) {
+    await clearDeveloperPreviewContext();
+  }
   const next: DevEditionOverrideState = {
     ...memoryState,
     override: { ...memoryState.override, ...patch, enabled: true },

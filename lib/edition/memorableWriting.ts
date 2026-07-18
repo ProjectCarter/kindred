@@ -4,7 +4,7 @@
  * Keep in sync with supabase/functions/_shared/editorial/memorableWriting.ts
  */
 
-import { extractLastParagraph } from "./uniqueConclusions";
+import { extractLastParagraph } from "./uniqueConclusions.ts";
 
 /** Generic takeaways that fail the Lasting Thought Test — never publish. */
 export const GENERIC_LASTING_THOUGHT_PATTERNS: RegExp[] = [

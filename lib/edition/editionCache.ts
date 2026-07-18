@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { EditionSection } from "./types";
 import type { LeadStory } from "./LeadStory";
 import type { TopStoryItem } from "./topStories";
+import type { NationalNewsPackage } from "./nationalNews";
 import type { BanditPayload } from "./bandit";
 import type { EditionIntelligence } from "./surfaceIntelligence";
 import type { MorningHeroExperience } from "./heroArtwork/types";
@@ -45,6 +46,8 @@ export type CachedEditionBundle = {
   sections: EditionSection[];
   leadStory: LeadStory | null;
   topStories: TopStoryItem[];
+  /** Shared U.S. national news — optional for legacy cached bundles. */
+  nationalNews?: NationalNewsPackage | null;
   bandit: BanditPayload | null;
   intelligence: EditionIntelligence | null;
   /** Frozen hero selection — stable for the life of this edition. */

@@ -1,5 +1,6 @@
 /**
  * Pre-generate and persist Local Events editorial for Seattle catalog rows.
+ * @deprecated Use scripts/enrich-events-catalog-editorial.ts --metro-key seattle-wa
  * Run before edition generation so buildEdition skips Claude for cached copy.
  *
  * Usage:

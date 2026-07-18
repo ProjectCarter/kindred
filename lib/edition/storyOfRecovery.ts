@@ -5,11 +5,14 @@
 
 import { supabase } from "../supabase";
 import type { KindredPlace } from "../location/types";
-import { metroKeyFromPlace } from "../location/metroKey";
+import { storyOfMetroKeysForLocation } from "../markets/libraryMetroKeys";
+import { citiesMatch } from "../location/locationKey";
 import type { EditionSection } from "./types";
 import {
   editionSectionFromCityArticle,
   isStoryOfSection,
+  storyOfSectionMatchesCity,
+  storyOfTitle,
   type CityArticleLibraryRow,
 } from "./storyOf";
 import { loadWithRetry } from "./loadWithRetry";
@@ -49,6 +52,57 @@ export function needsStoryOfRecovery(sections: EditionSection[]): boolean {
   return !sections.some((s) => isStoryOfSection(s.section_type));
 }
 
+/** Replace a story_of row built for the wrong city (e.g. Phoenix on a Gilbert edition). */
+export function needsStoryOfCityRepair(
+  sections: EditionSection[],
+  city: string
+): boolean {
+  const trimmed = city?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "your area") return false;
+  const story = sections.find((s) => isStoryOfSection(s.section_type));
+  if (!story) return false;
+  return !storyOfSectionMatchesCity(story, trimmed);
+}
+
+async function fetchApprovedCityArticleForPlace(
+  place: KindredPlace
+): Promise<{ row: CityArticleLibraryRow; metroKey: string } | null> {
+  const city = place.city?.trim();
+  if (!city) return null;
+
+  const metroKeys = storyOfMetroKeysForLocation({
+    city,
+    state: place.state ?? null,
+    region: place.region ?? null,
+    lat: place.lat,
+    lon: place.lon,
+  });
+
+  for (const metroKey of metroKeys) {
+    const { data, error } = await supabase
+      .from("kindred_city_articles")
+      .select(
+        "metro_key, city_name, headline, subtitle, body, image_url, image_caption, image_credit, image_source_url, image_license, sources"
+      )
+      .eq("metro_key", metroKey)
+      .eq("approval_status", "approved")
+      .maybeSingle();
+
+    if (error || !data) continue;
+
+    const row = data as CityArticleLibraryRow;
+    if (!row.headline?.trim() || !row.body?.trim() || !row.subtitle?.trim()) {
+      continue;
+    }
+    if (!citiesMatch(row.city_name, city)) continue;
+    if (row.headline.trim() !== storyOfTitle(row.city_name)) continue;
+
+    return { row, metroKey };
+  }
+
+  return null;
+}
+
 function mergeStoryOfSection(
   sections: EditionSection[],
   storySection: EditionSection
@@ -86,14 +140,6 @@ export async function recoverStoryOf(params: {
 }): Promise<StoryOfRecoveryResult> {
   const { editionId, editionDate, place, currentSections, cachedBundle } = params;
 
-  if (!needsStoryOfRecovery(currentSections)) {
-    return {
-      attempted: false,
-      recovered: false,
-      sections: currentSections,
-    };
-  }
-
   const city = place?.city?.trim();
   if (!city || city.toLowerCase() === "your area") {
     return {
@@ -104,11 +150,25 @@ export async function recoverStoryOf(params: {
     };
   }
 
-  const metroKey = metroKeyFromPlace({
+  const needsRepair = needsStoryOfCityRepair(currentSections, city);
+  const needsInsert = needsStoryOfRecovery(currentSections);
+
+  if (!needsInsert && !needsRepair) {
+    return {
+      attempted: false,
+      recovered: false,
+      sections: currentSections,
+    };
+  }
+
+  const metroKeys = storyOfMetroKeysForLocation({
     city,
     state: place?.state ?? null,
     region: place?.region ?? null,
+    lat: place?.lat ?? NaN,
+    lon: place?.lon ?? NaN,
   });
+  const metroKey = metroKeys[0] ?? city.toLowerCase().replace(/\s+/g, "-");
 
   if (!canAttemptRecovery(editionId, metroKey)) {
     return {
@@ -183,34 +243,20 @@ export async function recoverStoryOf(params: {
   }
 
   // Client fallback — display immediately when server is unavailable.
-  const { data, error } = await supabase
-    .from("kindred_city_articles")
-    .select(
-      "metro_key, city_name, headline, subtitle, body, image_url, image_caption, image_credit, image_source_url, image_license, sources"
-    )
-    .eq("metro_key", metroKey)
-    .eq("approval_status", "approved")
-    .maybeSingle();
-
-  if (error) {
-    if (__DEV__) {
-      console.warn("[storyOf:recovery] library lookup failed", {
-        metroKey,
-        message: error.message,
-      });
-    }
+  if (!place) {
     return {
       attempted: true,
       recovered: false,
       sections: currentSections,
       metroKey,
-      error: error.message,
+      error: "no_place",
     };
   }
 
-  if (!data) {
+  const libraryHit = await fetchApprovedCityArticleForPlace(place);
+  if (!libraryHit) {
     if (__DEV__) {
-      console.log("[storyOf:recovery] no approved article for metro", { metroKey });
+      console.log("[storyOf:recovery] no approved article for city", { city, metroKeys });
     }
     return {
       attempted: true,
@@ -222,8 +268,8 @@ export async function recoverStoryOf(params: {
   }
 
   const storySection = editionSectionFromCityArticle(
-    data as CityArticleLibraryRow,
-    metroKey
+    libraryHit.row,
+    libraryHit.metroKey
   );
 
   if (!storySection) {
@@ -231,7 +277,7 @@ export async function recoverStoryOf(params: {
       attempted: true,
       recovered: false,
       sections: currentSections,
-      metroKey,
+      metroKey: libraryHit.metroKey,
       error: "invalid_article",
     };
   }
@@ -248,8 +294,9 @@ export async function recoverStoryOf(params: {
 
   if (__DEV__) {
     console.log("[storyOf:recovery] client fallback applied", {
-      metroKey,
+      metroKey: libraryHit.metroKey,
       headline: storySection.headline,
+      repaired: needsRepair,
     });
   }
 
@@ -258,7 +305,7 @@ export async function recoverStoryOf(params: {
     recovered: true,
     sections: merged,
     headline: storySection.headline,
-    metroKey,
+    metroKey: libraryHit.metroKey,
     source: "client",
   };
 }

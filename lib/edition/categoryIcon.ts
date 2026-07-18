@@ -1,9 +1,8 @@
 /**
- * Kindred Visual Language Constitution v1 — one category, one permanent emoji.
- * Canonical law: .cursor/rules/kindred-visual-language.mdc
+ * Kindred Visual Language — icon resolution for events, discovery, and Bandit's Pick.
+ * Classification flows through editorialEmojiCatalog (most specific wins).
  *
- * Icons help readers recognize categories before reading a word.
- * Same verified category → same icon everywhere. Never stack. Never rotate.
+ * Canonical law: .cursor/rules/kindred-visual-language.mdc
  */
 
 import type { LocalEventCategory } from "./localEvents";
@@ -11,68 +10,24 @@ import { resolveSportEventIcon, SPORT_EVENT_ICON_FALLBACK } from "./sportEventIc
 import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
 import type { EditorialCategoryId } from "./editorialCategory";
 import type { BanditsPickKind } from "./bandit";
+import {
+  CATEGORY_ICON_DICTIONARY,
+  CATEGORY_ICON_FALLBACK,
+  EDITORIAL_EMOJI,
+  EDITORIAL_EMOJI_SECTION_FALLBACK,
+  LOCAL_EVENT_SECTION_EMOJI,
+  hayFromParts,
+  resolveEditorialEmojiFromHay,
+  resolveEditorialVenueEmoji,
+} from "./editorialEmojiCatalog";
+
+export {
+  CATEGORY_ICON_DICTIONARY,
+  CATEGORY_ICON_FALLBACK,
+  EDITORIAL_EMOJI,
+} from "./editorialEmojiCatalog";
 
 export type CategoryIconContext = "event" | "activity" | "recommendation" | "bandits_pick";
-
-/** Official Kindred icon dictionary — one category, one emoji. */
-export const CATEGORY_ICON_DICTIONARY = {
-  live_music: "🎵",
-  concert: "🎤",
-  theater: "🎭",
-  comedy: "😂",
-  movies: "🎬",
-  festival: "🎪",
-  food_festival: "🍽️",
-  coffee_shop: "☕",
-  brewery: "🍺",
-  winery: "🍷",
-  cocktail_bar: "🍸",
-  dancing: "💃",
-  art_gallery: "🎨",
-  museum: "🏛️",
-  historic_site: "📜",
-  library: "📚",
-  bookstore: "📖",
-  park: "🌳",
-  botanical_garden: "🌸",
-  nature_preserve: "🌿",
-  scenic_view: "🌅",
-  beach: "🏖️",
-  lake_river: "🌊",
-  hiking: "🥾",
-  walking_trail: "🚶",
-  cycling: "🚴",
-  running: "🏃",
-  pickleball: "🏓",
-  tennis: "🎾",
-  golf: "⛳",
-  mini_golf: "🏌️",
-  bowling: "🎳",
-  arcade: "🕹️",
-  escape_room: "🔐",
-  go_karts: "🏎️",
-  rock_climbing: "🧗",
-  swimming: "🏊",
-  playground: "🛝",
-  dog_park: "🐕",
-  pet_friendly: "🐾",
-  shopping: "🛍️",
-  antique_store: "🪑",
-  flea_market: "🛒",
-  community_event: "🤝",
-  business_networking: "💼",
-  educational_talk: "🎓",
-  charity: "❤️",
-  car_show: "🚗",
-  aviation: "✈️",
-  fireworks: "🎆",
-  holiday_event: "🎄",
-  farmers_market: "🥕",
-  food_dining: "🍽️",
-} as const;
-
-/** Default when category cannot be verified — community gathering, not decorative. */
-export const CATEGORY_ICON_FALLBACK = CATEGORY_ICON_DICTIONARY.community_event;
 
 type HayInput = {
   title?: string | null;
@@ -83,215 +38,93 @@ type HayInput = {
 };
 
 function hayFrom(input: HayInput): string {
-  return [
+  return hayFromParts([
     input.title,
     input.venue,
     input.dek,
     ...(input.venueCategories ?? []),
     ...(input.tags ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  ]);
 }
-
-function iconFromRules(
-  hay: string,
-  rules: Array<{ test: RegExp; icon: string }>,
-  fallback: string
-): string {
-  for (const rule of rules) {
-    if (rule.test.test(hay)) return rule.icon;
-  }
-  return fallback;
-}
-
-/**
- * Primary destinations — checked on verified venue first (brewery + live music → 🍺).
- */
-const PRIMARY_VENUE_RULES: Array<{ test: RegExp; icon: string }> = [
-  { test: /\b(escape\s*room)\b/, icon: CATEGORY_ICON_DICTIONARY.escape_room },
-  { test: /\b(go-?kart|go kart)\b/, icon: CATEGORY_ICON_DICTIONARY.go_karts },
-  { test: /\b(mini\s*golf|putt-?putt)\b/, icon: CATEGORY_ICON_DICTIONARY.mini_golf },
-  { test: /\b(bowling)\b/, icon: CATEGORY_ICON_DICTIONARY.bowling },
-  { test: /\b(arcade|video\s*arcade)\b/, icon: CATEGORY_ICON_DICTIONARY.arcade },
-  {
-    test: /\b(rock\s*climb|boulder(ing)?|climbing\s*gym)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.rock_climbing,
-  },
-  { test: /\b(brewery|brewpub|brewing|taproom)\b/, icon: CATEGORY_ICON_DICTIONARY.brewery },
-  { test: /\b(winery|vineyard)\b/, icon: CATEGORY_ICON_DICTIONARY.winery },
-  { test: /\b(cocktail|speakeasy|mixology)\b/, icon: CATEGORY_ICON_DICTIONARY.cocktail_bar },
-  { test: /\b(coffee|cafe|café|espresso)\b/, icon: CATEGORY_ICON_DICTIONARY.coffee_shop },
-  { test: /\b(museum)\b/, icon: CATEGORY_ICON_DICTIONARY.museum },
-  {
-    test: /\b(historic\s*(site|district|landmark|home|house)|heritage\s*(district|site))\b/,
-    icon: CATEGORY_ICON_DICTIONARY.historic_site,
-  },
-  { test: /\b(library)\b/, icon: CATEGORY_ICON_DICTIONARY.library },
-  { test: /\b(bookstore|book\s*shop)\b/, icon: CATEGORY_ICON_DICTIONARY.bookstore },
-  { test: /\b(botanical|arboretum)\b/, icon: CATEGORY_ICON_DICTIONARY.botanical_garden },
-  { test: /\b(beach)\b/, icon: CATEGORY_ICON_DICTIONARY.beach },
-  { test: /\b(dog\s*park)\b/, icon: CATEGORY_ICON_DICTIONARY.dog_park },
-  { test: /\b(playground)\b/, icon: CATEGORY_ICON_DICTIONARY.playground },
-  { test: /\b(art\s*gallery|gallery)\b/, icon: CATEGORY_ICON_DICTIONARY.art_gallery },
-  { test: /\b(golf\s*course|country\s*club)\b/, icon: CATEGORY_ICON_DICTIONARY.golf },
-];
-
-/**
- * Event and experience rules — full title + venue when venue is not a primary destination.
- */
-const EVENT_AND_TITLE_RULES: Array<{ test: RegExp; icon: string }> = [
-  ...PRIMARY_VENUE_RULES,
-  { test: /\b(wine\s*tasting)\b/, icon: CATEGORY_ICON_DICTIONARY.winery },
-  {
-    test: /\b(nature\s*preserve|wildlife\s*refuge)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.nature_preserve,
-  },
-  { test: /\b(lake|river|waterfront|kayak|paddleboard|paddle\s*board|boating)\b/, icon: CATEGORY_ICON_DICTIONARY.lake_river },
-  { test: /\b(antique\s*(shop|store|mall))\b/, icon: CATEGORY_ICON_DICTIONARY.antique_store },
-  { test: /\b(flea\s*market)\b/, icon: CATEGORY_ICON_DICTIONARY.flea_market },
-  { test: /\b(golf\b)(?!.*mini)/, icon: CATEGORY_ICON_DICTIONARY.golf },
-  { test: /\bfarmers?\s*market\b/, icon: CATEGORY_ICON_DICTIONARY.farmers_market },
-  {
-    test: /\bfood\s*(truck\s*)?festival\b|\btaco\s*festival\b|\bfood\s*fest\b/,
-    icon: CATEGORY_ICON_DICTIONARY.food_festival,
-  },
-  {
-    test: /\b(festival|fair|parade|carnival|street\s*fair)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.festival,
-  },
-  {
-    test: /\b(holiday|christmas\s*market|tree\s*lighting|santa\b|hanukkah|kwanzaa)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.holiday_event,
-  },
-  { test: /\b(fireworks|fourth of july)\b/, icon: CATEGORY_ICON_DICTIONARY.fireworks },
-  { test: /\b(car show|auto show|cruise night|classic car)\b/, icon: CATEGORY_ICON_DICTIONARY.car_show },
-  { test: /\b(air\s*show|aviation|fly-?in)\b/, icon: CATEGORY_ICON_DICTIONARY.aviation },
-  {
-    test: /\b(charity|fundraiser|benefit\s*(concert|dinner|gala))\b/,
-    icon: CATEGORY_ICON_DICTIONARY.charity,
-  },
-  {
-    test: /\b(networking|business\s*mixer|chamber\s*of\s*commerce)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.business_networking,
-  },
-  {
-    test: /\b(lecture|seminar|educational|author\s*talk|book\s*talk|poetry\s*reading)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.educational_talk,
-  },
-  { test: /\b(comedy|stand-?up|improv)\b/, icon: CATEGORY_ICON_DICTIONARY.comedy },
-  { test: /\b(ballet|ballroom|dance\s*class|dancing)\b/, icon: CATEGORY_ICON_DICTIONARY.dancing },
-  {
-    test: /\b(theater|theatre|\bplay\b|broadway|musical|opera|shakespeare)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.theater,
-  },
-  { test: /\b(film|movie|cinema)\b/, icon: CATEGORY_ICON_DICTIONARY.movies },
-  {
-    test: /\b(concert\b|orchestra|symphony|philharmonic)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.concert,
-  },
-  {
-    test: /\b(live\s*music|\bdj\b|jazz|blues|open\s*mic|acoustic\s*set|karaoke)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.live_music,
-  },
-  { test: /\b(pickleball)\b/, icon: CATEGORY_ICON_DICTIONARY.pickleball },
-  { test: /\btennis\b/, icon: CATEGORY_ICON_DICTIONARY.tennis },
-  { test: /\b(marathon|5k|10k|running\b|fun\s*run)\b/, icon: CATEGORY_ICON_DICTIONARY.running },
-  { test: /\b(cycl(e|ing)|bike\s*ride|gran\s*fondo)\b/, icon: CATEGORY_ICON_DICTIONARY.cycling },
-  { test: /\b(walking\s*trail)\b/, icon: CATEGORY_ICON_DICTIONARY.walking_trail },
-  { test: /\b(hike|hiking)\b/, icon: CATEGORY_ICON_DICTIONARY.hiking },
-  { test: /\b(swim|pool|aquatics)\b/, icon: CATEGORY_ICON_DICTIONARY.swimming },
-  {
-    test: /\b(sunrise|sunset|scenic\s*(view|overlook|vista))\b/,
-    icon: CATEGORY_ICON_DICTIONARY.scenic_view,
-  },
-  { test: /\b(park\b)(?!.*dog)/, icon: CATEGORY_ICON_DICTIONARY.park },
-  { test: /\b(shopping|mall|boutique)\b/, icon: CATEGORY_ICON_DICTIONARY.shopping },
-  { test: /\b(dog\s*friendly|pet\s*friendly)\b/, icon: CATEGORY_ICON_DICTIONARY.pet_friendly },
-  {
-    test: /\b(community|town\s*hall|neighborhood|block\s*party|volunteer)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.community_event,
-  },
-  {
-    test: /\b(food\b|dinner|brunch|restaurant|tasting|culinary|chef)\b/,
-    icon: CATEGORY_ICON_DICTIONARY.food_dining,
-  },
-];
-
-const EVENT_CATEGORY_FALLBACK: Record<LocalEventCategory, string> = {
-  music: CATEGORY_ICON_DICTIONARY.live_music,
-  comedy: CATEGORY_ICON_DICTIONARY.comedy,
-  arts: CATEGORY_ICON_DICTIONARY.theater,
-  family: CATEGORY_ICON_DICTIONARY.playground,
-  sports: SPORT_EVENT_ICON_FALLBACK,
-  food: CATEGORY_ICON_DICTIONARY.food_dining,
-  market: CATEGORY_ICON_DICTIONARY.farmers_market,
-  nightlife: CATEGORY_ICON_DICTIONARY.live_music,
-  community: CATEGORY_ICON_DICTIONARY.community_event,
-};
 
 const DISCOVERY_CATEGORY_FALLBACK: Partial<Record<DiscoveryCategory, string>> = {
-  coffee: CATEGORY_ICON_DICTIONARY.coffee_shop,
-  restaurants: CATEGORY_ICON_DICTIONARY.food_dining,
-  bakeries: CATEGORY_ICON_DICTIONARY.food_dining,
-  beaches: CATEGORY_ICON_DICTIONARY.beach,
-  hiking: CATEGORY_ICON_DICTIONARY.hiking,
-  parks: CATEGORY_ICON_DICTIONARY.park,
-  scenic_drives: CATEGORY_ICON_DICTIONARY.scenic_view,
-  museums: CATEGORY_ICON_DICTIONARY.museum,
-  books: CATEGORY_ICON_DICTIONARY.bookstore,
-  movies: CATEGORY_ICON_DICTIONARY.movies,
-  podcasts: CATEGORY_ICON_DICTIONARY.library,
-  recipes: CATEGORY_ICON_DICTIONARY.food_dining,
-  experiences: CATEGORY_ICON_DICTIONARY.community_event,
-  travel: CATEGORY_ICON_DICTIONARY.aviation,
-  activities: CATEGORY_ICON_DICTIONARY.community_event,
-  gardens: CATEGORY_ICON_DICTIONARY.botanical_garden,
+  coffee: EDITORIAL_EMOJI.coffee,
+  restaurants: EDITORIAL_EMOJI.food_dining,
+  bakeries: EDITORIAL_EMOJI.bakery,
+  beaches: EDITORIAL_EMOJI.beach,
+  hiking: EDITORIAL_EMOJI.hiking,
+  parks: EDITORIAL_EMOJI.park,
+  scenic_drives: EDITORIAL_EMOJI.scenic_view,
+  museums: EDITORIAL_EMOJI.museum,
+  books: EDITORIAL_EMOJI.literature,
+  movies: EDITORIAL_EMOJI.film,
+  podcasts: EDITORIAL_EMOJI.library,
+  recipes: EDITORIAL_EMOJI.food_dining,
+  experiences: EDITORIAL_EMOJI.festival,
+  travel: EDITORIAL_EMOJI.aviation,
+  activities: EDITORIAL_EMOJI.festival,
+  gardens: EDITORIAL_EMOJI.botanical_garden,
 };
 
 const EDITORIAL_CATEGORY_ICON: Partial<Record<EditorialCategoryId, string>> = {
-  restaurant: CATEGORY_ICON_DICTIONARY.food_dining,
-  coffee_shop: CATEGORY_ICON_DICTIONARY.coffee_shop,
-  bakery: CATEGORY_ICON_DICTIONARY.food_dining,
-  winery: CATEGORY_ICON_DICTIONARY.winery,
-  cocktail_bar: CATEGORY_ICON_DICTIONARY.cocktail_bar,
-  brewery: CATEGORY_ICON_DICTIONARY.brewery,
-  park: CATEGORY_ICON_DICTIONARY.park,
-  dog_park: CATEGORY_ICON_DICTIONARY.dog_park,
-  playground: CATEGORY_ICON_DICTIONARY.playground,
-  museum: CATEGORY_ICON_DICTIONARY.museum,
-  historic_site: CATEGORY_ICON_DICTIONARY.historic_site,
-  botanical_garden: CATEGORY_ICON_DICTIONARY.botanical_garden,
-  beach: CATEGORY_ICON_DICTIONARY.beach,
-  lake: CATEGORY_ICON_DICTIONARY.lake_river,
-  river: CATEGORY_ICON_DICTIONARY.lake_river,
-  scenic_lookout: CATEGORY_ICON_DICTIONARY.scenic_view,
-  observation_deck: CATEGORY_ICON_DICTIONARY.scenic_view,
-  scenic_drive: CATEGORY_ICON_DICTIONARY.scenic_view,
-  library: CATEGORY_ICON_DICTIONARY.library,
-  bookstore: CATEGORY_ICON_DICTIONARY.bookstore,
-  arcade: CATEGORY_ICON_DICTIONARY.arcade,
-  bowling_alley: CATEGORY_ICON_DICTIONARY.bowling,
-  mini_golf: CATEGORY_ICON_DICTIONARY.mini_golf,
-  escape_room: CATEGORY_ICON_DICTIONARY.escape_room,
-  rock_climbing_gym: CATEGORY_ICON_DICTIONARY.rock_climbing,
-  golf_course: CATEGORY_ICON_DICTIONARY.golf,
-  pickleball: CATEGORY_ICON_DICTIONARY.pickleball,
-  zoo: CATEGORY_ICON_DICTIONARY.museum,
-  aquarium: CATEGORY_ICON_DICTIONARY.museum,
-  farm: CATEGORY_ICON_DICTIONARY.farmers_market,
-  farmers_market: CATEGORY_ICON_DICTIONARY.farmers_market,
-  shopping_district: CATEGORY_ICON_DICTIONARY.shopping,
-  market: CATEGORY_ICON_DICTIONARY.shopping,
-  kayaking: CATEGORY_ICON_DICTIONARY.lake_river,
-  paddleboarding: CATEGORY_ICON_DICTIONARY.lake_river,
-  theater: CATEGORY_ICON_DICTIONARY.theater,
-  country_club: CATEGORY_ICON_DICTIONARY.golf,
-  rock_shop: CATEGORY_ICON_DICTIONARY.shopping,
-  general_place: CATEGORY_ICON_FALLBACK,
+  restaurant: EDITORIAL_EMOJI.food_dining,
+  coffee_shop: EDITORIAL_EMOJI.coffee,
+  bakery: EDITORIAL_EMOJI.bakery,
+  winery: EDITORIAL_EMOJI.winery,
+  cocktail_bar: EDITORIAL_EMOJI.cocktails,
+  brewery: EDITORIAL_EMOJI.brewery,
+  park: EDITORIAL_EMOJI.park,
+  dog_park: EDITORIAL_EMOJI.dog_park,
+  playground: EDITORIAL_EMOJI.playground,
+  museum: EDITORIAL_EMOJI.museum,
+  historic_site: EDITORIAL_EMOJI.historic_site,
+  botanical_garden: EDITORIAL_EMOJI.botanical_garden,
+  beach: EDITORIAL_EMOJI.beach,
+  lake: EDITORIAL_EMOJI.lake_river,
+  river: EDITORIAL_EMOJI.lake_river,
+  scenic_lookout: EDITORIAL_EMOJI.scenic_view,
+  observation_deck: EDITORIAL_EMOJI.scenic_view,
+  scenic_drive: EDITORIAL_EMOJI.scenic_view,
+  library: EDITORIAL_EMOJI.library,
+  bookstore: EDITORIAL_EMOJI.literature,
+  arcade: EDITORIAL_EMOJI.arcade,
+  bowling_alley: EDITORIAL_EMOJI.bowling,
+  mini_golf: EDITORIAL_EMOJI.mini_golf,
+  escape_room: EDITORIAL_EMOJI.escape_room,
+  rock_climbing_gym: EDITORIAL_EMOJI.rock_climbing,
+  golf_course: EDITORIAL_EMOJI.golf,
+  pickleball: EDITORIAL_EMOJI.pickleball,
+  zoo: EDITORIAL_EMOJI.museum,
+  aquarium: EDITORIAL_EMOJI.museum,
+  farm: EDITORIAL_EMOJI.farmers_market,
+  farmers_market: EDITORIAL_EMOJI.farmers_market,
+  shopping_district: EDITORIAL_EMOJI.shopping,
+  market: EDITORIAL_EMOJI.shopping,
+  kayaking: EDITORIAL_EMOJI.water_sports,
+  paddleboarding: EDITORIAL_EMOJI.water_sports,
+  theater: EDITORIAL_EMOJI.theater,
+  country_club: EDITORIAL_EMOJI.golf,
+  rock_shop: EDITORIAL_EMOJI.shopping,
+  general_place: EDITORIAL_EMOJI_SECTION_FALLBACK,
 };
 
+const ACTIVITY_SUBTYPE_ICON: Record<string, string> = {
+  hiking: EDITORIAL_EMOJI.hiking,
+  water_recreation: EDITORIAL_EMOJI.water_sports,
+  rock_climbing: EDITORIAL_EMOJI.rock_climbing,
+  pickleball: EDITORIAL_EMOJI.pickleball,
+  karaoke: EDITORIAL_EMOJI.live_music,
+  arcades: EDITORIAL_EMOJI.arcade,
+  bowling: EDITORIAL_EMOJI.bowling,
+  mini_golf: EDITORIAL_EMOJI.mini_golf,
+  escape_rooms: EDITORIAL_EMOJI.escape_room,
+  go_karts: EDITORIAL_EMOJI.go_karts,
+};
+
+/**
+ * Resolve event emoji — specific text → sport desk → section category → 🎉.
+ * 🤝 appears only when editorialEmojiCatalog matches genuine networking.
+ */
 export function resolveEventCategoryIcon(
   input: {
     name: string;
@@ -303,12 +136,13 @@ export function resolveEventCategoryIcon(
     sportsMarketId?: string | null;
   }
 ): string {
-  const venueHay = hayFrom({ venue: input.venue });
-  const venueIcon = iconFromRules(venueHay, PRIMARY_VENUE_RULES, "");
+  const venueIcon = resolveEditorialVenueEmoji(input.venue);
   if (venueIcon) return venueIcon;
 
   if (input.category === "sports") {
-    return resolveSportEventIcon(input, options);
+    const sportIcon = resolveSportEventIcon(input, options);
+    if (sportIcon) return sportIcon;
+    return SPORT_EVENT_ICON_FALLBACK;
   }
 
   const hay = hayFrom({
@@ -316,10 +150,11 @@ export function resolveEventCategoryIcon(
     venue: input.venue,
     dek: input.dek,
   });
-  const fromText = iconFromRules(hay, EVENT_AND_TITLE_RULES, "");
+  const fromText = resolveEditorialEmojiFromHay(hay);
   if (fromText) return fromText;
-  if (input.category) return EVENT_CATEGORY_FALLBACK[input.category];
-  return CATEGORY_ICON_FALLBACK;
+
+  if (input.category) return LOCAL_EVENT_SECTION_EMOJI[input.category];
+  return EDITORIAL_EMOJI_SECTION_FALLBACK;
 }
 
 export function resolveDiscoveryCategoryIcon(
@@ -332,34 +167,26 @@ export function resolveDiscoveryCategoryIcon(
   },
   context: CategoryIconContext
 ): string {
-  const hay = hayFrom(item);
+  const venueIcon = resolveEditorialVenueEmoji(item.title);
+  if (venueIcon) return venueIcon;
 
   if (item.editorialCategoryId && EDITORIAL_CATEGORY_ICON[item.editorialCategoryId]) {
     return EDITORIAL_CATEGORY_ICON[item.editorialCategoryId]!;
   }
 
-  const fromText = iconFromRules(hay, EVENT_AND_TITLE_RULES, "");
+  const hay = hayFrom(item);
+  const fromText = resolveEditorialEmojiFromHay(hay);
   if (fromText) return fromText;
 
-  if (item.activitySubtype === "hiking") return CATEGORY_ICON_DICTIONARY.hiking;
-  if (item.activitySubtype === "water_recreation") return CATEGORY_ICON_DICTIONARY.lake_river;
-  if (item.activitySubtype === "rock_climbing") return CATEGORY_ICON_DICTIONARY.rock_climbing;
-  if (item.activitySubtype === "pickleball") return CATEGORY_ICON_DICTIONARY.pickleball;
-  if (item.activitySubtype === "karaoke") return CATEGORY_ICON_DICTIONARY.live_music;
-  if (item.activitySubtype === "arcades") return CATEGORY_ICON_DICTIONARY.arcade;
-  if (item.activitySubtype === "bowling") return CATEGORY_ICON_DICTIONARY.bowling;
-  if (item.activitySubtype === "mini_golf") return CATEGORY_ICON_DICTIONARY.mini_golf;
-  if (item.activitySubtype === "escape_rooms") return CATEGORY_ICON_DICTIONARY.escape_room;
-  if (item.activitySubtype === "go_karts") return CATEGORY_ICON_DICTIONARY.go_karts;
-  if (item.activitySubtype) return CATEGORY_ICON_FALLBACK;
+  if (item.activitySubtype && ACTIVITY_SUBTYPE_ICON[item.activitySubtype]) {
+    return ACTIVITY_SUBTYPE_ICON[item.activitySubtype]!;
+  }
 
   const discoveryFallback = DISCOVERY_CATEGORY_FALLBACK[item.category];
   if (discoveryFallback) return discoveryFallback;
 
-  if (context === "activity" || context === "recommendation") {
-    return CATEGORY_ICON_FALLBACK;
-  }
-  return CATEGORY_ICON_FALLBACK;
+  void context;
+  return EDITORIAL_EMOJI_SECTION_FALLBACK;
 }
 
 export function resolveBanditsPickCategoryIcon(input: {
@@ -397,18 +224,19 @@ export function resolveBanditsPickCategoryIcon(input: {
     });
   }
 
-  const hay = hayFrom({ title: input.headline, dek: input.summary });
-  const fromText = iconFromRules(hay, EVENT_AND_TITLE_RULES, "");
+  const fromText = resolveEditorialEmojiFromHay(
+    hayFrom({ title: input.headline, dek: input.summary })
+  );
   if (fromText) return fromText;
 
   const kindFallback: Partial<Record<BanditsPickKind, string>> = {
-    activity: CATEGORY_ICON_FALLBACK,
-    place: CATEGORY_ICON_DICTIONARY.food_dining,
-    hidden_gem: CATEGORY_ICON_DICTIONARY.nature_preserve,
-    seasonal: CATEGORY_ICON_DICTIONARY.festival,
-    article: CATEGORY_ICON_DICTIONARY.library,
+    activity: EDITORIAL_EMOJI.festival,
+    place: EDITORIAL_EMOJI.food_dining,
+    hidden_gem: EDITORIAL_EMOJI.nature_preserve,
+    seasonal: EDITORIAL_EMOJI.festival,
+    article: EDITORIAL_EMOJI.library,
   };
-  return kindFallback[input.kind] ?? CATEGORY_ICON_FALLBACK;
+  return kindFallback[input.kind] ?? EDITORIAL_EMOJI_SECTION_FALLBACK;
 }
 
 /** One emoji only — never stack. Strips an existing leading emoji before prefixing. */

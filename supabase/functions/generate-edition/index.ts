@@ -1,18 +1,19 @@
 // Kindred — generate-edition
-// On-demand build for the signed-in user.
-// Requires an explicit client location — never silently falls back to IP or a hard-coded city.
+// On-demand edition request: validate location, enqueue job, trigger background worker.
+// Returns immediately — client polls until the edition is ready.
 
 import {
-  buildEditionForUser,
   createServiceClient,
   resolveEditionLocation,
-  type BuildEditionOptions,
 } from "../_shared/buildEdition.ts";
 import {
   assertLocationMatchesMarket,
   resolveEditionMarket,
 } from "../_shared/markets/editionMarket.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { generationJobsConflictTarget } from "../_shared/markets/editionIdentity.ts";
+import { findReadyEditionId } from "../_shared/edition/runUserGenerationJob.ts";
+import { triggerUserEditionJobWorker } from "../_shared/edition/triggerUserEditionJobWorker.ts";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import type { TemperatureUnitPreference } from "../_shared/weather/units.ts";
 
 type ClientLocation = {
@@ -23,46 +24,59 @@ type ClientLocation = {
   lon?: number;
 };
 
-function morningHeroSummary(
-  hero: {
-    artworkId?: string;
-    artworkTitle?: string;
-    artist?: string;
-    hostedUrl?: string;
-  } | null | undefined
-) {
-  if (!hero?.artworkId || !hero.hostedUrl?.trim()) {
-    return { present: false as const };
+type JobTracker = {
+  admin: SupabaseClient;
+  userId: string;
+  jobDate: string;
+  metroKey: string;
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+async function upsertGenerationJob(
+  tracker: JobTracker,
+  patch: {
+    status: "pending" | "processing" | "ready" | "failed";
+    last_error?: string | null;
+    attempts?: number;
   }
-  return {
-    present: true as const,
-    artworkId: hero.artworkId,
-    artworkTitle: hero.artworkTitle ?? null,
-    artist: hero.artist ?? null,
-    hostedUrl: hero.hostedUrl,
-  };
+) {
+  await tracker.admin.from("generation_jobs").upsert(
+    {
+      user_id: tracker.userId,
+      edition_date: tracker.jobDate,
+      metro_key: tracker.metroKey,
+      status: patch.status,
+      last_error: patch.last_error ?? null,
+      attempts: patch.attempts ?? 0,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: generationJobsConflictTarget() }
+  );
 }
 
 Deno.serve(async (req) => {
+  let jobTracker: JobTracker | null = null;
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
       console.error("[generate-edition] missing SUPABASE_URL or SERVICE_ROLE_KEY");
-      return new Response(
-        JSON.stringify({
-          error: "Server configuration incomplete. Missing Supabase credentials.",
-        }),
-        { status: 500, headers: { "content-type": "application/json" } }
+      return json(
+        { error: "Server configuration incomplete. Missing Supabase credentials." },
+        500
       );
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing auth" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+      return json({ error: "Missing auth" }, 401);
     }
 
     const supabaseUser = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -75,18 +89,15 @@ Deno.serve(async (req) => {
     } = await supabaseUser.auth.getUser();
 
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Not authenticated" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+      return json({ error: "Not authenticated" }, 401);
     }
 
     let clientLocation: ClientLocation | null = null;
     let editionDate: string | null = null;
     let temperatureUnitPreference: TemperatureUnitPreference | null = null;
-
     let devPreview = false;
     let editionTraceId: string | null = null;
+
     try {
       const body = await req.json();
       if (body?.location && typeof body.location === "object") {
@@ -124,24 +135,24 @@ Deno.serve(async (req) => {
       clientLocation.city.trim().toLowerCase() !== "your area";
 
     if (!locationUsable) {
-      return new Response(
-        JSON.stringify({
+      return json(
+        {
           error:
             "location_required — send { location: { city, lat, lon } } from the device. Kindred never invents a city.",
-        }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        },
+        400
       );
     }
 
     const stateCode = clientLocation!.state?.trim().toUpperCase() ?? "";
     if (!/^[A-Z]{2}$/.test(stateCode)) {
-      return new Response(
-        JSON.stringify({
+      return json(
+        {
           error:
             "Kindred is currently available in the United States. Choose a US city with a state code.",
           code: "NON_US_REGION",
-        }),
-        { status: 403, headers: { "content-type": "application/json" } }
+        },
+        403
       );
     }
 
@@ -155,13 +166,13 @@ Deno.serve(async (req) => {
 
     const resolvedMarket = resolveEditionMarket(locationHint);
     if (!resolvedMarket) {
-      return new Response(
-        JSON.stringify({
+      return json(
+        {
           error:
             "Unsupported market — Kindred could not resolve a US market for this location.",
           code: "UNSUPPORTED_MARKET",
-        }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        },
+        400
       );
     }
 
@@ -170,30 +181,84 @@ Deno.serve(async (req) => {
       resolvedMarket
     );
     if (!locationConsistency.ok) {
-      console.warn("[generate-edition] location market mismatch", {
-        traceId: editionTraceId,
-        city: locationHint.city,
-        state: locationHint.state,
-        lat: locationHint.lat,
-        lon: locationHint.lon,
-        market: resolvedMarket.metroKey,
-        reason: locationConsistency.reason,
-      });
-      return new Response(
-        JSON.stringify({
+      return json(
+        {
           error:
             "Location mismatch — city label and coordinates must belong to the same market.",
           code: "LOCATION_MARKET_MISMATCH",
           reason: locationConsistency.reason,
-        }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        },
+        400
       );
     }
 
     const supabaseAdmin = createServiceClient();
 
-    // Persist active location so overnight jobs match the reader's city.
-    // Dev preview skips this so QA cities do not overwrite the reader profile.
+    const jobDate =
+      editionDate && /^\d{4}-\d{2}-\d{2}$/.test(editionDate)
+        ? editionDate
+        : new Date().toISOString().slice(0, 10);
+
+    jobTracker = {
+      admin: supabaseAdmin,
+      userId: user.id,
+      jobDate,
+      metroKey: resolvedMarket.metroKey,
+    };
+
+    const readyEditionId = await findReadyEditionId(supabaseAdmin, {
+      userId: user.id,
+      editionDate: jobDate,
+      metroKey: resolvedMarket.metroKey,
+    });
+
+    if (readyEditionId) {
+      return json({
+        success: true,
+        alreadyReady: true,
+        async: false,
+        editionId: readyEditionId,
+        metroKey: resolvedMarket.metroKey,
+        editionDate: jobDate,
+        location: {
+          city: locationHint.city,
+          region: locationHint.region,
+          state: locationHint.state,
+        },
+      });
+    }
+
+    const { data: existingJob } = await supabaseAdmin
+      .from("generation_jobs")
+      .select("status, attempts, last_error")
+      .eq("user_id", user.id)
+      .eq("edition_date", jobDate)
+      .eq("metro_key", resolvedMarket.metroKey)
+      .maybeSingle();
+
+    if (existingJob?.status === "processing" || existingJob?.status === "pending") {
+      triggerUserEditionJobWorker({
+        userId: user.id,
+        editionDate: jobDate,
+        metroKey: resolvedMarket.metroKey,
+        editionTraceId,
+        temperatureUnitPreference: temperatureUnitPreference ?? "auto",
+        locationHint,
+      });
+
+      return json(
+        {
+          accepted: true,
+          async: true,
+          status: existingJob.status,
+          editionDate: jobDate,
+          metroKey: resolvedMarket.metroKey,
+          pollIntervalMs: 5000,
+        },
+        202
+      );
+    }
+
     if (!devPreview) {
       await supabaseAdmin
         .from("profiles")
@@ -216,127 +281,71 @@ Deno.serve(async (req) => {
     );
 
     if (!location) {
-      return new Response(
-        JSON.stringify({
+      await upsertGenerationJob(jobTracker, {
+        status: "failed",
+        last_error: "No location set. Choose a home city or enable current location.",
+      });
+      return json(
+        {
           error:
             "No location set. Choose a home city or enable current location.",
-        }),
-        { status: 400, headers: { "content-type": "application/json" } }
+        },
+        400
       );
     }
 
-    console.log("[generate-edition] location", {
-      traceId: editionTraceId,
-      source: "client",
-      mode: "explicit-body",
-      city: location.city,
-      region: location.region,
-      state: location.state,
-      lat: location.lat,
-      lon: location.lon,
-      resolvedMarket: resolvedMarket.metroKey,
-      catalogMetroKey: `${location.city}-${location.state}`.toLowerCase(),
-      editionDate,
-      temperatureUnitPreference,
-      temperatureResolvedHint:
-        temperatureUnitPreference === "celsius"
-          ? "celsius"
-          : temperatureUnitPreference === "fahrenheit"
-            ? "fahrenheit"
-            : "auto→US→fahrenheit expected for AZ",
+    await upsertGenerationJob(jobTracker, {
+      status: "pending",
+      last_error: null,
+      attempts: existingJob?.status === "failed" ? existingJob.attempts ?? 0 : 0,
     });
 
-    const buildOptions: BuildEditionOptions = {
-      editionDate,
-      temperatureUnitPreference: temperatureUnitPreference ?? "auto",
+    console.log("[generate-edition] enqueued", {
+      traceId: editionTraceId,
+      userId: user.id,
+      editionDate: jobDate,
+      metroKey: resolvedMarket.metroKey,
+      city: location.city,
+    });
+
+    triggerUserEditionJobWorker({
+      userId: user.id,
+      editionDate: jobDate,
+      metroKey: resolvedMarket.metroKey,
       editionTraceId,
-    };
+      temperatureUnitPreference: temperatureUnitPreference ?? "auto",
+      locationHint,
+    });
 
-    const result = await buildEditionForUser(
-      supabaseAdmin,
-      user.id,
-      location,
-      buildOptions
-    );
-
-    if (!result.ok) {
-      console.error("[generate-edition] build failed", result.error);
-      const jobDate =
-        editionDate && /^\d{4}-\d{2}-\d{2}$/.test(editionDate)
-          ? editionDate
-          : new Date().toISOString().slice(0, 10);
-      await supabaseAdmin.from("generation_jobs").upsert(
-        {
-          user_id: user.id,
-          edition_date: jobDate,
-          status: "failed",
-          attempts: 1,
-          last_error: result.error,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,edition_date" }
-      );
-      return new Response(JSON.stringify({ error: result.error }), {
-        status: 500,
-        headers: { "content-type": "application/json" },
-      });
-    }
-
-    const jobDate =
-      editionDate && /^\d{4}-\d{2}-\d{2}$/.test(editionDate)
-        ? editionDate
-        : new Date().toISOString().slice(0, 10);
-
-    await supabaseAdmin.from("generation_jobs").upsert(
+    return json(
       {
-        user_id: user.id,
-        edition_date: jobDate,
-        status: "ready",
-        attempts: 1,
-        last_error: null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,edition_date" }
-    );
-
-    const { data: editionRow } = await supabaseAdmin
-      .from("editions")
-      .select("morning_edition")
-      .eq("id", result.editionId)
-      .maybeSingle();
-    const morningHero = (
-      editionRow?.morning_edition as {
-        morningHero?: {
-          artworkId?: string;
-          artworkTitle?: string;
-          artist?: string;
-          hostedUrl?: string;
-        } | null;
-      } | null
-    )?.morningHero;
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        editionId: result.editionId,
-        metroKey: result.metroKey,
+        accepted: true,
+        async: true,
+        status: "pending",
+        editionDate: jobDate,
+        metroKey: resolvedMarket.metroKey,
         location: {
           city: location.city,
           region: location.region,
           state: location.state,
         },
-        editionDate: jobDate,
-        morningHero: morningHeroSummary(morningHero),
-      }),
-      { headers: { "content-type": "application/json" } }
+        pollIntervalMs: 5000,
+      },
+      202
     );
   } catch (err) {
     console.error("[generate-edition] failure", err);
-    return new Response(
-      JSON.stringify({
-        error: err instanceof Error ? err.message : "Unknown error",
-      }),
-      { status: 500, headers: { "content-type": "application/json" } }
-    );
+    const message = err instanceof Error ? err.message : "Unknown error";
+    if (jobTracker) {
+      try {
+        await upsertGenerationJob(jobTracker, {
+          status: "failed",
+          last_error: message,
+        });
+      } catch (jobErr) {
+        console.error("[generate-edition] failed to mark job failed", jobErr);
+      }
+    }
+    return json({ error: message }, 500);
   }
 });

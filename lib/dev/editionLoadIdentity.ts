@@ -82,6 +82,36 @@ export async function resolveEditionLoadIdentity(input: {
   const generatedMetroKey = input.loadMetroKey?.trim() || null;
 
   if (preview && (input.preferPreview !== false || isDevEditionOverrideActive())) {
+    const overridePlace = isDevEditionOverrideActive() ? getDevOverridePlace() : null;
+    const overrideMetroKey = overridePlace
+      ? editionMetroKeyFromPlace(overridePlace)
+      : null;
+    const previewStale =
+      Boolean(
+        overrideMetroKey &&
+          preview.metroKey &&
+          overrideMetroKey !== preview.metroKey.trim()
+      );
+    if (previewStale && overridePlace) {
+      const identity: EditionLoadIdentity = {
+        editionId: generatedEditionId,
+        metroKey: generatedMetroKey ?? overrideMetroKey,
+        place: overridePlace,
+        editionDate,
+        isDeveloperPreview: true,
+        source: generatedMetroKey ? "generate-response" : "dev-override",
+        activeLocation: devPreviewActiveLocation(overridePlace),
+        preview: null,
+      };
+      traceEditionIdentity(input.handoff, {
+        traceId: input.traceId,
+        editionId: identity.editionId,
+        metroKey: identity.metroKey,
+        city: overridePlace.city,
+        source: identity.source,
+      });
+      return identity;
+    }
     const place = developerPreviewPlace(preview);
     const metroKey = generatedMetroKey ?? preview.metroKey;
     const editionId = generatedEditionId ?? preview.editionId;

@@ -88,4 +88,6 @@ export type LeadStoryPolicy = {
   /** When true, lead may be omitted from Top Stories by the editor engine. */
   excludeFromBelowFold?: boolean;
   editionMode?: string;
+  /** City editions — never elevate national/world stories to the local lead desk. */
+  localOnly?: boolean;
 };

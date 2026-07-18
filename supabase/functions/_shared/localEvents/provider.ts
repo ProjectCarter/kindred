@@ -4,6 +4,7 @@
  */
 
 import { eventMatchesCity } from "../contentQuality.ts";
+import { fetchWithTimeout } from "../http/fetchWithTimeout.ts";
 import {
   buildEventBadgeSignals,
   extractAiHintsFromBanditNote,
@@ -205,6 +206,8 @@ export type LocalEventsFetchOptions = {
   timezone?: string | null;
   /** When set, read the shared metro events catalog — zero provider calls. */
   admin?: import("https://esm.sh/@supabase/supabase-js@2.45.4").SupabaseClient;
+  /** Canonical catalog metro key (e.g. phoenix-az for Gilbert readers). */
+  catalogMetroKey?: string | null;
 };
 
 export type LocalEventsPipelineProbe = {
@@ -319,7 +322,7 @@ async function fetchEventsPageWithProbe(
   let res: Response;
   let timedOut = false;
   try {
-    res = await fetch(`https://serpapi.com/search.json?${params}`);
+    res = await fetchWithTimeout(`https://serpapi.com/search.json?${params}`, {}, 30_000);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     timedOut = /timeout|timed out|abort/i.test(message);
@@ -586,7 +589,7 @@ async function fetchEventsPageOnce(
   if (strategy.htichips) params.set("htichips", strategy.htichips);
   if (start > 0) params.set("start", String(start));
 
-  const res = await fetch(`https://serpapi.com/search.json?${params}`);
+  const res = await fetchWithTimeout(`https://serpapi.com/search.json?${params}`, {}, 30_000);
   const data = await res.json();
   const rawEvents: unknown[] = Array.isArray(data.events_results)
     ? data.events_results
@@ -1102,10 +1105,18 @@ export function splitEventSchedule(startDateTime: string): {
   return { date: raw, time: "See listing" };
 }
 
+export type BuildLocalEventsBodyOptions = {
+  eventbriteOnly?: boolean;
+  /** Reader city for this edition — stamped on every event in the section JSON so
+   *  home.tsx sectionCity checks match Gilbert even when catalog venues say Phoenix. */
+  editionCity?: string | null;
+};
+
 export function buildLocalEventsBody(
   events: LocalEvent[],
-  options?: { eventbriteOnly?: boolean }
+  options?: BuildLocalEventsBodyOptions
 ): string {
+  const editionCity = options?.editionCity?.trim() || null;
   return JSON.stringify({
     ...(options?.eventbriteOnly ? { testMode: "eventbrite_only" as const } : {}),
     events: events.map((e, index) => {
@@ -1140,7 +1151,7 @@ export function buildLocalEventsBody(
         date,
         time,
         venue: enriched.venue,
-        city: enriched.city,
+        city: editionCity ?? enriched.city,
         sourceUrl: enriched.sourceUrl,
         sourceName: enriched.sourceName,
         ...(enriched.officialWebsite?.trim()

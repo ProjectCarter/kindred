@@ -107,14 +107,16 @@ const EDITION_FOOD_SELECT =
  */
 export async function getLocalPlacesForEdition(
   admin: SupabaseClient,
-  location: PlacesLocation
+  location: PlacesLocation,
+  options?: { catalogMetroKey?: string | null }
 ): Promise<NormalizedPlace[]> {
   if (!location.city || location.city === "your area") return [];
 
   try {
     await registerFoodDrinkMetro(admin, location);
     await registerActivitiesMetro(admin, location);
-    const metroKey = metroKeyFromLocation(location);
+    const metroKey =
+      options?.catalogMetroKey?.trim() || metroKeyFromLocation(location);
 
     const [activitiesRes, foodRes] = await Promise.all([
       admin

@@ -10,6 +10,7 @@ import { writeTodayInHistorySection } from "./writeTodayInHistory.ts";
 import { buildTodayInHistoryGrounding } from "../knowledge/providers/synthesize.ts";
 import { enrichEditionKnowledge } from "../knowledge/providers/enrich.ts";
 import type { KnowledgePayload } from "../knowledge/types.ts";
+import { US_NATIONAL_COUNTRY_CODE } from "../nationalDaily/resolveUsNationalDaily.ts";
 
 const BLOCKED_EVENTS = [/rus flight 9633/i, /chkalovsky/i];
 
@@ -68,6 +69,18 @@ export async function refreshTodayInHistoryForEdition(
 
   const onThisDay = historySelection.event;
 
+  const { data: nationalRow } = await admin
+    .from("kindred_us_national_daily")
+    .select("today_in_history")
+    .eq("edition_date", input.editionDate)
+    .eq("country_code", US_NATIONAL_COUNTRY_CODE)
+    .maybeSingle();
+
+  const nationalHistory = nationalRow?.today_in_history as
+    | { headline?: string; body?: string; sourceNote?: string; image?: unknown }
+    | null
+    | undefined;
+
   const { data: editionRow, error: editionError } = await admin
     .from("editions")
     .select("knowledge")
@@ -115,24 +128,28 @@ export async function refreshTodayInHistoryForEdition(
       : undefined
   );
 
-  const instruction =
-    `Write Today in History as Kindred's signature morning feature — a calm Sunday newspaper ` +
-    `story someone would read over coffee for two or three minutes. ` +
-    `Write 300–700 words across 2–4 paragraphs (separated by blank lines). ` +
-    `Cover: what happened, why it mattered, historical context, lasting impact, and one or two ` +
-    `memorable details that make the story stick. ` +
-    `Headline format: "${onThisDay.year} — Compelling editorial title" (never "Today in History" alone). ` +
-    `Tone: thoughtful, timeless, curious — never encyclopedic, never copied verbatim. ` +
-    `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
-    `do not invent facts.`;
-
-  const written = await writeTodayInHistorySection({
-    groundingData,
-    instruction,
-    year: onThisDay.year,
-    eventText: onThisDay.text,
-    anthropicApiKey: input.anthropicApiKey,
-  });
+  const written =
+    nationalHistory?.headline?.trim() && nationalHistory?.body?.trim()
+      ? {
+          headline: nationalHistory.headline,
+          body: nationalHistory.body,
+        }
+      : await writeTodayInHistorySection({
+          groundingData,
+          instruction:
+            `Write Today in History as Kindred's signature morning feature — a calm Sunday newspaper ` +
+            `story someone would read over coffee for two or three minutes. ` +
+            `Write 300–700 words across 2–4 paragraphs (separated by blank lines). ` +
+            `Cover: what happened, why it mattered, historical context, lasting impact, and one or two ` +
+            `memorable details that make the story stick. ` +
+            `Headline format: "${onThisDay.year} — Compelling editorial title" (never "Today in History" alone). ` +
+            `Tone: thoughtful, timeless, curious — never encyclopedic, never copied verbatim. ` +
+            `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
+            `do not invent facts.`,
+          year: onThisDay.year,
+          eventText: onThisDay.text,
+          anthropicApiKey: input.anthropicApiKey,
+        });
 
   if (!written.headline?.trim() || !written.body?.trim()) {
     return { ok: false, changed: false, error: "empty_write" };

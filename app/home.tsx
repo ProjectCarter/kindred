@@ -34,6 +34,7 @@ import { stashTodaysEvents } from "../lib/edition/eventsListStore";
 import { stashTodaysActivities } from "../lib/edition/activitiesListStore";
 import { stashTodaysHistoryPlaces } from "../lib/edition/historyAroundTownListStore";
 import { stashTodaysRecommendations } from "../lib/edition/recommendationsListStore";
+import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import {
   banditMorningLine,
@@ -53,6 +54,10 @@ import {
   type TopStoryItem,
 } from "../lib/edition/topStories";
 import {
+  resolveNationalNewsForRender,
+  type NationalNewsPackage,
+} from "../lib/edition/nationalNews";
+import {
   inferTopicFromSection,
   trackReadingSignal,
 } from "../lib/personalization";
@@ -62,6 +67,16 @@ import {
   PREPARING_LINES,
 } from "../lib/edition/morningRitual";
 import { localEditionDate } from "../lib/edition/dates";
+import {
+  fetchGenerationJobForEdition,
+  GENERATION_FIRST_PAINT_MAX_MS,
+  GENERATION_INVOKE_TIMEOUT_MS,
+  GENERATION_POLL_MAX_MS,
+  GENERATION_STALL_MESSAGE,
+  parseGenerateEditionResponse,
+  waitForEditionGeneration,
+} from "../lib/edition/generationJobs";
+import { isProcessingEditionPaintable } from "../lib/edition/minimumViableEdition";
 import { syncDeviceTimezone } from "../lib/edition/timezone";
 import { maybeTriggerLiveRefresh } from "../lib/edition/liveRefresh";
 import {
@@ -144,11 +159,15 @@ import {
   shouldBypassEditionCityMismatch,
   isDevEditionOverrideActive,
 } from "../lib/edition/resolveEditionContext";
-import { citiesMatch, locationKey } from "../lib/location/locationKey";
+import { locationKey } from "../lib/location/locationKey";
 import {
   getTemperatureUnitPreference,
 } from "../lib/weather/units";
-import { resolveEditionBuiltCity, cityFromEditionSections } from "../lib/edition/editionLocation";
+import {
+  resolveEditionBuiltCity,
+  cityFromEditionSections,
+} from "../lib/edition/editionLocation";
+import { shouldWithholdEditionForCityMismatch } from "../lib/edition/editionCityMismatch";
 import {
   LocationFirstRun,
   useLocationFirstRun,
@@ -231,6 +250,7 @@ export default function HomeScreen() {
   const [editionId, setEditionId] = useState<string | null>(null);
   const [leadStory, setLeadStory] = useState<LeadStory | null>(null);
   const [topStories, setTopStories] = useState<TopStoryItem[]>([]);
+  const [nationalNews, setNationalNews] = useState<NationalNewsPackage | null>(null);
   const [bandit, setBandit] = useState<BanditPayload | null>(null);
   const [intelligence, setIntelligence] =
     useState<EditionIntelligence | null>(null);
@@ -261,6 +281,8 @@ export default function HomeScreen() {
   const devGenerationMsRef = useRef<number | null>(null);
   /** Abort in-flight generate-edition fetch on timeout / unmount / supersede. */
   const generateAbortRef = useRef<AbortController | null>(null);
+  /** True while waitForEditionGeneration is polling — exempt from spinner safety timeout. */
+  const generationPollActiveRef = useRef(false);
   const devGenerateTraceIdRef = useRef<string | null>(null);
   /** Collapsing editorial masthead — scroll position drives compact sticky chrome. */
   const mastheadScrollY = useRef(new Animated.Value(0)).current;
@@ -512,6 +534,22 @@ export default function HomeScreen() {
     logStartupSummary(context, { editionComplete });
   }
 
+  function applyEditionNewsDesks(
+    edition: { national_news?: unknown; editorial_context?: unknown },
+    editionDate: string
+  ): TopStoryItem[] {
+    const stories = topStoriesFromEditorialContext(edition.editorial_context);
+    setTopStories(stories);
+    setNationalNews(
+      resolveNationalNewsForRender({
+        edition,
+        topStories: stories,
+        editionDate,
+      })
+    );
+    return stories;
+  }
+
   function tryApplyInstantCache(
     bundle: CachedEditionBundle,
     source: "memory" | "disk",
@@ -601,6 +639,7 @@ export default function HomeScreen() {
     setEditionId(merged.editionId);
     setLeadStory(merged.leadStory);
     setTopStories(merged.topStories);
+    setNationalNews(merged.nationalNews ?? null);
     setBandit(merged.bandit);
     setIntelligence(merged.intelligence);
     freezeEdition({
@@ -915,6 +954,8 @@ export default function HomeScreen() {
       parseLoadOptions(input);
     const gen = ++loadGen.current;
     const resetScroll = isRefresh && !quiet;
+    /** When true, this call intentionally left loading=true for a generate handoff. */
+    let deferKeepLoading = false;
     if (resetScroll) {
       resetScrollOnLoadRef.current = false;
       markHomeScrollForReset();
@@ -926,6 +967,7 @@ export default function HomeScreen() {
 
     // Withhold the previous folio immediately so a reload never flashes a
     // wrong-city or superseded edition while location/edition resolve.
+    // Preserve a printed paper during quiet background repair/refresh.
     if (mountedRef.current && resetScroll) {
       editionFrozenRef.current = false;
       clearEditionFreeze();
@@ -934,6 +976,7 @@ export default function HomeScreen() {
       setEditionId(null);
       setLeadStory(null);
       setTopStories([]);
+      setNationalNews(null);
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -956,7 +999,10 @@ export default function HomeScreen() {
         generating: generatingRef.current,
         quiet,
       });
-      if (!quiet && !generatingRef.current) setLoading(true);
+      if (!quiet && !generatingRef.current) {
+        deferKeepLoading = true;
+        setLoading(true);
+      }
       return;
     }
 
@@ -1074,7 +1120,7 @@ export default function HomeScreen() {
       null;
 
     const editionSelect =
-      "id, edition_date, status, user_id, metro_key, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context";
+      "id, edition_date, status, user_id, metro_key, lead_story, national_news, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context";
 
     const editionQuery = resolvedEditionId
       ? supabase
@@ -1252,29 +1298,29 @@ export default function HomeScreen() {
       statusText: editionStatusText ?? null,
     });
 
-    // Only serve finished papers — partial/failed rows must not render as today's edition.
-    const statusReady =
-      !!edition && (edition as { status?: string }).status === "ready";
+    // Serve ready editions and processing rows that already have core sections.
+    const rowStatus = edition ? (edition as { status?: string }).status : null;
+    const canLoadEditionRow =
+      !!edition && (rowStatus === "ready" || rowStatus === "processing");
 
-    if (!statusReady) {
+    if (!canLoadEditionRow) {
       if (__DEV__) {
-        console.warn("[home] loadEdition: no ready edition", {
+        console.warn("[home] loadEdition: no loadable edition", {
           reason: editionError
             ? "query error"
             : edition
-              ? `status=${(edition as { status?: string }).status ?? "unknown"}`
+              ? `status=${rowStatus ?? "unknown"}`
               : "zero rows for user_id + edition_date + metro_key",
           message: editionError?.message ?? null,
         });
       }
       const [adjacent, jobResult] = await Promise.all([
         fetchAdjacentEditions(user.id, todayStr, scopedMetroKey),
-        supabase
-          .from("generation_jobs")
-          .select("status, last_error")
-          .eq("user_id", user.id)
-          .eq("edition_date", todayStr)
-          .maybeSingle(),
+        fetchGenerationJobForEdition(supabase, {
+          userId: user.id,
+          editionDate: todayStr,
+          metroKey: scopedMetroKey,
+        }),
       ]);
       return {
         kind: "not_ready" as const,
@@ -1307,6 +1353,7 @@ export default function HomeScreen() {
       setEditionId(null);
       setLeadStory(null);
       setTopStories([]);
+      setNationalNews(null);
       setBandit(null);
       setIntelligence(null);
       setLoading(false);
@@ -1356,6 +1403,35 @@ export default function HomeScreen() {
     });
 
     const loaded = sectionRows ?? [];
+
+    if (
+      rowStatus === "processing" &&
+      !isProcessingEditionPaintable(rowStatus, loaded)
+    ) {
+      const [adjacent, jobResult] = await Promise.all([
+        fetchAdjacentEditions(user.id, todayStr, scopedMetroKey),
+        fetchGenerationJobForEdition(supabase, {
+          userId: user.id,
+          editionDate: todayStr,
+          metroKey: scopedMetroKey,
+        }),
+      ]);
+      return {
+        kind: "not_ready" as const,
+        user,
+        adjacent,
+        jobResult,
+        editionError: null,
+        edition,
+      };
+    }
+
+    if (rowStatus === "processing") {
+      devGenerateTrace(traceId ?? devGenerateTraceIdRef.current, "partial_edition_paint", {
+        editionId: edition.id,
+        sectionCount: loaded.length,
+      });
+    }
 
     pipelineStageBegin("normalization");
 
@@ -1454,6 +1530,9 @@ export default function HomeScreen() {
           current: loadGen.current,
         });
       }
+      // Newer load owns paint; still drop our refresh spinner. Loading is
+      // cleared in finally only when this gen is still current — otherwise
+      // the winner is responsible (hard timeout is the backstop).
       if (isRefresh && !quiet) setRefreshing(false);
       return;
     }
@@ -1565,6 +1644,7 @@ export default function HomeScreen() {
         setEditionId(null);
         setLeadStory(null);
         setTopStories([]);
+        setNationalNews(null);
         setBandit(null);
         setIntelligence(null);
         setClippedIds(new Set());
@@ -1618,17 +1698,14 @@ export default function HomeScreen() {
 
     const activeCity = active.place?.city ?? null;
     const sectionCity = cityFromEditionSections(loaded);
-    const cityMismatch = Boolean(
-      activeCity &&
-        (builtCity
-          ? !citiesMatch(activeCity, builtCity)
-          : // Unknown build city + Current Location → do not trust the cache
-            active.mode === "current")
-    );
-    const sectionCityMismatch = Boolean(
-      activeCity && sectionCity && !citiesMatch(activeCity, sectionCity)
-    );
-    const contentCityMismatch = cityMismatch || sectionCityMismatch;
+    // Authoritative built city wins — metro event cities (e.g. Phoenix for a
+    // Gilbert paper) must not block painting a correctly built edition.
+    const contentCityMismatch = shouldWithholdEditionForCityMismatch({
+      activeCity,
+      builtCity,
+      sectionCity,
+      mode: active.mode,
+    });
 
     if (__DEV__) {
       console.log("[home] loadEdition: location check", {
@@ -1636,8 +1713,7 @@ export default function HomeScreen() {
         activeCity,
         builtCity,
         sectionCity,
-        cityMismatch,
-        sectionCityMismatch,
+        contentCityMismatch,
         editionId: edition.id,
       });
     }
@@ -1661,6 +1737,7 @@ export default function HomeScreen() {
       setEditionId(null);
       setLeadStory(null);
       setTopStories([]);
+      setNationalNews(null);
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -1817,10 +1894,9 @@ export default function HomeScreen() {
       // Network row is authoritative for narrative desks — cache hydrate must
       // not leave discovery/intelligence frozen at an incomplete snapshot.
       setLeadStory(lead);
-      setTopStories(
-        topStoriesFromEditorialContext(
-          (edition as { editorial_context?: unknown }).editorial_context
-        )
+      applyEditionNewsDesks(
+        edition as { national_news?: unknown; editorial_context?: unknown },
+        edition.edition_date
       );
       setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
       setIntelligence(intel);
@@ -1833,6 +1909,14 @@ export default function HomeScreen() {
       });
       editionFrozenRef.current = true;
       preloadMorningHeroImage(intel.morningHero);
+      const parsedTopStories = topStoriesFromEditorialContext(
+        (edition as { editorial_context?: unknown }).editorial_context
+      );
+      const parsedNationalNews = resolveNationalNewsForRender({
+        edition: edition as { national_news?: unknown; editorial_context?: unknown },
+        topStories: parsedTopStories,
+        editionDate: edition.edition_date,
+      });
       const bundle: CachedEditionBundle = {
         userId: user.id,
         editionId: edition.id,
@@ -1844,9 +1928,8 @@ export default function HomeScreen() {
         cachedAt: Date.now(),
         sections: nextSections,
         leadStory: lead,
-        topStories: topStoriesFromEditorialContext(
-          (edition as { editorial_context?: unknown }).editorial_context
-        ),
+        topStories: parsedTopStories,
+        nationalNews: parsedNationalNews,
         bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
         intelligence: intel,
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
@@ -1860,10 +1943,9 @@ export default function HomeScreen() {
       setEditionDate(edition.edition_date);
       setEditionId(edition.id);
       setLeadStory(lead);
-      setTopStories(
-        topStoriesFromEditorialContext(
-          (edition as { editorial_context?: unknown }).editorial_context
-        )
+      applyEditionNewsDesks(
+        edition as { national_news?: unknown; editorial_context?: unknown },
+        edition.edition_date
       );
       setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
       setIntelligence(intel);
@@ -2140,6 +2222,9 @@ export default function HomeScreen() {
       }
 
       if (!patchEventsOnly && !syncAfterCache) {
+        const bgTopStories = topStoriesFromEditorialContext(
+          (edition as { editorial_context?: unknown }).editorial_context
+        );
         const bundle: CachedEditionBundle = {
           userId: user.id,
           editionId: edition.id,
@@ -2151,9 +2236,15 @@ export default function HomeScreen() {
           cachedAt: Date.now(),
           sections: bgSections,
           leadStory: lead,
-          topStories: topStoriesFromEditorialContext(
-            (edition as { editorial_context?: unknown }).editorial_context
-          ),
+          topStories: bgTopStories,
+          nationalNews: resolveNationalNewsForRender({
+            edition: edition as {
+              national_news?: unknown;
+              editorial_context?: unknown;
+            },
+            topStories: bgTopStories,
+            editionDate: edition.edition_date,
+          }),
           bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
           intelligence: bgIntel,
           heroImageId: cachedBundleRef.current?.heroImageId ?? null,
@@ -2208,6 +2299,14 @@ export default function HomeScreen() {
         if (!editionFrozenRef.current && !cachedBundleRef.current) {
           setError("The paper couldn’t be reached. Pull to try again.");
         }
+      }
+    } finally {
+      if (!mountedRef.current) return;
+      if (gen !== loadGen.current) {
+        if (isRefresh && !quiet) setRefreshing(false);
+        return;
+      }
+      if (!deferKeepLoading) {
         setLoading(false);
         setRefreshing(false);
       }
@@ -2216,6 +2315,8 @@ export default function HomeScreen() {
 
   const pollBackgroundJobProgress = useCallback(async () => {
     if (!isSupabaseConfigured || generatingRef.current) return;
+
+    const traceId = devGenerateTraceIdRef.current;
 
     const {
       data: { session },
@@ -2229,28 +2330,65 @@ export default function HomeScreen() {
       preferPreview: true,
     });
     const pollMetroKey = pollIdentity.metroKey;
+
     const [editionResult, jobResult] = await Promise.all([
       pollMetroKey
         ? supabase
             .from("editions")
-            .select("status")
+            .select("id, status")
             .eq("user_id", user.id)
             .eq("edition_date", todayStr)
             .eq("metro_key", pollMetroKey)
             .maybeSingle()
         : Promise.resolve({ data: null, error: null }),
-      supabase
-        .from("generation_jobs")
-        .select("status, last_error")
-        .eq("user_id", user.id)
-        .eq("edition_date", todayStr)
-        .maybeSingle(),
+      fetchGenerationJobForEdition(supabase, {
+        userId: user.id,
+        editionDate: todayStr,
+        metroKey: pollMetroKey,
+      }),
     ]);
 
     if (!mountedRef.current) return;
 
-    if (editionResult.data?.status === "ready") {
-      void loadEdition({ quiet: true });
+    const pollEditionId = editionResult.data?.id as string | undefined;
+    const pollStatus = editionResult.data?.status as string | undefined;
+
+    let pollSectionTypes: string[] = [];
+    if (pollEditionId) {
+      const { data: sectionRows } = await supabase
+        .from("edition_sections")
+        .select("section_type")
+        .eq("edition_id", pollEditionId);
+      pollSectionTypes = (sectionRows ?? []).map((row) =>
+        String((row as { section_type: string }).section_type)
+      );
+    }
+
+    const pollPaintable = isProcessingEditionPaintable(pollStatus, pollSectionTypes.map((t) => ({ section_type: t })));
+
+    devGenerateTrace(traceId, "background_poll_tick", {
+      metroKey: pollMetroKey,
+      city: pollIdentity.place?.city ?? null,
+      editionStatus: pollStatus ?? null,
+      sectionCount: pollSectionTypes.length,
+      paintable: pollPaintable,
+    });
+
+    if (pollEditionId && pollPaintable) {
+      devGenerateTrace(traceId, "background_poll_ready", {
+        editionId: pollEditionId,
+        metroKey: pollMetroKey,
+        partial: pollStatus === "processing",
+      });
+      setBackgroundJob(null);
+      setError(null);
+      void loadEdition({
+        quiet: true,
+        afterGenerate: true,
+        editionId: pollEditionId,
+        metroKey: pollMetroKey,
+        traceId: traceId ?? undefined,
+      });
       return;
     }
 
@@ -2259,6 +2397,9 @@ export default function HomeScreen() {
         status: jobResult.data.status,
         lastError: jobResult.data.last_error,
       });
+      if (jobResult.data.status === "failed" && !editionIdRef.current) {
+        setError(GENERATION_STALL_MESSAGE);
+      }
     }
   }, [loadEdition]);
 
@@ -2332,23 +2473,63 @@ export default function HomeScreen() {
     loadEdition();
   }, [loadEdition]);
 
-  // Never leave the reader on a spinner for minutes on cold start.
+  // Never leave the reader on a spinner indefinitely — any loading/generating
+  // path must clear within 30s even if an edition id is already known.
   useEffect(() => {
+    if (!loading && !generating) return;
     const timer = setTimeout(() => {
-      if (
-        mountedRef.current &&
-        !editionIdRef.current &&
-        !cachedBundleRef.current
-      ) {
-        if (__DEV__) {
-          console.warn("[home] initial load exceeded 30s without a paper");
-        }
-        setError("The paper is taking longer than usual. Pull to try again.");
-        setLoading(false);
+      if (!mountedRef.current) return;
+      if (generationPollActiveRef.current) return;
+      if (__DEV__) {
+        console.warn("[home] safety timeout — clearing loading/generating spinner", {
+          hadEdition: Boolean(editionIdRef.current),
+          hadCache: Boolean(cachedBundleRef.current),
+        });
+      }
+      generatingRef.current = false;
+      setGenerating(false);
+      setLoading(false);
+      setRefreshing(false);
+      if (!editionIdRef.current && !cachedBundleRef.current) {
+        setError(GENERATION_STALL_MESSAGE);
       }
     }, 30_000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [loading, generating]);
+
+  // After 60s on the presses screen, attempt partial paint or show Retry.
+  useEffect(() => {
+    if (!generating) return;
+    const timer = setTimeout(() => {
+      if (!mountedRef.current || !generatingRef.current) return;
+      const traceId = devGenerateTraceIdRef.current;
+      devGenerateTrace(traceId, "generating_first_paint_timeout");
+      void (async () => {
+        await loadEdition({
+          isRefresh: true,
+          afterGenerate: true,
+          traceId: traceId ?? undefined,
+        });
+        if (!mountedRef.current) return;
+        if (editionIdRef.current && editionIdRef.current.length > 0) {
+          generatingRef.current = false;
+          setGenerating(false);
+          setLoading(false);
+          devGenerateTrace(traceId, "first_paint", {
+            editionId: editionIdRef.current,
+            via: "60s_timeout",
+          });
+          return;
+        }
+        setError(GENERATION_STALL_MESSAGE);
+        generatingRef.current = false;
+        setGenerating(false);
+        setLoading(false);
+        void pollBackgroundJobProgress();
+      })();
+    }, GENERATION_FIRST_PAINT_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [generating, loadEdition, pollBackgroundJobProgress]);
 
   // While the overnight job already has today's edition in progress, quietly
   // recheck rather than leaving the reader on a stale "isn't ready yet" —
@@ -2362,7 +2543,7 @@ export default function HomeScreen() {
       if (mountedRef.current && !generatingRef.current) {
         void pollBackgroundJobProgress();
       }
-    }, 15_000);
+    }, 5_000);
     return () => clearInterval(interval);
   }, [backgroundJob, pollBackgroundJobProgress]);
 
@@ -2400,11 +2581,16 @@ export default function HomeScreen() {
     void loadEdition(true);
   }
 
-  async function handleGenerate(continuedTraceId?: string) {
+  async function handleGenerate(
+    continuedTraceId?: string,
+    options?: { manualBuild?: boolean }
+  ) {
     const traceId = continuedTraceId ?? createDevGenerateTraceId();
     devGenerateTraceIdRef.current = traceId;
-    devGenerateTrace(traceId, "handle_generate_enter");
-    console.log("[generate] ENTER handleGenerate", { traceId });
+    devGenerateTrace(traceId, "handle_generate_enter", {
+      manualBuild: options?.manualBuild === true,
+    });
+    console.log("[generate] ENTER handleGenerate", { traceId, manualBuild: options?.manualBuild });
     if (generatingRef.current) {
       console.log("[generate] EXIT handleGenerate (already running)", { traceId });
       return;
@@ -2414,12 +2600,15 @@ export default function HomeScreen() {
     setLoading(false);
     setError(null);
 
+    if (options?.manualBuild) {
+      devGenerateTrace(traceId, "manual_build_start");
+      setBackgroundJob(null);
+    }
+
     // Supersede any prior in-flight invoke (should be none when the guard holds).
     generateAbortRef.current?.abort();
     const abort = new AbortController();
     generateAbortRef.current = abort;
-    const INVOKE_TIMEOUT_MS = 90_000;
-    const timeoutId = setTimeout(() => abort.abort(), INVOKE_TIMEOUT_MS);
 
     try {
       // Dev override: never flash yesterday's city while the new edition builds.
@@ -2434,6 +2623,7 @@ export default function HomeScreen() {
         setEditionId(null);
         setLeadStory(null);
         setTopStories([]);
+        setNationalNews(null);
         setBandit(null);
         setIntelligence(null);
         setClippedIds(new Set());
@@ -2465,12 +2655,7 @@ export default function HomeScreen() {
       }
       if (!mountedRef.current) return;
       if (abort.signal.aborted) {
-        // Resolving location (e.g. a slow GPS fix) ate the whole timeout budget
-        // before we ever reached the invoke — surface it instead of bouncing
-        // back to the empty state with no explanation.
-        setError(
-          "That took longer than expected. Try again in a moment — only one paper at a time."
-        );
+        setError(GENERATION_STALL_MESSAGE);
         return;
       }
       applyActiveLocation(active);
@@ -2486,6 +2671,23 @@ export default function HomeScreen() {
       const loc: KindredPlace = active.place;
       const tempUnit = await getTemperatureUnitPreference();
       const editionDate = await resolveEffectiveEditionDate();
+
+      if (options?.manualBuild && isDevEditionOverrideActive()) {
+        const metroKey = editionCacheMetroKey(loc);
+        if (metroKey) {
+          await setDeveloperPreviewContext({
+            editionId: null,
+            metroKey,
+            city: loc.city,
+            state: loc.state ?? null,
+            region: loc.region ?? null,
+            lat: loc.lat,
+            lon: loc.lon,
+            editionDate,
+            traceId,
+          });
+        }
+      }
 
       if (__DEV__) {
         console.log("[home] generate-edition: location resolved", {
@@ -2514,10 +2716,10 @@ export default function HomeScreen() {
           () =>
             reject(
               new Error(
-                `generate-edition invoke timed out after ${INVOKE_TIMEOUT_MS}ms`
+                `generate-edition invoke timed out after ${GENERATION_INVOKE_TIMEOUT_MS}ms`
               )
             ),
-          INVOKE_TIMEOUT_MS
+          GENERATION_INVOKE_TIMEOUT_MS
         );
       });
       let data: unknown;
@@ -2606,7 +2808,8 @@ export default function HomeScreen() {
         responseBody &&
         typeof responseBody === "object" &&
         "error" in responseBody &&
-        (responseBody as { error?: unknown }).error
+        (responseBody as { error?: unknown }).error &&
+        !parseGenerateEditionResponse(responseBody)
       ) {
         const bodyError = String((responseBody as { error: unknown }).error);
         if (__DEV__) console.error("[home] generate-edition: error in response body", {
@@ -2629,21 +2832,114 @@ export default function HomeScreen() {
       clearEditionFreeze();
       resetScrollOnLoadRef.current = true;
 
+      const parsed = parseGenerateEditionResponse(responseBody);
+      if (!parsed) {
+        setError("The presses stumbled. Give it another moment.");
+        return;
+      }
+
+      if (parsed.kind === "error") {
+        const friendly = parsed.code === "NON_US_REGION"
+          ? SUPPORTED_REGION_MESSAGE
+          : "The presses stumbled. Give it another moment.";
+        setError(
+          __DEV__ && parsed.code !== "NON_US_REGION"
+            ? `${friendly}\n\nmessage: ${parsed.message}\ncode: ${parsed.code ?? "(none)"}`
+            : friendly
+        );
+        return;
+      }
+
+      const {
+        data: { session: generateSession },
+      } = await getLaunchSessionOrFetch();
+      const generateUserId = generateSession?.user?.id ?? null;
+      if (!generateUserId) {
+        setError("Sign in to open today's paper.");
+        return;
+      }
+
+      let generatedEditionId = parsed.kind === "ready" ? parsed.editionId : null;
+      let generatedMetroKey = parsed.metroKey;
+
+      if (parsed.kind === "ready") {
+        setBackgroundJob(null);
+      }
+
+      if (parsed.kind === "async") {
+        setBackgroundJob({ status: parsed.status, lastError: null });
+        devGenerateTrace(traceId, "async_poll_start", {
+          status: parsed.status,
+          metroKey: parsed.metroKey,
+        });
+
+        generationPollActiveRef.current = true;
+        let waitResult;
+        try {
+          waitResult = await waitForEditionGeneration(supabase, {
+            userId: generateUserId,
+            editionDate: parsed.editionDate,
+            metroKey: parsed.metroKey,
+            pollIntervalMs: 2_000,
+            maxWaitMs: GENERATION_POLL_MAX_MS,
+            onTick: (status) => {
+              devGenerateTrace(traceId, "async_poll_tick", { status });
+              if (mountedRef.current) {
+                setBackgroundJob({
+                  status,
+                  lastError: status === "failed" ? "Edition build failed" : null,
+                });
+              }
+            },
+            onPoll: (meta) => {
+              devGenerateTrace(traceId, "async_poll_tick", meta);
+            },
+          });
+        } finally {
+          generationPollActiveRef.current = false;
+        }
+
+        devGenerateTrace(traceId, "async_poll_end", {
+          outcome: waitResult.outcome,
+          partial: waitResult.outcome === "ready" ? waitResult.partial : undefined,
+        });
+
+        if (waitResult.outcome === "aborted") {
+          if (!mountedRef.current) return;
+          devGenerateTrace(traceId, "generation_stalled", { reason: "aborted" });
+          setBackgroundJob({ status: "processing", lastError: null });
+          setError(GENERATION_STALL_MESSAGE);
+          void pollBackgroundJobProgress();
+          return;
+        }
+
+        if (waitResult.outcome === "timeout") {
+          devGenerateTrace(traceId, "generation_stalled", { reason: "timeout" });
+          setBackgroundJob({ status: "processing", lastError: null });
+          setError(GENERATION_STALL_MESSAGE);
+          void pollBackgroundJobProgress();
+          return;
+        }
+
+        if (waitResult.outcome === "failed") {
+          setBackgroundJob({ status: "failed", lastError: waitResult.lastError });
+          setError(
+            waitResult.lastError?.trim()
+              ? "The presses stumbled. Give it another moment."
+              : "The presses stumbled. Give it another moment."
+          );
+          return;
+        }
+
+        generatedEditionId = waitResult.editionId;
+        setBackgroundJob(null);
+      }
+
       // Release generating UI before loading the saved edition — otherwise
       // loadEdition's in-flight guard returns early and leaves loading stuck.
       generatingRef.current = false;
       if (mountedRef.current) setGenerating(false);
       devGenerateTrace(traceId, "generating_cleared");
-
-      const generated =
-        responseBody && typeof responseBody === "object"
-          ? (responseBody as {
-              editionId?: string;
-              metroKey?: string;
-            })
-          : null;
-      const generatedEditionId = generated?.editionId?.trim() || null;
-      const generatedMetroKey = generated?.metroKey?.trim() || null;
 
       if (
         generatedEditionId &&
@@ -2658,7 +2954,7 @@ export default function HomeScreen() {
           region: loc.region ?? null,
           lat: loc.lat,
           lon: loc.lon,
-          editionDate,
+          editionDate: parsed.kind === "ready" ? parsed.editionDate : editionDate,
           traceId,
         });
         applyActiveLocation({
@@ -2701,6 +2997,7 @@ export default function HomeScreen() {
       console.log("[generate] loadEdition END", { ms: Date.now() - loadStarted, traceId });
       devGenerateTraceSummary(traceId);
       devGenerateTraceIdRef.current = null;
+      return;
     } catch (err) {
       if (!mountedRef.current) return;
       // Timeout / explicit abort — do not treat as a generic stumble when we
@@ -2713,9 +3010,11 @@ export default function HomeScreen() {
         if (__DEV__) {
           console.warn("[home] generate-edition: aborted or timed out", err);
         }
-        setError(
-          "That took longer than expected. Try again in a moment — only one paper at a time."
-        );
+        if (!mountedRef.current) return;
+        devGenerateTrace(traceId, "generation_stalled", { reason: "invoke_abort" });
+        setBackgroundJob({ status: "processing", lastError: null });
+        setError(GENERATION_STALL_MESSAGE);
+        void pollBackgroundJobProgress();
         return;
       }
       if (__DEV__) console.error("[home] generate-edition: caught exception", err);
@@ -2729,16 +3028,16 @@ export default function HomeScreen() {
       );
     } finally {
       console.log("[generate] finally ENTER", { traceId });
-      clearTimeout(timeoutId);
+      generationPollActiveRef.current = false;
       if (generateAbortRef.current === abort) {
         generateAbortRef.current = null;
       }
       generatingRef.current = false;
       if (mountedRef.current) {
         setGenerating(false);
-        if (!editionIdRef.current) {
-          setLoading(false);
-        }
+        // Always clear loading — a ready (even incomplete) paper must never
+        // leave the reader stranded on the spinner after generate exits.
+        setLoading(false);
       }
       devGenerateTrace(traceId, "handle_generate_exit", {
         editionId: editionIdRef.current,
@@ -3035,7 +3334,19 @@ export default function HomeScreen() {
             ) : null}
             {error && <Text style={styles.error}>{error}</Text>}
             {/* Mismatch refresh lives on the banner — avoid a duplicate CTA. */}
-            {!locationMismatch && !backgroundJobActive ? (
+            {!locationMismatch && error ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.button,
+                  pressed && styles.linkPressed,
+                ]}
+                onPress={() => void handleGenerate(undefined, { manualBuild: true })}
+                accessibilityRole="button"
+                accessibilityLabel="Retry"
+              >
+                <Text style={styles.buttonText}>Retry</Text>
+              </Pressable>
+            ) : !locationMismatch && !backgroundJobActive ? (
               <Pressable
                 style={({ pressed }) => [
                   styles.button,
@@ -3049,10 +3360,10 @@ export default function HomeScreen() {
               </Pressable>
             ) : null}
             {/* Emergency fallback only — the overnight job is already running. */}
-            {!locationMismatch && backgroundJobActive ? (
+            {!locationMismatch && backgroundJobActive && !error ? (
               <Pressable
                 style={styles.previousLink}
-                onPress={() => void handleGenerate()}
+                onPress={() => void handleGenerate(undefined, { manualBuild: true })}
                 accessibilityRole="button"
                 accessibilityLabel={waitingCopy.backgroundBuildNow}
               >
@@ -3092,6 +3403,7 @@ export default function HomeScreen() {
               editionDate={editionDate}
               leadStory={leadStory}
               topStories={topStories}
+              nationalNews={nationalNews}
               banditGreeting={banditMorningLine(bandit)}
               banditAside={intelligence?.banditAside}
               memoryNote={intelligence?.memoryNote}
@@ -3172,7 +3484,7 @@ export default function HomeScreen() {
                   ? parseLocalEventsBody(section.body) ?? []
                   : [];
                 persistHomeScrollNow();
-                stashTodaysEvents(allEvents);
+                stashTodaysEvents(sliceForSeeAll(allEvents));
                 router.push("/events");
               }}
               onSeeAllActivities={() => {
@@ -3189,19 +3501,19 @@ export default function HomeScreen() {
                   }
                 );
                 persistHomeScrollNow();
-                stashTodaysActivities(full.activities);
+                stashTodaysActivities(sliceForSeeAll(full.activities));
                 router.push("/activities");
               }}
               onSeeAllRecommendations={(items) => {
                 persistHomeScrollNow();
-                stashTodaysRecommendations(items);
+                stashTodaysRecommendations(sliceForSeeAll(items));
                 router.push("/recommendations");
               }}
               historyAroundTown={intelligence?.historyAroundTown}
               onSeeAllHistoryAroundTown={() => {
                 persistHomeScrollNow();
                 stashTodaysHistoryPlaces(
-                  intelligence?.historyAroundTown?.places ?? []
+                  sliceForSeeAll(intelligence?.historyAroundTown?.places ?? [])
                 );
                 router.push("/history-around-town");
               }}

@@ -7,6 +7,7 @@ import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { selectActivityCards } from "../lib/edition/activities";
+import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
 import { getTodaysActivities } from "../lib/edition/activitiesListStore";
 import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
 import { getActiveEditionId } from "../lib/edition/editionContext";
@@ -15,13 +16,13 @@ import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Full published Activities list — every qualifying activity in this edition. */
+/** Full published Activities list — up to 20 curated activities in this edition. */
 export default function ActivitiesScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.activities
   );
-  const items = useMemo(() => getTodaysActivities(), []);
+  const items = useMemo(() => sliceForSeeAll(getTodaysActivities()), []);
   const cards = useMemo(() => selectActivityCards(items), [items]);
   const articlesById = useMemo(
     () => discoveryArticlesById(items, "activity"),
@@ -61,7 +62,7 @@ export default function ActivitiesScreen() {
         <EditorialCardGrid
           kicker="Activities"
           cards={cards}
-          initialRenderCount={Math.max(cards.length, 1)}
+          initialRenderCount={cards.length || 1}
           emptyCopy="Nothing new to try nearby this month — check back tomorrow."
           showBanditWhenEmpty
           onOpenCard={(card) => {

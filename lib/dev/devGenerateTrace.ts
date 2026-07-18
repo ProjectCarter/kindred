@@ -10,14 +10,23 @@ export type DevGenerateStage =
   | "invoke_prepare"
   | "invoke_start"
   | "invoke_end"
+  | "async_poll_start"
+  | "async_poll_tick"
+  | "async_poll_end"
+  | "background_poll_tick"
+  | "background_poll_ready"
+  | "manual_build_start"
+  | "generation_stalled"
+  | "partial_edition_paint"
+  | "generating_first_paint_timeout"
+  | "first_paint"
   | "load_edition_start"
   | "load_edition_end"
   | "generating_cleared"
   | "handle_generate_exit"
   | "load_edition_blocked"
   | "load_edition_fetch_start"
-  | "load_edition_fetch_end"
-  | "first_paint";
+  | "load_edition_fetch_end";
 
 type TraceMark = { stage: DevGenerateStage; at: number; meta?: Record<string, unknown> };
 

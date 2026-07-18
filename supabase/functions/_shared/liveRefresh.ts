@@ -106,6 +106,7 @@ export async function refreshEventsSection(
     const { isEventbriteOnlyMode } = await import("./localEvents/eventbriteOnlyMode.ts");
     const body = buildLocalEventsBody(events, {
       eventbriteOnly: isEventbriteOnlyMode(),
+      editionCity: input.location.city,
     });
 
     const { data: existing, error: existingError } = await admin

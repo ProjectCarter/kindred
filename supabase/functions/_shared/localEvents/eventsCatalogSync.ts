@@ -437,7 +437,8 @@ export async function loadEventsCatalogForEdition(
   location: LocalEventLocation,
   options?: LocalEventsFetchOptions
 ): Promise<LocalEvent[]> {
-  const metroKey = metroKeyFromEventLocation(location);
+  const metroKey =
+    options?.catalogMetroKey?.trim() || metroKeyFromEventLocation(location);
   const now = options?.now ?? new Date();
   const eventTimezone = options?.timezone ?? resolveEventTimezone(location);
 
@@ -495,6 +496,53 @@ export async function loadEventsCatalogForEdition(
   });
 
   return ranked;
+}
+
+/** All verified active catalog rows for editorial backfill (no rank cap). */
+export async function loadEventsCatalogForEnrichment(
+  admin: SupabaseClient,
+  location: LocalEventLocation,
+  options?: LocalEventsFetchOptions
+): Promise<LocalEvent[]> {
+  const metroKey =
+    options?.catalogMetroKey?.trim() || metroKeyFromEventLocation(location);
+  const now = options?.now ?? new Date();
+
+  const { data, error } = await admin
+    .from("events_catalog")
+    .select(
+      "id, metro_key, provider, provider_id, dedupe_key, name, venue, city, start_at, end_at, event_timezone, official_website, ticket_url, lifecycle, verification_status, verification_confidence, event_payload, editorial_teaser, editorial_body, image_source"
+    )
+    .eq("metro_key", metroKey)
+    .eq("verification_status", "verified")
+    .in("lifecycle", ["verified", "upcoming", "today"])
+    .order("start_at", { ascending: true })
+    .limit(200);
+
+  if (error || !data) {
+    console.error("[events:catalog] enrichment read failure", { metroKey, error });
+    return [];
+  }
+
+  const rows = (data as EventsCatalogRow[]).filter((row) => {
+    const lifecycle = resolveEventCatalogLifecycle(
+      row.event_payload,
+      location,
+      now,
+      row.verification_status === "verified"
+    );
+    return isEventCatalogActiveLifecycle(lifecycle);
+  });
+
+  const events = rows.map(rowToLocalEvent);
+  const familyFiltered = filterFamilyFriendlyEvents(events);
+  console.log("[events:catalog] enrichment read", {
+    metroKey,
+    stored: rows.length,
+    afterFamilyFilter: familyFiltered.kept.length,
+    filtered: familyFiltered.filteredCount,
+  });
+  return familyFiltered.kept;
 }
 
 export async function listEventsMetrosForSync(

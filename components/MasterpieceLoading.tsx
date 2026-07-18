@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { kindredGold, paper } from "../lib/edition/newspaperTheme";
+import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
 
 const LOADING_LINES = [
   "Loading today's masterpiece…",
@@ -19,6 +20,7 @@ export function MasterpieceLoading({
   backLabel = "← Today's paper",
   onBack,
 }: MasterpieceLoadingProps) {
+  const insets = useSafeAreaInsets();
   const [lineIndex, setLineIndex] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
 
@@ -37,7 +39,13 @@ export function MasterpieceLoading({
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar style="dark" />
       {onBack ? (
-        <Pressable onPress={onBack} style={styles.backRow}>
+        <Pressable
+          onPress={onBack}
+          style={[
+            styles.backRow,
+            articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true }),
+          ]}
+        >
           <Text style={styles.back}>{backLabel}</Text>
         </Pressable>
       ) : null}
@@ -63,7 +71,7 @@ const styles = StyleSheet.create({
   },
   backRow: {
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingBottom: 14,
   },
   back: {
     fontSize: 15,

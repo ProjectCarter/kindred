@@ -66,8 +66,8 @@ Never choose randomly.
 | 🛍️ | Shopping |
 | 🪑 | Antique Store |
 | 🛒 | Flea Market |
-| 🤝 | Community Event |
-| 💼 | Business Networking |
+| 🤝 | Networking / collaboration only (rare — never a fallback) |
+| 💼 | Business / professional |
 | 🎓 | Educational Talk |
 | ❤️ | Charity / Fundraiser |
 | 🚗 | Car Show |
@@ -75,7 +75,14 @@ Never choose randomly.
 | 🎆 | Fireworks |
 | 🎄 | Holiday Event |
 
-Source of truth in code: `CATEGORY_ICON_DICTIONARY` in `lib/edition/categoryIcon.ts`.
+Source of truth in code: `lib/edition/editorialEmojiCatalog.ts` and `lib/edition/categoryIcon.ts`.
+
+## Fallback order (events)
+
+1. Highly specific editorial emoji (catalog rules, most specific first)
+2. Sport desk emoji (verified sports only)
+3. Section category emoji (`music` → 🎵, `community` → 🎉)
+4. Desk fallback 🎉 — **never** 🤝 unless networking/collaboration is verified in the title
 
 ## Editorial rules
 

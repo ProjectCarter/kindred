@@ -7,6 +7,7 @@ import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { getTodaysEvents } from "../lib/edition/eventsListStore";
+import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
 import { articleFromLocalEvent } from "../lib/edition/article";
 import { localEditionDate } from "../lib/edition/dates";
 import { getActiveEditionId } from "../lib/edition/editionContext";
@@ -15,13 +16,13 @@ import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Full published Local Events list — every qualifying event in today's edition. */
+/** Full published Local Events list — up to 20 curated events in today's edition. */
 export default function EventsScreen() {
   const router = useRouter();
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.events
   );
-  const events = useMemo(() => getTodaysEvents(), []);
+  const events = useMemo(() => sliceForSeeAll(getTodaysEvents()), []);
   const eventArticlesById = useMemo(() => {
     const editionDate = localEditionDate();
     const map = new Map<string, ReturnType<typeof articleFromLocalEvent>>();
@@ -64,7 +65,7 @@ export default function EventsScreen() {
 
         <LocalEventsGrid
           events={events}
-          initialRenderCount={Math.max(events.length, 1)}
+          initialRenderCount={events.length || 1}
           showBanditWhenEmpty
           onOpenEvent={(event) => {
             const article = eventArticlesById.get(`${event.name}:${event.date}`);

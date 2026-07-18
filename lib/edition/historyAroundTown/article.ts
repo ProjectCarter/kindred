@@ -1,5 +1,6 @@
 import type { KindredArticle } from "../article";
 import type { HistoryPlaceSnapshot } from "./types";
+import { cityRegionLine, normalizeHistoryPlaceSnapshot } from "./types";
 
 function locationLine(place: HistoryPlaceSnapshot): string | null {
   const parts = [place.address, place.city, place.state].filter(Boolean);
@@ -10,46 +11,58 @@ function locationLine(place: HistoryPlaceSnapshot): string | null {
  * History Around Town → KindredArticle.
  * Reads only from the frozen library snapshot — no runtime generation.
  */
-export function articleFromHistoryPlace(place: HistoryPlaceSnapshot): KindredArticle {
-  const body = [...place.body];
-  if (place.closingNote?.trim()) {
-    body.push(place.closingNote.trim());
-  }
-
-  const location = locationLine(place);
+export function articleFromHistoryPlace(
+  place: HistoryPlaceSnapshot
+): KindredArticle {
+  const snapshot = normalizeHistoryPlaceSnapshot(place);
+  const location = locationLine(snapshot);
+  const region = cityRegionLine(snapshot);
 
   return {
-    id: `history-around-town:${place.id}`,
+    id: `history-around-town:${snapshot.id}`,
     section: "history_around_town",
-    headline: place.placeName,
-    dek: place.teaser,
-    byline: place.categoryLabel,
+    headline: snapshot.placeName,
+    dek: snapshot.teaser,
+    byline: [snapshot.categoryLabel, region].filter(Boolean).join(" · "),
     source: "Kindred",
-    heroImage: place.heroImageUrl
+    heroImage: snapshot.heroImageUrl
       ? {
-          uri: place.heroImageUrl,
-          credit: place.imageCredit,
-          kind: "editorial",
+          uri: snapshot.heroImageUrl,
+          credit: snapshot.imageCredit,
+          caption: snapshot.historicalMetadataLine ?? undefined,
+          kind: "historical",
         }
       : null,
-    body,
-    modules: place.modules,
+    body: snapshot.theStory.length ? snapshot.theStory : snapshot.body,
+    modules: [],
     contentType: "history",
     savedContentType: "article",
     savedLocation: location,
-    sourceUrl: place.officialWebsite,
+    sourceUrl: snapshot.officialWebsite,
+    historyPlaceSnapshot: snapshot,
     actionContext: {
+      surface: "history_around_town",
       mapsDestination:
-        place.lat != null && place.lon != null
+        snapshot.lat != null && snapshot.lon != null
           ? {
-              lat: place.lat,
-              lon: place.lon,
-              name: place.placeName,
+              lat: snapshot.lat,
+              lon: snapshot.lon,
+              name: snapshot.placeName,
+              city: snapshot.city,
+              state: snapshot.state,
+              address: snapshot.address,
             }
-          : place.address
-            ? { address: place.address, name: place.placeName }
+          : snapshot.address
+            ? {
+                address: snapshot.address,
+                name: snapshot.placeName,
+                city: snapshot.city,
+                state: snapshot.state,
+              }
             : null,
-      websiteUrl: place.officialWebsite,
+      websiteUrl: snapshot.officialWebsite,
+      ticketUrl: snapshot.admissionUrl,
+      phone: snapshot.phone,
     },
   };
 }

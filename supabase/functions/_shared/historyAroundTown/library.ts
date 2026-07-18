@@ -1,125 +1,28 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { libraryMetroKeysForLocation } from "../../../../lib/markets/libraryMetroKeys.ts";
 import { metroKeyFromLocation } from "../storyOf/metroKey.ts";
 import {
   computeHistoryPlaceValidationStatus,
   isApprovedHistoryPlace,
 } from "./validation.ts";
+import { buildHistoryPlaceSnapshot } from "./snapshot.ts";
+import { normalizeHistoryPlaceSnapshot } from "./normalize.ts";
 import type {
   HistoryAroundTownEditionPayload,
-  HistoryPlaceEditorialModule,
   HistoryPlaceRow,
   HistoryPlaceSnapshot,
 } from "./types.ts";
 import {
-  CATEGORY_LABELS,
   HISTORY_AROUND_TOWN_CAROUSEL_LIMIT,
   HISTORY_AROUND_TOWN_SUBTITLE,
 } from "./types.ts";
 
-function splitBody(body: string): string[] {
-  return body
-    .trim()
-    .split(/\n{2,}/)
-    .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter((p) => p.length > 20);
-}
-
-function modulesFromRow(row: HistoryPlaceRow): HistoryPlaceEditorialModule[] {
-  const stored = Array.isArray(row.editorial_modules)
-    ? row.editorial_modules.filter((m) => m?.body?.trim())
-    : [];
-
-  if (stored.length >= 4) return stored;
-
-  const built: HistoryPlaceEditorialModule[] = [];
-  if (row.history_summary?.trim()) {
-    built.push({ id: "history", label: "History", body: row.history_summary.trim() });
-  }
-  if (row.why_it_matters?.trim()) {
-    built.push({
-      id: "why_it_matters",
-      label: "Why it matters",
-      body: row.why_it_matters.trim(),
-    });
-  }
-  if (row.interesting_facts?.length) {
-    built.push({
-      id: "interesting_facts",
-      label: "Interesting facts",
-      body: row.interesting_facts.map((f) => f.trim()).filter(Boolean).join(" "),
-    });
-  }
-  if (row.architecture_note?.trim()) {
-    built.push({
-      id: "architecture",
-      label: "Architecture",
-      body: row.architecture_note.trim(),
-    });
-  }
-  if (row.best_time_to_visit?.trim()) {
-    built.push({
-      id: "best_time",
-      label: "Best time to visit",
-      body: row.best_time_to_visit.trim(),
-    });
-  }
-  if (row.hours_text?.trim()) {
-    built.push({ id: "hours", label: "Hours", body: row.hours_text.trim() });
-  }
-  if (row.admission_text?.trim()) {
-    built.push({
-      id: "admission",
-      label: "Admission",
-      body: row.admission_text.trim(),
-    });
-  }
-  if (row.parking_text?.trim()) {
-    built.push({ id: "parking", label: "Parking", body: row.parking_text.trim() });
-  }
-  if (row.accessibility_text?.trim()) {
-    built.push({
-      id: "accessibility",
-      label: "Accessibility",
-      body: row.accessibility_text.trim(),
-    });
-  }
-  if (row.nearby_places?.length) {
-    built.push({
-      id: "nearby",
-      label: "Nearby places",
-      body: row.nearby_places.join(" · "),
-    });
-  }
-
-  return built.length ? built : stored;
-}
-
-export function rowToSnapshot(row: HistoryPlaceRow): HistoryPlaceSnapshot | null {
+export function rowToSnapshot(
+  row: HistoryPlaceRow,
+  slugIndex?: Map<string, HistoryPlaceRow>
+): HistoryPlaceSnapshot | null {
   if (!isApprovedHistoryPlace(row)) return null;
-
-  const body = splitBody(row.story_body);
-  if (body.length < 2) return null;
-
-  return {
-    id: row.id,
-    slug: row.slug,
-    placeName: row.place_name.trim(),
-    category: row.category,
-    categoryLabel: row.category_label?.trim() || CATEGORY_LABELS[row.category],
-    teaser: row.editorial_teaser.trim(),
-    body,
-    modules: modulesFromRow(row),
-    closingNote: row.closing_note?.trim() ?? null,
-    heroImageUrl: row.hosted_url?.trim() || row.image_url?.trim() || null,
-    imageCredit: row.image_credit?.trim() ?? null,
-    lat: row.lat,
-    lon: row.lon,
-    address: row.address?.trim() ?? null,
-    city: row.city?.trim() ?? null,
-    state: row.state?.trim() ?? null,
-    officialWebsite: row.official_website?.trim() ?? null,
-    nearbyPlaces: (row.nearby_places ?? []).map((p) => p.trim()).filter(Boolean),
-  };
+  return buildHistoryPlaceSnapshot(row, slugIndex);
 }
 
 export async function listApprovedHistoryPlaces(
@@ -186,25 +89,50 @@ function diversifyCarousel(rows: HistoryPlaceRow[]): HistoryPlaceRow[] {
 
 export async function buildHistoryAroundTownForEdition(
   admin: SupabaseClient,
-  location: { city: string; state?: string | null; region?: string | null }
+  location: {
+    city: string;
+    state?: string | null;
+    region?: string | null;
+    lat?: number;
+    lon?: number;
+  }
 ): Promise<HistoryAroundTownEditionPayload | null> {
   const city = location.city?.trim();
   if (!city || city.toLowerCase() === "your area") return null;
 
-  const metroKey = metroKeyFromLocation(location);
-  const rows = await listApprovedHistoryPlaces(admin, metroKey);
+  const metroKeys = libraryMetroKeysForLocation({
+    city,
+    state: location.state,
+    region: location.region,
+    lat: location.lat ?? NaN,
+    lon: location.lon ?? NaN,
+  });
+
+  let metroKey = metroKeys[0] ?? metroKeyFromLocation(location);
+  let rows: HistoryPlaceRow[] = [];
+
+  for (const key of metroKeys) {
+    const found = await listApprovedHistoryPlaces(admin, key);
+    if (found.length) {
+      metroKey = key;
+      rows = found;
+      break;
+    }
+  }
+
   if (!rows.length) {
-    console.warn("[historyAroundTown] no approved places", { metroKey });
+    console.warn("[historyAroundTown] no approved places", { metroKeys });
     return null;
   }
 
+  const slugIndex = new Map(rows.map((row) => [row.slug, row]));
   const carouselRows = diversifyCarousel(rows);
   const places = rows
-    .map((row) => rowToSnapshot(row))
+    .map((row) => rowToSnapshot(row, slugIndex))
     .filter((p): p is HistoryPlaceSnapshot => p != null);
 
   const carousel = carouselRows
-    .map((row) => rowToSnapshot(row))
+    .map((row) => rowToSnapshot(row, slugIndex))
     .filter((p): p is HistoryPlaceSnapshot => p != null);
 
   if (!carousel.length || !places.length) return null;
@@ -228,8 +156,8 @@ export function parseHistoryAroundTownPayload(
   return {
     metroKey: payload.metroKey,
     subtitle: payload.subtitle?.trim() || HISTORY_AROUND_TOWN_SUBTITLE,
-    carousel: payload.carousel,
-    places: payload.places,
+    carousel: payload.carousel.map(normalizeHistoryPlaceSnapshot),
+    places: payload.places.map(normalizeHistoryPlaceSnapshot),
   };
 }
 

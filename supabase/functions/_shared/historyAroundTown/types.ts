@@ -20,10 +20,18 @@ export type HistoryPlaceCategory =
   | "public_art"
   | "landmark";
 
-export type HistoryPlaceValidationStatus =
-  | "needs_review"
-  | "approved"
-  | "rejected";
+export type HistoryTimelineEntry = {
+  year: string;
+  event: string;
+};
+
+export type HistoryNearbyLink = {
+  id: string;
+  slug: string;
+  placeName: string;
+  teaser: string | null;
+  historicalMetadataLine: string | null;
+};
 
 export type HistoryPlaceEditorialModule = {
   id: string;
@@ -64,7 +72,28 @@ export type HistoryPlaceRow = {
   image_credit: string | null;
   image_source_url: string | null;
   image_license: string | null;
+  image_photographer: string | null;
+  image_era: string | null;
+  image_date: string | null;
+  image_verification_status: string | null;
   official_website: string | null;
+  phone: string | null;
+  year_established: string | null;
+  historical_era: string | null;
+  historical_metadata_line: string | null;
+  historic_designation: string | null;
+  historic_designations: string[] | null;
+  historical_significance: string | null;
+  editorial_introduction: string | null;
+  looking_closer: string[] | null;
+  timeline_entries: HistoryTimelineEntry[] | unknown;
+  visiting_today_text: string | null;
+  before_you_go_text: string | null;
+  visit_duration_text: string | null;
+  dog_policy_text: string | null;
+  google_maps_url: string | null;
+  admission_url: string | null;
+  nearby_place_slugs: string[] | null;
   source_urls: string[] | null;
   source_provider: string;
   source_provider_place_id: string | null;
@@ -77,6 +106,11 @@ export type HistoryPlaceRow = {
   use_count: number;
 };
 
+export type HistoryPlaceValidationStatus =
+  | "needs_review"
+  | "approved"
+  | "rejected";
+
 /** Frozen place — copied into editions.history_around_town at build time. */
 export type HistoryPlaceSnapshot = {
   id: string;
@@ -85,26 +119,52 @@ export type HistoryPlaceSnapshot = {
   category: HistoryPlaceCategory;
   categoryLabel: string;
   teaser: string;
-  body: string[];
-  modules: HistoryPlaceEditorialModule[];
+  historicalMetadataLine: string | null;
+  yearEstablished: string | null;
+  historicalEra: string | null;
+  designations: string[];
+  editorialIntroduction: string | null;
+  theStory: string[];
+  whyItMatters: string | null;
+  lookingCloser: string[];
+  timeline: HistoryTimelineEntry[];
+  didYouKnow: string[];
+  visitingToday: string | null;
+  beforeYouGo: string | null;
+  nearbyLinks: HistoryNearbyLink[];
   closingNote: string | null;
   heroImageUrl: string | null;
   imageCredit: string | null;
+  imageSourceUrl: string | null;
+  imageLicense: string | null;
+  imagePhotographer: string | null;
+  imageEra: string | null;
+  imageDate: string | null;
   lat: number | null;
   lon: number | null;
   address: string | null;
   city: string | null;
   state: string | null;
+  phone: string | null;
   officialWebsite: string | null;
+  googleMapsUrl: string | null;
+  admissionUrl: string | null;
+  hoursText: string | null;
+  admissionText: string | null;
+  parkingText: string | null;
+  accessibilityText: string | null;
+  bestTimeToVisit: string | null;
+  visitDuration: string | null;
+  dogPolicy: string | null;
+  body: string[];
+  modules: HistoryPlaceEditorialModule[];
   nearbyPlaces: string[];
 };
 
 export type HistoryAroundTownEditionPayload = {
   metroKey: string;
   subtitle: string;
-  /** Homepage carousel — up to ~20 curated places. */
   carousel: HistoryPlaceSnapshot[];
-  /** Full directory for See All — every approved place in this metro. */
   places: HistoryPlaceSnapshot[];
 };
 

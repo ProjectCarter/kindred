@@ -71,7 +71,7 @@ export type ActionBarContext = {
   mapsActionLabel?: string | null;
   discoveryCategory?: DiscoveryCategory | string | null;
   tags?: string[];
-  surface?: "event" | "activity" | "recommendation" | "bandits_pick";
+  surface?: "event" | "activity" | "recommendation" | "bandits_pick" | "history_around_town";
 };
 
 /** @deprecated Use buildGoogleMapsSearchUrl(MapsDestination) from ./googleMaps */
@@ -570,6 +570,15 @@ export function resolveArticleContextActions(
       isFreeEvent: ctx.isFreeEvent,
       includeSave: false,
     });
+  } else if (ctx.surface === "history_around_town") {
+    actions = resolveActionsForHistoryPlace({
+      mapsDestination:
+        ctx.mapsDestination ??
+        mapsDestinationFromSavedLocation(article.savedLocation),
+      websiteUrl: ctx.websiteUrl ?? article.sourceUrl,
+      admissionUrl: ctx.ticketUrl,
+      googleMapsUrl: article.historyPlaceSnapshot?.googleMapsUrl ?? null,
+    });
   } else {
     actions = resolveActionsForRecommendation(
       discoveryItemFromContext(article, ctx),
@@ -634,6 +643,21 @@ export function resolveActionsForArticle(
     });
   }
 
+  if (ctx.surface === "history_around_town") {
+    const out = resolveActionsForHistoryPlace({
+      mapsDestination:
+        ctx.mapsDestination ??
+        mapsDestinationFromSavedLocation(article.savedLocation),
+      websiteUrl: ctx.websiteUrl ?? article.sourceUrl,
+      admissionUrl: ctx.ticketUrl,
+      googleMapsUrl: article.historyPlaceSnapshot?.googleMapsUrl ?? null,
+    });
+    const seen = new Set(out.map((a) => a.id));
+    pushUniqueUrl(out, saveAction(), seen);
+    pushUniqueUrl(out, shareAction(), seen);
+    return out;
+  }
+
   return resolveActionsForRecommendation(
     discoveryItemFromContext(article, ctx),
     { fallbackCity: options?.fallbackCity, includeSave: true }
@@ -693,6 +717,82 @@ export function actionContextFromDiscoveryItem(
     tags: item.tags,
     phone: item.phone ?? null,
     menuUrl: item.menuUrl ?? null,
+  };
+}
+
+/** History Around Town — Maps, Official Website, admission when verified. */
+export function resolveActionsForHistoryPlace(input: {
+  mapsDestination?: MapsDestination | null;
+  websiteUrl?: string | null;
+  admissionUrl?: string | null;
+  googleMapsUrl?: string | null;
+}): ActionBarAction[] {
+  const out: ActionBarAction[] = [];
+  const seen = new Set<string>();
+
+  const maps = mapsAction(
+    verifiedMapsDestination(input.mapsDestination) ??
+      (input.googleMapsUrl?.trim()
+        ? null
+        : input.mapsDestination ?? null)
+  );
+  if (maps) pushUniqueUrl(out, maps, seen);
+
+  if (input.googleMapsUrl?.trim() && isOfficialProviderUrl(input.googleMapsUrl.trim())) {
+    pushUniqueUrl(
+      out,
+      {
+        id: "maps",
+        label: GOOGLE_MAPS_ACTION_LABEL,
+        icon: "📍",
+        kind: "url",
+        url: input.googleMapsUrl.trim(),
+      },
+      seen
+    );
+  }
+
+  const site = websiteAction(input.websiteUrl, "Official Website");
+  if (site) pushUniqueUrl(out, site, seen);
+
+  const admission = websiteAction(
+    input.admissionUrl,
+    "Tickets or Admission",
+    "admission"
+  );
+  if (admission && !seen.has(admission.url?.trim() ?? "")) {
+    pushUniqueUrl(out, { ...admission, icon: "🎟" }, seen);
+  }
+
+  return out;
+}
+
+export function actionContextFromHistoryPlace(
+  place: import("./historyAroundTown/types").HistoryPlaceSnapshot
+): ActionBarContext {
+  return {
+    surface: "history_around_town",
+    mapsDestination:
+      place.lat != null && place.lon != null
+        ? {
+            lat: place.lat,
+            lon: place.lon,
+            name: place.placeName,
+            city: place.city,
+            state: place.state,
+            address: place.address,
+          }
+        : place.address
+          ? {
+              address: place.address,
+              name: place.placeName,
+              city: place.city,
+              state: place.state,
+            }
+          : null,
+    websiteUrl: place.officialWebsite,
+    ticketUrl: place.admissionUrl,
+    phone: place.phone,
   };
 }
 

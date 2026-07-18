@@ -1,5 +1,6 @@
 import { primaryNewsCategory, interestToCategory } from "./sources.ts";
 import { isNearDuplicate, normalizeTitleKey, normalizeUrlKey } from "./diversity.ts";
+import { fetchWithTimeout } from "../http/fetchWithTimeout.ts";
 import type { CandidateStory, StoryRankingContext } from "./types.ts";
 
 type NewsApiArticle = {
@@ -57,8 +58,10 @@ async function fetchHeadlines(opts: {
   });
   if (opts.category) params.set("category", opts.category);
 
-  const res = await fetch(
-    `https://newsapi.org/v2/top-headlines?${params.toString()}`
+  const res = await fetchWithTimeout(
+    `https://newsapi.org/v2/top-headlines?${params.toString()}`,
+    {},
+    20_000
   );
   const data = await res.json();
   return {
@@ -84,7 +87,11 @@ async function fetchLocalEverything(opts: {
     apiKey: opts.apiKey,
   });
 
-  const res = await fetch(`https://newsapi.org/v2/everything?${params.toString()}`);
+  const res = await fetchWithTimeout(
+    `https://newsapi.org/v2/everything?${params.toString()}`,
+    {},
+    20_000
+  );
   const data = await res.json();
   return {
     articles: Array.isArray(data.articles) ? data.articles : [],
@@ -219,4 +226,33 @@ export async function fetchStoryCandidates(
   });
 
   return unique;
+}
+
+/** Local/regional pool only — for city-specific news desks. */
+export async function fetchLocalStoryCandidates(
+  ctx: StoryRankingContext,
+  apiKey: string
+): Promise<CandidateStory[]> {
+  const localQuery = localSearchQuery(ctx);
+  if (!localQuery) {
+    console.log("[stories] local candidate pool skipped — no city query");
+    return [];
+  }
+
+  const result = await fetchLocalEverything({ apiKey, query: localQuery, pageSize: 12 });
+  console.log("[stories] provider NewsAPI local pool", {
+    pool: `local:${localQuery}`,
+    httpStatus: result.status,
+    articleCount: result.articles.length,
+    apiError: result.error,
+  });
+
+  const stories = dedupe(mapArticles(result.articles, "local", null));
+  console.log("[stories] local candidate pool", {
+    uniqueCount: stories.length,
+    city: ctx.city,
+    region: ctx.region,
+    state: ctx.state,
+  });
+  return stories;
 }

@@ -6,6 +6,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { fetchApprovedCityArticle } from "./library.ts";
 import { cityArticleSourceNote } from "./sourceNote.ts";
+import { storyOfHeadline } from "./types.ts";
 
 export type EnsureStoryOfSectionResult = {
   ok: boolean;
@@ -23,12 +24,21 @@ export async function ensureStoryOfSectionForEdition(
       city: string;
       state?: string | null;
       region?: string | null;
+      lat?: number;
+      lon?: number;
     };
   }
 ): Promise<EnsureStoryOfSectionResult> {
+  const city = input.location.city?.trim();
+  if (!city || city.toLowerCase() === "your area") {
+    return { ok: true, changed: false, error: "no_city" };
+  }
+
+  const expectedHeadline = storyOfHeadline(city);
+
   const { data: existing, error: existingError } = await admin
     .from("edition_sections")
-    .select("id, section_type")
+    .select("id, section_type, headline")
     .eq("edition_id", input.editionId)
     .in("section_type", ["story_of", "your_city"])
     .maybeSingle();
@@ -37,7 +47,7 @@ export async function ensureStoryOfSectionForEdition(
     return { ok: false, changed: false, error: existingError.message };
   }
 
-  if (existing?.id) {
+  if (existing?.id && existing.headline?.trim() === expectedHeadline) {
     return { ok: true, changed: false };
   }
 
@@ -49,6 +59,21 @@ export async function ensureStoryOfSectionForEdition(
       error: "no_approved_article",
       metroKey: null,
     };
+  }
+
+  if (existing?.id) {
+    const { error: deleteError } = await admin
+      .from("edition_sections")
+      .delete()
+      .eq("id", existing.id);
+    if (deleteError) {
+      return { ok: false, changed: false, error: deleteError.message };
+    }
+    console.warn("[storyOf] replaced wrong-city story_of section", {
+      editionId: input.editionId,
+      previousHeadline: existing.headline?.slice(0, 80) ?? null,
+      nextHeadline: article.headline,
+    });
   }
 
   const { error: insertError } = await admin.from("edition_sections").insert({

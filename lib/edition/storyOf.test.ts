@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import {
   editionSectionFromCityArticle,
   isStoryOfSection,
+  parseStoryOfHeadlineCity,
   parseStoryOfSourceNote,
+  storyOfSectionMatchesCity,
   storyOfTitle,
   syntheticStoryOfSectionId,
 } from "./storyOf.ts";
@@ -21,6 +23,24 @@ const gilbert = JSON.parse(
 
 test("storyOfTitle uses canonical headline format", () => {
   assert.equal(storyOfTitle("Gilbert"), "The Story of Gilbert");
+});
+
+test("parseStoryOfHeadlineCity extracts city from headline", () => {
+  assert.equal(parseStoryOfHeadlineCity("The Story of Gilbert"), "Gilbert");
+  assert.equal(parseStoryOfHeadlineCity("The Story of Phoenix"), "Phoenix");
+});
+
+test("storyOfSectionMatchesCity rejects Phoenix story on Gilbert edition", () => {
+  const phoenixStory = {
+    id: "1",
+    section_type: "story_of",
+    position: 5,
+    headline: "The Story of Phoenix",
+    body: "Phoenix grew…",
+    source_note: null,
+  };
+  assert.equal(storyOfSectionMatchesCity(phoenixStory, "Gilbert"), false);
+  assert.equal(storyOfSectionMatchesCity(phoenixStory, "Phoenix"), true);
 });
 
 test("editionSectionFromCityArticle builds a valid story_of section", () => {

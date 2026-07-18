@@ -316,6 +316,22 @@ export function computeDiscoveryConfidence(
     );
   }
 
+  // Shared metro catalog rows already passed verification at ingest —
+  // do not re-reject them because the provider URL is a maps listing.
+  if (
+    item.id.startsWith("place_") &&
+    isVerifiedPlaceProvider(item) &&
+    hasCrossSourceLocation(item) &&
+    isDiscoveryEditoriallyComplete(item)
+  ) {
+    score += pushSignal(
+      signals,
+      "shared_catalog_listing",
+      "Verified shared metro catalog entry",
+      45
+    );
+  }
+
   if (isInventedOrTemplatePlace(item)) {
     score += pushSignal(
       signals,

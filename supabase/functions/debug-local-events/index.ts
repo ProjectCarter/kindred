@@ -3,6 +3,10 @@
 // a sanitized SerpAPI sample — never exposes the API key.
 
 import {
+  isCronAuthorized,
+  cronUnauthorizedResponse,
+} from "../_shared/auth/cronSecret.ts";
+import {
   getLocalEvents,
   probeLocalEventsPipeline,
   buildLocalEventsBody,
@@ -51,6 +55,10 @@ type ProbeRequest = {
 
 Deno.serve(async (req) => {
   try {
+    if (!isCronAuthorized(req)) {
+      return cronUnauthorizedResponse();
+    }
+
     let body: ProbeRequest = {};
     try {
       body = (await req.json()) as ProbeRequest;
@@ -177,7 +185,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const productionBody = buildLocalEventsBody(productionEvents);
+    const productionBody = buildLocalEventsBody(productionEvents, {
+      editionCity: location.city,
+    });
     const persistedEvents = JSON.parse(productionBody) as {
       events: Array<{
         name: string;

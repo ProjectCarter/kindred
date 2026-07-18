@@ -144,6 +144,11 @@ function HistoryPlaceCard({
         <Text style={styles.headline} numberOfLines={3} maxFontSizeMultiplier={1.15}>
           {card.placeName}
         </Text>
+        {card.historicalMetadataLine ? (
+          <Text style={styles.metadata} maxFontSizeMultiplier={1.12}>
+            {card.historicalMetadataLine}
+          </Text>
+        ) : null}
         <Text style={styles.teaser} numberOfLines={3} maxFontSizeMultiplier={1.15}>
           {card.teaser}
         </Text>
@@ -231,7 +236,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.3,
     color: paper.ink,
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  metadata: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: "italic",
+    color: paper.terracottaSoft,
+    marginBottom: 10,
   },
   teaser: {
     fontFamily: "Georgia",

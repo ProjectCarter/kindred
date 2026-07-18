@@ -14,10 +14,11 @@ import { StatusBar } from "expo-status-bar";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
 import { formatArtworkCreditBlock } from "../lib/edition/heroArtwork/credits";
-import { masterpieceTitleLine } from "../lib/edition/heroArtwork/formatTitle";
+import { masterpieceTitleLine, masterpieceOriginalTitle } from "../lib/edition/heroArtwork/formatTitle";
 import { resolveMasterpieceDetail } from "../lib/edition/heroArtwork/detail";
 import { MasterpieceFrame } from "./MasterpieceFrame";
 import { kindredGold, masterpiece, paper, press } from "../lib/edition/newspaperTheme";
+import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
 
 export type MasterpieceReaderProps = {
   morningHero: MorningHeroExperience;
@@ -164,6 +165,7 @@ export function MasterpieceReader({
   const credit = formatArtworkCreditBlock(morningHero);
 
   const titleWithYear = masterpieceTitleLine(morningHero);
+  const originalTitle = masterpieceOriginalTitle(morningHero);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -174,7 +176,10 @@ export function MasterpieceReader({
       >
         <Pressable
           onPress={onBack}
-          style={styles.backRow}
+          style={[
+            styles.backRow,
+            articleBackRowInsets(0, { safeAreaAlreadyApplied: true }),
+          ]}
           accessibilityRole="button"
           accessibilityLabel={backLabel.replace(/^←\s*/, "Back to ")}
         >
@@ -202,6 +207,10 @@ export function MasterpieceReader({
           <Text style={styles.artist} maxFontSizeMultiplier={1.15}>
             {morningHero.artist}
           </Text>
+
+          {originalTitle ? (
+            <TextSection heading="Original Title" paragraphs={[originalTitle]} />
+          ) : null}
 
           <FullMasterpieceArticle detail={detail} />
 
@@ -262,7 +271,7 @@ const styles = StyleSheet.create({
   },
   backRow: {
     paddingHorizontal: masterpiece.edgeMargin,
-    paddingVertical: 12,
+    paddingBottom: 12,
   },
   back: {
     fontSize: 15,

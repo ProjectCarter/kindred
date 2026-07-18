@@ -11,13 +11,20 @@
 //      same job — and builds the whole batch concurrently.
 
 import {
-  buildEditionForUser,
   createServiceClient,
   resolveEditionLocation,
 } from "../_shared/buildEdition.ts";
 import { resolveEditionMarket } from "../_shared/markets/editionMarket.ts";
+import { generationJobsConflictTarget } from "../_shared/markets/editionIdentity.ts";
+import { runUserGenerationJob, executeClaimedGenerationJob } from "../_shared/edition/runUserGenerationJob.ts";
+import {
+  isCronAuthorized,
+  cronUnauthorizedResponse,
+} from "../_shared/auth/cronSecret.ts";
+import { mapWithConcurrency } from "../_shared/http/concurrency.ts";
 
 const BATCH_SIZE = 15;
+const BUILD_CONCURRENCY = 3;
 const MAX_ATTEMPTS = 3;
 const STALE_PROCESSING_MINUTES = 10;
 // V1 requirement: begin generating at 12:01 AM local — one minute after
@@ -38,16 +45,7 @@ function json(body: unknown, status = 200) {
 }
 
 function isAuthorized(req: Request): boolean {
-  const cronSecret = Deno.env.get("CRON_SECRET");
-  if (!cronSecret) return false;
-
-  const headerSecret = req.headers.get("x-cron-secret");
-  if (headerSecret && headerSecret === cronSecret) return true;
-
-  const auth = req.headers.get("Authorization");
-  if (auth === `Bearer ${cronSecret}`) return true;
-
-  return false;
+  return isCronAuthorized(req);
 }
 
 /** A user's local calendar date + clock time, from an IANA timezone name. */
@@ -233,11 +231,12 @@ Deno.serve(async (req) => {
             {
               user_id: userId,
               edition_date: localDate,
+              metro_key: metroKey,
               status: "pending",
               updated_at: new Date().toISOString(),
             },
             {
-              onConflict: "user_id,edition_date",
+              onConflict: generationJobsConflictTarget(),
               ignoreDuplicates: true,
             }
           );
@@ -260,20 +259,32 @@ Deno.serve(async (req) => {
 
     const claimed = (claimedRaw ?? []) as GenerationJobRow[];
 
-    // 3) Build the claimed batch concurrently. Sequential would blow past
-    // the Edge Function's own execution timeout well before a batch
-    // finished — each build can take ~60-90s, so 15 in a row would take
-    // 15-20+ minutes. Concurrent keeps one sweep to roughly one edition's
-    // worth of wall time, regardless of batch size.
-    const results = await Promise.all(
-      claimed.map(async (job) => {
-        const location = await resolveEditionLocation(
-          supabaseAdmin,
-          job.user_id,
-          null
-        );
+    // 3) Build the claimed batch with bounded concurrency — avoids Edge timeout
+    // when many builds run at once while still processing a full batch per sweep.
+    const results = await mapWithConcurrency(
+      claimed,
+      BUILD_CONCURRENCY,
+      async (job) => {
+        const row = job as GenerationJobRow & { metro_key?: string | null };
+        const metroKey =
+          row.metro_key?.trim() ||
+          (await (async () => {
+            const location = await resolveEditionLocation(
+              supabaseAdmin,
+              job.user_id,
+              null
+            );
+            if (!location) return null;
+            return resolveEditionMarket({
+              city: location.city,
+              state: location.state,
+              region: location.region,
+              lat: location.lat,
+              lon: location.lon,
+            })?.metroKey ?? null;
+          })());
 
-        if (!location) {
+        if (!metroKey) {
           await supabaseAdmin
             .from("generation_jobs")
             .update({
@@ -286,34 +297,33 @@ Deno.serve(async (req) => {
           return { ok: false };
         }
 
-        const result = await buildEditionForUser(supabaseAdmin, job.user_id, location, {
+        const result = await executeClaimedGenerationJob(supabaseAdmin, {
+          jobId: job.id,
+          userId: job.user_id,
           editionDate: job.edition_date,
+          metroKey,
           temperatureUnitPreference: "auto",
         });
 
-        await supabaseAdmin
-          .from("generation_jobs")
-          .update(
-            result.ok
-              ? {
-                  status: "ready",
-                  last_error: null,
-                  updated_at: new Date().toISOString(),
-                }
-              : {
-                  status: "failed",
-                  last_error: result.error,
-                  updated_at: new Date().toISOString(),
-                }
-          )
-          .eq("id", job.id);
-
         return { ok: result.ok };
-      })
+      }
     );
 
     const succeeded = results.filter((r) => r.ok).length;
     const failed = results.length - succeeded;
+
+    const cronOutcome = {
+      kind: "cron_edition_jobs_outcome",
+      at: now.toISOString(),
+      reaped: reapedCount ?? 0,
+      enqueued,
+      skippedTooEarly,
+      skippedReady,
+      processed: results.length,
+      succeeded,
+      failed,
+    };
+    console.log(JSON.stringify(cronOutcome));
 
     return json({
       success: true,

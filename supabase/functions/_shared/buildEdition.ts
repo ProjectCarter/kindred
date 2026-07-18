@@ -13,7 +13,7 @@ import {
   selectBanditsPick,
 } from "./bandit/selectPick.ts";
 import type { BanditsPick } from "./bandit/types.ts";
-import { runEditorialDecisions } from "./editor/index.ts";
+import { runLocalEditorialDecisions } from "./editor/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
 import type { DiscoveryPayload, DiscoveryRankingContext } from "./discovery/types.ts";
 import { runKnowledgeDecisions } from "./knowledge/index.ts";
@@ -39,7 +39,6 @@ import { composeHeroOpening } from "./morningEdition/heroOpening.ts";
 import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
 import { fetchApprovedCityArticle } from "./storyOf/library.ts";
 import { cityArticleSourceNote } from "./storyOf/sourceNote.ts";
-import { resolveProductionMorningHero } from "./heroArtwork/production.ts";
 import { buildHistoryAroundTownForEdition } from "./historyAroundTown/library.ts";
 import { isMorningHeroDetailComplete } from "./heroArtwork/presentation.ts";
 import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
@@ -106,8 +105,16 @@ import {
   type EditionSectionWriteRow,
 } from "./markets/editionSectionAudit.ts";
 import { getCatalogBootstrapState } from "./catalog/catalogBootstrap.ts";
-import { metroKeyFromPlace } from "../../../lib/location/metroKey.ts";
+import { catalogMetroKeyForMarket } from "../../../lib/markets/resolveEditionMarket.ts";
 import { editionsConflictTarget } from "./markets/editionIdentity.ts";
+import { publishMinimumViableEditionCheckpoint } from "./edition/earlyEditionPublish.ts";
+import {
+  logNationalDailyAttachedToCity,
+  probeUsNationalDailyCache,
+  resolveUsNationalDailyEditorial,
+  type UsNationalDailyEditorial,
+} from "./nationalDaily/resolveUsNationalDaily.ts";
+import { logNationalNewsAttachedToCity } from "./nationalDaily/resolveNationalNews.ts";
 
 export type { LocalEvent } from "./localEvents/provider.ts";
 export {
@@ -610,11 +617,7 @@ export async function buildEditionForUser(
     conflictTarget: editionConflictTarget,
   });
 
-  const catalogMetroKey = metroKeyFromPlace({
-    city: location.city,
-    state: location.state,
-    region: location.region,
-  });
+  const catalogMetroKey = catalogMetroKeyForMarket(editionMarket);
   const marketAnchor = {
     lat: location.lat,
     lon: location.lon,
@@ -757,13 +760,24 @@ export async function buildEditionForUser(
 
   const eventTimezone = resolveEventTimezone(eventsLocation);
 
+  const usNationalDailyCacheWarm = await timer.timed(
+    "National Daily Cache Probe (DB)",
+    () => probeUsNationalDailyCache(supabaseAdmin, editionDate)
+  );
+  console.log("[buildEdition] national daily cache", {
+    editionDate,
+    warm: usNationalDailyCacheWarm,
+  });
+
   const [weatherForecast, onThisDayCandidates, localEventsRaw, localPlaces, editorial] =
     await Promise.all([
     timer.timed("Weather", () =>
       fetchWeatherForecast(weatherLat, weatherLon, supabaseAdmin)
     ),
     timer.timed("Today in History - candidates", () =>
-      fetchOnThisDayCandidates(editionDate)
+      usNationalDailyCacheWarm
+        ? Promise.resolve([])
+        : fetchOnThisDayCandidates(editionDate)
     ),
     timer.timed("Local Events", () =>
       getLocalEvents(eventsLocation, {
@@ -772,6 +786,7 @@ export async function buildEditionForUser(
         editionDate,
         timezone: eventTimezone,
         admin: supabaseAdmin,
+        catalogMetroKey,
       })
     ),
     // Shared per-metro cache (see places/cache.ts) — this call almost
@@ -779,8 +794,8 @@ export async function buildEditionForUser(
     timer.timed("Food & Drink - Places", () =>
       getLocalPlacesForEdition(supabaseAdmin, eventsLocation)
     ),
-    timer.timed("News - Editorial Decisions", () =>
-      runEditorialDecisions({
+    timer.timed("News - Local Editorial Decisions", () =>
+      runLocalEditorialDecisions({
         editionDate,
         newsApiKey,
         ranking: {
@@ -869,15 +884,29 @@ export async function buildEditionForUser(
   const weatherAttribution = weatherSourceAttribution(weatherForecast);
 
   let historySelection: TodayInHistorySelection | null = null;
+  let npsParks: Awaited<ReturnType<typeof getNpsParksForEdition>> = [];
   try {
-    historySelection = await timer.timed("Today in History - select", () =>
-      selectTodayInHistoryStory({
-        candidates: onThisDayCandidates,
-        nowYear: editionDateObj.getFullYear(),
-      })
-    );
+    const [historyResult, npsResult] = await Promise.all([
+      usNationalDailyCacheWarm
+        ? Promise.resolve(null)
+        : timer.timed("Today in History - select", () =>
+            selectTodayInHistoryStory({
+              candidates: onThisDayCandidates,
+              nowYear: editionDateObj.getFullYear(),
+            })
+          ),
+      timer.timed("NPS Parks", () =>
+        getNpsParksForEdition(
+          supabaseAdmin,
+          { lat: weatherLat, lon: weatherLon, state },
+          weatherIntel
+        )
+      ),
+    ]);
+    historySelection = historyResult;
+    npsParks = npsResult;
   } catch (historySelectErr) {
-    console.warn("[buildEdition] today in history selection failed", historySelectErr);
+    console.warn("[buildEdition] today in history / NPS parallel fetch failed", historySelectErr);
   }
 
   let onThisDay = historySelection?.event ?? null;
@@ -896,6 +925,32 @@ export async function buildEditionForUser(
     }
   }
 
+  const heroMonthForNational = parseEditionDate(editionDate).getMonth() + 1;
+  const nationalDailyPromise = resolveUsNationalDailyEditorial(supabaseAdmin, {
+    editionDate,
+    editionTraceId: options.editionTraceId ?? null,
+    anthropicApiKey,
+    newsApiKey,
+    historySelection,
+    onThisDay,
+    historyImage: historySelection?.image ?? null,
+    heroContext: {
+      date: editionDate,
+      season: getSeason(heroMonthForNational),
+      weatherHint:
+        weatherConditionCode != null &&
+        /rain|storm|drizzle/i.test(String(weatherConditionCode))
+          ? "rain"
+          : weather?.current?.temperature_2m != null &&
+              weather.current.temperature_2m >= 32
+            ? "hot"
+            : weather?.current?.temperature_2m != null &&
+                weather.current.temperature_2m <= 5
+              ? "cold"
+              : "clear",
+    },
+  });
+
   // Pipeline already returns the full ranked qualified pool — do not re-allocate.
   const localEventsRanked = localEventsRawFiltered;
 
@@ -913,14 +968,8 @@ export async function buildEditionForUser(
     planningNote: weatherIntel?.planningNote?.slice(0, 60) ?? null,
   });
 
-  const npsParks = await timer.timed("NPS Parks", () =>
-    getNpsParksForEdition(
-      supabaseAdmin,
-      { lat: weatherLat, lon: weatherLon, state },
-      weatherIntel
-    )
-  );
-  const banditPlanningNote = topNpsPlanningNote(npsParks, weatherIntel);
+  const npsParksResolved = npsParks;
+  const banditPlanningNote = topNpsPlanningNote(npsParksResolved, weatherIntel);
 
   // Bandit's Pick candidate selection is pure CPU over the already-scored
   // news pool plus verified local places/events (raw, pre-AI-enrichment —
@@ -946,7 +995,7 @@ export async function buildEditionForUser(
     favoriteSources: personalization.favoriteSources,
     weatherSummary,
     weatherIntel,
-    npsParks,
+    npsParks: npsParksResolved,
     isWeekend: editorial.calendar.isWeekend,
     isSunday: editorial.calendar.isSunday,
     localPlaces: localPlacesFiltered,
@@ -999,17 +1048,20 @@ export async function buildEditionForUser(
     surfaced: localEventsForEdition.length,
   });
 
-  if (localEvents.length > 0 && anthropicApiKey) {
+  async function enrichLocalEventsForEdition(): Promise<LocalEvent[]> {
+    let events = localEventsForEdition;
+    if (events.length === 0 || !anthropicApiKey) return events;
+
     const editorialTarget = Math.min(LOCAL_EVENTS_EDITION_SURFACED_MAX, 12);
     const reservePool = localEventsForBandit.filter(
       (candidate) =>
-        !localEvents.some(
+        !events.some(
           (picked) =>
             `${picked.name}|${picked.startDateTime}`.toLowerCase() ===
             `${candidate.name}|${candidate.startDateTime}`.toLowerCase()
         )
     );
-    const enrichQueue = [...localEvents, ...reservePool];
+    const enrichQueue = [...events, ...reservePool];
     const publishable: LocalEvent[] = [];
     const seen = new Set<string>();
     let enrichedAttempts = 0;
@@ -1034,80 +1086,87 @@ export async function buildEditionForUser(
       }
     }
 
-    localEvents = publishable.slice(0, editorialTarget);
+    events = publishable.slice(0, editorialTarget);
 
     console.log("[buildEdition] local events editorial gate", {
       enrichedAttempts,
-      publishable: localEvents.length,
+      publishable: events.length,
       remainingQueue: enrichQueue.length,
     });
 
-    void persistEventEditorialBatch(supabaseAdmin, localEvents, catalogMetroKey).catch(
+    void persistEventEditorialBatch(supabaseAdmin, events, catalogMetroKey).catch(
       (err) =>
         console.warn("[buildEdition] local events editorial persist failed", {
           error: err instanceof Error ? err.message : String(err),
         })
     );
+
+    return events;
   }
 
-  // Story Editor runs after Local Events editorial so event copy gets time budget.
-  const editedBatch = await timer.timed(
-    "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
-    () =>
-      Promise.all([
-        leadStory && anthropicApiKey
-          ? runStoryEditorSafe(
+  // Local Events AI enrichment and Story Editor are independent — run together.
+  const [localEventsEnriched, editedBatch] = await Promise.all([
+    enrichLocalEventsForEdition(),
+    timer.timed(
+      "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
+      () =>
+        Promise.all([
+          leadStory && anthropicApiKey
+            ? runStoryEditorSafe(
+                {
+                  id: leadStory.id,
+                  headline: leadStory.headline,
+                  sourceText: leadStory.summary || leadStory.headline,
+                  source: leadStory.source,
+                  url: leadStory.url,
+                  publishedAt: leadStory.publishedAt,
+                  surfaceRole: "lead",
+                  locale: "en",
+                  selectionWhy: leadStory.selection.reasons
+                    .map((r) => r.label)
+                    .slice(0, 4),
+                },
+                anthropicApiKey
+              )
+            : Promise.resolve(null),
+          banditsPickStory?.kind === "article" && anthropicApiKey
+            ? runStoryEditorSafe(
+                {
+                  id: banditsPickStory.id,
+                  headline: banditsPickStory.headline,
+                  sourceText:
+                    banditsPickStory.summary || banditsPickStory.headline,
+                  source: banditsPickStory.source,
+                  url: banditsPickStory.url,
+                  publishedAt: banditsPickStory.publishedAt,
+                  surfaceRole: "bandits_pick",
+                  locale: "en",
+                  selectionWhy: [banditsPickStory.why].filter(Boolean),
+                },
+                anthropicApiKey
+              )
+            : Promise.resolve(null),
+          ...topStories.map((ranked) =>
+            runStoryEditorSafe(
               {
-                id: leadStory.id,
-                headline: leadStory.headline,
-                sourceText: leadStory.summary || leadStory.headline,
-                source: leadStory.source,
-                url: leadStory.url,
-                publishedAt: leadStory.publishedAt,
-                surfaceRole: "lead",
+                id: ranked.story.id,
+                headline: ranked.story.title,
+                sourceText: ranked.story.description || ranked.story.title,
+                source: ranked.story.source,
+                url: ranked.story.url,
+                publishedAt: ranked.story.publishedAt,
+                surfaceRole: "top_story",
                 locale: "en",
-                selectionWhy: leadStory.selection.reasons
-                  .map((r) => r.label)
-                  .slice(0, 4),
+                selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
               },
               anthropicApiKey
             )
-          : Promise.resolve(null),
-        banditsPickStory?.kind === "article" && anthropicApiKey
-          ? runStoryEditorSafe(
-              {
-                id: banditsPickStory.id,
-                headline: banditsPickStory.headline,
-                sourceText:
-                  banditsPickStory.summary || banditsPickStory.headline,
-                source: banditsPickStory.source,
-                url: banditsPickStory.url,
-                publishedAt: banditsPickStory.publishedAt,
-                surfaceRole: "bandits_pick",
-                locale: "en",
-                selectionWhy: [banditsPickStory.why].filter(Boolean),
-              },
-              anthropicApiKey
-            )
-          : Promise.resolve(null),
-        ...topStories.map((ranked) =>
-          runStoryEditorSafe(
-            {
-              id: ranked.story.id,
-              headline: ranked.story.title,
-              sourceText: ranked.story.description || ranked.story.title,
-              source: ranked.story.source,
-              url: ranked.story.url,
-              publishedAt: ranked.story.publishedAt,
-              surfaceRole: "top_story",
-              locale: "en",
-              selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
-            },
-            anthropicApiKey
-          )
-        ),
-      ])
-  );
+          ),
+        ])
+    ),
+  ]);
+
+  localEvents = localEventsEnriched;
 
   const [editedLead, editedPick, ...editedTopStories] = editedBatch;
 
@@ -1501,35 +1560,7 @@ export async function buildEditionForUser(
   }
 
   // local_events is stored as structured JSON for card UI — not rewritten by Claude.
-
-  if (onThisDay) {
-    sections.push({
-      section_type: "today_in_history",
-      position: 4,
-      groundingData: buildTodayInHistoryGrounding(
-        onThisDay,
-        knowledgeWithGrounding.providerGrounding?.onThisDay,
-        historySelection?.image?.url
-          ? {
-              image: historySelection.image,
-              editorNotes: historySelection.editorNotes,
-            }
-          : undefined
-      ),
-      instruction:
-        `Write Today in History as Kindred's signature morning feature — a calm Sunday newspaper ` +
-        `story someone would read over coffee for three or four minutes. ` +
-        `Write 450–900 words across exactly 6 paragraphs (separated by blank lines). ` +
-        `Cover in order: a specific hook, historical context, what happened, why it mattered then, ` +
-        `long-term impact, and a unique lasting legacy — plus one or two memorable verified details ` +
-        `woven through the piece. Vary paragraph length. End with a quiet observation that could belong only ` +
-        `to this event and year — never a summary recap. ` +
-        `Headline format: "${onThisDay.year} — Compelling editorial title" (never "Today in History" alone). ` +
-        `Tone: thoughtful, timeless, curious — never encyclopedic, never copied verbatim. ` +
-        `Ground ONLY in the dated event and verified background below. Synthesize original prose; ` +
-        `do not invent facts.`,
-    });
-  }
+  // Today in History copy comes from the shared U.S. national daily layer — not per-city AI.
 
   if (weather?.daily) {
     const tomorrowHigh = formatTempC(
@@ -1703,6 +1734,51 @@ export async function buildEditionForUser(
     headline: banditsPick?.story.headline?.slice(0, 60) ?? null,
   });
 
+  let usNationalDaily: UsNationalDailyEditorial | null = null;
+  try {
+    usNationalDaily = await timer.timed("National Daily Editorial", () =>
+      nationalDailyPromise
+    );
+    if (usNationalDaily?.id) {
+      logNationalDailyAttachedToCity({
+        traceId: options.editionTraceId ?? null,
+        editionDate,
+        nationalDailyId: usNationalDaily.id,
+        metroKey: editionMetroKey,
+        masterpieceArtworkId: usNationalDaily.todayMasterpiece?.artworkId ?? null,
+      });
+    }
+    if (usNationalDaily?.nationalNews && usNationalDaily.id) {
+      logNationalNewsAttachedToCity({
+        traceId: options.editionTraceId ?? null,
+        editionDate,
+        nationalDailyId: usNationalDaily.id,
+        packageId: usNationalDaily.nationalNews.packageId,
+        metroKey: editionMetroKey,
+        storyCount: usNationalDaily.nationalNews.stories.length,
+      });
+    }
+  } catch (nationalErr) {
+    console.warn("[buildEdition] national daily editorial skipped", nationalErr);
+  }
+
+  if (
+    usNationalDaily?.todayInHistory?.image &&
+    knowledgeWithGrounding.providerGrounding
+  ) {
+    knowledgeWithGrounding.providerGrounding.onThisDayImage =
+      usNationalDaily.todayInHistory.image;
+    if (historySelection) {
+      knowledgeWithGrounding.providerGrounding.onThisDaySelection = {
+        editorialScore: historySelection.editorialScore,
+        imageScore: historySelection.imageScore,
+        candidateCount: historySelection.candidateCount,
+        selectedRank: historySelection.selectedRank,
+        editorNotes: historySelection.editorNotes,
+      };
+    }
+  }
+
   const [written, bandit] = await Promise.all([
     timer.timed("AI Summaries - Section Writing", () =>
       Promise.all(
@@ -1754,6 +1830,121 @@ export async function buildEditionForUser(
     emptyWrittenCount: sections.length - writtenUsable,
     localEventsStructured: localEvents.length > 0,
   });
+
+  // MVP checkpoint — core desks first so the client can paint before optional AI polish.
+  try {
+    const mvpCheckpointStart = performance.now();
+    const cityArticleEarly = await fetchApprovedCityArticle(supabaseAdmin, {
+      city,
+      state,
+      region,
+      lat: weatherLat,
+      lon: weatherLon,
+    });
+
+    const mvpRows: Array<{
+      section_type: string;
+      position: number;
+      headline: string;
+      body: string;
+      source_note?: string | null;
+    }> = [];
+
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i]!;
+      const copy = written[i];
+      if (!copy?.headline || !copy?.body) continue;
+      if (section.section_type !== "weather") {
+        continue;
+      }
+      mvpRows.push({
+        section_type: section.section_type,
+        position: section.position,
+        headline: copy.headline,
+        body: copy.body,
+        source_note: weatherAttribution,
+      });
+    }
+
+    if (usNationalDaily?.todayInHistory) {
+      mvpRows.push({
+        section_type: "today_in_history",
+        position: 4,
+        headline: usNationalDaily.todayInHistory.headline,
+        body: usNationalDaily.todayInHistory.body,
+        source_note: usNationalDaily.todayInHistory.sourceNote,
+      });
+    }
+
+    if (cityArticleEarly) {
+      mvpRows.push({
+        section_type: "story_of",
+        position: 5,
+        headline: cityArticleEarly.headline,
+        body: cityArticleEarly.body,
+        source_note: cityArticleSourceNote(cityArticleEarly),
+      });
+    }
+
+    if (heroWeatherTag) {
+      mvpRows.push({
+        section_type: "weather",
+        position: 1,
+        headline: heroWeatherTag,
+        body: heroWeatherTag,
+        source_note: weatherAttribution,
+      });
+    }
+
+    if (localEvents.length > 0) {
+      const publishableEvents = assertEventsVerifiedForPublication(localEvents, {
+        now: new Date(),
+        location: eventsLocation,
+        eventTimezone,
+        editionDate,
+      });
+      if (publishableEvents.length > 0) {
+        mvpRows.push({
+          section_type: "local_events",
+          position: 3,
+          headline: "A Few Things Happening Around Town",
+          body: buildLocalEventsBody(publishableEvents, { editionCity: city }),
+          source_note: "Curated from trusted local event sources",
+        });
+      }
+    }
+
+    mvpRows.sort((a, b) => a.position - b.position);
+
+    const checkpoint = await publishMinimumViableEditionCheckpoint(supabaseAdmin, {
+      traceId: options.editionTraceId,
+      userId,
+      editionDate,
+      metroKey: editionMetroKey,
+      editionCore: {
+        editorial_context: editorialContext,
+        lead_story: leadStory,
+        bandit,
+        discovery: JSON.parse(JSON.stringify(discoveryWithImages)),
+        knowledge: JSON.parse(JSON.stringify(knowledgeWithGrounding)),
+        memory: JSON.parse(JSON.stringify(memory)),
+      },
+      sectionRows: mvpRows,
+    });
+
+    console.log("[buildEdition] MVP checkpoint", {
+      traceId: options.editionTraceId ?? null,
+      ok: checkpoint.ok,
+      markedReady: checkpoint.ok ? checkpoint.markedReady : false,
+      sectionCount: checkpoint.ok ? checkpoint.sectionCount : 0,
+      elapsedMs: Math.round(performance.now() - mvpCheckpointStart),
+    });
+  } catch (mvpErr) {
+    console.warn("[buildEdition] MVP checkpoint skipped", {
+      traceId: options.editionTraceId ?? null,
+      error: mvpErr instanceof Error ? mvpErr.message : String(mvpErr),
+    });
+  }
 
   const seasonMonth = new Date(`${editionDate}T12:00:00`).getMonth();
   const seasonHint =
@@ -1894,25 +2085,8 @@ export async function buildEditionForUser(
 
   let morningHero: MorningHeroExperience | null = null;
   try {
-    const heroMonth = parseEditionDate(editionDate).getMonth() + 1;
-    morningHero = await resolveProductionMorningHero(supabaseAdmin, {
-      editionDate,
-      context: {
-        date: editionDate,
-        season: getSeason(heroMonth),
-        weatherHint:
-          weatherConditionCode != null &&
-          /rain|storm|drizzle/i.test(String(weatherConditionCode))
-            ? "rain"
-            : weather?.current?.temperature_2m != null &&
-                weather.current.temperature_2m >= 32
-              ? "hot"
-              : weather?.current?.temperature_2m != null &&
-                  weather.current.temperature_2m <= 5
-                ? "cold"
-                : "clear",
-      },
-    });
+    const nationalHero = usNationalDaily?.todayMasterpiece?.presentation ?? null;
+    morningHero = nationalHero;
     if (morningHero) {
       if (!isMorningHeroDetailComplete(morningHero.detail)) {
         console.warn("[buildEdition] morning hero rejected — incomplete detail article", {
@@ -1934,7 +2108,7 @@ export async function buildEditionForUser(
       }
     } else {
       morningEdition.selectionMeta.editorNotes.push(
-        "hero_artwork: library empty or no hosted artwork eligible for selection"
+        "hero_artwork: national daily layer empty or no hosted artwork eligible for selection"
       );
     }
 
@@ -2081,6 +2255,7 @@ export async function buildEditionForUser(
   const editionUpsertFields: Record<string, unknown> = {
     editorial_context: editorialContextWithMorning,
     lead_story: leadStory,
+    national_news: usNationalDaily?.nationalNews ?? null,
     bandit,
     discovery: JSON.parse(JSON.stringify(discoveryWithImages)),
     knowledge: JSON.parse(JSON.stringify(knowledgeWithGrounding)),
@@ -2117,6 +2292,7 @@ export async function buildEditionForUser(
     edition_date: editionDate,
     metro_key: editionMetroKey,
     status: "processing" as const,
+    us_national_daily_id: usNationalDaily?.id ?? null,
     editorial_context: editorialContextWithMorning,
     lead_story: leadStory,
     bandit,
@@ -2296,6 +2472,8 @@ export async function buildEditionForUser(
     city,
     state,
     region,
+    lat: weatherLat,
+    lon: weatherLon,
   });
 
   const { data: existingSections, error: existingSectionsError } =
@@ -2468,7 +2646,9 @@ export async function buildEditionForUser(
         beforeGate: localEvents.length,
       });
     } else {
-    const localEventsBody = buildLocalEventsBody(publishableEvents);
+    const localEventsBody = buildLocalEventsBody(publishableEvents, {
+      editionCity: city,
+    });
     const persistedCount = (() => {
       try {
         const parsed = JSON.parse(localEventsBody) as { events?: unknown[] };
@@ -2502,6 +2682,21 @@ export async function buildEditionForUser(
       headline: heroWeatherTag,
       body: heroWeatherTag,
       source_note: weatherAttribution,
+    });
+  }
+
+  if (usNationalDaily?.todayInHistory) {
+    rows.push({
+      edition_id: edition.id,
+      section_type: "today_in_history",
+      position: 4,
+      headline: usNationalDaily.todayInHistory.headline,
+      body: usNationalDaily.todayInHistory.body,
+      source_note: usNationalDaily.todayInHistory.sourceNote,
+    });
+    console.log("[buildEdition] today in history persisted from national daily", {
+      nationalDailyId: usNationalDaily.id,
+      headline: usNationalDaily.todayInHistory.headline.slice(0, 60),
     });
   }
 
@@ -2621,39 +2816,64 @@ export async function buildEditionForUser(
   const heroLibrary = await listReadyHeroArtworkLibrary(supabaseAdmin);
   const buildComplete = await assessPersistedEditionRow(supabaseAdmin, edition.id, {
     morningEdition: editionUpsertFields.morning_edition,
-    // Only require morning hero when at least one library record is fully
-    // publishable — approved-but-incomplete rows must not block the edition.
     libraryHasHeroArtwork: heroLibrary.length > 0,
   });
 
+  const { data: statusRow } = await supabaseAdmin
+    .from("editions")
+    .select("status")
+    .eq("id", edition.id)
+    .maybeSingle();
+  const editionAlreadyReady = statusRow?.status === "ready";
+
   if (!buildComplete.complete) {
-    console.warn("[buildEdition] refusing ready — persisted row incomplete", {
+    console.warn("[buildEdition] persisted row completeness gaps", {
       editionId: edition.id,
       insertedTypes: rowsToInsert.map((r) => r.section_type),
       discoverySurfaceItems: discoverySurfaceItemCount(discoveryWithImages),
       reasons: buildComplete.reasons,
+      editionAlreadyReady,
     });
-    await supabaseAdmin
-      .from("editions")
-      .update({ status: "failed" })
-      .eq("id", edition.id);
+    if (!editionAlreadyReady) {
+      await supabaseAdmin
+        .from("editions")
+        .update({ status: "failed" })
+        .eq("id", edition.id);
 
-    logTimingSummary(timer);
-    return {
-      ok: false,
-      error: `Edition incomplete — not marking ready: ${buildComplete.reasons.join("; ")}`,
-    };
+      logTimingSummary(timer);
+      return {
+        ok: false,
+        error: `Edition incomplete — not marking ready: ${buildComplete.reasons.join("; ")}`,
+      };
+    }
   }
 
-  // Only now — sections confirmed written — is this edition actually done.
-  const { error: readyError } = await supabaseAdmin
-    .from("editions")
-    .update({ status: "ready" })
-    .eq("id", edition.id);
+  // Only flip to ready when not already published via MVP checkpoint.
+  if (!editionAlreadyReady) {
+    const { error: readyError } = await supabaseAdmin
+      .from("editions")
+      .update({ status: "ready" })
+      .eq("id", edition.id);
 
-  if (readyError) {
-    logTimingSummary(timer);
-    return { ok: false, error: readyError.message };
+    if (readyError) {
+      logTimingSummary(timer);
+      return { ok: false, error: readyError.message };
+    }
+  } else {
+    // Refresh full row while keeping ready — optional desks may have landed.
+    await supabaseAdmin
+      .from("editions")
+      .update({
+        editorial_context: editionUpsertFields.editorial_context,
+        lead_story: editionUpsertFields.lead_story,
+        bandit: editionUpsertFields.bandit,
+        discovery: editionUpsertFields.discovery,
+        knowledge: editionUpsertFields.knowledge,
+        memory: editionUpsertFields.memory,
+        morning_edition: editionUpsertFields.morning_edition,
+        history_around_town: editionUpsertFields.history_around_town,
+      })
+      .eq("id", edition.id);
   }
 
   logTimingSummary(timer);

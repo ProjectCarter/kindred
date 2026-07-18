@@ -263,6 +263,10 @@ export function selectLeadStory(
     );
   }
 
+  if (policy.localOnly) {
+    return null;
+  }
+
   // 2) Breaking — only when clearly strong
   const breakingFromSlate = input.topStories.find((s) => s.role === "breaking");
   if (

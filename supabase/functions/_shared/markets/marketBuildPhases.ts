@@ -27,6 +27,7 @@ import {
 } from "./bootstrapReconcile.ts";
 import {
   assessUsMarketCompleteness,
+  hasApprovedStoryOf,
   isMarketSupported,
   marketStatusFromCompleteness,
   validateUsMarketOnly,
@@ -361,13 +362,9 @@ export async function runMarketBuildPhase(
         await registerFoodDrinkMetro(admin, loc);
 
         const bootstrap = await getCatalogBootstrapState(admin, market.metro_key);
-        const { count: storyCount } = await admin
-          .from("kindred_city_articles")
-          .select("id", { count: "exact", head: true })
-          .eq("metro_key", market.metro_key)
-          .eq("approval_status", "approved");
+        const storyReady = await hasApprovedStoryOf(admin, market);
 
-        if ((storyCount ?? 0) < 1) {
+        if (!storyReady) {
           throw new Error(
             "Story of Your City requires an approved kindred_city_articles row before build"
           );

@@ -9,6 +9,8 @@ import { parseMorningEditionPayload } from "./morningEdition";
 import type { EditionSection } from "./types";
 import { normalizeCityKey } from "../location/locationKey";
 
+export { shouldWithholdEditionForCityMismatch } from "./editionCityMismatch.ts";
+
 export function cityFromEditionPayloads(row: {
   discovery?: unknown;
   editorial_context?: unknown;

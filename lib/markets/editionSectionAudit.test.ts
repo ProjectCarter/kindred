@@ -86,7 +86,7 @@ test("filterEditionSectionRowsByMarket keeps metro-local sections only", () => {
   assert.equal(rejected[0]?.sectionType, "local_events");
 });
 
-test("auditEditionSectionRow rejects story_of with wrong metroKey in source_note", () => {
+test("auditEditionSectionRow rejects story_of when headline city mismatches edition", () => {
   const audit = auditEditionSectionRow({
     row: {
       edition_id: "ed-1",
@@ -102,7 +102,31 @@ test("auditEditionSectionRow rejects story_of with wrong metroKey in source_note
   });
 
   assert.equal(audit.crossMetroRejected, true);
-  assert.match(audit.rejectReason ?? "", /story_of_metro_mismatch/);
+  assert.match(audit.rejectReason ?? "", /story_of_city_mismatch/);
+});
+
+test("auditEditionSectionRow accepts Gilbert story on Phoenix metro edition", () => {
+  const phoenixMarket = resolveEditionMarket({
+    city: "Gilbert",
+    state: "AZ",
+    lat: 33.3528,
+    lon: -111.789,
+  })!;
+  const audit = auditEditionSectionRow({
+    row: {
+      edition_id: "ed-1",
+      section_type: "story_of",
+      position: 5,
+      headline: "The Story of Gilbert",
+      body: "Gilbert grew from farmland…",
+      source_note: JSON.stringify({ metroKey: "gilbert-az" }),
+    },
+    market: phoenixMarket,
+    catalogMetroKey: "phoenix-az",
+    anchor: { city: "Gilbert", state: "AZ", lat: 33.3528, lon: -111.789 },
+  });
+
+  assert.equal(audit.crossMetroRejected, false);
 });
 
 test("buildEditionDeskGapReport explains missing discovery desks", () => {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getCatalogBootstrapState } from "../catalog/catalogBootstrap.ts";
+import { libraryMetroKeysForLocation } from "../../../../lib/markets/libraryMetroKeys.ts";
 
 export type MarketCompletenessSection = {
   id: string;
@@ -51,6 +52,40 @@ function pushSection(
   if (section.required && !section.complete) {
     deficiencies.push(section.detail ?? section.label);
   }
+}
+
+export async function hasApprovedStoryOf(
+  admin: SupabaseClient,
+  market: UsMarketRow
+): Promise<boolean> {
+  const metroKeys = libraryMetroKeysForLocation({
+    city: market.primary_city,
+    state: market.state_code,
+    lat: market.latitude,
+    lon: market.longitude,
+  });
+
+  for (const key of metroKeys) {
+    const { count } = await admin
+      .from("kindred_city_articles")
+      .select("id", { count: "exact", head: true })
+      .eq("metro_key", key)
+      .eq("approval_status", "approved");
+    if ((count ?? 0) > 0) return true;
+  }
+  return false;
+}
+
+async function countEligibleActivities(
+  admin: SupabaseClient,
+  metroKey: string
+): Promise<number> {
+  const { count } = await admin
+    .from("activities_catalog")
+    .select("id", { count: "exact", head: true })
+    .eq("metro_key", metroKey)
+    .in("lifecycle", ["verified", "active", "featured"]);
+  return count ?? 0;
 }
 
 async function countTable(
@@ -143,7 +178,7 @@ export async function assessUsMarketCompleteness(
   });
 
   const activityCount = bootstrap.activitiesCatalogBootstrapped
-    ? await countTable(admin, "activities_catalog", metroKey, { lifecycle: "active" })
+    ? await countEligibleActivities(admin, metroKey)
     : 0;
   const activitiesComplete =
     bootstrap.activitiesCatalogBootstrapped && activityCount >= MIN_ACTIVITIES;
@@ -155,7 +190,7 @@ export async function assessUsMarketCompleteness(
     detail: activitiesComplete
       ? null
       : bootstrap.activitiesCatalogBootstrapped
-      ? `Need ≥${MIN_ACTIVITIES} active activities (have ${activityCount})`
+      ? `Need ≥${MIN_ACTIVITIES} publishable activities (have ${activityCount})`
       : "Activities catalog awaiting first successful sync",
   });
 
@@ -176,12 +211,7 @@ export async function assessUsMarketCompleteness(
       : "Food & Drinks catalog awaiting first successful sync",
   });
 
-  const { count: storyCount } = await admin
-    .from("kindred_city_articles")
-    .select("id", { count: "exact", head: true })
-    .eq("metro_key", metroKey)
-    .eq("approval_status", "approved");
-  const storyComplete = (storyCount ?? 0) > 0;
+  const storyComplete = await hasApprovedStoryOf(admin, market);
   pushSection(sections, deficiencies, {
     id: "story_of",
     label: "Story of Your City",

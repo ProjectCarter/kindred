@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Validate one U.S. market — read-only, no catalog sync, no API spend.
- * Usage: node scripts/validate-us-market.mjs seattle-wa-metro
+ * Usage: CRON_SECRET=... node scripts/validate-us-market.mjs seattle-wa-metro
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { catalogAuthHeaders, supabaseUrl } from "./lib/catalogAuth.mjs";
 
 const slug = process.argv[2]?.trim();
 if (!slug) {
@@ -12,25 +12,9 @@ if (!slug) {
   process.exit(1);
 }
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ?? "https://zdqjeocdsbdzecawumdp.supabase.co";
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SERVICE_KEY) {
-  console.error("SUPABASE_SERVICE_ROLE_KEY required");
-  process.exit(1);
-}
-
-const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-
-const res = await fetch(`${SUPABASE_URL}/functions/v1/build-market`, {
+const res = await fetch(`${supabaseUrl()}/functions/v1/build-market`, {
   method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${SERVICE_KEY}`,
-  },
+  headers: catalogAuthHeaders(),
   body: JSON.stringify({ slug, action: "validate" }),
 });
 

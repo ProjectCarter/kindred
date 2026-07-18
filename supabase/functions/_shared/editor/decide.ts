@@ -1,4 +1,4 @@
-import { fetchStoryCandidates } from "../stories/fetchCandidates.ts";
+import { fetchStoryCandidates, fetchLocalStoryCandidates } from "../stories/fetchCandidates.ts";
 import { scoreCandidate, type ScoredCandidate } from "../stories/score.ts";
 import { selectFrontPage } from "../stories/selectFrontPage.ts";
 import { matchesRecentCoverage } from "../stories/diversity.ts";
@@ -143,6 +143,114 @@ export async function runEditorialDecisions(
     slateRoles: frontPage.stories.map((s) => s.role),
     tones: decisions.slate.map((s) => s.tone),
     notes: decisions.editorNotes,
+  });
+
+  return {
+    frontPage,
+    leadStory,
+    calendar,
+    policy,
+    decisions,
+  };
+}
+
+/**
+ * Local news desk only — city-specific lead and top stories.
+ * National coverage comes from the shared U.S. national daily layer.
+ */
+export async function runLocalEditorialDecisions(
+  input: RunEditorialDecisionsInput
+): Promise<EditorialDecisionsResult> {
+  const now = input.ranking.now ?? new Date();
+  const { calendar, policy } = policyForEditionDate(
+    input.editionDate,
+    now,
+    input.ranking.maxStories ?? 4
+  );
+
+  const ranking: StoryRankingContext = {
+    ...input.ranking,
+    now,
+    maxStories: policy.maxStories,
+    editorial: {
+      calendar,
+      policy,
+    },
+  };
+
+  const candidates = await fetchLocalStoryCandidates(ranking, input.newsApiKey);
+  const scored = candidates
+    .map((story) => scoreCandidate(story, ranking))
+    .filter(
+      (c) =>
+        c.story.pool === "local" ||
+        c.reasons.some(
+          (r) => r.code === "local_relevance" || r.code === "local_pool"
+        )
+    )
+    .sort((a, b) => b.score - a.score);
+
+  const provisionalSlate = selectFrontPage(scored, ranking, policy);
+  const leadStory = selectLeadStory(
+    {
+      topStories: provisionalSlate.stories,
+      scoredCandidates: scored,
+      localScoreThreshold: calendar.isWeekend ? 18 : 20,
+      recentStoryKeys: ranking.recentStoryKeys ?? [],
+    },
+    {
+      preferWeekendFeature: false,
+      excludeFromBelowFold: policy.leadDistinctFromSlate,
+      editionMode: policy.mode,
+      localOnly: true,
+    }
+  );
+
+  const excludeIds = new Set<string>();
+  if (leadStory && policy.leadDistinctFromSlate) {
+    excludeIds.add(leadStory.id);
+  }
+
+  const poolForSlate = scored.filter((c) => !excludeIds.has(c.story.id));
+  let frontPage = selectFrontPage(poolForSlate, ranking, policy);
+  frontPage = ensureEmotionalBalance(frontPage, poolForSlate, ranking, policy);
+  frontPage = {
+    ...frontPage,
+    scoredCandidates: scored,
+  };
+
+  const leadScored: ScoredCandidate | null = leadStory
+    ? scored.find((c) => c.story.id === leadStory.id) ?? null
+    : null;
+
+  const decisions = summarizeEditorialDecisions({
+    calendar,
+    policy,
+    lead: leadScored,
+    leadRole: leadStory?.role,
+    slate: frontPage.stories.map((s) => ({
+      story: s.story,
+      score: s.score,
+      role: s.role,
+      reasons: s.reasons,
+    })),
+  });
+
+  frontPage = {
+    ...frontPage,
+    groundingData: enrichGrounding(frontPage.groundingData, decisions),
+    selectionMeta: {
+      ...frontPage.selectionMeta,
+      editorialDecisions: decisions,
+    },
+  };
+
+  console.log("[editor] local decisions", {
+    mode: policy.mode,
+    lead: leadStory?.headline?.slice(0, 60) ?? null,
+    leadRole: leadStory?.role ?? null,
+    slateRoles: frontPage.stories.map((s) => s.role),
+    localPoolSize: scored.length,
   });
 
   return {

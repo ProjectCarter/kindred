@@ -10,3 +10,7 @@ export function stashTodaysHistoryPlaces(places: HistoryPlaceSnapshot[]): void {
 export function getTodaysHistoryPlaces(): HistoryPlaceSnapshot[] {
   return todaysHistoryPlaces;
 }
+
+export function getHistoryPlaceById(id: string): HistoryPlaceSnapshot | null {
+  return todaysHistoryPlaces.find((place) => place.id === id) ?? null;
+}
