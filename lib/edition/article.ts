@@ -5,7 +5,8 @@ import {
   type RankedDiscoveryItem,
 } from "./discovery";
 import type { KnowledgeFacet, KnowledgePayload } from "./knowledge";
-import { onThisDayImageFromKnowledge } from "./historicalImages";
+import { resolveTodayInHistoryImage } from "./todayInHistoryImage";
+import { resolveTodayInHistoryDisplayHeadline } from "./history/headline";
 import {
   isStoryOfSection,
   parseStoryOfSourceNote,
@@ -500,15 +501,37 @@ export function articleFromEditionSectionWithKnowledge(
     body: string;
     source_note?: string | null;
   },
-  knowledge: KnowledgePayload | unknown | null | undefined
+  knowledge: KnowledgePayload | unknown | null | undefined,
+  options?: {
+    nationalDaily?: import("./usNationalDaily").UsNationalDailyRecord | null;
+    pairedNationalDaily?: import("./usNationalDaily").UsNationalDailyRecord | null;
+  }
 ): KindredArticle {
-  return articleFromEditionSection(section, {
-    historicalImage:
-      section.section_type === "today_in_history"
-        ? onThisDayImageFromKnowledge(knowledge)
-        : isStoryOfSection(section.section_type)
-          ? storyOfImageFromSourceNote(section.source_note)
-          : null,
+  const historicalImage =
+    section.section_type === "today_in_history"
+      ? resolveTodayInHistoryImage({
+          section,
+          knowledge,
+          nationalDaily: options?.nationalDaily,
+          pairedNationalDaily: options?.pairedNationalDaily,
+        }).image
+      : isStoryOfSection(section.section_type)
+        ? storyOfImageFromSourceNote(section.source_note)
+        : null;
+
+  const displayHeadline =
+    section.section_type === "today_in_history"
+      ? resolveTodayInHistoryDisplayHeadline(section)
+      : section.headline;
+
+  return articleFromEditionSection(
+    { ...section, headline: displayHeadline },
+    {
+      historicalImage,
+    dek:
+      isStoryOfSection(section.section_type)
+        ? parseStoryOfSourceNote(section.source_note)?.subtitle ?? null
+        : null,
   });
 }
 

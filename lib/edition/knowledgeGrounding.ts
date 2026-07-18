@@ -31,10 +31,22 @@ export type KnowledgeLookupResult = {
   matchedQuery?: string;
 };
 
+export type TodayInHistoryDeskSync = {
+  year: number;
+  eventText: string;
+  articleFingerprint: string;
+  imageFingerprint: string;
+  nationalDailyId: string | null;
+  syncedAt: string;
+  source: "national_daily" | "client_recovery" | "server_recovery";
+};
+
 export type EditionKnowledgeGrounding = {
   onThisDay?: KnowledgeLookupResult | null;
   /** Authentic historical media for Today in History — never AI or stock. */
   onThisDayImage?: HistoricalImageAsset | null;
+  /** Binds article + image to one Today in History record on device. */
+  onThisDaySync?: TodayInHistoryDeskSync | null;
   onThisDaySelection?: TodayInHistorySelectionMeta | null;
   heroArtwork?: KnowledgeLookupResult | null;
   discoveryByItemId?: Record<string, KnowledgeLookupResult>;

@@ -8,6 +8,13 @@ import type {
   HistoricalImageAsset,
   HistoricalImageSource,
 } from "./types.ts";
+import {
+  compareImageEditorialCandidates,
+  evaluateHistoricalImageEditorial,
+  historicalImageMatchesEvent,
+  scoreImageEventMatch,
+  type ImageEventMatchInput,
+} from "./imageEventMatch.ts";
 
 const HISTORICAL_KIND_PATTERNS: Array<{ kind: HistoricalAssetKind; pattern: RegExp }> = [
   { kind: "photograph", pattern: /\b(photograph|photo\b|daguerreotype|albumen|tintype)\b/i },
@@ -178,43 +185,90 @@ function candidateToAsset(
   };
 }
 
-function imageFromWikiPages(
-  pages: OnThisDayWikiPage[] | undefined,
-  captionFallback: string
+function pageToAsset(
+  page: OnThisDayWikiPage,
+  captionFallback: string,
+  matchScore: number
 ): HistoricalImageAsset | null {
-  for (const page of pages ?? []) {
-    const url =
-      page.originalimage?.source?.trim() || page.thumbnail?.source?.trim() || "";
-    if (!url) continue;
+  const url =
+    page.originalimage?.source?.trim() || page.thumbnail?.source?.trim() || "";
+  if (!url) return null;
 
-    const width =
-      page.originalimage?.width ?? page.thumbnail?.width ?? 0;
-    if (width > 0 && width < 320) continue;
+  const width = page.originalimage?.width ?? page.thumbnail?.width ?? 0;
+  if (width > 0 && width < 320) return null;
 
-    const title = page.displaytitle ?? page.title ?? captionFallback;
-    const assetKind = classifyHistoricalAssetKind(
-      `${title} ${page.extract ?? ""}`
-    );
+  const title = page.displaytitle ?? page.title ?? captionFallback;
+  const assetKind = classifyHistoricalAssetKind(
+    `${title} ${page.extract ?? ""}`
+  );
 
-    return {
-      url,
-      previewUrl: page.thumbnail?.source ?? url,
-      caption: title.replace(/<[^>]+>/g, "").trim().slice(0, 160),
-      credit: formatHistoricalCredit({
-        source: "wikipedia",
-        pageTitle: page.title ?? title,
-        sourcePageUrl: page.wiki_url ?? "https://en.wikipedia.org/",
-        assetKind,
-      }),
+  return {
+    url,
+    previewUrl: page.thumbnail?.source ?? url,
+    caption: title.replace(/<[^>]+>/g, "").trim().slice(0, 160),
+    credit: formatHistoricalCredit({
       source: "wikipedia",
+      pageTitle: page.title ?? title,
       sourcePageUrl: page.wiki_url ?? "https://en.wikipedia.org/",
       assetKind,
-      license: null,
-      matchScore: 28,
-      resolvedAt: new Date().toISOString(),
-    };
+    }),
+    source: "wikipedia",
+    sourcePageUrl: page.wiki_url ?? "https://en.wikipedia.org/",
+    assetKind,
+    license: null,
+    matchScore,
+    resolvedAt: new Date().toISOString(),
+  };
+}
+
+function buildImageMatchInput(
+  onThisDay: { year: number; text: string },
+  image: HistoricalImageAsset,
+  pageTitle?: string | null
+): ImageEventMatchInput {
+  return {
+    eventYear: onThisDay.year,
+    eventText: onThisDay.text,
+    articleBody: onThisDay.text,
+    image: {
+      caption: image.caption,
+      credit: image.credit,
+      sourcePageUrl: image.sourcePageUrl,
+      url: image.url,
+      assetKind: image.assetKind,
+    },
+    pageTitle,
+  };
+}
+
+function imageFromWikiPages(
+  pages: OnThisDayWikiPage[] | undefined,
+  onThisDay: { year: number; text: string },
+  captionFallback: string
+): HistoricalImageAsset | null {
+  const candidates: Array<{ asset: HistoricalImageAsset; evaluation: ReturnType<typeof evaluateHistoricalImageEditorial> }> = [];
+
+  for (const page of pages ?? []) {
+    const draft = pageToAsset(page, captionFallback, 0);
+    if (!draft) continue;
+
+    const matchInput = buildImageMatchInput(
+      onThisDay,
+      draft,
+      page.title ?? page.displaytitle ?? null
+    );
+    const evaluation = evaluateHistoricalImageEditorial(matchInput);
+    if (!evaluation.passes) continue;
+
+    candidates.push({
+      asset: { ...draft, matchScore: evaluation.score },
+      evaluation,
+    });
   }
-  return null;
+
+  candidates.sort((a, b) => compareImageEditorialCandidates(a.evaluation, b.evaluation));
+
+  return candidates[0]?.asset ?? null;
 }
 
 function wikipediaThumbnailToAsset(
@@ -260,7 +314,7 @@ export async function resolveHistoricalImageForOnThisDay(input: {
   const subject = buildOnThisDaySearchQuery(input.onThisDay.text);
   const captionFallback = `On this day in ${input.onThisDay.year}`;
 
-  const fromPages = imageFromWikiPages(input.wikiPages, captionFallback);
+  const fromPages = imageFromWikiPages(input.wikiPages, input.onThisDay, captionFallback);
   if (fromPages) return fromPages;
 
   const queries = buildHistoricalImageSearchQueries({
@@ -298,11 +352,25 @@ export async function resolveHistoricalImageForOnThisDay(input: {
   }
 
   if (best) {
-    return candidateToAsset(best.candidate, subject, captionFallback, best.score);
+    const asset = candidateToAsset(best.candidate, subject, captionFallback, best.score);
+    const evaluation = evaluateHistoricalImageEditorial(
+      buildImageMatchInput(input.onThisDay, asset)
+    );
+    if (evaluation.passes) {
+      return { ...asset, matchScore: evaluation.score };
+    }
   }
 
   if (input.grounding?.thumbnail?.url) {
-    return wikipediaThumbnailToAsset(input.grounding, captionFallback);
+    const thumbnailAsset = wikipediaThumbnailToAsset(input.grounding, captionFallback);
+    if (thumbnailAsset) {
+      const evaluation = evaluateHistoricalImageEditorial(
+        buildImageMatchInput(input.onThisDay, thumbnailAsset, input.grounding.pageTitle)
+      );
+      if (evaluation.passes) {
+        return { ...thumbnailAsset, matchScore: evaluation.score };
+      }
+    }
   }
 
   return null;

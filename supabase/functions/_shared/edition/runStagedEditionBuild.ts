@@ -241,6 +241,17 @@ async function runAttachNationalStage(
       body: national.todayInHistory.body,
       source_note: national.todayInHistory.sourceNote,
     });
+    console.log("[todayInHistory:sync]", {
+      step: "edition_generation",
+      traceId: ctx.traceId,
+      editionId: ctx.editionId,
+      editionDate: ctx.editionDate,
+      usNationalDailyId: national.id,
+      articleYear: national.todayInHistory.year,
+      headline: national.todayInHistory.headline,
+      imageUrl: national.todayInHistory.image?.url ?? null,
+      imageResolvedAt: national.todayInHistory.image?.resolvedAt ?? null,
+    });
   }
 
   logNationalDailyAttachedToCity({

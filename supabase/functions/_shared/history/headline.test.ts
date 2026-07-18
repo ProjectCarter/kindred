@@ -23,6 +23,14 @@ Deno.test("formatTodayInHistoryHeadline adds year to editorial title", () => {
   );
 });
 
+Deno.test("formatTodayInHistoryHeadline derives Aviation Section headline", () => {
+  const headline = formatTodayInHistoryHeadline(
+    1914,
+    "The Aviation Section, U.S. Signal Corps, is created as the country's first military aviation unit."
+  );
+  assertEquals(headline, "1914 — The U.S. Army Creates the Aviation Section");
+});
+
 Deno.test("formatTodayInHistoryHeadline derives from event when generic", () => {
   const headline = formatTodayInHistoryHeadline(
     1903,

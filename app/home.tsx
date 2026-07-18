@@ -111,6 +111,15 @@ import {
   recoverLocalEvents,
 } from "../lib/edition/localEventsRecovery";
 import { recoverTodayInHistory } from "../lib/edition/todayInHistoryRecovery";
+import { fetchUsNationalDailyByDate } from "../lib/edition/fetchUsNationalDaily";
+import type { UsNationalDailyRecord } from "../lib/edition/usNationalDaily";
+import {
+  articleIdentityFromSection,
+  imageIdentityFromAsset,
+  logTodayInHistorySyncTrace,
+  resolvePairedNationalDailyForCache,
+} from "../lib/edition/todayInHistorySync";
+import { todayInHistoryImageFromNationalDaily } from "../lib/edition/todayInHistoryImage";
 import { recoverStoryOf } from "../lib/edition/storyOfRecovery";
 import { recoverMorningHero } from "../lib/edition/morningHeroRecovery";
 import { metroExpectsStoryOf } from "../lib/edition/storyOfCoverage";
@@ -254,6 +263,10 @@ export default function HomeScreen() {
   const [bandit, setBandit] = useState<BanditPayload | null>(null);
   const [intelligence, setIntelligence] =
     useState<EditionIntelligence | null>(null);
+  const [nationalDaily, setNationalDaily] =
+    useState<UsNationalDailyRecord | null>(null);
+  const [pairedNationalDaily, setPairedNationalDaily] =
+    useState<UsNationalDailyRecord | null>(null);
   const [clippedIds, setClippedIds] = useState<Set<string>>(new Set());
   const [clipPendingId, setClipPendingId] = useState<string | null>(null);
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
@@ -628,6 +641,50 @@ export default function HomeScreen() {
     markStartup("home_interactive");
   }, [loading, editionId]);
 
+  useEffect(() => {
+    scheduleNationalDailyLoad(editionDate);
+  }, [editionDate]);
+
+  function scheduleNationalDailyLoad(editionDate: string | null | undefined): void {
+    const date = editionDate?.trim();
+    if (!date) {
+      setNationalDaily(null);
+      setPairedNationalDaily(null);
+      return;
+    }
+    void fetchUsNationalDailyByDate(date).then((record) => {
+      if (!mountedRef.current) return;
+      setNationalDaily(record);
+      setPairedNationalDaily((existing) =>
+        resolvePairedNationalDailyForCache({
+          sections: cachedBundleRef.current?.sections ?? [],
+          networkDaily: record,
+          existingPaired: existing,
+        })
+      );
+    });
+  }
+
+  function traceEditionSectionsTodayInHistory(
+    sections: EditionSection[],
+    editionId: string,
+    editionDate: string,
+    usNationalDailyId?: string | null
+  ): void {
+    const section = sections.find((s) => s.section_type === "today_in_history");
+    if (!section) return;
+    logTodayInHistorySyncTrace({
+      step: "edition_sections",
+      editionId,
+      editionDate,
+      usNationalDailyId: usNationalDailyId ?? null,
+      article: articleIdentityFromSection(section),
+      image: imageIdentityFromAsset(null, { source: null }),
+      synced: false,
+      reason: "section_only_trace",
+    });
+  }
+
   function applyCachedBundle(bundle: CachedEditionBundle): void {
     const merged = mergeHistoryAroundTownIntoCachedBundle(
       mergeMorningHeroIntoCachedBundle(bundle)
@@ -642,6 +699,7 @@ export default function HomeScreen() {
     setNationalNews(merged.nationalNews ?? null);
     setBandit(merged.bandit);
     setIntelligence(merged.intelligence);
+    setPairedNationalDaily(merged.pairedNationalDaily ?? null);
     freezeEdition({
       editionId: merged.editionId,
       editionDate: merged.editionDate,
@@ -802,6 +860,7 @@ export default function HomeScreen() {
   }): Promise<{
     sections: EditionSection[];
     intelligence: EditionIntelligence | null;
+    pairedNationalDaily: UsNationalDailyRecord | null;
   }> {
     const result = await recoverTodayInHistory({
       userId: params.userId,
@@ -812,13 +871,25 @@ export default function HomeScreen() {
       cachedBundle: cachedBundleRef.current,
     });
 
-    if (!result.recovered) return params;
+    if (!result.recovered) {
+      return {
+        sections: params.sections,
+        intelligence: params.intelligence,
+        pairedNationalDaily: cachedBundleRef.current?.pairedNationalDaily ?? null,
+      };
+    }
 
     if (__DEV__) {
       console.log("[home] todayInHistory recovery applied", {
         source: result.source,
         headline: result.headline,
+        pairedNationalDailyId: result.pairedNationalDaily?.id ?? null,
       });
+    }
+
+    if (result.pairedNationalDaily) {
+      setPairedNationalDaily(result.pairedNationalDaily);
+      setNationalDaily(result.pairedNationalDaily);
     }
 
     if (cachedBundleRef.current) {
@@ -826,6 +897,7 @@ export default function HomeScreen() {
         ...cachedBundleRef.current,
         sections: result.sections,
         intelligence: result.intelligence,
+        pairedNationalDaily: result.pairedNationalDaily ?? cachedBundleRef.current.pairedNationalDaily ?? null,
         cachedAt: Date.now(),
       });
     }
@@ -833,6 +905,7 @@ export default function HomeScreen() {
     return {
       sections: result.sections,
       intelligence: result.intelligence,
+      pairedNationalDaily: result.pairedNationalDaily ?? null,
     };
   }
 
@@ -1221,6 +1294,10 @@ export default function HomeScreen() {
                   setSections(nextSections);
                   setIntelligence(nextIntel);
                 }
+                if (recovered.pairedNationalDaily) {
+                  setPairedNationalDaily(recovered.pairedNationalDaily);
+                  setNationalDaily(recovered.pairedNationalDaily);
+                }
                 const active = activeLocationRef.current?.place ?? null;
                 const storySections = await maybeRecoverStoryOf({
                   editionId: cached.editionId,
@@ -1403,6 +1480,12 @@ export default function HomeScreen() {
     });
 
     const loaded = sectionRows ?? [];
+    traceEditionSectionsTodayInHistory(
+      loaded,
+      edition.id,
+      edition.edition_date,
+      (edition as { us_national_daily_id?: string | null }).us_national_daily_id ?? null
+    );
 
     if (
       rowStatus === "processing" &&
@@ -1934,6 +2017,12 @@ export default function HomeScreen() {
         intelligence: intel,
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
         morningHero: intel.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
+        pairedNationalDaily: resolvePairedNationalDailyForCache({
+          sections: nextSections,
+          networkDaily: nationalDaily,
+          existingPaired:
+            cachedBundleRef.current?.pairedNationalDaily ?? pairedNationalDaily,
+        }),
       };
       cachedBundleRef.current = bundle;
       scheduleCachedEditionSave(bundle);
@@ -2250,6 +2339,14 @@ export default function HomeScreen() {
           heroImageId: cachedBundleRef.current?.heroImageId ?? null,
           morningHero:
             bgIntel?.morningHero ?? cachedBundleRef.current?.morningHero ?? null,
+          pairedNationalDaily:
+            historyRecovery.pairedNationalDaily ??
+            resolvePairedNationalDailyForCache({
+              sections: bgSections,
+              networkDaily: nationalDaily,
+              existingPaired:
+                cachedBundleRef.current?.pairedNationalDaily ?? pairedNationalDaily,
+            }),
         };
         cachedBundleRef.current = bundle;
       scheduleCachedEditionSave(bundle);
@@ -3121,7 +3218,10 @@ export default function HomeScreen() {
         const result = await saveClipping(
           user.id,
           { contentType: "article", clipKey, sectionId: section.id },
-          articleFromEditionSectionWithKnowledge(section, intelligence?.knowledge)
+          articleFromEditionSectionWithKnowledge(section, intelligence?.knowledge, {
+            nationalDaily,
+            pairedNationalDaily,
+          })
         );
 
         if (result.ok) {
@@ -3518,6 +3618,8 @@ export default function HomeScreen() {
                 router.push("/history-around-town");
               }}
               knowledge={intelligence?.knowledge}
+              nationalDaily={nationalDaily}
+              pairedNationalDaily={pairedNationalDaily}
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}

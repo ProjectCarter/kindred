@@ -4,6 +4,9 @@
 
 import type { HistoricalImageAsset } from "../knowledgeGrounding";
 import type { OnThisDayCandidate, OnThisDayWikiPage } from "./onThisDay";
+import {
+  evaluateHistoricalImageEditorial,
+} from "./imageEventMatch";
 
 function subjectTokens(eventText: string): string[] {
   const withoutParens = eventText.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
@@ -48,26 +51,54 @@ function pickBestPage(
 export function resolveHistoricalImageFromCandidate(
   candidate: OnThisDayCandidate
 ): HistoricalImageAsset | null {
-  const page = pickBestPage(candidate.pages, candidate.text);
-  const url =
-    page?.originalimage?.source?.trim() || page?.thumbnail?.source?.trim() || null;
-  if (!url) return null;
+  const ranked = [...(candidate.pages ?? [])].sort(
+    (a, b) => scorePage(b, candidate.text) - scorePage(a, candidate.text)
+  );
 
-  const title = page?.displaytitle?.trim() || page?.title?.trim() || candidate.text;
-  const caption = `On this day in ${candidate.year}: ${title.replace(/<[^>]+>/g, "")}`;
+  for (const page of ranked) {
+    const url =
+      page.originalimage?.source?.trim() || page.thumbnail?.source?.trim() || null;
+    if (!url) continue;
 
-  return {
-    url,
-    caption,
-    credit: page?.wiki_url
-      ? `Wikimedia / Wikipedia — ${page.wiki_url}`
-      : "Wikimedia / Wikipedia",
-    source: "wikipedia",
-    sourcePageUrl: page?.wiki_url ?? url,
-    assetKind: "photograph",
-    matchScore: 72,
-    resolvedAt: new Date().toISOString(),
-  };
+    const title = page.displaytitle?.trim() || page.title?.trim() || candidate.text;
+    const caption = `On this day in ${candidate.year}: ${title.replace(/<[^>]+>/g, "")}`;
+    const draft: HistoricalImageAsset = {
+      url,
+      caption,
+      credit: page.wiki_url
+        ? `Wikimedia / Wikipedia — ${page.wiki_url}`
+        : "Wikimedia / Wikipedia",
+      source: "wikipedia",
+      sourcePageUrl: page.wiki_url ?? url,
+      assetKind: "photograph",
+      matchScore: 0,
+      resolvedAt: new Date().toISOString(),
+    };
+
+    const matchInput = {
+      eventYear: candidate.year,
+      eventText: candidate.text,
+      articleBody: candidate.text,
+      image: {
+        caption: draft.caption,
+        credit: draft.credit,
+        sourcePageUrl: draft.sourcePageUrl,
+        url: draft.url,
+        assetKind: draft.assetKind,
+      },
+      pageTitle: page.title ?? page.displaytitle ?? null,
+    };
+
+    const evaluation = evaluateHistoricalImageEditorial(matchInput);
+    if (!evaluation.passes) continue;
+
+    return {
+      ...draft,
+      matchScore: evaluation.score,
+    };
+  }
+
+  return null;
 }
 
 export function bestWikiPageTitle(candidate: OnThisDayCandidate): string | null {

@@ -18,6 +18,13 @@ import type { EditionIntelligence } from "./surfaceIntelligence";
 import type { MorningHeroExperience } from "./heroArtwork/types";
 import { parseMorningHeroExperience } from "./morningEdition";
 import { mergeMorningHeroIntoCachedBundle } from "./resolveMorningHero";
+import type { UsNationalDailyRecord } from "./usNationalDaily";
+import {
+  articleIdentityFromSection,
+  imageIdentityFromAsset,
+  logTodayInHistorySyncTrace,
+} from "./todayInHistorySync";
+import { todayInHistoryImageFromNationalDaily } from "./todayInHistoryImage";
 import {
   recordEditionCacheDiskHit,
   recordEditionCacheMemoryHit,
@@ -54,6 +61,8 @@ export type CachedEditionBundle = {
   heroImageId?: string | null;
   /** Frozen daily artwork hero from morning_edition.morningHero. */
   morningHero?: MorningHeroExperience | null;
+  /** Paired Today in History snapshot — keeps article + image on one record in cache. */
+  pairedNationalDaily?: UsNationalDailyRecord | null;
 };
 
 function cacheKey(userId: string, editionDate: string, metroKey: string): string {
@@ -124,6 +133,36 @@ function normalizeCachedBundle(
   return mergeMorningHeroIntoCachedBundle(parsed);
 }
 
+function traceCachedTodayInHistory(
+  step: "async_storage",
+  bundle: CachedEditionBundle
+): void {
+  const section = bundle.sections.find((s) => s.section_type === "today_in_history");
+  if (!section) return;
+
+  const article = articleIdentityFromSection(section);
+  const pairedImage = todayInHistoryImageFromNationalDaily(bundle.pairedNationalDaily);
+  logTodayInHistorySyncTrace({
+    step,
+    editionId: bundle.editionId,
+    editionDate: bundle.editionDate,
+    usNationalDailyId: bundle.pairedNationalDaily?.id ?? null,
+    cachedAt: bundle.cachedAt,
+    article,
+    image: imageIdentityFromAsset(pairedImage, {
+      source: pairedImage ? "paired_cache" : null,
+      nationalDailyId: bundle.pairedNationalDaily?.id ?? null,
+      year: bundle.pairedNationalDaily?.todayInHistory?.year ?? null,
+    }),
+    synced: Boolean(
+      pairedImage &&
+        bundle.pairedNationalDaily?.todayInHistory?.headline?.trim() ===
+          section.headline?.trim()
+    ),
+    reason: bundle.pairedNationalDaily ? null : "cache_missing_paired_national_daily",
+  });
+}
+
 /** Synchronous warm-cache read — no AsyncStorage, no JSON parse. */
 export function peekMemoryCachedEdition(
   userId: string,
@@ -171,6 +210,7 @@ export async function loadCachedEdition(
       );
       if (parsed) {
         memoryBundles.set(memoryKey(userId, editionDate, metroKey), parsed);
+        traceCachedTodayInHistory("async_storage", parsed);
       }
       masterpieceTraceEnd("article/cache-load", {
         ms: Date.now() - started,
@@ -255,6 +295,7 @@ export async function saveCachedEdition(bundle: CachedEditionBundle): Promise<vo
       memoryKey(normalized.userId, normalized.editionDate, normalized.metroKey),
       normalized
     );
+    traceCachedTodayInHistory("async_storage", normalized);
     try {
       await AsyncStorage.setItem(
         cacheKey(normalized.userId, normalized.editionDate, normalized.metroKey),

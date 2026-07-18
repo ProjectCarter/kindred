@@ -2,6 +2,7 @@ import type { HistoricalImageAsset } from "./types.ts";
 import type { OnThisDayCandidate } from "./onThisDay.ts";
 import { rankOnThisDayCandidates } from "./scoreCandidate.ts";
 import { resolveHistoricalImageForOnThisDay } from "./historicalImages.ts";
+import { historicalImageMatchesEvent } from "./imageEventMatch.ts";
 
 export type TodayInHistorySelection = {
   event: { year: number; text: string };
@@ -56,6 +57,22 @@ export async function selectTodayInHistoryStory(
     });
 
     if (!image?.url?.trim()) continue;
+
+    if (
+      !historicalImageMatchesEvent({
+        eventYear: candidate.year,
+        eventText: candidate.text,
+        articleBody: candidate.text,
+        image,
+      })
+    ) {
+      console.log("[history:select] rejected unrelated image", {
+        year: candidate.year,
+        caption: image.caption?.slice(0, 80) ?? null,
+        rank: i + 1,
+      });
+      continue;
+    }
 
     const imageScore = image.matchScore ?? 0;
     const editorNotes = [

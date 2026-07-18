@@ -1,4 +1,4 @@
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Image,
   Text,
@@ -76,7 +76,13 @@ import {
   getFrozenDiscovery,
 } from "../lib/edition/editionFreeze";
 import { resolveArticleHero } from "../lib/edition/articleHero";
-import { onThisDayImageFromKnowledge } from "../lib/edition/historicalImages";
+import { fetchUsNationalDailyByDate } from "../lib/edition/fetchUsNationalDaily";
+import {
+  resolveTodayInHistoryImage,
+  shouldRenderTodayInHistoryImage,
+} from "../lib/edition/todayInHistoryImage";
+import type { UsNationalDailyRecord } from "../lib/edition/usNationalDaily";
+import { logTodayInHistorySyncTrace } from "../lib/edition/todayInHistorySync";
 import { historyYearLabel } from "../lib/edition/historyCard";
 import { MorningArrival } from "./MorningArrival";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
@@ -111,6 +117,10 @@ type Props = {
   onSeeAllRecommendations?: (items: RankedDiscoveryItem[]) => void;
   /** Stored knowledge payload — used when tapping explainer notes. */
   knowledge?: KnowledgePayload | null;
+  /** Shared U.S. national daily — canonical Today in History image source. */
+  nationalDaily?: UsNationalDailyRecord | null;
+  /** Cache/recovery snapshot paired with the rendered section text. */
+  pairedNationalDaily?: UsNationalDailyRecord | null;
   heroImageUri?: string | null;
   banditGreeting?: string | null;
   banditAside?: string | null;
@@ -221,6 +231,8 @@ function EditionReaderInner({
   onSeeAllActivities,
   onSeeAllRecommendations,
   knowledge,
+  nationalDaily: nationalDailyProp,
+  pairedNationalDaily: pairedNationalDailyProp,
   heroImageUri,
   banditGreeting,
   banditAside,
@@ -258,6 +270,27 @@ function EditionReaderInner({
   historyAroundTown,
   onSeeAllHistoryAroundTown,
 }: Props) {
+  const [fetchedNationalDaily, setFetchedNationalDaily] =
+    useState<UsNationalDailyRecord | null>(null);
+
+  useEffect(() => {
+    if (nationalDailyProp !== undefined) return;
+    const date = editionDate?.trim();
+    if (!date) return;
+
+    let cancelled = false;
+    void fetchUsNationalDailyByDate(date).then((record) => {
+      if (!cancelled) setFetchedNationalDaily(record);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editionDate, nationalDailyProp]);
+
+  const nationalDaily =
+    nationalDailyProp !== undefined ? nationalDailyProp : fetchedNationalDaily;
+
   const weather = sections.find((s) => s.section_type === "weather");
   const localEvents = sections.find((s) => s.section_type === "local_events");
   const greetingSection = sections.find((s) => s.section_type === "greeting");
@@ -282,10 +315,39 @@ function EditionReaderInner({
     () => (storyOf ? storyOfSubtitleFromSection(storyOf) : null),
     [storyOf]
   );
-  const historyImage = useMemo(
-    () => onThisDayImageFromKnowledge(knowledge),
-    [knowledge]
+  const historyImageResolution = useMemo(
+    () =>
+      resolveTodayInHistoryImage({
+        section: history,
+        knowledge,
+        nationalDaily,
+        pairedNationalDaily: pairedNationalDailyProp,
+      }),
+    [history, knowledge, nationalDaily, pairedNationalDailyProp]
   );
+  const historyImage = historyImageResolution.image;
+  const renderHistoryImage = shouldRenderTodayInHistoryImage(historyImage, {
+    synced: historyImageResolution.synced,
+  });
+
+  useEffect(() => {
+    if (!__DEV__ || !history) return;
+    logTodayInHistorySyncTrace({
+      step: "edition_reader",
+      editionId: editionId ?? null,
+      editionDate: editionDate ?? null,
+      usNationalDailyId: historyImageResolution.nationalDailyId,
+      article: historyImageResolution.article,
+      image: historyImageResolution.imageIdentity,
+      synced: historyImageResolution.synced,
+      reason: historyImageResolution.reason,
+    });
+  }, [
+    editionDate,
+    editionId,
+    history,
+    historyImageResolution,
+  ]);
   const historyYear = useMemo(
     () => (history ? historyYearLabel(history, knowledge) : null),
     [history, knowledge]
@@ -601,7 +663,7 @@ function EditionReaderInner({
   function articleForSection(section: EditionSection): KindredArticle {
     if (section.section_type === "today_in_history") {
       return articleFromEditionSection(section, {
-        historicalImage: onThisDayImageFromKnowledge(knowledge),
+        historicalImage: historyImage,
       });
     }
     if (isStoryOfSection(section.section_type)) {
@@ -806,7 +868,7 @@ function EditionReaderInner({
           <TodayInHistorySection
             section={history}
             historicalYear={historyYear}
-            image={historyImage}
+            image={renderHistoryImage ? historyImage : null}
             onOpen={
               onOpenArticle
                 ? () => onOpenArticle(articleForSection(history))

@@ -85,6 +85,8 @@ export type TodayInHistoryUpgradeResult = {
   section?: EditionSection;
   image?: HistoricalImageAsset | null;
   onThisDay?: KnowledgeLookupResult | null;
+  year?: number;
+  eventText?: string;
   error?: string | null;
 };
 
@@ -159,5 +161,7 @@ export async function upgradeTodayInHistoryClient(
     section,
     image,
     onThisDay: wiki,
+    year: selected.year,
+    eventText: selected.text,
   };
 }

@@ -1,8 +1,11 @@
+import { useEffect } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import type { EditionSection } from "../lib/edition/types";
 import type { HistoricalImageAsset } from "../lib/edition/knowledgeGrounding";
 import { historyCardIntro, historyHeadlineIncludesYear } from "../lib/edition/historyCard";
+import { resolveTodayInHistoryDisplayHeadline } from "../lib/edition/history/headline";
 import { sectionIntro } from "../lib/edition/sectionIntro";
+import { STORY_OF_CARD_ASPECT_RATIO } from "../lib/edition/storyOfImage";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
@@ -24,9 +27,18 @@ export function TodayInHistorySection({
 }: Props) {
   const intro = sectionIntro("today_in_history");
   const preview = historyCardIntro(section.body);
+  const headline = resolveTodayInHistoryDisplayHeadline(section);
   const imageUri = image?.url?.trim() || null;
   const showYearLine =
-    Boolean(historicalYear) && !historyHeadlineIncludesYear(section.headline);
+    Boolean(historicalYear) && !historyHeadlineIncludesYear(headline);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log("[todayInHistory:render]", {
+      headline: section.headline,
+      hasImage: Boolean(imageUri),
+    });
+  }, [headline, imageUri]);
 
   return (
     <View style={styles.section} accessibilityRole="summary">
@@ -45,7 +57,7 @@ export function TodayInHistorySection({
         onPress={onOpen}
         disabled={!onOpen}
         accessibilityRole={onOpen ? "button" : "text"}
-        accessibilityLabel={`Today in History: ${section.headline}`}
+        accessibilityLabel={`Today in History: ${headline}`}
         style={({ pressed }) => [
           styles.card,
           onOpen && pressed && { opacity: press.opacity },
@@ -57,7 +69,21 @@ export function TodayInHistorySection({
               source={{ uri: imageUri }}
               style={styles.image}
               resizeMode="cover"
-              accessibilityLabel={image?.caption || section.headline}
+              accessibilityLabel={image?.caption || headline}
+              onLoad={() => {
+                if (__DEV__) {
+                  console.log("[todayInHistory:image] load success", {
+                    url: imageUri,
+                  });
+                }
+              }}
+              onError={() => {
+                if (__DEV__) {
+                  console.warn("[todayInHistory:image] load error", {
+                    url: imageUri,
+                  });
+                }
+              }}
             />
             {image?.credit ? (
               <Text style={styles.imageCredit} numberOfLines={2}>
@@ -74,7 +100,7 @@ export function TodayInHistorySection({
         ) : null}
 
         <Text style={styles.headline} maxFontSizeMultiplier={1.25}>
-          {section.headline}
+          {headline}
         </Text>
 
         {preview ? (
@@ -124,10 +150,12 @@ const styles = StyleSheet.create({
   },
   imageWrap: {
     marginBottom: 16,
+    overflow: "hidden",
+    borderRadius: 2,
   },
   image: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: STORY_OF_CARD_ASPECT_RATIO,
     backgroundColor: paper.creamDeep,
   },
   imageCredit: {
@@ -149,6 +177,8 @@ const styles = StyleSheet.create({
     ...type.sectionHeadline,
     color: paper.ink,
     marginBottom: 12,
+    flexShrink: 1,
+    alignSelf: "stretch",
   },
   preview: {
     ...type.folioDek,

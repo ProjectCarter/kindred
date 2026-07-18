@@ -18,6 +18,14 @@ import {
 } from "./editionCache";
 import { needsTodayInHistoryRecovery } from "./history/stale";
 import { upgradeTodayInHistoryClient } from "./history/upgrade";
+import type { UsNationalDailyRecord } from "./usNationalDaily";
+import { fetchUsNationalDailyByDate } from "./fetchUsNationalDaily";
+import {
+  articleIdentityFromSection,
+  buildPairedNationalDailySnapshot,
+  buildTodayInHistoryDeskSync,
+  imageIdentityFromAsset,
+} from "./todayInHistorySync";
 
 const RECOVERY_THROTTLE_MS = 45_000;
 const lastRecoveryAt = new Map<string, number>();
@@ -29,6 +37,8 @@ export type TodayInHistoryRecoveryResult = {
   intelligence: EditionIntelligence | null;
   headline?: string | null;
   source?: "server" | "client" | null;
+  /** Paired national snapshot — article + image from the same record. */
+  pairedNationalDaily?: UsNationalDailyRecord | null;
   error?: string | null;
 };
 
@@ -59,7 +69,8 @@ function mergeHistoryKnowledge(
   intelligence: EditionIntelligence | null,
   editionDate: string,
   image: HistoricalImageAsset,
-  onThisDay?: KnowledgeLookupResult | null
+  onThisDay?: KnowledgeLookupResult | null,
+  sync?: import("./knowledgeGrounding").TodayInHistoryDeskSync | null
 ): EditionIntelligence | null {
   if (!intelligence) return intelligence;
 
@@ -83,6 +94,7 @@ function mergeHistoryKnowledge(
         ...knowledge.providerGrounding,
         onThisDayImage: image,
         onThisDay: onThisDay ?? knowledge.providerGrounding?.onThisDay ?? null,
+        onThisDaySync: sync ?? knowledge.providerGrounding?.onThisDaySync ?? null,
         enrichedAt: new Date().toISOString(),
         providersUsed: ["wikipedia"],
       },
@@ -200,6 +212,7 @@ export async function recoverTodayInHistory(params: {
     const sectionRow = await fetchHistorySection(editionId);
     if (sectionRow && !needsTodayInHistoryRecovery([sectionRow])) {
       const merged = mergeHistorySection(currentSections, sectionRow);
+      const pairedNationalDaily = await fetchUsNationalDailyByDate(editionDate);
 
       const { data: editionRow } = await supabase
         .from("editions")
@@ -224,6 +237,7 @@ export async function recoverTodayInHistory(params: {
           ...cachedBundle,
           sections: merged,
           intelligence: nextIntel,
+          pairedNationalDaily,
           cachedAt: Date.now(),
         });
       }
@@ -231,6 +245,7 @@ export async function recoverTodayInHistory(params: {
       if (__DEV__) {
         console.log("[history:recovery] server refresh succeeded", {
           headline: sectionRow.headline,
+          pairedNationalDailyId: pairedNationalDaily?.id ?? null,
         });
       }
 
@@ -241,6 +256,7 @@ export async function recoverTodayInHistory(params: {
         intelligence: nextIntel,
         headline: sectionRow.headline,
         source: "server",
+        pairedNationalDaily,
       };
     }
   }
@@ -261,12 +277,33 @@ export async function recoverTodayInHistory(params: {
   }
 
   const merged = mergeHistorySection(currentSections, clientUpgrade.section);
+  const articleIdentity = articleIdentityFromSection(clientUpgrade.section);
+  const imageIdentity = imageIdentityFromAsset(clientUpgrade.image, {
+    source: "knowledge",
+    year: clientUpgrade.year ?? articleIdentity.year,
+  });
+  const deskSync = buildTodayInHistoryDeskSync({
+    year: clientUpgrade.year ?? articleIdentity.year ?? 0,
+    eventText: clientUpgrade.eventText ?? "",
+    articleFingerprint: articleIdentity.fingerprint,
+    imageFingerprint: imageIdentity.fingerprint,
+    source: "client_recovery",
+  });
+  const pairedNationalDaily = buildPairedNationalDailySnapshot({
+    editionDate,
+    section: clientUpgrade.section,
+    image: clientUpgrade.image!,
+    year: clientUpgrade.year ?? articleIdentity.year ?? 0,
+    eventText: clientUpgrade.eventText ?? "",
+    source: "client_recovery",
+  });
   const nextIntel = clientUpgrade.image
     ? mergeHistoryKnowledge(
         intelligence,
         editionDate,
         clientUpgrade.image,
-        clientUpgrade.onThisDay
+        clientUpgrade.onThisDay,
+        deskSync
       )
     : intelligence;
 
@@ -275,6 +312,7 @@ export async function recoverTodayInHistory(params: {
       ...cachedBundle,
       sections: merged,
       intelligence: nextIntel,
+      pairedNationalDaily,
       cachedAt: Date.now(),
     });
   }
@@ -283,6 +321,9 @@ export async function recoverTodayInHistory(params: {
     console.log("[history:recovery] client upgrade applied", {
       headline: clientUpgrade.section.headline,
       words: clientUpgrade.section.body.split(/\s+/).filter(Boolean).length,
+      pairedNationalDailyId: pairedNationalDaily.id,
+      articleFingerprint: articleIdentity.fingerprint,
+      imageFingerprint: imageIdentity.fingerprint,
     });
   }
 
@@ -293,5 +334,6 @@ export async function recoverTodayInHistory(params: {
     intelligence: nextIntel,
     headline: clientUpgrade.section.headline,
     source: "client",
+    pairedNationalDaily,
   };
 }
