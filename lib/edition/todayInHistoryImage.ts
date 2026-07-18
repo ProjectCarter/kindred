@@ -73,12 +73,14 @@ export function resolveTodayInHistoryImage(input: {
   knowledge?: KnowledgePayload | unknown | null;
   nationalDaily?: UsNationalDailyRecord | null;
   pairedNationalDaily?: UsNationalDailyRecord | null;
+  editionDate?: string | null;
 }): TodayInHistoryImageResolution {
   const desk = resolveSyncedTodayInHistoryDesk({
     section: input.section,
     knowledge: input.knowledge,
     nationalDaily: input.nationalDaily,
     pairedNationalDaily: input.pairedNationalDaily,
+    editionDate: input.editionDate,
   });
 
   return {

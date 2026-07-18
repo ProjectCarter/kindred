@@ -150,6 +150,12 @@ import {
 } from "../lib/dev/devGenerateTrace";
 import { shouldDeferLoadEditionDuringGenerate } from "../lib/dev/devGenerateGuard";
 import {
+  HOME_SCROLL_AT_TOP_PX,
+  logHomeScrollDebug,
+  scrollDebugSnapshot,
+  type HomeScrollRestorePhase,
+} from "../lib/dev/homeScrollDebug";
+import {
   displayCityForEdition,
   getDeveloperPreviewContextSync,
   hydrateDeveloperPreviewContext,
@@ -325,6 +331,17 @@ export default function HomeScreen() {
   const restoredScrollRef = useRef(false);
   const skipScrollRestoreRef = useRef(false);
   const resetScrollOnLoadRef = useRef(false);
+  /** Automatic restore allowed only during initial launch or one navigation return. */
+  const scrollRestorePhaseRef = useRef<HomeScrollRestorePhase>("initial");
+  /** Set on focus cleanup — gates navigation-return restore. */
+  const homeScreenBlurredRef = useRef(false);
+  const homeScrollDraggingRef = useRef(false);
+  const programmaticScrollRef = useRef(false);
+  const homeFocusTransitionCountRef = useRef(0);
+  const initialRestoreEditionRef = useRef<string | null>(null);
+  const restoreHomeScrollIfNeededRef = useRef<
+    (contentHeight?: number) => void
+  >(() => {});
   const editionIdRef = useRef<string | null>(null);
   const activeLocationRef = useRef<ActiveLocation | null>(null);
   /** Mount effect resolves location once — skip duplicate read on first focus. */
@@ -374,12 +391,126 @@ export default function HomeScreen() {
 
   useEffect(() => {
     setActiveEditionId(editionId);
+    logHomeScrollDebug("edition_id_change", { editionId });
   }, [editionId]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    logHomeScrollDebug("sections_replaced", {
+      editionId,
+      count: sections.length,
+      types: sections.map((section) => section.section_type),
+    });
+  }, [sections, editionId]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    logHomeScrollDebug("intelligence_replaced", {
+      editionId,
+      hasDiscovery: Boolean(intelligence?.discovery),
+    });
+  }, [intelligence, editionId]);
+
+  useEffect(() => {
+    logHomeScrollDebug("home_scroll_mount");
+    return () => {
+      logHomeScrollDebug("home_scroll_unmount");
+    };
+  }, []);
+
+  /** One initial restore per edition — only before the reader takes control. */
+  useEffect(() => {
+    if (!editionId || sections.length === 0) return;
+    if (initialRestoreEditionRef.current === editionId) return;
+    if (scrollRestorePhaseRef.current !== "initial") return;
+
+    initialRestoreEditionRef.current = editionId;
+    let cancelled = false;
+
+    void (async () => {
+      const key = homeScrollSessionKey(
+        editionId,
+        activeLocationKey(activeLocationRef.current)
+      );
+      const saved = await loadHomeScroll(key);
+      if (
+        cancelled ||
+        scrollRestorePhaseRef.current !== "initial" ||
+        restoredScrollRef.current
+      ) {
+        return;
+      }
+
+      logHomeScrollDebug(
+        "restore_arm_eval",
+        scrollRestoreSnapshot("initial_launch", {
+          targetY: saved,
+        })
+      );
+
+      if (saved <= 0) {
+        restoredScrollRef.current = true;
+        scrollRestorePhaseRef.current = "done";
+        return;
+      }
+
+      pendingScrollRestoreY.current = saved;
+      restoredScrollRef.current = false;
+      restoreHomeScrollIfNeededRef.current(undefined);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editionId, sections.length]);
 
   function currentHomeScrollKey(): string | null {
     const id = editionIdRef.current;
     if (!id) return null;
     return homeScrollSessionKey(id, activeLocationKey(activeLocationRef.current));
+  }
+
+  function scrollRestoreSnapshot(reason: string, extra?: Record<string, unknown>) {
+    return scrollDebugSnapshot({
+      reason,
+      currentY: homeScrollYRef.current,
+      pendingRestoreY: pendingScrollRestoreY.current,
+      restored: restoredScrollRef.current,
+      phase: scrollRestorePhaseRef.current,
+      userLocked: scrollRestorePhaseRef.current === "locked",
+      dragging: homeScrollDraggingRef.current,
+      focusTransitions: homeFocusTransitionCountRef.current,
+      editionId: editionIdRef.current,
+      ...extra,
+    });
+  }
+
+  function lockScrollRestore(reason: string): void {
+    if (scrollRestorePhaseRef.current === "locked") return;
+    scrollRestorePhaseRef.current = "locked";
+    pendingScrollRestoreY.current = 0;
+    restoredScrollRef.current = true;
+    logHomeScrollDebug("restore_locked", scrollRestoreSnapshot(reason));
+  }
+
+  function programmaticScrollTo(
+    y: number,
+    reason: string,
+    extra?: Record<string, unknown>
+  ): void {
+    programmaticScrollRef.current = true;
+    logHomeScrollDebug(
+      "scrollTo",
+      scrollRestoreSnapshot(reason, { targetY: y, ...extra })
+    );
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y, animated: false });
+      mastheadScrollY.setValue(y);
+      homeScrollYRef.current = y;
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false;
+      });
+    });
   }
 
   function markHomeScrollForReset(): void {
@@ -388,11 +519,11 @@ export default function HomeScreen() {
     skipScrollRestoreRef.current = true;
     pendingScrollRestoreY.current = 0;
     restoredScrollRef.current = true;
+    scrollRestorePhaseRef.current = "done";
+    initialRestoreEditionRef.current = null;
     homeScrollYRef.current = 0;
     mastheadScrollY.setValue(0);
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: false });
-    });
+    programmaticScrollTo(0, "markHomeScrollForReset");
   }
 
   function persistHomeScrollNow(): void {
@@ -434,15 +565,16 @@ export default function HomeScreen() {
   }
 
   /**
-   * Re-entrant on purpose: content height can arrive in more than one
-   * layout pass (fonts, images, section counts) while the screen is
-   * remounting. Keep nudging toward the saved offset on every
-   * onContentSizeChange call and only stop once the content is tall
-   * enough to fully satisfy it — otherwise an early, too-short layout
-   * pass would permanently lock in an under-scrolled position.
+   * One-shot restore for initial launch or navigation return only.
+   * Never re-entrant — content-size growth must not re-arm scroll commands.
    */
   const restoreHomeScrollIfNeeded = useCallback((contentHeight?: number) => {
-    if (skipScrollRestoreRef.current || restoredScrollRef.current) return;
+    const phase = scrollRestorePhaseRef.current;
+    if (phase !== "initial" && phase !== "return") return;
+    if (restoredScrollRef.current) return;
+    if (homeScrollDraggingRef.current) return;
+    if (skipScrollRestoreRef.current) return;
+
     const target = pendingScrollRestoreY.current;
     if (target <= 0) return;
 
@@ -450,26 +582,40 @@ export default function HomeScreen() {
       contentHeight != null
         ? Math.max(0, Math.min(target, contentHeight - 1))
         : target;
-    if (y <= 0) return;
-
-    // Only called without a contentHeight when the screen never lost its
-    // existing layout (focus-time direct restore) — trust it as final.
-    if (contentHeight == null || contentHeight >= target) {
+    if (y <= 0) {
       restoredScrollRef.current = true;
+      scrollRestorePhaseRef.current = "done";
+      pendingScrollRestoreY.current = 0;
+      return;
     }
 
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y, animated: false });
-      mastheadScrollY.setValue(y);
-      homeScrollYRef.current = y;
+    pendingScrollRestoreY.current = 0;
+    restoredScrollRef.current = true;
+    scrollRestorePhaseRef.current = "done";
+
+    programmaticScrollTo(y, "restoreHomeScrollIfNeeded", {
+      targetY: target,
+      contentHeight: contentHeight ?? null,
     });
   }, [mastheadScrollY]);
 
+  restoreHomeScrollIfNeededRef.current = restoreHomeScrollIfNeeded;
+
   const onHomeContentSizeChange = useCallback(
     (_w: number, h: number) => {
-      restoreHomeScrollIfNeeded(h);
+      const phase = scrollRestorePhaseRef.current;
+      logHomeScrollDebug(
+        "content_size_change",
+        scrollRestoreSnapshot("content_size_change", {
+          contentHeight: h,
+          phase,
+        })
+      );
+      if (phase !== "initial" && phase !== "return") return;
+      if (restoredScrollRef.current) return;
+      restoreHomeScrollIfNeededRef.current(h);
     },
-    [restoreHomeScrollIfNeeded]
+    []
   );
 
   function activeLocationKey(active: ActiveLocation | null): string {
@@ -535,15 +681,11 @@ export default function HomeScreen() {
   const morningHero = useMemo(() => {
     if (morningHeroFromIntel) return morningHeroFromIntel;
 
-    const cached = cachedBundleRef.current;
-    if (!cached || (editionId && cached.editionId !== editionId)) return null;
-
-    return (
-      cached.morningHero ??
-      cached.intelligence?.morningHero ??
-      null
-    );
-  }, [morningHeroFromIntel, editionId]);
+    return resolveMorningHero({
+      intelligence,
+      cachedBundle: cachedBundleRef.current,
+    });
+  }, [morningHeroFromIntel, intelligence, editionId]);
 
   function logFirstPaintIfNeeded(
     context: string,
@@ -659,6 +801,8 @@ export default function HomeScreen() {
       setPairedNationalDaily(null);
       return;
     }
+    // Drop the prior date's row so sync gates never pair against stale years.
+    setNationalDaily(null);
     void fetchUsNationalDailyByDate(date).then((record) => {
       if (!mountedRef.current) return;
       setNationalDaily(record);
@@ -1080,6 +1224,17 @@ export default function HomeScreen() {
     const resetScroll = isRefresh && !quiet;
     /** When true, this call intentionally left loading=true for a generate handoff. */
     let deferKeepLoading = false;
+    if (__DEV__) {
+      logHomeScrollDebug("load_edition_start", {
+        isRefresh,
+        quiet,
+        eventsOnly,
+        afterGenerate,
+        resetScroll,
+        currentY: homeScrollYRef.current,
+        editionId: editionIdRef.current,
+      });
+    }
     if (resetScroll) {
       resetScrollOnLoadRef.current = false;
       markHomeScrollForReset();
@@ -2247,31 +2402,6 @@ export default function HomeScreen() {
         }
       }
 
-      if (!resetScroll) {
-        const targetKey = homeScrollSessionKey(
-          edition.id,
-          activeLocationKey(active)
-        );
-        const savedScroll = await loadHomeScroll(targetKey);
-        if (
-          mountedRef.current &&
-          gen === loadGen.current &&
-          savedScroll > 0 &&
-          !skipScrollRestoreRef.current
-        ) {
-          pendingScrollRestoreY.current = savedScroll;
-          restoredScrollRef.current = false;
-          homeScrollYRef.current = savedScroll;
-          mastheadScrollY.setValue(savedScroll);
-          if (__DEV__) {
-            console.log("[home] scroll: resolved restore target", {
-              editionId: edition.id,
-              savedScroll,
-            });
-          }
-        }
-      }
-
       void fetchAdjacentEditions(
         user.id,
         edition.edition_date,
@@ -2468,6 +2598,14 @@ export default function HomeScreen() {
         }
       }
     } finally {
+      if (__DEV__) {
+        logHomeScrollDebug("load_edition_end", {
+          isRefresh,
+          quiet,
+          currentY: homeScrollYRef.current,
+          editionId: editionIdRef.current,
+        });
+      }
       if (!mountedRef.current) return;
       if (gen !== loadGen.current) {
         if (isRefresh && !quiet) setRefreshing(false);
@@ -2598,6 +2736,14 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      homeFocusTransitionCountRef.current += 1;
+      logHomeScrollDebug(
+        "focus_enter",
+        scrollRestoreSnapshot("focus_enter", {
+          blurred: homeScreenBlurredRef.current,
+        })
+      );
+
       let cancelled = false;
 
       void (async () => {
@@ -2605,6 +2751,8 @@ export default function HomeScreen() {
           skipScrollRestoreRef.current = false;
           return;
         }
+        if (!homeScreenBlurredRef.current) return;
+        homeScreenBlurredRef.current = false;
 
         const id = editionIdRef.current;
         if (!id) return;
@@ -2622,18 +2770,28 @@ export default function HomeScreen() {
           return;
         }
 
-        pendingScrollRestoreY.current = saved;
+        scrollRestorePhaseRef.current = "return";
         restoredScrollRef.current = false;
-        homeScrollYRef.current = saved;
-        mastheadScrollY.setValue(saved);
-        restoreHomeScrollIfNeeded();
+        pendingScrollRestoreY.current = saved;
+
+        logHomeScrollDebug(
+          "restore_arm_eval",
+          scrollRestoreSnapshot("navigation_return", { targetY: saved })
+        );
+
+        restoreHomeScrollIfNeededRef.current(undefined);
       })();
 
       return () => {
         cancelled = true;
+        homeScreenBlurredRef.current = true;
         persistHomeScrollNow();
+        logHomeScrollDebug(
+          "focus_leave",
+          scrollRestoreSnapshot("focus_leave")
+        );
       };
-    }, [mastheadScrollY, restoreHomeScrollIfNeeded])
+    }, [])
   );
 
   useEffect(() => {
@@ -2739,13 +2897,27 @@ export default function HomeScreen() {
   }, [loadEdition]);
 
   function handleHomeRefresh() {
+    logHomeScrollDebug("refresh_start", {
+      currentY: homeScrollYRef.current,
+      editionId: editionIdRef.current,
+    });
     // Keep the printed paper visible — sync quietly under the refresh spinner.
     if (editionIdRef.current && sections.length > 0) {
       setRefreshing(true);
-      void loadEdition({ isRefresh: true, quiet: true });
+      void loadEdition({ isRefresh: true, quiet: true }).finally(() => {
+        logHomeScrollDebug("refresh_end", {
+          currentY: homeScrollYRef.current,
+          editionId: editionIdRef.current,
+        });
+      });
       return;
     }
-    void loadEdition(true);
+    void loadEdition(true).finally(() => {
+      logHomeScrollDebug("refresh_end", {
+        currentY: homeScrollYRef.current,
+        editionId: editionIdRef.current,
+      });
+    });
   }
 
   async function handleGenerate(
@@ -3385,12 +3557,27 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
         scrollEventThrottle={16}
+        onScrollBeginDrag={() => {
+          homeScrollDraggingRef.current = true;
+          lockScrollRestore("scroll_begin_drag");
+        }}
+        onScrollEndDrag={() => {
+          homeScrollDraggingRef.current = false;
+        }}
+        onMomentumScrollBegin={() => {
+          lockScrollRestore("momentum_begin");
+        }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: mastheadScrollY } } }],
           {
             useNativeDriver: true,
             listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-              homeScrollYRef.current = event.nativeEvent.contentOffset.y;
+              const y = event.nativeEvent.contentOffset.y;
+              homeScrollYRef.current = y;
+              if (programmaticScrollRef.current) return;
+              if (y > HOME_SCROLL_AT_TOP_PX) {
+                lockScrollRestore("user_scroll");
+              }
             },
           }
         )}

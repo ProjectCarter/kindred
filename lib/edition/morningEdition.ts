@@ -120,13 +120,33 @@ export function parseMorningHeroExperience(
   }
 }
 
+function morningHeroFromRawMorningEdition(
+  value: unknown
+): MorningHeroExperience | null {
+  if (!value || typeof value !== "object") return null;
+
+  const payload = parseMorningEditionPayload(value);
+  if (payload?.morningHero) {
+    return parseMorningHeroExperience(payload.morningHero);
+  }
+
+  // Staged city builds persist a compact { morningHero, heroArtworkId } snapshot
+  // without the full MorningEditionPayload (version + briefings).
+  if ("morningHero" in value) {
+    return parseMorningHeroExperience(
+      (value as { morningHero?: unknown }).morningHero
+    );
+  }
+
+  return null;
+}
+
 export function morningHeroFromEdition(
   edition: { morning_edition?: unknown; morningEdition?: unknown } | null | undefined
 ): MorningHeroExperience | null {
-  const payload = parseMorningEditionPayload(
+  return morningHeroFromRawMorningEdition(
     edition?.morning_edition ?? edition?.morningEdition
   );
-  return parseMorningHeroExperience(payload?.morningHero);
 }
 
 export function parseMorningEditionPayload(

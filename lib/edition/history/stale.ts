@@ -26,7 +26,9 @@ export function isStaleTodayInHistorySection(
   if (STALE_BODY_MARKERS.some((re) => re.test(body))) return true;
 
   const words = wordCount(body);
-  if (words < 200) return true;
+  // Staged national-daily copy can land slightly under 200 words while still
+  // being fully verified — avoid destructive client recovery on thin-but-valid desks.
+  if (words < 160) return true;
 
   if (!YEAR_HEADLINE_RE.test(headline) || GENERIC_HEADLINE_RE.test(headline)) {
     return true;

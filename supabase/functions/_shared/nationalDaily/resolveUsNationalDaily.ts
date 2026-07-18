@@ -12,6 +12,7 @@ import { writeTodayInHistorySection } from "../history/writeTodayInHistory.ts";
 import { buildTodayInHistoryGrounding } from "../knowledge/providers/synthesize.ts";
 import type { TodayInHistorySelection } from "../history/selectStory.ts";
 import type { HistoricalImageAsset } from "../history/types.ts";
+import { historicalImageMatchesEvent } from "../history/imageEventMatch.ts";
 import { resolveUsNationalNews } from "./resolveNationalNews.ts";
 import type { UsNationalNewsPackagePayload } from "./types.ts";
 
@@ -105,10 +106,35 @@ function parseMasterpiecePayload(
   return { artworkId, presentation };
 }
 
+function historyImageVerified(
+  history: UsNationalTodayInHistoryPayload | null | undefined
+): boolean {
+  const image = history?.image;
+  if (!image?.url?.trim()) return false;
+  if (!history?.year || !history.eventText?.trim()) return false;
+  return historicalImageMatchesEvent({
+    eventYear: history.year,
+    eventText: history.eventText,
+    articleBody: history.body ?? history.eventText,
+    image,
+  });
+}
+
 function parseHistoryPayload(raw: unknown): UsNationalTodayInHistoryPayload | null {
   if (!raw || typeof raw !== "object") return null;
   const row = raw as UsNationalTodayInHistoryPayload;
   if (!row.headline?.trim() || !row.body?.trim()) return null;
+
+  const image = row.image?.url?.trim() ? row.image : null;
+  if (image && !historyImageVerified({ ...row, image })) {
+    console.warn("[usNationalDaily] rejecting cached history image — event mismatch", {
+      year: row.year,
+      caption: image.caption?.slice(0, 80) ?? null,
+      url: image.url.slice(0, 120),
+    });
+    return { ...row, image: null };
+  }
+
   return row;
 }
 
@@ -277,13 +303,14 @@ export async function loadUsNationalDailyForCityAttach(
   const history = parseHistoryPayload(row?.today_in_history);
   const nationalNews = parseNationalNewsPayload(row?.national_news);
 
-  if (!row?.id || !masterpiece || !history || !nationalNews) {
+  if (!row?.id || !masterpiece || !history || !nationalNews || !historyImageVerified(history)) {
     console.warn("[usNationalDaily] city attach cache miss — refusing generation", {
       traceId: editionTraceId ?? null,
       editionDate,
       hasRow: Boolean(row?.id),
       hasMasterpiece: Boolean(masterpiece),
       hasHistory: Boolean(history),
+      hasVerifiedHistoryImage: historyImageVerified(history),
       hasNationalNews: Boolean(nationalNews),
     });
     return null;
@@ -324,7 +351,7 @@ export async function resolveUsNationalDailyEditorial(
   let diagnostic: UsNationalDailyDiagnostic;
   let nationalNewsDiagnostic: string | null = null;
 
-  if (masterpiece && history && nationalNews && row) {
+  if (masterpiece && history && nationalNews && row && historyImageVerified(history)) {
     diagnostic = "national_daily_cache_hit";
     nationalNewsDiagnostic = "national_news_cache_hit";
     logNationalDaily(diagnostic, {
@@ -345,6 +372,16 @@ export async function resolveUsNationalDailyEditorial(
       diagnostic,
       nationalNewsDiagnostic,
     };
+  }
+
+  if (history && !historyImageVerified(history)) {
+    console.warn("[usNationalDaily] re-resolving Today in History — cached image failed verification", {
+      traceId: input.editionTraceId,
+      editionDate,
+      nationalDailyId: row?.id ?? null,
+      year: history.year,
+    });
+    history = null;
   }
 
   const [resolvedHero, generatedHistory, newsResult] = await Promise.all([

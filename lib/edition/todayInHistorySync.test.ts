@@ -4,6 +4,7 @@ import {
   articleIdentityFromSection,
   articleIdentityFromNationalDaily,
   resolveSyncedTodayInHistoryDesk,
+  resolvePairedNationalDailyForCache,
 } from "./todayInHistorySync.ts";
 import { parseUsNationalDailyRow, US_NATIONAL_COUNTRY_CODE } from "./usNationalDaily.ts";
 import { resolveTodayInHistoryImage } from "./todayInHistoryImage.ts";
@@ -116,4 +117,47 @@ test("article fingerprints differ between 1914 section and 1976 national daily",
   const sectionArticle = articleIdentityFromSection(SECTION_1914);
   const networkArticle = articleIdentityFromNationalDaily(NETWORK_NADIA);
   assert.notEqual(sectionArticle.fingerprint, networkArticle?.fingerprint);
+});
+
+test("resolvePairedNationalDailyForCache drops mismatched existing paired snapshot", () => {
+  const stalePaired = parseUsNationalDailyRow({
+    id: "paired:stale",
+    edition_date: "2026-07-18",
+    country_code: US_NATIONAL_COUNTRY_CODE,
+    today_in_history: {
+      year: 1914,
+      eventText: "Aviation",
+      headline: SECTION_1914.headline,
+      body: SECTION_1914.body,
+      teaser: "Aviation teaser",
+      sourceNote: "Sourced from Wikipedia",
+      image: NADIA_IMAGE,
+      selectionMeta: null,
+    },
+  });
+
+  const resolved = resolvePairedNationalDailyForCache({
+    sections: [SECTION_1976],
+    networkDaily: NETWORK_NADIA,
+    existingPaired: stalePaired,
+  });
+
+  assert.equal(resolved?.id, NETWORK_NADIA?.id);
+});
+
+test("national daily from wrong edition date is ignored during sync", () => {
+  const wrongDate = parseUsNationalDailyRow({
+    ...NETWORK_NADIA!,
+    id: "wrong-date",
+    edition_date: "2026-07-17",
+  });
+
+  const desk = resolveSyncedTodayInHistoryDesk({
+    section: SECTION_1976,
+    nationalDaily: wrongDate,
+    editionDate: "2026-07-18",
+  });
+
+  assert.equal(desk.synced, false);
+  assert.equal(desk.image, null);
 });

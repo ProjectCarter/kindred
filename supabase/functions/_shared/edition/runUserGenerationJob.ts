@@ -6,6 +6,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { resolveEditionLocation } from "../buildEdition.ts";
 import type { TemperatureUnitPreference } from "../weather/units.ts";
+import { isEditionFullyBuilt } from "../../../../lib/edition/stagedBuildCompletion.ts";
 import { logEditionBuildOutcome } from "./editionBuildOutcome.ts";
 import { runStagedEditionBuild } from "./runStagedEditionBuild.ts";
 
@@ -35,15 +36,65 @@ export async function findReadyEditionId(
   admin: SupabaseClient,
   input: { userId: string; editionDate: string; metroKey: string }
 ): Promise<string | null> {
-  const { data } = await admin
+  const { data: edition } = await admin
     .from("editions")
-    .select("id")
+    .select("id, status")
     .eq("user_id", input.userId)
     .eq("edition_date", input.editionDate)
     .eq("metro_key", input.metroKey)
     .eq("status", "ready")
     .maybeSingle();
-  return data?.id ?? null;
+  if (!edition?.id) return null;
+
+  const { data: job } = await admin
+    .from("generation_jobs")
+    .select("completed_stages")
+    .eq("user_id", input.userId)
+    .eq("edition_date", input.editionDate)
+    .eq("metro_key", input.metroKey)
+    .maybeSingle();
+
+  if (
+    !isEditionFullyBuilt({
+      editionStatus: edition.status,
+      completedStages: job?.completed_stages ?? null,
+    })
+  ) {
+    return null;
+  }
+
+  return edition.id;
+}
+
+/** Re-open a paintable-but-incomplete job so claim_user_generation_job can resume. */
+async function prepareIncompleteStagedJobForResume(
+  admin: SupabaseClient,
+  input: { userId: string; editionDate: string; metroKey: string }
+): Promise<void> {
+  const { data: job } = await admin
+    .from("generation_jobs")
+    .select("id, status, completed_stages")
+    .eq("user_id", input.userId)
+    .eq("edition_date", input.editionDate)
+    .eq("metro_key", input.metroKey)
+    .maybeSingle();
+
+  if (!job?.id) return;
+  if (isEditionFullyBuilt({ editionStatus: "ready", completedStages: job.completed_stages })) {
+    return;
+  }
+
+  if (job.status === "ready" || job.status === "processing") {
+    await admin
+      .from("generation_jobs")
+      .update({
+        status: "pending",
+        last_error: null,
+        stage_started_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", job.id);
+  }
 }
 
 async function finalizeJob(
@@ -204,8 +255,12 @@ export async function executeClaimedGenerationJob(
 
   const jobReady = jobRow?.status === "ready";
   const editionReady = persistedEdition.status === "ready";
+  const buildComplete = isEditionFullyBuilt({
+    editionStatus: persistedEdition.status,
+    completedStages: jobRow?.completed_stages ?? null,
+  });
 
-  if (jobReady && editionReady) {
+  if (jobReady && editionReady && buildComplete) {
     logEditionBuildOutcome({
       kind: "edition_build_outcome",
       at: new Date().toISOString(),
@@ -251,6 +306,8 @@ export async function runUserGenerationJob(
       skipped: "edition_already_ready",
     };
   }
+
+  await prepareIncompleteStagedJobForResume(admin, input);
 
   await reapStaleJobs(admin);
 

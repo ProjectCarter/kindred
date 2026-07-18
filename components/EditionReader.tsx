@@ -314,6 +314,14 @@ function EditionReaderInner({
     };
   }, [editionDate, nationalDailyProp]);
 
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log("[home:scroll-debug] edition_reader_mount", { editionId, editionDate });
+    return () => {
+      console.log("[home:scroll-debug] edition_reader_unmount", { editionId, editionDate });
+    };
+  }, [editionId, editionDate]);
+
   const nationalDaily =
     nationalDailyProp !== undefined ? nationalDailyProp : fetchedNationalDaily;
 
@@ -348,8 +356,9 @@ function EditionReaderInner({
         knowledge,
         nationalDaily,
         pairedNationalDaily: pairedNationalDailyProp,
+        editionDate,
       }),
-    [history, knowledge, nationalDaily, pairedNationalDailyProp]
+    [history, knowledge, nationalDaily, pairedNationalDailyProp, editionDate]
   );
   const historyImage = historyImageResolution.image;
   const renderHistoryImage = shouldRenderTodayInHistoryImage(historyImage, {
@@ -655,6 +664,49 @@ function EditionReaderInner({
         ? "cache (fingerprint match)"
         : "merged (cache + network)";
 
+  const activitiesGeneratedCount =
+    stableDiscovery?.picks?.filter((pick) => pick.category === "activities").length ??
+    0;
+  const activitiesSectionRowCount = sections.filter(
+    (section) => section.section_type === "activities"
+  ).length;
+  const activitiesFinalCount = curatedFullAllocation.activities.length;
+  const activitiesWillRender = activitiesFinalCount > 0;
+
+  const foodDrinksSectionRow = sections.find((section) =>
+    isRenderedFoodDrinksSectionType(section.section_type)
+  );
+  const foodDrinksGeneratedCount =
+    stableDiscovery?.picks?.filter((pick) =>
+      ["restaurants", "coffee", "bakeries", "breweries", "wineries"].includes(
+        pick.category
+      )
+    ).length ?? 0;
+  const foodDrinksSectionRowCount = foodDrinksSectionRow ? 1 : 0;
+  const foodDrinksFinalCount = curatedFullAllocation.recommendations.length;
+  const foodDrinksWillRender = foodDrinksFinalCount > 0;
+
+  const storyOfBodyPresent = Boolean(storyOf?.body?.trim());
+  const storyOfTitlePresent = Boolean(storyOf?.headline?.trim());
+  const storyOfImagePresent = Boolean(storyOfImage?.url?.trim());
+  const storyOfWillRender = Boolean(storyOf && storyOfTitlePresent && storyOfBodyPresent);
+
+  const localTopStories = topStories.filter((s) =>
+    /local/i.test(s.role ?? "")
+  );
+  const localNewsGeneratedCount = topStories.filter((story) =>
+    /local/i.test(story.role ?? "")
+  ).length;
+  const localNewsSectionRowCount = sections.filter(
+    (section) => section.section_type === "top_stories"
+  ).length;
+  const localNewsFinalCount =
+    (leadStory && /local/i.test(leadStory.role ?? "") ? 1 : 0) +
+    localTopStories.length;
+  const localNewsWillRender = Boolean(
+    leadStory && /local/i.test(leadStory.role ?? "")
+  );
+
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
   );
@@ -686,9 +738,6 @@ function EditionReaderInner({
     );
   }, [banditsPick, editionDate]);
 
-  const localTopStories = topStories.filter((s) =>
-    /local/i.test(s.role ?? "")
-  );
   const nationalTopStories = topStories.filter(
     (s) => !/local/i.test(s.role ?? "")
   );
@@ -806,8 +855,23 @@ function EditionReaderInner({
   void discoveryEditorNote;
   void mastheadLeading;
 
+  const masterpieceArtworkUri = morningHero?.hostedUrl?.trim() || null;
+  const masterpieceShowArtworkHero = Boolean(masterpieceArtworkUri && morningHero);
+  const masterpieceGenericFallback = !masterpieceShowArtworkHero;
+
   return (
     <View style={styles.folio}>
+      <HomepageSectionDevDiagnostic
+        label="TODAY'S MASTERPIECE (dev)"
+        lines={[
+          `masterpiece payload: ${morningHero ? "yes" : "no"}`,
+          `title: ${morningHero?.artworkTitle?.trim() ? "yes" : "no"}`,
+          `artist: ${morningHero?.artist?.trim() ? "yes" : "no"}`,
+          `description: ${morningHero?.aboutArtworkBody?.trim() ? "yes" : "no"}`,
+          `artwork hero selected: ${masterpieceShowArtworkHero ? "yes" : "no"}`,
+          `generic photo fallback selected: ${masterpieceGenericFallback ? "yes" : "no"}`,
+        ]}
+      />
       <MorningArrival
         editionDate={editionDate}
         locationCity={locationCity}
@@ -858,6 +922,17 @@ function EditionReaderInner({
       </FolioReveal>
 
       <FolioReveal index={folioCursor++}>
+        <HomepageSectionDevDiagnostic
+          label="ACTIVITIES (dev)"
+          lines={[
+            "mounted: yes",
+            `generated count: ${activitiesGeneratedCount}`,
+            `section row count: ${activitiesSectionRowCount}`,
+            `cache count: ${stableDiscoveryItems?.length ?? 0}`,
+            `final card count: ${activitiesFinalCount}`,
+            `willRender: ${activitiesWillRender ? "yes" : "no"}`,
+          ]}
+        />
         <ActivitiesSection
           items={curatedFullAllocation.activities}
           locationCity={locationCity}
@@ -879,6 +954,17 @@ function EditionReaderInner({
       </FolioReveal>
 
       <FolioReveal index={folioCursor++}>
+        <HomepageSectionDevDiagnostic
+          label="FOOD & DRINKS (dev)"
+          lines={[
+            "mounted: yes",
+            `generated count: ${foodDrinksGeneratedCount}`,
+            `section row count: ${foodDrinksSectionRowCount}`,
+            `cache count: ${stableDiscoveryItems?.length ?? 0}`,
+            `final card count: ${foodDrinksFinalCount}`,
+            `willRender: ${foodDrinksWillRender ? "yes" : "no"}`,
+          ]}
+        />
         <RecommendationsSection
           items={curatedFullAllocation.recommendations}
           locationCity={locationCity}
@@ -901,8 +987,19 @@ function EditionReaderInner({
         />
       </FolioReveal>
 
-      {storyOf ? (
-        <FolioReveal index={folioCursor++}>
+      <FolioReveal index={folioCursor++}>
+        <HomepageSectionDevDiagnostic
+          label="THE STORY OF GILBERT (dev)"
+          lines={[
+            "mounted: yes",
+            `payload present: ${storyOf ? "yes" : "no"}`,
+            `title present: ${storyOfTitlePresent ? "yes" : "no"}`,
+            `body present: ${storyOfBodyPresent ? "yes" : "no"}`,
+            `image present: ${storyOfImagePresent ? "yes" : "no"}`,
+            `willRender: ${storyOfWillRender ? "yes" : "no"}`,
+          ]}
+        />
+        {storyOf && storyOfWillRender ? (
           <StoryOfSection
             section={storyOf}
             cityName={locationCity}
@@ -914,11 +1011,20 @@ function EditionReaderInner({
                 : undefined
             }
           />
-        </FolioReveal>
-      ) : null}
+        ) : null}
+      </FolioReveal>
 
       {history ? (
         <FolioReveal index={folioCursor++}>
+          <HomepageSectionDevDiagnostic
+            label="TODAY IN HISTORY (dev)"
+            lines={[
+              `history image URL: ${historyImage?.url?.trim() ? "yes" : "no"}`,
+              `sync match: ${historyImageResolution.synced ? "yes" : "no"}`,
+              `shouldRender: ${renderHistoryImage ? "yes" : "no"}`,
+              `suppression reason: ${historyImageResolution.reason ?? "none"}`,
+            ]}
+          />
           <TodayInHistorySection
             section={history}
             historicalYear={historyYear}
@@ -987,8 +1093,19 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {leadStory && /local/i.test(leadStory.role ?? "") ? (
-        <FolioReveal index={folioCursor++}>
+      <FolioReveal index={folioCursor++}>
+        <HomepageSectionDevDiagnostic
+          label="LOCAL NEWS (dev)"
+          lines={[
+            "mounted: yes",
+            `generated count: ${localNewsGeneratedCount}`,
+            `section row count: ${localNewsSectionRowCount}`,
+            `cache count: ${topStories.length}`,
+            `final card count: ${localNewsFinalCount}`,
+            `willRender: ${localNewsWillRender ? "yes" : "no"}`,
+          ]}
+        />
+        {leadStory && /local/i.test(leadStory.role ?? "") ? (
           <TimeStylePackage
             sectionLabel="Local News"
             feature={{
@@ -1031,8 +1148,8 @@ function EditionReaderInner({
                 : undefined
             }
           />
-        </FolioReveal>
-      ) : null}
+        ) : null}
+      </FolioReveal>
 
       {lookingAhead ? (
         <FolioReveal index={folioCursor++}>

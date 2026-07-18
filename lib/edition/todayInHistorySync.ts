@@ -221,16 +221,38 @@ function knowledgeImageCandidate(
   return { image, identity, synced };
 }
 
+function nationalDailyMatchesEditionDate(
+  record: UsNationalDailyRecord | null | undefined,
+  editionDate: string | null | undefined
+): boolean {
+  if (!editionDate?.trim()) return true;
+  return record?.editionDate?.trim() === editionDate.trim();
+}
+
 function nationalDailyImageCandidate(
   record: UsNationalDailyRecord | null | undefined,
   article: TodayInHistoryArticleIdentity,
-  source: "national_daily" | "paired_cache"
+  source: "national_daily" | "paired_cache",
+  editionDate?: string | null
 ): {
   image: HistoricalImageAsset | null;
   identity: TodayInHistoryImageIdentity;
   synced: boolean;
   recordArticle: TodayInHistoryArticleIdentity | null;
 } {
+  if (!nationalDailyMatchesEditionDate(record, editionDate)) {
+    return {
+      image: null,
+      identity: imageIdentityFromAsset(null, {
+        source: null,
+        nationalDailyId: record?.id ?? null,
+        year: record?.todayInHistory?.year ?? null,
+      }),
+      synced: false,
+      recordArticle: null,
+    };
+  }
+
   const recordArticle = articleIdentityFromNationalDaily(record);
   const image = todayInHistoryImageFromNationalDaily(record);
   const identity = imageIdentityFromAsset(image, {
@@ -276,6 +298,8 @@ export function resolveSyncedTodayInHistoryDesk(input: {
   nationalDaily?: UsNationalDailyRecord | null;
   /** Snapshot stored beside the cached section — wins over network national daily. */
   pairedNationalDaily?: UsNationalDailyRecord | null;
+  /** Reject national rows from a prior edition date still in React state. */
+  editionDate?: string | null;
 }): TodayInHistoryDeskResolution {
   const article = articleIdentityFromSection(input.section);
 
@@ -307,7 +331,8 @@ export function resolveSyncedTodayInHistoryDesk(input: {
   const pairedCandidate = nationalDailyImageCandidate(
     input.pairedNationalDaily,
     article,
-    "paired_cache"
+    "paired_cache",
+    input.editionDate
   );
   if (pairedCandidate.image && pairedCandidate.synced) {
     return {
@@ -324,7 +349,8 @@ export function resolveSyncedTodayInHistoryDesk(input: {
   const networkCandidate = nationalDailyImageCandidate(
     input.nationalDaily,
     article,
-    "national_daily"
+    "national_daily",
+    input.editionDate
   );
   if (networkCandidate.image && networkCandidate.synced) {
     return {
@@ -460,5 +486,5 @@ export function resolvePairedNationalDailyForCache(input: {
     }
   }
 
-  return input.existingPaired ?? null;
+  return null;
 }
