@@ -7,13 +7,13 @@ import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
 import { venueHayFromParts } from "./venueQuality";
 import { VENUE_EDITORIAL_TIER_GUIDE_MIN } from "./venueEditorialScore";
 
-export const FOOD_DRINK_SECTION_KICKER = "🍽️ Food & Drink";
-export const FOOD_DRINK_SECTION_TITLE = "Food & Drink";
+export const FOOD_DRINK_SECTION_KICKER = "🍽️ Food & Drinks";
+export const FOOD_DRINK_SECTION_TITLE = "Food & Drinks";
 export const FOOD_DRINK_SECTION_QUESTION = "Where should I eat and drink?";
 export const FOOD_DRINK_SECTION_INTRO =
   "Kindred's curated local dining guide — up to 20 editor-selected places within 25 miles.";
 export const FOOD_DRINK_SEE_ALL_LABEL = (count: number) =>
-  `See all ${count} places`;
+  `See all ${count} Food & Drinks`;
 
 /** Target 80–90% independently owned; chains capped at 20% of published picks. */
 export const FOOD_DRINK_MAX_CHAIN_SHARE = 0.2;
@@ -76,7 +76,8 @@ export function foodDrinkSortScore(d: RankedDiscoveryItem): number {
 /** Guide pool — exclude venues below editorial guide minimum. */
 export function isGuideEligibleVenueEditorial(d: RankedDiscoveryItem): boolean {
   const editorial = d.item.venueEditorial?.score;
-  if (typeof editorial !== "number") return true;
+  // Score 0 means unset placeholder from catalog sync — not a failing grade.
+  if (typeof editorial !== "number" || editorial <= 0) return true;
   return editorial >= VENUE_EDITORIAL_TIER_GUIDE_MIN;
 }
 

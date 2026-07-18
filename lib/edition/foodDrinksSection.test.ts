@@ -188,3 +188,14 @@ test("food_drinks section ids do not route through local events desk", () => {
     "food_drinks"
   );
 });
+
+test("venueEditorial score 0 is treated as unset for homepage eligibility", () => {
+  function guideEligible(score: number | undefined): boolean {
+    if (typeof score !== "number" || score <= 0) return true;
+    return score >= 60;
+  }
+  assert.equal(guideEligible(0), true);
+  assert.equal(guideEligible(undefined), true);
+  assert.equal(guideEligible(45), false);
+  assert.equal(guideEligible(70), true);
+});

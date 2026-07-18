@@ -123,7 +123,7 @@ export function selectHomepageRecommendationCards(
   const editionDate = options?.editionDate ?? null;
   const pool = prepareFoodDrinkPool(items, { readerLocation }).filter((d) => {
     const score = d.item.venueEditorial?.score;
-    if (typeof score === "number" && score < VENUE_EDITORIAL_TIER_STRONG - 10) {
+    if (typeof score === "number" && score > 0 && score < VENUE_EDITORIAL_TIER_STRONG - 10) {
       return false;
     }
     return true;
@@ -138,6 +138,18 @@ export function selectHomepageRecommendationCards(
 
   return ranked
     .slice(0, HOMEPAGE_INITIAL_RENDER_COUNT)
+    .map((d) => toRecommendationCard(d, options?.city));
+}
+
+/** When card selection yields zero but desk items exist, still paint the section. */
+export function buildFallbackHomepageFoodDrinkCards(
+  items: readonly RankedDiscoveryItem[] | null | undefined,
+  options?: { city?: string | null; limit?: number }
+): EditorialGridCard[] {
+  const limit = options?.limit ?? HOMEPAGE_INITIAL_RENDER_COUNT;
+  return (items ?? [])
+    .filter((d) => d.item.title?.trim())
+    .slice(0, limit)
     .map((d) => toRecommendationCard(d, options?.city));
 }
 

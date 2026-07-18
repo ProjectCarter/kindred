@@ -35,6 +35,8 @@ type Props = {
   onSeeAll?: () => void;
   /** e.g. (n) => `See all ${n} activities` */
   seeAllLabel?: (total: number) => string;
+  /** Full desk pool count for See All footer (defaults to cards.length). */
+  seeAllTotal?: number;
   emptyCopy?: string;
   /**
    * Shows Bandit (resting, no newspaper — "nothing more to deliver") beside
@@ -57,6 +59,7 @@ export function EditorialCardGrid({
   limit,
   onSeeAll,
   seeAllLabel,
+  seeAllTotal: seeAllTotalProp,
   emptyCopy = "Nothing new to surface here today — check back tomorrow.",
   showBanditWhenEmpty = false,
 }: Props) {
@@ -71,7 +74,12 @@ export function EditorialCardGrid({
       ? sliceForInitialRender(completeCards, renderCount)
       : completeCards;
   const remainingCount = completeCards.length - visible.length;
-  const seeAllTotal = completeCards.length;
+  const seeAllTotal = seeAllTotalProp ?? completeCards.length;
+  const showSeeAllFooter =
+    Boolean(onSeeAll) &&
+    (seeAllTotalProp != null
+      ? seeAllTotal > visible.length
+      : remainingCount > 0);
 
   if (visible.length === 0) {
     return (
@@ -185,7 +193,7 @@ export function EditorialCardGrid({
         </View>
       ))}
 
-      {onSeeAll && remainingCount > 0 ? (
+      {showSeeAllFooter && onSeeAll ? (
         <Pressable
           onPress={onSeeAll}
           style={({ pressed }) => [

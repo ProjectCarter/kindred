@@ -74,7 +74,7 @@ export default function RecommendationsScreen() {
 
         {sections.length === 0 ? (
           <Text style={styles.emptyCopy}>
-            Nothing on the Food & Drink desk this month — check back tomorrow.
+            Nothing on the Food & Drinks desk this month — check back tomorrow.
           </Text>
         ) : (
           sections.map((section) => (
