@@ -9,8 +9,17 @@ export const MARKET_STATUS = [
   "planned",
   "building",
   "ready",
+  "complete",
   "needs_attention",
   "paused",
+] as const;
+
+export const POPULATION_TIER = [
+  "tier_1_national",
+  "tier_2_major",
+  "tier_3_regional",
+  "tier_4_emerging",
+  "tourist_destination",
 ] as const;
 
 export const MARKET_TYPE = [

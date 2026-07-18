@@ -8,6 +8,24 @@ import {
   usMarketSlugFromParts,
 } from "./ranking.ts";
 import type { UsMarketSeedInput } from "./types.ts";
+import {
+  displayNameForMarket,
+  nationalSignificanceScore,
+  populationTierFromSeed,
+  regionalCoverageScore,
+} from "./marketRolloutScoring.ts";
+
+function finalizeSeed(seed: UsMarketSeedInput): UsMarketSeedInput {
+  const regional_priority = regionalCoverageScore(seed);
+  const national_significance_score = nationalSignificanceScore(seed);
+  return {
+    ...seed,
+    display_name: displayNameForMarket(seed),
+    population_tier: populationTierFromSeed(seed),
+    regional_priority,
+    national_significance_score,
+  };
+}
 
 function metroRowsToSeeds(): UsMarketSeedInput[] {
   return US_METRO_TOP_100.slice(0, 100).map((row, index) => {
@@ -23,9 +41,10 @@ function metroRowsToSeeds(): UsMarketSeedInput[] {
     ] = row;
     const market_type = "major_metro" as const;
     const slug = usMarketSlugFromParts({ primary_city, state_code, market_type });
-    const seed: UsMarketSeedInput = {
+    const seed: UsMarketSeedInput = finalizeSeed({
       slug,
       metro_key: metroKeyFromPlace({ city: primary_city, state: state_code }),
+      display_name: primary_city,
       market_name: `${primary_city} Metro`,
       primary_city,
       state_name,
@@ -37,7 +56,7 @@ function metroRowsToSeeds(): UsMarketSeedInput[] {
       longitude,
       timezone,
       metro_cities: [primary_city, ...metro_cities],
-    };
+    });
     return seed;
   });
 }
@@ -56,9 +75,10 @@ function touristRowsToSeeds(): UsMarketSeedInput[] {
     ] = row;
     const market_type = "tourist_destination" as const;
     const slug = usMarketSlugFromParts({ primary_city, state_code, market_type });
-    return {
+    return finalizeSeed({
       slug,
       metro_key: metroKeyFromPlace({ city: primary_city, state: state_code }),
+      display_name: primary_city,
       market_name: primary_city,
       primary_city,
       state_name,
@@ -73,7 +93,7 @@ function touristRowsToSeeds(): UsMarketSeedInput[] {
       longitude,
       timezone,
       metro_cities: [primary_city],
-    } satisfies UsMarketSeedInput;
+    });
   });
 }
 

@@ -135,6 +135,7 @@ export function assertLocationMatchesMarket(
     !cityMatchesMarket(input.city, {
       metro_key: market.metroKey,
       slug: market.slug,
+      display_name: market.marketName,
       market_name: market.marketName,
       primary_city: market.primaryCity,
       state_name: "",

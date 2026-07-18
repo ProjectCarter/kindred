@@ -3,10 +3,13 @@ import type {
   MARKET_BUILD_LOG_STATUS,
   MARKET_STATUS,
   MARKET_TYPE,
+  POPULATION_TIER,
 } from "./constants";
+import type { PopulationTier } from "./marketRolloutScoring.ts";
 
 export type UsMarketStatus = (typeof MARKET_STATUS)[number];
 export type UsMarketType = (typeof MARKET_TYPE)[number];
+export type UsPopulationTier = (typeof POPULATION_TIER)[number];
 export type MarketBuildJobType = (typeof MARKET_BUILD_JOB_TYPE)[number];
 export type MarketBuildLogStatus = (typeof MARKET_BUILD_LOG_STATUS)[number];
 
@@ -14,6 +17,8 @@ export type UsMarketRecord = {
   id: string;
   slug: string;
   metro_key: string;
+  /** Reader-facing city label — e.g. Seattle, Sedona */
+  display_name: string;
   market_name: string;
   primary_city: string;
   state_name: string;
@@ -22,11 +27,15 @@ export type UsMarketRecord = {
   market_type: UsMarketType;
   population: number | null;
   population_rank: number | null;
+  population_tier: UsPopulationTier;
   tourism_rank: number | null;
   tourism_priority: number;
   regional_priority: number;
+  national_significance_score: number;
   future_user_demand_score: number;
   overall_rank: number;
+  /** Same as overall_rank — explicit rollout sequence */
+  rollout_priority: number;
   latitude: number;
   longitude: number;
   timezone: string;
@@ -56,11 +65,31 @@ export type MarketCompletenessSection = {
 };
 
 export type MarketCompletenessReport = {
+  /** All required validation desks passed */
   complete: boolean;
+  /** Catalog foundation bootstrapped (events, activities, food) */
   foundationComplete: boolean;
   needsAttention: boolean;
   sections: MarketCompletenessSection[];
   deficiencies: string[];
+  assessedAt?: string;
+};
+
+export type UsMarketCatalogEntry = {
+  metro_key: string;
+  display_name: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+  search_radius_miles: number;
+  timezone: string;
+  population_tier: UsPopulationTier;
+  tourism_priority: number;
+  rollout_priority: number;
+  status: UsMarketStatus;
+  slug: string;
+  market_type: UsMarketType;
+  overall_rank: number;
 };
 
 export type MarketBuildLogRecord = {
@@ -91,6 +120,7 @@ export type MarketBuildLogRecord = {
 export type UsMarketSeedInput = {
   slug: string;
   metro_key: string;
+  display_name: string;
   market_name: string;
   primary_city: string;
   state_name: string;
@@ -98,9 +128,11 @@ export type UsMarketSeedInput = {
   market_type: UsMarketType;
   population: number | null;
   population_rank: number | null;
+  population_tier?: PopulationTier;
   tourism_rank?: number | null;
   tourism_priority?: number;
   regional_priority?: number;
+  national_significance_score?: number;
   future_user_demand_score?: number;
   latitude: number;
   longitude: number;

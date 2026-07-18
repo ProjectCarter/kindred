@@ -16,6 +16,7 @@ export function computeMarketRankingScore(input: {
   tourism_rank: number | null;
   tourism_priority: number;
   regional_priority: number;
+  national_significance_score: number;
   future_user_demand_score: number;
 }): number {
   const populationComponent =
@@ -30,6 +31,7 @@ export function computeMarketRankingScore(input: {
 
   const tourismPriorityComponent = Math.max(0, input.tourism_priority) * 250;
   const regionalComponent = Math.max(0, input.regional_priority) * 75;
+  const nationalComponent = Math.max(0, input.national_significance_score) * 12;
   const demandComponent = Math.max(0, input.future_user_demand_score) * 25;
 
   return (
@@ -37,6 +39,7 @@ export function computeMarketRankingScore(input: {
     tourismPriorityComponent +
     tourismRankComponent +
     regionalComponent +
+    nationalComponent +
     demandComponent
   );
 }
@@ -48,12 +51,14 @@ export function rankUsMarketSeeds(
     const tourism_priority = seed.tourism_priority ?? 0;
     const tourism_rank = seed.tourism_rank ?? null;
     const regional_priority = seed.regional_priority ?? 0;
+    const national_significance_score = seed.national_significance_score ?? 0;
     const future_user_demand_score = seed.future_user_demand_score ?? 0;
     const ranking_score = computeMarketRankingScore({
       population_rank: seed.population_rank,
       tourism_rank,
       tourism_priority,
       regional_priority,
+      national_significance_score,
       future_user_demand_score,
     });
     return {
@@ -61,9 +66,11 @@ export function rankUsMarketSeeds(
       tourism_priority,
       tourism_rank,
       regional_priority,
+      national_significance_score,
       future_user_demand_score,
       ranking_score,
       overall_rank: 0,
+      rollout_priority: 0,
     };
   });
 
@@ -82,6 +89,7 @@ export function rankUsMarketSeeds(
   return scored.map((row, index) => ({
     ...row,
     overall_rank: index + 1,
+    rollout_priority: index + 1,
   }));
 }
 
