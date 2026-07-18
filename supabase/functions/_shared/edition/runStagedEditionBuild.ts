@@ -73,6 +73,7 @@ import { eventHasPublishableEditorial } from "../localEvents/banditNotes.ts";
 import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.ts";
 import { filterEventsForLocalEventsDesk } from "./editionSectionOwnership.ts";
 import { allocateDiscoverySections } from "../discovery/sectionAllocation.ts";
+import { buildHistoryAroundTownForEdition } from "../historyAroundTown/library.ts";
 
 export type StagedBuildJobRow = {
   id: string;
@@ -554,13 +555,71 @@ async function runFoodDrinksStage(
   };
 }
 
+async function attachHistoryAroundTownToEdition(
+  admin: SupabaseClient,
+  ctx: StageContext
+): Promise<{ placeCount: number; carouselCount: number; payloadBytes: number }> {
+  let historyAroundTown = null;
+  try {
+    historyAroundTown = await buildHistoryAroundTownForEdition(admin, {
+      city: ctx.location.city,
+      state: ctx.location.state,
+      region: ctx.location.region,
+      lat: ctx.location.lat,
+      lon: ctx.location.lon,
+    });
+  } catch (err) {
+    console.warn("[historyAroundTown:staged] attach failed", {
+      editionId: ctx.editionId,
+      metroKey: ctx.metroKey,
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return { placeCount: 0, carouselCount: 0, payloadBytes: 0 };
+  }
+
+  if (!historyAroundTown) {
+    console.warn("[historyAroundTown:staged] no approved places", {
+      editionId: ctx.editionId,
+      metroKey: ctx.metroKey,
+      city: ctx.location.city,
+    });
+    return { placeCount: 0, carouselCount: 0, payloadBytes: 0 };
+  }
+
+  const serialized = JSON.parse(JSON.stringify(historyAroundTown));
+  const { error } = await admin
+    .from("editions")
+    .update({ history_around_town: serialized })
+    .eq("id", ctx.editionId);
+  if (error) throw new Error(error.message);
+
+  console.log("[historyAroundTown:staged] attached", {
+    editionId: ctx.editionId,
+    metroKey: historyAroundTown.metroKey,
+    places: historyAroundTown.places.length,
+    carousel: historyAroundTown.carousel.length,
+  });
+
+  return {
+    placeCount: historyAroundTown.places.length,
+    carouselCount: historyAroundTown.carousel.length,
+    payloadBytes: estimateJsonBytes(serialized),
+  };
+}
+
 async function runStoryOfStage(
   admin: SupabaseClient,
   ctx: StageContext
 ): Promise<{ itemCount: number; payloadBytes: number }> {
+  const historyAroundTown = await attachHistoryAroundTownToEdition(admin, ctx);
+
   const article = await fetchApprovedCityArticle(admin, ctx.location);
   if (!article) {
-    return { itemCount: 0, payloadBytes: 0 };
+    await maybeMarkEditionPaintable(admin, ctx.editionId);
+    return {
+      itemCount: historyAroundTown.placeCount > 0 ? 1 : 0,
+      payloadBytes: historyAroundTown.payloadBytes,
+    };
   }
 
   await upsertEditionSection(admin, {
@@ -573,7 +632,11 @@ async function runStoryOfStage(
   });
   await maybeMarkEditionPaintable(admin, ctx.editionId);
 
-  return { itemCount: 1, payloadBytes: estimateJsonBytes(article.body) };
+  return {
+    itemCount: 1 + (historyAroundTown.placeCount > 0 ? 1 : 0),
+    payloadBytes:
+      estimateJsonBytes(article.body) + historyAroundTown.payloadBytes,
+  };
 }
 
 async function runBanditsPickStage(

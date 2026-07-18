@@ -218,6 +218,7 @@ import {
   needsNetworkHistoryAroundTownMerge,
   resolveHistoryAroundTown,
 } from "../lib/edition/resolveHistoryAroundTown";
+import { parseHistoryAroundTownPayload } from "../lib/edition/historyAroundTown/types";
 import {
   masterpieceTraceAsync,
 } from "../lib/edition/masterpieceDiagnostics";
@@ -285,6 +286,12 @@ export default function HomeScreen() {
   } | null>(null);
   const [localEventsStatus, setLocalEventsStatus] =
     useState<LocalEventsLoadStatus>("loading");
+  const [devSectionsLoadPath, setDevSectionsLoadPath] = useState<string>(
+    "initial"
+  );
+  const [devCacheMatchedNetwork, setDevCacheMatchedNetwork] = useState<
+    boolean | null
+  >(null);
   const { pending: firstRunPending, dismiss: dismissFirstRun } =
     useLocationFirstRun();
   const loadGen = useRef(0);
@@ -685,6 +692,42 @@ export default function HomeScreen() {
     });
   }
 
+  function logHistoryAroundTownPipeline(
+    step: string,
+    input: {
+      editionRaw?: unknown;
+      intelligence?: EditionIntelligence | null;
+      cachedBundle?: CachedEditionBundle | null;
+    }
+  ): void {
+    if (!__DEV__) return;
+    const raw = input.editionRaw;
+    const rawPlaces =
+      raw &&
+      typeof raw === "object" &&
+      Array.isArray((raw as { places?: unknown[] }).places)
+        ? (raw as { places: unknown[] }).places.length
+        : 0;
+    const rawCarousel =
+      raw &&
+      typeof raw === "object" &&
+      Array.isArray((raw as { carousel?: unknown[] }).carousel)
+        ? (raw as { carousel: unknown[] }).carousel.length
+        : 0;
+    const parsedFromRaw = parseHistoryAroundTownPayload(raw);
+    console.log("[home:historyPlaces:pipeline]", {
+      step,
+      editionJsonPlaces: rawPlaces,
+      editionJsonCarousel: rawCarousel,
+      editionJsonParsedPlaces: parsedFromRaw?.places?.length ?? 0,
+      editionJsonParsedCarousel: parsedFromRaw?.carousel?.length ?? 0,
+      loaderIntelligencePlaces:
+        input.intelligence?.historyAroundTown?.places?.length ?? 0,
+      cacheIntelligencePlaces:
+        input.cachedBundle?.intelligence?.historyAroundTown?.places?.length ?? 0,
+    });
+  }
+
   function applyCachedBundle(bundle: CachedEditionBundle): void {
     const merged = mergeHistoryAroundTownIntoCachedBundle(
       mergeMorningHeroIntoCachedBundle(bundle)
@@ -700,6 +743,14 @@ export default function HomeScreen() {
     setBandit(merged.bandit);
     setIntelligence(merged.intelligence);
     setPairedNationalDaily(merged.pairedNationalDaily ?? null);
+    logHistoryAroundTownPipeline("cache_hydrate", {
+      intelligence: merged.intelligence,
+      cachedBundle: merged,
+    });
+    if (__DEV__) {
+      setDevSectionsLoadPath("cache:hydrate");
+      setDevCacheMatchedNetwork(null);
+    }
     freezeEdition({
       editionId: merged.editionId,
       editionDate: merged.editionDate,
@@ -1921,6 +1972,12 @@ export default function HomeScreen() {
       (edition as { history_around_town?: unknown }).history_around_town
     );
 
+    logHistoryAroundTownPipeline("homepage_loader", {
+      editionRaw: (edition as { history_around_town?: unknown }).history_around_town,
+      intelligence: intel,
+      cachedBundle: cachedBundleRef.current,
+    });
+
     // Never block first paint / generate-edition completion on recovery fetch.
     scheduleMorningHeroRecovery(edition.edition_date, intel, gen);
 
@@ -2088,6 +2145,19 @@ export default function HomeScreen() {
           ? "syncAfterCache"
           : "full",
     });
+
+    if (__DEV__) {
+      setDevSectionsLoadPath(
+        patchEventsOnly
+          ? "patchEventsOnly"
+          : syncAfterCache
+            ? cacheMatchesNetwork
+              ? "syncAfterCache:cache"
+              : "syncAfterCache:merged"
+            : "full:network"
+      );
+      setDevCacheMatchedNetwork(syncAfterCache ? cacheMatchesNetwork : null);
+    }
 
     if (__DEV__) {
       logLocalEventsPipeline(
@@ -3620,6 +3690,10 @@ export default function HomeScreen() {
               knowledge={intelligence?.knowledge}
               nationalDaily={nationalDaily}
               pairedNationalDaily={pairedNationalDaily}
+              devSectionsLoadPath={__DEV__ ? devSectionsLoadPath : undefined}
+              devCacheMatchedNetwork={
+                __DEV__ ? devCacheMatchedNetwork : undefined
+              }
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}

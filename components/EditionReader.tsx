@@ -168,6 +168,10 @@ type Props = {
   /** Frozen History Around Town — final homepage section. */
   historyAroundTown?: HistoryAroundTownEditionPayload | null;
   onSeeAllHistoryAroundTown?: () => void;
+  /** Development-only — last loadEdition apply path for runtime diagnostics. */
+  devSectionsLoadPath?: string | null;
+  /** Development-only — whether cache fingerprint matched network on last sync. */
+  devCacheMatchedNetwork?: boolean | null;
 };
 
 const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
@@ -220,6 +224,26 @@ function folioTeaser(body: string): { dek: string; clamped: boolean } {
   };
 }
 
+function HomepageSectionDevDiagnostic({
+  label,
+  lines,
+}: {
+  label: string;
+  lines: string[];
+}) {
+  if (!__DEV__) return null;
+  return (
+    <View style={devDiagnosticStyles.box} accessibilityLabel={`${label} diagnostics`}>
+      <Text style={devDiagnosticStyles.title}>{label}</Text>
+      {lines.map((line) => (
+        <Text key={line} style={devDiagnosticStyles.line}>
+          {line}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 function EditionReaderInner({
   sections,
   editionId,
@@ -233,6 +257,8 @@ function EditionReaderInner({
   knowledge,
   nationalDaily: nationalDailyProp,
   pairedNationalDaily: pairedNationalDailyProp,
+  devSectionsLoadPath,
+  devCacheMatchedNetwork,
   heroImageUri,
   banditGreeting,
   banditAside,
@@ -613,6 +639,21 @@ function EditionReaderInner({
     () => selectHistoryAroundTownCarousel(historyAroundTown),
     [historyAroundTown]
   );
+  const historyPlacesCount = historyAroundTown?.places?.length ?? 0;
+  const historyCarouselIdCount = historyAroundTown?.carousel?.length ?? 0;
+  const historyWillRender = historyCarouselCards.length > 0;
+  const localEventsSectionPresent = sections.some(
+    (section) => section.section_type === "local_events"
+  );
+  const localEventsSourceLabel =
+    devSectionsLoadPath?.trim() ||
+    (devCacheMatchedNetwork == null ? "unknown" : "pending");
+  const localEventsCacheNetworkLabel =
+    devCacheMatchedNetwork == null
+      ? "n/a"
+      : devCacheMatchedNetwork
+        ? "cache (fingerprint match)"
+        : "merged (cache + network)";
 
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
@@ -793,6 +834,19 @@ function EditionReaderInner({
       />
 
       <FolioReveal index={folioCursor++}>
+        <HomepageSectionDevDiagnostic
+          label="LOCAL EVENTS (dev)"
+          lines={[
+            "mounted: yes",
+            `event count: ${events.length}`,
+            `curated count: ${curatedLocalEvents.length}`,
+            `homepage slice: ${visibleEvents.length}`,
+            `section row present: ${localEventsSectionPresent ? "yes" : "no"}`,
+            `load path: ${localEventsSourceLabel}`,
+            `cache vs network: ${localEventsCacheNetworkLabel}`,
+            `load status: ${localEventsStatus ?? "unknown"}`,
+          ]}
+        />
         <LocalEventsGrid
           events={events}
           homepageOrder={curatedLocalEvents}
@@ -1131,6 +1185,17 @@ function EditionReaderInner({
       {otherSections.map((section) => renderSection(section, folioCursor++))}
 
       <FolioReveal index={folioCursor++}>
+        <HomepageSectionDevDiagnostic
+          label="HISTORICAL PLACES (dev)"
+          lines={[
+            "mounted: yes",
+            `places count: ${historyPlacesCount}`,
+            `carousel id count: ${historyCarouselIdCount}`,
+            `card count: ${historyCarouselCards.length}`,
+            `willRender: ${historyWillRender ? "yes" : "no"}`,
+            `intelligence payload: ${historyAroundTown ? "yes" : "no"}`,
+          ]}
+        />
         <HistoryAroundTownSection
           cards={historyCarouselCards}
           subtitle={historyAroundTown?.subtitle}
@@ -1174,6 +1239,10 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
     prev.morningBriefing === next.morningBriefing &&
     prev.localEventsStatus === next.localEventsStatus &&
     prev.historyAroundTown === next.historyAroundTown &&
+    prev.devSectionsLoadPath === next.devSectionsLoadPath &&
+    prev.devCacheMatchedNetwork === next.devCacheMatchedNetwork &&
+    prev.nationalDaily === next.nationalDaily &&
+    prev.pairedNationalDaily === next.pairedNationalDaily &&
     prev.clippedSectionIds === next.clippedSectionIds &&
     prev.readerLocation === next.readerLocation &&
     prev.topStories === next.topStories &&
@@ -1183,6 +1252,32 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
 }
 
 export const EditionReader = memo(EditionReaderInner, editionReaderPropsAreEqual);
+
+const devDiagnosticStyles = StyleSheet.create({
+  box: {
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#B45309",
+    backgroundColor: "#FFF7ED",
+    borderRadius: 6,
+  },
+  title: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: "#9A3412",
+    marginBottom: 4,
+  },
+  line: {
+    fontFamily: "Menlo",
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#7C2D12",
+  },
+});
 
 const styles = StyleSheet.create({
   folio: {
