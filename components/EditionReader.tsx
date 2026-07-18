@@ -63,6 +63,10 @@ import {
 } from "../lib/edition/localEventsPipeline";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import {
+  resolveFoodDrinksHomepageItems,
+  isRenderedFoodDrinksSectionType,
+} from "../lib/edition/foodDrinksSection";
+import {
   resolveReaderLocation,
   type ReaderLocation,
 } from "../lib/edition/localDiscoveryScope";
@@ -293,7 +297,8 @@ function EditionReaderInner({
       s.section_type !== "today_in_history" &&
       s.section_type !== "story_of" &&
       s.section_type !== "your_city" &&
-      s.section_type !== "top_stories"
+      s.section_type !== "top_stories" &&
+      !isRenderedFoodDrinksSectionType(s.section_type)
   );
 
   const dateLabel = editionDate ? formatEditionDate(editionDate) : null;
@@ -395,27 +400,6 @@ function EditionReaderInner({
     });
   }, [stableDiscovery, locationCity, locationState, locationRegion]);
 
-  const sectionAllocation = useMemo(
-    () =>
-      allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
-        excludeVenueNames: eventVenueNames,
-        readerLocation: resolvedReaderLocation,
-      }),
-    [
-      stableDiscovery,
-      stableDiscoveryItems,
-      eventVenueNames,
-      resolvedReaderLocation,
-    ]
-  );
-
-  // Activities/Recommendations need the true full claimed list on the
-  // front page too, not just the first 8 — EditorialCardGrid already
-  // decides how many cards to actually show (its own `limit`, default
-  // 8) and only reveals "See more" once the real total exceeds that,
-  // exactly like Local Events. Capping the pool itself to 8 here would
-  // make "See more" never appear. Notebook/localBiz below intentionally
-  // keep using the capped `sectionAllocation` — unrelated to this fix.
   const fullSectionAllocation = useMemo(
     () =>
       allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
@@ -428,6 +412,41 @@ function EditionReaderInner({
       stableDiscoveryItems,
       eventVenueNames,
       resolvedReaderLocation,
+    ]
+  );
+
+  const foodDrinksItems = useMemo(
+    () =>
+      resolveFoodDrinksHomepageItems({
+        sections,
+        discovery: stableDiscovery,
+        fallbackItems: fullSectionAllocation.recommendations,
+      }),
+    [sections, stableDiscovery, fullSectionAllocation.recommendations]
+  );
+
+  const fullAllocationWithFoodDrinks = useMemo(
+    () => ({
+      ...fullSectionAllocation,
+      recommendations: foodDrinksItems,
+    }),
+    [fullSectionAllocation, foodDrinksItems]
+  );
+
+  const sectionAllocation = useMemo(
+    () => ({
+      ...allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
+        excludeVenueNames: eventVenueNames,
+        readerLocation: resolvedReaderLocation,
+      }),
+      recommendations: foodDrinksItems.slice(0, HOMEPAGE_INITIAL_RENDER_COUNT),
+    }),
+    [
+      stableDiscovery,
+      stableDiscoveryItems,
+      eventVenueNames,
+      resolvedReaderLocation,
+      foodDrinksItems,
     ]
   );
 
@@ -453,11 +472,11 @@ function EditionReaderInner({
     () =>
       curateHomepageEdition({
         localEvents: events,
-        allocation: fullSectionAllocation,
+        allocation: fullAllocationWithFoodDrinks,
         anchors: editionAnchors,
         sportsMarketId,
       }),
-    [events, fullSectionAllocation, editionAnchors, sportsMarketId]
+    [events, fullAllocationWithFoodDrinks, editionAnchors, sportsMarketId]
   );
 
   const curatedFullAllocation = curatedEdition.allocation;

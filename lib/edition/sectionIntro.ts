@@ -18,6 +18,7 @@ export const SECTION_INTROS: Record<string, string> = {
   your_city: "A pause to understand where you live.",
   looking_ahead: "What to keep an eye on next.",
   recommendations: "The best places to eat and drink nearby.",
+  food_drinks: "The best places to eat and drink nearby.",
   bandits_picks: "What Bandit says not to miss this month.",
   knowledge: "Context worth carrying into the day.",
   memory: "A thread from earlier reading.",
