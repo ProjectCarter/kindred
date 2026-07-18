@@ -21,6 +21,7 @@ export const SECTION_LABELS: Record<string, string> = {
   your_city: "The Story of…",
   looking_ahead: "Looking Ahead",
   recommendations: "Food & Drink",
+  food_drinks: "Food & Drink",
   bandits_picks: "What's Special Right Now",
   knowledge: "Context",
   memory: "From the Archive",

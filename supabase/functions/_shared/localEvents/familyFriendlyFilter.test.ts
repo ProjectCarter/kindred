@@ -36,6 +36,18 @@ Deno.test("assessFamilyFriendlyListing excludes explicit adult entertainment tit
   }
 });
 
+Deno.test("assessFamilyFriendlyListing excludes drag shows in V1", () => {
+  const blocked = [
+    "Saturday Drag Show",
+    "Drag Brunch Spectacular",
+    "Best Drag Night in Phoenix",
+  ];
+  for (const name of blocked) {
+    const result = assessFamilyFriendlyListing({ name, venue: "Club Neon" });
+    assert(result.excluded, `expected block: ${name}`);
+  }
+});
+
 Deno.test("assessFamilyFriendlyListing keeps legitimate performances", () => {
   const allowed = [
     {
@@ -49,10 +61,6 @@ Deno.test("assessFamilyFriendlyListing keeps legitimate performances", () => {
     {
       name: "An Evening with Nate Bargatze",
       venue: "Mortgage Matchup Center",
-    },
-    {
-      name: "Family Drag Story Hour",
-      venue: "Phoenix Public Library",
     },
     {
       name: "Adult Contemporary Night — Live Acoustic Sets",

@@ -214,17 +214,16 @@ function assessAdultEntertainment(
 
   if (/\bdrag\b/i.test(hay)) {
     if (
-      /\b(adult|strip|xxx|nude|topless|erotic|male revue|female revue|sexually explicit)\b/i.test(
-        hay
-      ) ||
-      ADULT_VENUE_PATTERN.test(hay)
+      /\b(story hour|storytime|library|children'?s|kids|family story)\b/i.test(hay) &&
+      /\b(library|public library|bookstore)\b/i.test(hay)
     ) {
-      return {
-        excluded: true,
-        signal: "adult-oriented drag",
-        category: "adult_entertainment",
-      };
+      return null;
     }
+    return {
+      excluded: true,
+      signal: "drag show",
+      category: "adult_entertainment",
+    };
   }
 
   if (

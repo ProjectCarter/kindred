@@ -70,6 +70,9 @@ import { assessMinimumViableEdition } from "./minimumViableEdition.ts";
 import { triggerUserEditionJobWorker } from "./triggerUserEditionJobWorker.ts";
 import type { RunUserGenerationJobInput } from "./runUserGenerationJob.ts";
 import { eventHasPublishableEditorial } from "../localEvents/banditNotes.ts";
+import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.ts";
+import { filterEventsForLocalEventsDesk } from "./editionSectionOwnership.ts";
+import { allocateDiscoverySections } from "../discovery/sectionAllocation.ts";
 
 export type StagedBuildJobRow = {
   id: string;
@@ -93,6 +96,7 @@ export type StageRunResult =
 
 type BuildState = {
   localEvents?: LocalEvent[];
+  foodDrinkEventReroutes?: LocalEvent[];
   localPlaces?: unknown[];
   discovery?: DiscoveryPayload;
   editorial?: Awaited<ReturnType<typeof runLocalEditorialDecisions>>;
@@ -337,7 +341,27 @@ async function runLocalEventsStage(
     raw = filterLocalEventsByMarket(raw, ctx.editionMarket, ctx.marketAnchor).kept;
   }
 
-  const allocated = allocateLocalEventsByHorizon(raw, {
+  const familyFiltered = filterFamilyFriendlyEvents(raw);
+  if (familyFiltered.filteredCount > 0) {
+    console.log("[runStagedEditionBuild] local_events family filter", {
+      traceId: ctx.traceId,
+      filteredCount: familyFiltered.filteredCount,
+      samples: familyFiltered.samples,
+    });
+  }
+
+  const owned = filterEventsForLocalEventsDesk(familyFiltered.kept);
+  if (owned.reroutedFood.length > 0 || owned.excluded.length > 0) {
+    console.log("[runStagedEditionBuild] local_events desk ownership", {
+      traceId: ctx.traceId,
+      kept: owned.kept.length,
+      reroutedFood: owned.reroutedFood.length,
+      excluded: owned.excluded.length,
+      reroutedSamples: owned.reroutedFood.slice(0, 3).map((e) => e.name),
+    });
+  }
+
+  const allocated = allocateLocalEventsByHorizon(owned.kept, {
     maxTotal: LOCAL_EVENTS_EDITION_SURFACED_MAX,
     now: editionDateObj,
     readerCity: ctx.location.city,
@@ -378,6 +402,7 @@ async function runLocalEventsStage(
   }
 
   buildState.localEvents = publishable;
+  buildState.foodDrinkEventReroutes = owned.reroutedFood;
   return {
     localEvents: publishable,
     itemCount: publishable.length,
@@ -391,12 +416,19 @@ async function runActivitiesStage(
   buildState: BuildState
 ): Promise<{ discovery: DiscoveryPayload; itemCount: number; payloadBytes: number }> {
   if (!buildState.localPlaces) {
-    let places = await getLocalPlacesForEdition(admin, ctx.location);
+    let places = await getLocalPlacesForEdition(admin, ctx.location, {
+      catalogMetroKey: ctx.catalogMetroKey,
+    });
     if (ctx.editionMarket) {
       places = filterPlacesByMarket(places, ctx.editionMarket, ctx.marketAnchor).kept;
     }
     buildState.localPlaces = places;
   }
+
+  const localEventsForDiscovery = (buildState.localEvents ?? []).filter(
+    (event) =>
+      filterEventsForLocalEventsDesk([event]).kept.length > 0
+  );
 
   const personalization = await loadPersonalizationProfile(admin, ctx.userId, ctx.location);
   const discovery = runDiscoveryDecisions({
@@ -415,7 +447,7 @@ async function runActivitiesStage(
     npsParks: [],
     isWeekend: false,
     isSunday: false,
-    localEvents: buildState.localEvents ?? [],
+    localEvents: localEventsForDiscovery,
     localPlaces: buildState.localPlaces as Parameters<
       typeof runDiscoveryDecisions
     >[0]["localPlaces"],
@@ -441,16 +473,74 @@ async function runFoodDrinksStage(
   ctx: StageContext,
   buildState: BuildState
 ): Promise<{ itemCount: number; payloadBytes: number }> {
-  const discovery = buildState.discovery;
+  let discovery = buildState.discovery;
   if (!discovery) {
-    return { itemCount: 0, payloadBytes: 0 };
+    if (!buildState.localPlaces) {
+      let places = await getLocalPlacesForEdition(admin, ctx.location, {
+        catalogMetroKey: ctx.catalogMetroKey,
+      });
+      if (ctx.editionMarket) {
+        places = filterPlacesByMarket(places, ctx.editionMarket, ctx.marketAnchor).kept;
+      }
+      buildState.localPlaces = places;
+    }
+
+    const personalization = await loadPersonalizationProfile(admin, ctx.userId, ctx.location);
+    discovery = runDiscoveryDecisions({
+      editionDate: ctx.editionDate,
+      now: new Date(),
+      city: ctx.location.city,
+      region: ctx.location.region,
+      state: ctx.location.state,
+      readerLat: ctx.location.lat,
+      readerLon: ctx.location.lon,
+      interests: personalization.interests,
+      followedTopics: personalization.followedTopics,
+      favoriteSources: personalization.favoriteSources,
+      weatherSummary: null,
+      weatherIntel: null,
+      npsParks: [],
+      isWeekend: false,
+      isSunday: false,
+      localEvents: (buildState.localEvents ?? []).filter(
+        (event) => filterEventsForLocalEventsDesk([event]).kept.length > 0
+      ),
+      localPlaces: buildState.localPlaces as Parameters<
+        typeof runDiscoveryDecisions
+      >[0]["localPlaces"],
+      recentKeys: [],
+    });
+    buildState.discovery = discovery;
   }
-  const foodCount = discovery.picks.filter(
-    (p) => p.category === "coffee" || p.category === "restaurants" || p.category === "bakeries"
-  ).length;
+
+  const allocation = allocateDiscoverySections(discovery);
+  const foodItems = allocation.recommendations;
+
+  if (foodItems.length > 0) {
+    await upsertEditionSection(admin, {
+      edition_id: ctx.editionId,
+      section_type: "food_drinks",
+      position: 6,
+      headline: "Food & Drink",
+      body: JSON.stringify({
+        version: 1,
+        items: foodItems.map((item) => ({
+          id: item.item.id,
+          title: item.item.title,
+          category: item.item.category,
+          score: item.score,
+        })),
+      }),
+      source_note: "Kindred Food & Drink desk",
+    });
+  }
 
   await admin.from("editions").update({ discovery }).eq("id", ctx.editionId);
-  return { itemCount: foodCount, payloadBytes: estimateJsonBytes(discovery) };
+
+  return {
+    itemCount: foodItems.length,
+    payloadBytes: estimateJsonBytes({ discovery, foodItems }),
+  };
 }
 
 async function runStoryOfStage(
@@ -494,7 +584,9 @@ async function runBanditsPickStage(
     frontPageIds: editorial.frontPage.stories.map((s) => s.story.id),
     interests: personalization.interests,
     recentKeys: [],
-    localEvents: buildState.localEvents ?? [],
+    localEvents: (buildState.localEvents ?? []).filter(
+      (event) => filterEventsForLocalEventsDesk([event]).kept.length > 0
+    ),
     discovery: {
       editionDate: ctx.editionDate,
       now: new Date(),

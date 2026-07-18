@@ -3,6 +3,10 @@ import type { EventInfoBadgeId } from "./eventBadges";
 import { inferEventInfoBadges } from "./eventBadges";
 import { filterValidEvents } from "./localEventsValidation";
 import {
+  classifyEventListingSection,
+  filterEventsForLocalEventsDesk,
+} from "./editionSectionOwnership";
+import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
   LOCAL_EVENT_PUBLISH_MIN_SCORE,
   meetsLocalEventPublishThreshold,
@@ -443,13 +447,23 @@ export function parseLocalEventsBody(
       });
 
     const { valid, dropped } = filterValidEvents(mapped);
+    const owned = filterEventsForLocalEventsDesk(valid);
+    const localEventsOnly = owned.kept.filter(
+      (event) => classifyEventListingSection(event) === "local_events"
+    );
+    const ownershipDropped = [
+      ...owned.reroutedFood,
+      ...owned.excluded,
+      ...dropped.map((d) => d.event),
+    ];
 
     if (__DEV__) {
       console.log("[localEvents:parse] body parsed", {
         rawCount,
         afterNameFilter: mapped.length,
         afterValidation: valid.length,
-        droppedCount: dropped.length,
+        afterOwnership: localEventsOnly.length,
+        droppedCount: dropped.length + ownershipDropped.length,
       });
     }
 
@@ -457,8 +471,8 @@ export function parseLocalEventsBody(
       const oldest = parsedEventsBodyCache.keys().next().value;
       if (oldest) parsedEventsBodyCache.delete(oldest);
     }
-    parsedEventsBodyCache.set(cacheKey, valid);
-    return valid;
+    parsedEventsBodyCache.set(cacheKey, localEventsOnly);
+    return localEventsOnly;
   } catch (err) {
     if (__DEV__) {
       console.warn("[localEvents:parse] JSON parse failed", {
