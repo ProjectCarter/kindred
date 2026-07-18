@@ -319,6 +319,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         editionId: result.editionId,
+        metroKey: result.metroKey,
         location: {
           city: location.city,
           region: location.region,

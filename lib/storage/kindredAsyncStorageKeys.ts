@@ -76,6 +76,12 @@ export const KINDRED_ASYNC_STORAGE_KEYS: KindredStorageEntry[] = [
     source: "lib/dev/editionOverrideStore.ts",
   },
   {
+    label: "dev_preview_context",
+    keyOrPrefix: "@kindred/dev/preview-context-v1",
+    preserve: true,
+    source: "lib/dev/developerPreviewContext.ts",
+  },
+  {
     label: "dev_pending_generate",
     keyOrPrefix: "@kindred/dev/pending-generate-v1",
     preserve: true,

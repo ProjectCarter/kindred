@@ -5,7 +5,7 @@ export {
   catalogMetroKeyForMarket,
   type ResolvedEditionMarket,
   type EditionLocationInput,
-} from "../../../lib/markets/resolveEditionMarket.ts";
+} from "../../../../lib/markets/resolveEditionMarket.ts";
 
 export {
   filterLocalEventsByMarket,
@@ -16,6 +16,6 @@ export {
   type EditionMarketAnchor,
   type IsolatedLocalEvent,
   type IsolatedPlace,
-} from "../../../lib/markets/editionMarketIsolation.ts";
+} from "../../../../lib/markets/editionMarketIsolation.ts";
 
-export { haversineKm, milesToKm } from "../../../lib/markets/geo.ts";
+export { haversineKm, milesToKm } from "../../../../lib/markets/geo.ts";

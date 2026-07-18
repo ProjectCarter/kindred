@@ -1,4 +1,4 @@
-import type { UsMarketSeedInput } from "./types";
+import type { UsMarketSeedInput } from "./types.ts";
 
 export type RankedUsMarketSeed = UsMarketSeedInput & {
   overall_rank: number;

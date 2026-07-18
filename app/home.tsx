@@ -110,7 +110,6 @@ import {
   MastheadLink,
 } from "../components/KindredMasthead";
 import {
-  resolveActivePlace,
   locationPayload,
   returnToHomeCity,
   type ActiveLocation,
@@ -126,6 +125,14 @@ import {
   devGenerateTraceSummary,
 } from "../lib/dev/devGenerateTrace";
 import { shouldDeferLoadEditionDuringGenerate } from "../lib/dev/devGenerateGuard";
+import {
+  displayCityForEdition,
+  getDeveloperPreviewContextSync,
+  hydrateDeveloperPreviewContext,
+  isDeveloperPreviewSessionActive,
+  setDeveloperPreviewContext,
+} from "../lib/dev/developerPreviewContext";
+import { resolveEditionLoadIdentity } from "../lib/dev/editionLoadIdentity";
 import {
   maybeRecordDevEditionSnapshot,
   tryApplyDevEditionPreview,
@@ -187,6 +194,7 @@ import {
   masterpieceTraceAsync,
 } from "../lib/edition/masterpieceDiagnostics";
 import { SUPPORTED_REGION_MESSAGE } from "../lib/markets/constants";
+import { editionMetroKeyFromPlace } from "../lib/markets/editionIdentity";
 
 function isNonUsEditionResponse(body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
@@ -198,7 +206,7 @@ function isNonUsEditionResponse(body: unknown): boolean {
 
 function editionCacheMetroKey(place: KindredPlace | null | undefined): string | null {
   if (!place?.city) return null;
-  return metroKeyFromKindredPlace(place);
+  return editionMetroKeyFromPlace(place);
 }
 
 const EDITION_SECTIONS_HOME_SELECT =
@@ -282,6 +290,45 @@ export default function HomeScreen() {
 
   editionIdRef.current = editionId;
   activeLocationRef.current = activeLocation;
+
+  /** Keep ref in sync immediately — React state can lag behind loadEdition. */
+  function applyActiveLocation(next: ActiveLocation): void {
+    activeLocationRef.current = next;
+    setActiveLocation(next);
+  }
+
+  function readerDisplayCity(): string | undefined {
+    const preview = getDeveloperPreviewContextSync();
+    return displayCityForEdition({
+      preview,
+      discoveryCity: intelligence?.discovery?.location?.city ?? null,
+      activeCity: activeLocation?.place?.city ?? null,
+    });
+  }
+
+  function readerDisplayPlace(): KindredPlace | null {
+    const preview = getDeveloperPreviewContextSync();
+    if (preview) {
+      return {
+        city: preview.city,
+        state: preview.state,
+        region: preview.region,
+        lat: preview.lat,
+        lon: preview.lon,
+      };
+    }
+    const discoveryLoc = intelligence?.discovery?.location;
+    if (discoveryLoc?.city && typeof discoveryLoc.lat === "number" && typeof discoveryLoc.lon === "number") {
+      return {
+        city: discoveryLoc.city,
+        state: discoveryLoc.state ?? null,
+        region: discoveryLoc.region ?? null,
+        lat: discoveryLoc.lat,
+        lon: discoveryLoc.lon,
+      };
+    }
+    return activeLocation?.place ?? null;
+  }
 
   useEffect(() => {
     setActiveEditionId(editionId);
@@ -418,9 +465,11 @@ export default function HomeScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const active = await resolveActivePlace({ refreshIfStale: false });
+      await hydrateDevEditionOverrideState();
+      await hydrateDeveloperPreviewContext();
+      const active = await resolveEffectivePlace({ refreshIfStale: false });
       if (!cancelled && mountedRef.current) {
-        setActiveLocation(active);
+        applyActiveLocation(active);
         focusedLocationKeyRef.current = activeLocationKey(active);
       }
     })();
@@ -507,9 +556,13 @@ export default function HomeScreen() {
         pipelineStageEnd("cache_load", { source: "layout", hit: false, pendingDevGenerate: true });
         return;
       }
+      await hydrateDeveloperPreviewContext();
+      const identity = await resolveEditionLoadIdentity({
+        handoff: "layout-cache",
+        preferPreview: true,
+      });
       const todayStr = resolveEffectiveEditionDateSync();
-      const active = await resolveEffectivePlace({ refreshIfStale: false });
-      const metroKey = editionCacheMetroKey(active.place);
+      const metroKey = identity.metroKey;
       if (!metroKey) {
         pipelineStageEnd("cache_load", { source: "layout", hit: false, reason: "no_metro" });
         return;
@@ -783,11 +836,29 @@ export default function HomeScreen() {
     editionDate: string;
     place: KindredPlace | null;
     sections: EditionSection[];
+    expectedMetroKey?: string | null;
+    traceId?: string | null;
   }): Promise<EditionSection[]> {
-    const { editionId, editionDate, place, sections } = params;
+    const { editionId, editionDate, place, sections, expectedMetroKey, traceId } = params;
     if (!place || !needsLocalEventsRecovery(sections)) {
       const count = countValidEventsInSections(sections);
       setLocalEventsStatus(count > 0 ? "ready" : "quiet_day");
+      return sections;
+    }
+
+    if (
+      expectedMetroKey &&
+      editionCacheMetroKey(place) !== expectedMetroKey
+    ) {
+      if (__DEV__) {
+        console.warn("[home] localEvents recovery rejected — metro mismatch", {
+          expectedMetroKey,
+          placeCity: place.city,
+          placeMetroKey: editionCacheMetroKey(place),
+          traceId,
+        });
+      }
+      setLocalEventsStatus("quiet_day");
       return sections;
     }
 
@@ -796,6 +867,7 @@ export default function HomeScreen() {
       editionId,
       editionDate,
       place,
+      expectedMetroKey,
       currentSections: sections,
       cachedBundle: cachedBundleRef.current,
     });
@@ -825,6 +897,9 @@ export default function HomeScreen() {
     eventsOnly?: boolean;
     /** After generate-edition succeeded — bypass in-flight generate guard. */
     afterGenerate?: boolean;
+    /** Exact edition returned by generate-edition — never load an unscoped row. */
+    editionId?: string | null;
+    metroKey?: string | null;
     traceId?: string | null;
   };
 
@@ -836,7 +911,7 @@ export default function HomeScreen() {
   }
 
   const loadEdition = useCallback(async (input?: boolean | LoadEditionOptions) => {
-    const { isRefresh = false, quiet = false, eventsOnly = false, afterGenerate = false, traceId = null } =
+    const { isRefresh = false, quiet = false, eventsOnly = false, afterGenerate = false, editionId: loadEditionId = null, metroKey: loadMetroKey = null, traceId = null } =
       parseLoadOptions(input);
     const gen = ++loadGen.current;
     const resetScroll = isRefresh && !quiet;
@@ -942,17 +1017,44 @@ export default function HomeScreen() {
     void syncDeviceTimezone(user.id);
 
     const todayStr = await resolveEffectiveEditionDate();
-    const activeForCache =
-      activeLocationRef.current ??
-      (await resolveEffectivePlace({ refreshIfStale: false }));
-    const cacheMetroKey = editionCacheMetroKey(activeForCache.place);
+    const identity = await resolveEditionLoadIdentity({
+      handoff: "loadEdition",
+      traceId,
+      loadEditionId,
+      loadMetroKey,
+      preferPreview:
+        afterGenerate || Boolean(loadEditionId) || Boolean(loadMetroKey),
+    });
+
+    if (identity.activeLocation) {
+      applyActiveLocation(identity.activeLocation);
+    }
+
+    const cacheMetroKey = identity.metroKey;
+    const scopedMetroKey = identity.metroKey;
+    const resolvedEditionId = identity.editionId;
 
     if (__DEV__) {
       console.log("[home] loadEdition: date filters", {
         localEditionDate: todayStr,
         cacheMetroKey,
+        scopedMetroKey,
+        resolvedEditionId,
+        identitySource: identity.source,
+        previewCity: identity.place?.city ?? null,
         timezoneOffsetMinutes: new Date().getTimezoneOffset(),
       });
+    }
+
+    if (!cacheMetroKey && !resolvedEditionId) {
+      if (__DEV__) {
+        console.warn("[home] loadEdition: no market identity — refusing unscoped lookup", {
+          activeCity: identity.place?.city ?? null,
+        });
+      }
+      setLoading(false);
+      setRefreshing(false);
+      return { kind: "not_ready" as const, user, adjacent: { older: null, newer: null }, jobResult: { data: null, error: null }, editionError: null, edition: null };
     }
 
     // Overlap cache read with the editions network query on cold start.
@@ -971,14 +1073,22 @@ export default function HomeScreen() {
         : null) ??
       null;
 
-    const editionQuery = supabase
-      .from("editions")
-      .select(
-        "id, edition_date, status, user_id, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context"
-      )
-      .eq("user_id", user.id)
-      .eq("edition_date", todayStr)
-      .maybeSingle();
+    const editionSelect =
+      "id, edition_date, status, user_id, metro_key, lead_story, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context";
+
+    const editionQuery = resolvedEditionId
+      ? supabase
+          .from("editions")
+          .select(editionSelect)
+          .eq("id", resolvedEditionId)
+          .maybeSingle()
+      : supabase
+          .from("editions")
+          .select(editionSelect)
+          .eq("user_id", user.id)
+          .eq("edition_date", todayStr)
+          .eq("metro_key", scopedMetroKey!)
+          .maybeSingle();
 
     let prefetchedSectionsPromise: ReturnType<typeof queryEditionSections> | null =
       prefetchEditionId ? queryEditionSections(prefetchEditionId) : null;
@@ -1127,6 +1237,8 @@ export default function HomeScreen() {
     __DEV__ && console.log("[home] loadEdition: editions query", {
       filterUserId: user.id,
       filterEditionDate: todayStr,
+      filterMetroKey: scopedMetroKey,
+      filterEditionId: resolvedEditionId,
       result: edition,
       error: editionError
         ? {
@@ -1151,12 +1263,12 @@ export default function HomeScreen() {
             ? "query error"
             : edition
               ? `status=${(edition as { status?: string }).status ?? "unknown"}`
-              : "zero rows for user_id + edition_date",
+              : "zero rows for user_id + edition_date + metro_key",
           message: editionError?.message ?? null,
         });
       }
       const [adjacent, jobResult] = await Promise.all([
-        fetchAdjacentEditions(user.id, todayStr),
+        fetchAdjacentEditions(user.id, todayStr, scopedMetroKey),
         supabase
           .from("generation_jobs")
           .select("status, last_error")
@@ -1172,6 +1284,34 @@ export default function HomeScreen() {
         editionError,
         edition: edition ?? null,
       };
+    }
+
+    const editionRowMetroKey =
+      (edition as { metro_key?: string | null }).metro_key?.trim() || null;
+    if (
+      scopedMetroKey &&
+      editionRowMetroKey &&
+      editionRowMetroKey !== scopedMetroKey
+    ) {
+      if (__DEV__) {
+        console.warn("[home] loadEdition: edition metro_key mismatch — withholding", {
+          expectedMetroKey: scopedMetroKey,
+          editionMetroKey: editionRowMetroKey,
+          editionId: edition.id,
+        });
+      }
+      editionFrozenRef.current = false;
+      clearEditionFreeze();
+      setSections([]);
+      setEditionDate(null);
+      setEditionId(null);
+      setLeadStory(null);
+      setTopStories([]);
+      setBandit(null);
+      setIntelligence(null);
+      setLoading(false);
+      setRefreshing(false);
+      return { kind: "not_ready" as const, user, adjacent: { older: null, newer: null }, jobResult: { data: null, error: null }, editionError: null, edition };
     }
 
     const canUsePrefetchedSections =
@@ -1226,19 +1366,17 @@ export default function HomeScreen() {
 
     let discoveryRaw = (edition as { discovery?: unknown }).discovery;
     const editionDiscovery = parseDiscoveryPayload(discoveryRaw);
-    const editionMetroKey =
-      editionDiscovery?.location?.city != null
+    const expectStoryOfForEdition = metroExpectsStoryOf(
+      editionDiscovery?.location
         ? metroKeyFromKindredPlace({
-            city: editionDiscovery.location.city,
+            city: editionDiscovery.location.city ?? "",
             state: editionDiscovery.location.state ?? null,
             region: editionDiscovery.location.region ?? null,
             lat: editionDiscovery.location.lat ?? 0,
             lon: editionDiscovery.location.lon ?? 0,
           })
-        : activeLocationRef.current?.place
-          ? metroKeyFromKindredPlace(activeLocationRef.current.place)
-          : null;
-    const expectStoryOfForEdition = metroExpectsStoryOf(editionMetroKey);
+        : null
+    );
     const persistedComplete = isPersistedEditionComplete(
       { ...edition, discovery: discoveryRaw },
       loaded,
@@ -1331,24 +1469,37 @@ export default function HomeScreen() {
         const id = editionIdRef.current;
         const date =
           cachedBundleRef.current?.editionDate ?? resolveEffectiveEditionDateSync();
-        const active = activeLocationRef.current?.place ?? null;
-        if (id && date && active && needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])) {
-          void maybeRecoverLocalEvents({
-            editionId: id,
-            editionDate: date,
-            place: active,
-            sections: cachedBundleRef.current?.sections ?? [],
-          }).then((recovered) => {
+        void (async () => {
+          const recoveryIdentity = await resolveEditionLoadIdentity({
+            handoff: "recovery-path",
+            loadEditionId: id,
+            loadMetroKey: cachedBundleRef.current?.metroKey ?? null,
+            preferPreview: true,
+          });
+          const place = recoveryIdentity.place;
+          if (
+            id &&
+            date &&
+            place &&
+            needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])
+          ) {
+            const recovered = await maybeRecoverLocalEvents({
+              editionId: id,
+              editionDate: date,
+              place,
+              sections: cachedBundleRef.current?.sections ?? [],
+              expectedMetroKey: recoveryIdentity.metroKey,
+            });
             if (mountedRef.current && recovered.length > 0) {
               setSections(recovered);
               persistSectionsToCache(recovered);
             }
-          });
-        } else if (!needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])) {
-          setLocalEventsStatus("ready");
-        } else {
-          setLocalEventsStatus("failed");
-        }
+          } else if (!needsLocalEventsRecovery(cachedBundleRef.current?.sections ?? [])) {
+            setLocalEventsStatus("ready");
+          } else {
+            setLocalEventsStatus("failed");
+          }
+        })();
         setLoading(false);
         setRefreshing(false);
         return;
@@ -1434,12 +1585,24 @@ export default function HomeScreen() {
 
     const { user, edition, loaded, expectStoryOf = false } = payload;
 
-    // Use cached prefs for city check — never block first paint on GPS refresh.
+    const paintIdentity = await resolveEditionLoadIdentity({
+      handoff: "loadEdition-paint",
+      traceId,
+      loadEditionId: edition.id,
+      loadMetroKey:
+        (edition as { metro_key?: string | null }).metro_key?.trim() || null,
+      preferPreview:
+        afterGenerate || Boolean(loadEditionId) || Boolean(loadMetroKey),
+    });
+
+    // Use authoritative preview identity — never stale profile ref alone.
     const active =
-      activeLocationRef.current ??
+      paintIdentity.activeLocation ??
       (await resolveEffectivePlace({ refreshIfStale: false }));
-    if (mountedRef.current && !activeLocationRef.current) {
-      setActiveLocation(active);
+    if (paintIdentity.activeLocation) {
+      applyActiveLocation(paintIdentity.activeLocation);
+    } else if (mountedRef.current && !activeLocationRef.current) {
+      applyActiveLocation(active);
     }
 
     const builtCity = resolveEditionBuiltCity(
@@ -1506,7 +1669,12 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
 
-      void fetchAdjacentEditions(user.id, edition.edition_date).then((adjacent) => {
+      void fetchAdjacentEditions(
+        user.id,
+        edition.edition_date,
+        (edition as { metro_key?: string | null }).metro_key ??
+          editionCacheMetroKey(active.place)
+      ).then((adjacent) => {
         if (mountedRef.current && gen === loadGen.current) {
           setOlder(adjacent.older);
         }
@@ -1670,14 +1838,9 @@ export default function HomeScreen() {
         editionId: edition.id,
         editionDate: edition.edition_date,
         metroKey:
+          (edition as { metro_key?: string | null }).metro_key ??
           editionCacheMetroKey(active.place) ??
-          metroKeyFromKindredPlace({
-            city: builtCity ?? active.place?.city ?? "unknown",
-            state: active.place?.state ?? null,
-            region: active.place?.region ?? null,
-            lat: active.place?.lat ?? 0,
-            lon: active.place?.lon ?? 0,
-          }),
+          "unknown",
         cachedAt: Date.now(),
         sections: nextSections,
         leadStory: lead,
@@ -1868,15 +2031,27 @@ export default function HomeScreen() {
         }
       }
 
-      void fetchAdjacentEditions(user.id, edition.edition_date).then((adjacent) => {
+      void fetchAdjacentEditions(
+        user.id,
+        edition.edition_date,
+        (edition as { metro_key?: string | null }).metro_key ??
+          editionCacheMetroKey(active.place)
+      ).then((adjacent) => {
         if (mountedRef.current && gen === loadGen.current) {
           setOlder(adjacent.older);
         }
       });
 
-      const refreshed = await resolveActivePlace({ refreshIfStale: true });
-      if (mountedRef.current && gen === loadGen.current) {
-        setActiveLocation(refreshed);
+      const syncIdentity = await resolveEditionLoadIdentity({
+        handoff: "background-sync",
+        traceId,
+        loadEditionId: edition.id,
+        loadMetroKey:
+          (edition as { metro_key?: string | null }).metro_key?.trim() || null,
+        preferPreview: true,
+      });
+      if (syncIdentity.activeLocation && mountedRef.current && gen === loadGen.current) {
+        applyActiveLocation(syncIdentity.activeLocation);
       }
 
       let bgSections = nextSections;
@@ -1885,8 +2060,10 @@ export default function HomeScreen() {
       const recoveredSections = await maybeRecoverLocalEvents({
         editionId: edition.id,
         editionDate: edition.edition_date,
-        place: refreshed.place,
+        place: syncIdentity.place,
         sections: bgSections,
+        expectedMetroKey: syncIdentity.metroKey,
+        traceId,
       });
 
       if (
@@ -1922,7 +2099,7 @@ export default function HomeScreen() {
       const storySections = await maybeRecoverStoryOf({
         editionId: edition.id,
         editionDate: edition.edition_date,
-        place: refreshed.place,
+        place: syncIdentity.place,
         sections: bgSections,
       });
 
@@ -1968,8 +2145,9 @@ export default function HomeScreen() {
           editionId: edition.id,
           editionDate: edition.edition_date,
           metroKey:
+            (edition as { metro_key?: string | null }).metro_key ??
             editionCacheMetroKey(active.place) ??
-            metroKeyFromKindredPlace(active.place!),
+            "unknown",
           cachedAt: Date.now(),
           sections: bgSections,
           leadStory: lead,
@@ -1985,7 +2163,7 @@ export default function HomeScreen() {
         cachedBundleRef.current = bundle;
       scheduleCachedEditionSave(bundle);
       void maybeRecordDevEditionSnapshot({
-        place: active.place,
+        place: syncIdentity.place ?? active.place,
         editionDate: edition.edition_date,
         bundle,
         discovery: (edition as { discovery?: unknown }).discovery,
@@ -2004,16 +2182,18 @@ export default function HomeScreen() {
         });
       }
 
-      void maybeTriggerLiveRefresh({
-        editionId: edition.id,
-        editionDate: edition.edition_date,
-        place: refreshed.place,
-        onEventsChanged: () => {
-          if (mountedRef.current) {
-            void loadEdition({ quiet: true, eventsOnly: true });
-          }
-        },
-      });
+      if (!syncIdentity.isDeveloperPreview) {
+        void maybeTriggerLiveRefresh({
+          editionId: edition.id,
+          editionDate: edition.edition_date,
+          place: syncIdentity.place,
+          onEventsChanged: () => {
+            if (mountedRef.current) {
+              void loadEdition({ quiet: true, eventsOnly: true });
+            }
+          },
+        });
+      }
 
       pipelineStageEnd("background_sync");
     })();
@@ -2044,13 +2224,21 @@ export default function HomeScreen() {
     if (!user) return;
 
     const todayStr = await resolveEffectiveEditionDate();
+    const pollIdentity = await resolveEditionLoadIdentity({
+      handoff: "background-poll",
+      preferPreview: true,
+    });
+    const pollMetroKey = pollIdentity.metroKey;
     const [editionResult, jobResult] = await Promise.all([
-      supabase
-        .from("editions")
-        .select("status")
-        .eq("user_id", user.id)
-        .eq("edition_date", todayStr)
-        .maybeSingle(),
+      pollMetroKey
+        ? supabase
+            .from("editions")
+            .select("status")
+            .eq("user_id", user.id)
+            .eq("edition_date", todayStr)
+            .eq("metro_key", pollMetroKey)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
       supabase
         .from("generation_jobs")
         .select("status, last_error")
@@ -2081,12 +2269,15 @@ export default function HomeScreen() {
         return;
       }
       void (async () => {
-        const active = await resolveActivePlace({ refreshIfStale: false });
+        const active = await resolveEffectivePlace({ refreshIfStale: false });
         if (!mountedRef.current) return;
-        setActiveLocation(active);
+        applyActiveLocation(active);
         const nextKey = activeLocationKey(active);
         const prevKey = focusedLocationKeyRef.current;
         focusedLocationKeyRef.current = nextKey;
+        if (isDeveloperPreviewSessionActive() || isDevEditionOverrideActive()) {
+          return;
+        }
         // Reload today's paper when returning from Location settings (or any
         // focus) with a different city/mode — never leave a stale folio up.
         if (prevKey !== null && prevKey !== nextKey) {
@@ -2184,9 +2375,12 @@ export default function HomeScreen() {
       if (now - lastActive.at < 45_000) return;
       lastActive.at = now;
       void (async () => {
-        const active = await resolveActivePlace({ refreshIfStale: true });
+        if (isDeveloperPreviewSessionActive() || isDevEditionOverrideActive()) {
+          return;
+        }
+        const active = await resolveEffectivePlace({ refreshIfStale: true });
         if (mountedRef.current) {
-          setActiveLocation(active);
+          applyActiveLocation(active);
           focusedLocationKeyRef.current = activeLocationKey(active);
         }
         void loadEdition({ quiet: true });
@@ -2279,7 +2473,7 @@ export default function HomeScreen() {
         );
         return;
       }
-      setActiveLocation(active);
+      applyActiveLocation(active);
 
       if (!active.place) {
         setError(
@@ -2441,9 +2635,65 @@ export default function HomeScreen() {
       if (mountedRef.current) setGenerating(false);
       devGenerateTrace(traceId, "generating_cleared");
 
-      console.log("[generate] loadEdition BEGIN", { traceId });
+      const generated =
+        responseBody && typeof responseBody === "object"
+          ? (responseBody as {
+              editionId?: string;
+              metroKey?: string;
+            })
+          : null;
+      const generatedEditionId = generated?.editionId?.trim() || null;
+      const generatedMetroKey = generated?.metroKey?.trim() || null;
+
+      if (
+        generatedEditionId &&
+        generatedMetroKey &&
+        isDevEditionOverrideActive()
+      ) {
+        await setDeveloperPreviewContext({
+          editionId: generatedEditionId,
+          metroKey: generatedMetroKey,
+          city: loc.city,
+          state: loc.state ?? null,
+          region: loc.region ?? null,
+          lat: loc.lat,
+          lon: loc.lon,
+          editionDate,
+          traceId,
+        });
+        applyActiveLocation({
+          place: loc,
+          mode: "home",
+          modeLabel: "Dev Preview",
+          isTravel: false,
+          needsSetup: false,
+        });
+      }
+
+      // Drop legacy unscoped cache so we never reload a wrong-market row by date alone.
+      if (isDevEditionOverrideActive()) {
+        const {
+          data: { session },
+        } = await getLaunchSessionOrFetch();
+        const cacheUser = session?.user ?? null;
+        if (cacheUser) {
+          await clearCachedEdition(cacheUser.id, editionDate, null);
+        }
+      }
+
+      console.log("[generate] loadEdition BEGIN", {
+        traceId,
+        generatedEditionId,
+        generatedMetroKey,
+      });
       const loadStarted = Date.now();
-      await loadEdition({ isRefresh: true, afterGenerate: true, traceId });
+      await loadEdition({
+        isRefresh: true,
+        afterGenerate: true,
+        traceId,
+        editionId: generatedEditionId,
+        metroKey: generatedMetroKey,
+      });
       devGenerationMsRef.current = Date.now() - generationStarted;
       devGenerateTrace(traceId, "load_edition_end", {
         ms: Date.now() - loadStarted,
@@ -2651,11 +2901,7 @@ export default function HomeScreen() {
       />
       <KindredStickyMasthead
         scrollY={mastheadScrollY}
-        subtitle={
-          activeLocation?.place?.city ??
-          intelligence?.discovery?.location?.city ??
-          undefined
-        }
+        subtitle={readerDisplayCity()}
         trailing={
           <MastheadLink
             label="Library"
@@ -2878,26 +3124,22 @@ export default function HomeScreen() {
                   accessibilityLabel="Open library"
                 />
               }
-              locationCity={
-                activeLocation?.place?.city ??
-                intelligence?.discovery?.location?.city ??
-                null
-              }
+              locationCity={readerDisplayCity() ?? null}
               readerLocation={
-                activeLocation?.place
-                  ? {
-                      lat: activeLocation.place.lat,
-                      lon: activeLocation.place.lon,
-                    }
-                  : null
+                (() => {
+                  const place = readerDisplayPlace();
+                  return place
+                    ? { lat: place.lat, lon: place.lon }
+                    : null;
+                })()
               }
               locationRegion={
-                activeLocation?.place?.region ??
+                readerDisplayPlace()?.region ??
                 intelligence?.discovery?.location?.region ??
                 null
               }
               locationState={
-                activeLocation?.place?.state ??
+                readerDisplayPlace()?.state ??
                 intelligence?.discovery?.location?.state ??
                 null
               }

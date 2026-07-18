@@ -12,9 +12,10 @@ import { buildEditionHealthReport } from "./editionHealthReport";
 export function devEditionHistoryId(
   place: KindredPlace,
   editionDate: string,
-  editionId: string
+  editionId: string,
+  metroKey: string
 ): string {
-  return `${place.city}-${editionDate}-${editionId}`.toLowerCase().replace(/\s+/g, "-");
+  return `${metroKey}-${editionDate}-${editionId}`.toLowerCase();
 }
 
 export async function recordDevEditionSnapshot(input: {
@@ -45,7 +46,12 @@ export async function recordDevEditionSnapshot(input: {
   });
 
   const entry: DevEditionHistoryEntry = {
-    id: devEditionHistoryId(input.place, input.editionDate, input.bundle.editionId),
+    id: devEditionHistoryId(
+      input.place,
+      input.editionDate,
+      input.bundle.editionId,
+      input.bundle.metroKey
+    ),
     label: `${formatPlaceLabel(input.place)} · ${input.editionDate}`,
     place: input.place,
     editionDate: input.editionDate,

@@ -1,6 +1,6 @@
-import { normalizeCityKey } from "../location/locationKey";
-import { haversineKm, milesToKm } from "./geo";
-import type { ResolvedEditionMarket } from "./resolveEditionMarket";
+import { normalizeCityKey } from "../location/locationKey.ts";
+import { haversineKm, milesToKm } from "./geo.ts";
+import type { ResolvedEditionMarket } from "./resolveEditionMarket.ts";
 
 export type MarketIsolationRejection = {
   kind: "event" | "place" | "discovery";
@@ -144,6 +144,15 @@ export function filterLocalEventsByMarket<T extends IsolatedLocalEvent>(
           reason: dist.reason ?? `city_not_in_market:${event.city}`,
           sourceCity: event.city,
           distanceKm: dist.distanceKm,
+        });
+        continue;
+      }
+      if (dist.distanceKm == null) {
+        rejected.push({
+          kind: "event",
+          name: event.name,
+          reason: `city_not_in_market:${event.city}`,
+          sourceCity: event.city,
         });
         continue;
       }

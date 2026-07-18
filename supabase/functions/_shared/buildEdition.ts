@@ -95,7 +95,17 @@ import {
   resolveEditionMarket,
   type ResolvedEditionMarket,
 } from "./markets/editionMarket.ts";
+import {
+  auditEditionSectionRow,
+  buildEditionDeskGapReport,
+  filterEditionSectionRowsByMarket,
+  logEditionDeskGapReport,
+  logEditionSectionWriteAudit,
+  type EditionSectionWriteRow,
+} from "./markets/editionSectionAudit.ts";
+import { getCatalogBootstrapState } from "./catalog/catalogBootstrap.ts";
 import { metroKeyFromPlace } from "../../../lib/location/metroKey.ts";
+import { editionsConflictTarget } from "./markets/editionIdentity.ts";
 
 export type { LocalEvent } from "./localEvents/provider.ts";
 export {
@@ -108,7 +118,7 @@ import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
 export { enrichEventsWithBanditNotes };
 
 export type BuildEditionResult =
-  | { ok: true; editionId: string }
+  | { ok: true; editionId: string; metroKey: string }
   | { ok: false; error: string };
 
 export type BuildEditionOptions = {
@@ -574,6 +584,29 @@ export async function buildEditionForUser(
     lat: location.lat,
     lon: location.lon,
   });
+  if (!editionMarket) {
+    console.warn("[buildEdition] unsupported market — refusing edition without metro_key", {
+      traceId: options.editionTraceId ?? null,
+      city: location.city,
+      state: location.state,
+    });
+    return {
+      ok: false,
+      error: "Unsupported market — cannot assign edition identity (metro_key).",
+    };
+  }
+
+  const editionMetroKey = editionMarket.metroKey;
+  const editionConflictTarget = editionsConflictTarget();
+
+  console.log("[buildEdition] edition identity", {
+    traceId: options.editionTraceId ?? null,
+    userId,
+    editionDate: options.editionDate ?? null,
+    metroKey: editionMetroKey,
+    conflictTarget: editionConflictTarget,
+  });
+
   const catalogMetroKey = metroKeyFromPlace({
     city: location.city,
     state: location.state,
@@ -598,10 +631,10 @@ export async function buildEditionForUser(
     state: location.state,
     lat: location.lat,
     lon: location.lon,
-    resolvedMarket: editionMarket?.metroKey ?? null,
+    resolvedMarket: editionMarket.metroKey,
     catalogMetroKey,
-    marketPrimaryCity: editionMarket?.primaryCity ?? null,
-    marketState: editionMarket?.stateCode ?? null,
+    marketPrimaryCity: editionMarket.primaryCity,
+    marketState: editionMarket.stateCode,
   });
 
   // Single consolidated `profiles` read. Personalization, Memory, and the
@@ -1781,9 +1814,10 @@ export async function buildEditionForUser(
 
   const { data: priorEditionRow } = await supabaseAdmin
     .from("editions")
-    .select("morning_edition")
+    .select("morning_edition, discovery")
     .eq("user_id", userId)
     .eq("edition_date", editionDate)
+    .eq("metro_key", editionMetroKey)
     .maybeSingle();
   const priorMorningHero =
     priorEditionRow?.morning_edition &&
@@ -1791,6 +1825,17 @@ export async function buildEditionForUser(
       ? ((priorEditionRow.morning_edition as { morningHero?: MorningHeroExperience })
           .morningHero ?? null)
       : null;
+  const priorDiscoveryCity =
+    priorEditionRow?.discovery &&
+    typeof priorEditionRow.discovery === "object" &&
+    (priorEditionRow.discovery as { location?: { city?: string } }).location?.city?.trim()
+      ? String(
+          (priorEditionRow.discovery as { location?: { city?: string } }).location!.city
+        ).trim()
+      : null;
+  const priorCityMatchesCurrent =
+    !priorDiscoveryCity ||
+    priorDiscoveryCity.toLowerCase() === location.city.trim().toLowerCase();
 
   let morningHero: MorningHeroExperience | null = null;
   try {
@@ -1840,6 +1885,7 @@ export async function buildEditionForUser(
 
     if (
       !morningHero &&
+      priorCityMatchesCurrent &&
       priorMorningHero?.hostedUrl?.trim() &&
       priorMorningHero.aboutArtworkBody?.trim()
     ) {
@@ -1848,7 +1894,11 @@ export async function buildEditionForUser(
         morningHero?: MorningHeroExperience | null;
       }).morningHero = morningHero;
       morningEdition.selectionMeta.editorNotes.push(
-        "hero_artwork: preserved frozen morning hero from prior edition row"
+        "hero_artwork: preserved frozen morning hero from prior edition row (same city)"
+      );
+    } else if (!morningHero && priorMorningHero && !priorCityMatchesCurrent) {
+      morningEdition.selectionMeta.editorNotes.push(
+        `hero_artwork: skipped prior morning hero — city changed (${priorDiscoveryCity} → ${location.city})`
       );
     }
   } catch (heroErr) {
@@ -1948,6 +1998,31 @@ export async function buildEditionForUser(
     now: new Date(),
   });
 
+  const catalogBootstrap = editionMarket
+    ? await getCatalogBootstrapState(supabaseAdmin, catalogMetroKey)
+    : null;
+
+  const deskGapReport = buildEditionDeskGapReport({
+    city: location.city,
+    catalogMetroKey,
+    market: editionMarket,
+    catalogBootstrap: catalogBootstrap ?? undefined,
+    leadStoryPresent: Boolean(leadStory),
+    topStoriesCount: topStories.length,
+    banditsPickPresent: Boolean(banditsPick),
+    morningHeroPresent: Boolean(morningHero),
+    localEventsCount: localEvents.length,
+    discoverySurfaces: discoveryWithImages.surfaces ?? {},
+    localPlacesCount: localPlaces.length,
+    localPlacesFilteredCount: localPlacesFiltered.length,
+  });
+
+  logEditionDeskGapReport({
+    traceId: options.editionTraceId,
+    editionId: "pending",
+    report: deskGapReport,
+  });
+
   const editionUpsertFields: Record<string, unknown> = {
     editorial_context: editorialContextWithMorning,
     lead_story: leadStory,
@@ -1985,6 +2060,7 @@ export async function buildEditionForUser(
   const upsertCore = {
     user_id: userId,
     edition_date: editionDate,
+    metro_key: editionMetroKey,
     status: "processing" as const,
     editorial_context: editorialContextWithMorning,
     lead_story: leadStory,
@@ -1998,7 +2074,7 @@ export async function buildEditionForUser(
 
   let { data: edition, error: editionError } = await supabaseAdmin
     .from("editions")
-    .upsert(upsertCore, { onConflict: "user_id,edition_date" })
+    .upsert(upsertCore, { onConflict: editionConflictTarget })
     .select()
     .single();
 
@@ -2055,6 +2131,7 @@ export async function buildEditionForUser(
         payload: {
           user_id: userId,
           edition_date: editionDate,
+          metro_key: editionMetroKey,
           status: "processing",
           editorial_context: editorialContextWithMorning,
           lead_story: leadStory,
@@ -2073,7 +2150,7 @@ export async function buildEditionForUser(
       });
       const retry = await supabaseAdmin
         .from("editions")
-        .upsert(attempt.payload, { onConflict: "user_id,edition_date" })
+        .upsert(attempt.payload, { onConflict: editionConflictTarget })
         .select()
         .single();
       if (!retry.error) {
@@ -2106,6 +2183,7 @@ export async function buildEditionForUser(
         {
           user_id: userId,
           edition_date: editionDate,
+          metro_key: editionMetroKey,
           status: "processing",
           editorial_context: editorialContextWithMorning,
           lead_story: leadStory,
@@ -2114,7 +2192,7 @@ export async function buildEditionForUser(
           knowledge: knowledgeWithGrounding,
           memory,
         },
-        { onConflict: "user_id,edition_date" }
+        { onConflict: editionConflictTarget }
       )
       .select()
       .single();
@@ -2134,12 +2212,13 @@ export async function buildEditionForUser(
           {
             user_id: userId,
             edition_date: editionDate,
+            metro_key: editionMetroKey,
             status: "processing",
             editorial_context: editorialContextWithMorning,
             lead_story: leadStory,
             bandit,
           },
-          { onConflict: "user_id,edition_date" }
+          { onConflict: editionConflictTarget }
         )
         .select()
         .single();
@@ -2164,15 +2243,128 @@ export async function buildEditionForUser(
     region,
   });
 
-  const { error: deleteError } = await supabaseAdmin
+  const { data: existingSections, error: existingSectionsError } =
+    await supabaseAdmin
+      .from("edition_sections")
+      .select("section_type, headline, body, source_note, position")
+      .eq("edition_id", edition.id);
+
+  if (existingSectionsError) {
+    console.warn("[buildEdition] edition_sections pre-delete read failed", {
+      editionId: edition.id,
+      error: existingSectionsError.message,
+    });
+  }
+
+  if (editionMarket && existingSections?.length) {
+    const preDeleteAudits = (existingSections as EditionSectionWriteRow[]).map(
+      (row) =>
+        auditEditionSectionRow({
+          row: {
+            edition_id: edition.id,
+            section_type: row.section_type,
+            position: row.position,
+            headline: row.headline,
+            body: row.body,
+            source_note: row.source_note,
+          },
+          market: editionMarket,
+          catalogMetroKey,
+          anchor: marketAnchor,
+        })
+    );
+    logEditionSectionWriteAudit({
+      traceId: options.editionTraceId,
+      phase: "pre_delete",
+      editionId: edition.id,
+      market: editionMarket,
+      catalogMetroKey,
+      anchor: marketAnchor,
+      audits: preDeleteAudits,
+      existingSectionCount: existingSections.length,
+      existingSectionTypes: existingSections.map((s) => s.section_type),
+    });
+    const staleCrossMetro = preDeleteAudits.filter((a) => a.crossMetroRejected);
+    if (staleCrossMetro.length > 0) {
+      console.error("[buildEdition] stale cross-metro edition_sections before delete", {
+        traceId: options.editionTraceId ?? null,
+        editionId: edition.id,
+        buildMetroKey: editionMarket.metroKey,
+        catalogMetroKey,
+        buildCity: location.city,
+        staleSections: staleCrossMetro.map((a) => ({
+          sectionType: a.sectionType,
+          sampleCities: a.sampleCities,
+          sourceCatalog: a.sourceCatalog,
+          rejectReason: a.rejectReason,
+        })),
+        likelyCause:
+          "prior build left edition_sections rows (delete failed or build aborted after edition upsert)",
+      });
+    }
+  }
+
+  const { error: deleteError, count: deletedCount } = await supabaseAdmin
     .from("edition_sections")
-    .delete()
+    .delete({ count: "exact" })
     .eq("edition_id", edition.id);
 
   console.log("[buildEdition] edition_sections delete", {
     editionId: edition.id,
+    deletedCount: deletedCount ?? null,
     error: deleteError?.message ?? null,
   });
+
+  if (deleteError) {
+    logEditionSectionWriteAudit({
+      traceId: options.editionTraceId,
+      phase: "pre_delete",
+      editionId: edition.id,
+      market: editionMarket!,
+      catalogMetroKey,
+      anchor: marketAnchor,
+      deleteError: deleteError.message,
+      existingSectionCount: existingSections?.length ?? null,
+    });
+    await supabaseAdmin
+      .from("editions")
+      .update({ status: "failed" })
+      .eq("id", edition.id);
+    logTimingSummary(timer);
+    return {
+      ok: false,
+      error: `edition_sections_delete: ${deleteError.message}`,
+    };
+  }
+
+  const { data: remainingSections, error: remainingSectionsError } =
+    await supabaseAdmin
+      .from("edition_sections")
+      .select("section_type")
+      .eq("edition_id", edition.id);
+
+  if (remainingSectionsError) {
+    console.warn("[buildEdition] edition_sections post-delete read failed", {
+      editionId: edition.id,
+      error: remainingSectionsError.message,
+    });
+  } else if (remainingSections?.length) {
+    console.error("[buildEdition] stale edition_sections survived delete", {
+      traceId: options.editionTraceId ?? null,
+      editionId: edition.id,
+      remainingCount: remainingSections.length,
+      remainingTypes: remainingSections.map((s) => s.section_type),
+    });
+    await supabaseAdmin
+      .from("editions")
+      .update({ status: "failed" })
+      .eq("id", edition.id);
+    logTimingSummary(timer);
+    return {
+      ok: false,
+      error: `edition_sections_delete_incomplete: ${remainingSections.length} stale rows remain`,
+    };
+  }
 
   const rows = sections
     .map((s, i) => ({
@@ -2268,9 +2460,58 @@ export async function buildEditionForUser(
     insertedTypes: rows.map((r) => r.section_type),
   });
 
+  let rowsToInsert = rows as EditionSectionWriteRow[];
+  let sectionInsertAudits: ReturnType<typeof auditEditionSectionRow>[] = [];
+
+  if (editionMarket) {
+    const filtered = filterEditionSectionRowsByMarket({
+      rows: rowsToInsert,
+      market: editionMarket,
+      catalogMetroKey,
+      anchor: marketAnchor,
+    });
+    sectionInsertAudits = filtered.audits;
+    if (filtered.rejected.length > 0) {
+      console.warn("[buildEdition] cross-metro edition sections rejected", {
+        traceId: options.editionTraceId ?? null,
+        editionId: edition.id,
+        metroKey: editionMarket.metroKey,
+        catalogMetroKey,
+        rejected: filtered.rejected,
+      });
+      await supabaseAdmin
+        .from("editions")
+        .update({ status: "failed" })
+        .eq("id", edition.id);
+      logTimingSummary(timer);
+      return {
+        ok: false,
+        error: `edition_sections_cross_metro: ${filtered.rejected
+          .map((r) => `${r.sectionType}:${r.rejectReason}`)
+          .join("; ")}`,
+      };
+    }
+    rowsToInsert = filtered.kept;
+    logEditionSectionWriteAudit({
+      traceId: options.editionTraceId,
+      phase: "pre_insert",
+      editionId: edition.id,
+      market: editionMarket,
+      catalogMetroKey,
+      anchor: marketAnchor,
+      audits: sectionInsertAudits,
+    });
+  }
+
+  logEditionDeskGapReport({
+    traceId: options.editionTraceId,
+    editionId: edition.id,
+    report: deskGapReport,
+  });
+
   // Confirmed bug path: empty insert was treated as success, leaving a ready
   // edition with zero sections (home empty state).
-  if (rows.length === 0) {
+  if (rowsToInsert.length === 0) {
     await supabaseAdmin
       .from("editions")
       .update({ status: "failed" })
@@ -2287,13 +2528,28 @@ export async function buildEditionForUser(
 
   const { error: sectionsError } = await supabaseAdmin
     .from("edition_sections")
-    .insert(rows);
+    .insert(rowsToInsert);
 
   console.log("[buildEdition] edition_sections insert", {
-    attempted: rows.length,
+    attempted: rowsToInsert.length,
+    rejectedCrossMetro: sectionInsertAudits.filter((a) => a.crossMetroRejected)
+      .length,
     error: sectionsError?.message ?? null,
     errorCode: sectionsError?.code ?? null,
   });
+
+  if (editionMarket) {
+    logEditionSectionWriteAudit({
+      traceId: options.editionTraceId,
+      phase: "post_insert",
+      editionId: edition.id,
+      market: editionMarket,
+      catalogMetroKey,
+      anchor: marketAnchor,
+      audits: sectionInsertAudits,
+      insertError: sectionsError?.message ?? null,
+    });
+  }
 
   timer.record("Database Write - Sections", performance.now() - sectionsWriteStart);
 
@@ -2318,7 +2574,7 @@ export async function buildEditionForUser(
   if (!buildComplete.complete) {
     console.warn("[buildEdition] refusing ready — persisted row incomplete", {
       editionId: edition.id,
-      insertedTypes: rows.map((r) => r.section_type),
+      insertedTypes: rowsToInsert.map((r) => r.section_type),
       discoverySurfaceItems: discoverySurfaceItemCount(discoveryWithImages),
       reasons: buildComplete.reasons,
     });
@@ -2347,7 +2603,7 @@ export async function buildEditionForUser(
 
   logTimingSummary(timer);
 
-  return { ok: true, editionId: edition.id };
+  return { ok: true, editionId: edition.id, metroKey: editionMetroKey };
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   createServiceClient,
   resolveEditionLocation,
 } from "../_shared/buildEdition.ts";
+import { resolveEditionMarket } from "../_shared/markets/editionMarket.ts";
 
 const BATCH_SIZE = 15;
 const MAX_ATTEMPTS = 3;
@@ -106,6 +107,32 @@ type GenerationJobRow = {
   last_error: string | null;
 };
 
+function metroKeyFromProfileBlob(
+  profile: { location?: unknown; home_location?: unknown }
+): string | null {
+  const blob = profile.location ?? profile.home_location;
+  if (!blob || typeof blob !== "object") return null;
+  const p = blob as {
+    city?: string;
+    state?: string | null;
+    region?: string | null;
+    lat?: number;
+    lon?: number;
+  };
+  if (!p.city?.trim() || !Number.isFinite(p.lat) || !Number.isFinite(p.lon)) {
+    return null;
+  }
+  return (
+    resolveEditionMarket({
+      city: p.city.trim(),
+      state: p.state ?? null,
+      region: p.region ?? null,
+      lat: p.lat!,
+      lon: p.lon!,
+    })?.metroKey ?? null
+  );
+}
+
 Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") {
@@ -132,7 +159,7 @@ Deno.serve(async (req) => {
     // it's time, keyed to THEIR local date — not one shared UTC "today".
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from("profiles")
-      .select("id, interests, timezone");
+      .select("id, interests, timezone, location, home_location");
 
     if (profilesError) {
       return json({ error: profilesError.message }, 500);
@@ -141,13 +168,18 @@ Deno.serve(async (req) => {
     const eligible = (profiles ?? []).filter(
       (p: { id: string; interests?: string[] | null }) =>
         Array.isArray(p.interests) && p.interests.length > 0
-    ) as Array<{ id: string; timezone?: string | null }>;
+    ) as Array<{
+      id: string;
+      timezone?: string | null;
+      location?: unknown;
+      home_location?: unknown;
+    }>;
 
     let enqueued = 0;
     let skippedTooEarly = 0;
     let skippedReady = 0;
     const localDatesInPlay = new Set<string>();
-    const toEnqueue: Array<{ userId: string; localDate: string }> = [];
+    const toEnqueue: Array<{ userId: string; localDate: string; metroKey: string | null }> = [];
 
     for (const profile of eligible) {
       const tz = profile.timezone || DEFAULT_TIMEZONE;
@@ -160,7 +192,11 @@ Deno.serve(async (req) => {
         continue; // before 12:01 AM local — wait for the generation window
       }
 
-      toEnqueue.push({ userId: profile.id, localDate });
+      toEnqueue.push({
+        userId: profile.id,
+        localDate,
+        metroKey: metroKeyFromProfileBlob(profile),
+      });
     }
 
     if (toEnqueue.length > 0) {
@@ -169,7 +205,7 @@ Deno.serve(async (req) => {
 
       const { data: readyEditions, error: readyError } = await supabaseAdmin
         .from("editions")
-        .select("user_id, edition_date")
+        .select("user_id, edition_date, metro_key")
         .eq("status", "ready")
         .in("user_id", userIds)
         .in("edition_date", editionDates);
@@ -180,13 +216,13 @@ Deno.serve(async (req) => {
 
       const readyKeys = new Set(
         (readyEditions ?? []).map(
-          (row: { user_id: string; edition_date: string }) =>
-            `${row.user_id}:${row.edition_date}`
+          (row: { user_id: string; edition_date: string; metro_key?: string | null }) =>
+            `${row.user_id}:${row.edition_date}:${row.metro_key ?? ""}`
         )
       );
 
-      for (const { userId, localDate } of toEnqueue) {
-        if (readyKeys.has(`${userId}:${localDate}`)) {
+      for (const { userId, localDate, metroKey } of toEnqueue) {
+        if (metroKey && readyKeys.has(`${userId}:${localDate}:${metroKey}`)) {
           skippedReady += 1;
           continue;
         }

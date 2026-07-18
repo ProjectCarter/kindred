@@ -1,11 +1,11 @@
-import { metroKeyFromPlace } from "../location/metroKey";
-import { buildUsMarketDirectorySeeds } from "./usMarketDirectory";
+import { metroKeyFromPlace } from "../location/metroKey.ts";
+import { buildUsMarketDirectorySeeds } from "./usMarketDirectory.ts";
 import {
   KINDRED_MARKET_DEFAULT_RADIUS_MILES,
   KINDRED_MARKET_FALLBACK_RADIUS_MILES,
-} from "./constants";
-import { haversineKm, milesToKm } from "./geo";
-import type { UsMarketSeedInput } from "./types";
+} from "./constants.ts";
+import { haversineKm, milesToKm } from "./geo.ts";
+import type { UsMarketSeedInput } from "./types.ts";
 
 export type ResolvedEditionMarket = {
   metroKey: string;

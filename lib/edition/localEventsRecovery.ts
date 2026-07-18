@@ -6,6 +6,7 @@
 
 import { supabase } from "../supabase";
 import { locationPayload, type KindredPlace } from "../location/deviceLocation";
+import { editionMetroKeyFromPlace, canRecoverLocalEventsForMetro } from "../markets/editionIdentity";
 import type { EditionSection } from "./types";
 import { loadWithRetry } from "./loadWithRetry";
 import {
@@ -75,11 +76,39 @@ export async function recoverLocalEvents(params: {
   editionId: string;
   editionDate: string;
   place: KindredPlace;
+  /** When set, refuse recovery if place does not match this market. */
+  expectedMetroKey?: string | null;
   currentSections: EditionSection[];
   cachedBundle?: CachedEditionBundle | null;
 }): Promise<LocalEventsRecoveryResult> {
-  const { editionId, editionDate, place, currentSections, cachedBundle } =
+  const { editionId, editionDate, place, expectedMetroKey, currentSections, cachedBundle } =
     params;
+
+  if (
+    expectedMetroKey &&
+    !canRecoverLocalEventsForMetro({
+      place,
+      expectedMetroKey,
+      cachedMetroKey: cachedBundle?.metroKey,
+    })
+  ) {
+    if (__DEV__) {
+      console.warn("[localEvents:recovery] rejected — metro mismatch", {
+        expectedMetroKey,
+        placeMetroKey: editionMetroKeyFromPlace(place),
+        placeCity: place.city,
+        cacheMetroKey: cachedBundle?.metroKey ?? null,
+        editionId,
+      });
+    }
+    return {
+      attempted: false,
+      recovered: false,
+      eventCount: countValidEventsInSections(currentSections),
+      mergedSections: currentSections,
+      error: "metro_mismatch",
+    };
+  }
 
   if (!canAttemptRecovery(editionId, editionDate)) {
     return {

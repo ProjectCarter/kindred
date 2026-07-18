@@ -1,4 +1,4 @@
-import type { KindredPlace } from "./types";
+import type { KindredPlace } from "./types.ts";
 
 /** Stable metro cache key — matches supabase/functions/_shared/places/cache.ts */
 export function metroKeyFromPlace(place: {

@@ -1,13 +1,13 @@
 import {
   US_METRO_TOP_100,
   US_TOURIST_DESTINATIONS,
-} from "./data/usMarketDirectoryData";
-import { metroKeyFromPlace } from "../location/metroKey";
+} from "./data/usMarketDirectoryData.ts";
+import { metroKeyFromPlace } from "../location/metroKey.ts";
 import {
   rankUsMarketSeeds,
   usMarketSlugFromParts,
-} from "./ranking";
-import type { UsMarketSeedInput } from "./types";
+} from "./ranking.ts";
+import type { UsMarketSeedInput } from "./types.ts";
 
 function metroRowsToSeeds(): UsMarketSeedInput[] {
   return US_METRO_TOP_100.slice(0, 100).map((row, index) => {

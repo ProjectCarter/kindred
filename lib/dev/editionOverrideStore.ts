@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { KindredPlace } from "../location/types";
 import { localEditionDate } from "../edition/dates";
 import { assertDeveloperMode } from "./developerMode";
+import { clearDeveloperPreviewContext } from "./developerPreviewContext";
 import {
   DEFAULT_DEV_EDITION_OVERRIDE,
   DEFAULT_DEV_EDITION_OVERRIDE_STATE,
@@ -124,6 +125,7 @@ export async function setDevEditionOverride(
 
 export async function disableDevEditionOverride(): Promise<void> {
   await hydrateDevEditionOverrideState();
+  await clearDeveloperPreviewContext();
   await persistState({
     ...memoryState,
     override: { ...memoryState.override, enabled: false },

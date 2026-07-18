@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { metroKeyFromPlace } from "../location/metroKey.ts";
+import { editionMetroKeyFromPlace } from "./editionIdentity.ts";
 import {
   assertLocationMatchesMarket,
   resolveEditionMarket,
@@ -95,12 +96,13 @@ test("missing San Diego catalogs do not fall back to Gilbert events", () => {
   assert.equal(sdResult.kept.length, 0);
 });
 
-test("edition cache metro keys isolate Gilbert and San Diego", () => {
-  const gilbertKey = metroKeyFromPlace(GILBERT);
-  const sanDiegoKey = metroKeyFromPlace(SAN_DIEGO);
-  assert.equal(gilbertKey, "gilbert-az");
+test("edition cache metro keys isolate Gilbert and San Diego markets", () => {
+  const gilbertKey = editionMetroKeyFromPlace(GILBERT);
+  const sanDiegoKey = editionMetroKeyFromPlace(SAN_DIEGO);
+  assert.equal(gilbertKey, "phoenix-az");
   assert.equal(sanDiegoKey, "san-diego-ca");
   assert.notEqual(gilbertKey, sanDiegoKey);
+  assert.equal(metroKeyFromPlace(GILBERT), "gilbert-az");
 });
 
 test("San Diego label with Gilbert coordinates is rejected", () => {

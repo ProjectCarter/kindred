@@ -28,6 +28,8 @@ import {
 } from "../lib/dev/editionOverrideStore";
 import { DEV_QA_CITY_PRESETS, searchDevEditionCities } from "../lib/dev/devCitySearch";
 import { setPendingDevEditionGenerate } from "../lib/dev/pendingDevGenerate";
+import { setDeveloperPreviewContext } from "../lib/dev/developerPreviewContext";
+import { editionMetroKeyFromPlace } from "../lib/markets/editionIdentity";
 import { devGenerateTrace, createDevGenerateTraceId } from "../lib/dev/devGenerateTrace";
 import type { DevEditionHistoryEntry, EditionDateMode } from "../lib/dev/editionOverrideTypes";
 import { DevEditionHealthDashboard } from "../components/DevEditionHealthDashboard";
@@ -155,6 +157,23 @@ export default function DevToolsScreen() {
       });
       await setDevEditionOverride({ place, dateMode, customEditionDate: customDate });
       await setDevEditionDateMode(dateMode, customDate);
+      const editionDate = resolveDevEditionDate(
+        getDevEditionOverrideStateSync().override
+      );
+      const metroKey = editionMetroKeyFromPlace(place);
+      if (metroKey) {
+        await setDeveloperPreviewContext({
+          editionId: null,
+          metroKey,
+          city: place.city,
+          state: place.state ?? null,
+          region: place.region ?? null,
+          lat: place.lat,
+          lon: place.lon,
+          editionDate,
+          traceId,
+        });
+      }
       await setPendingDevEditionGenerate(true, traceId);
       router.push("/home");
     } finally {
