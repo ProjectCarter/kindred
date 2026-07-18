@@ -9,6 +9,7 @@ import {
   orderEventsForEdition,
   HOMEPAGE_INITIAL_RENDER_COUNT,
   eventCategoryLabel,
+  eventDisplayHeadline,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
 import { resolveEventCategoryIcon } from "../lib/edition/categoryIcon";
@@ -210,7 +211,7 @@ export function LocalEventsGrid({
 
                     <EditorialTitle
                       icon={categoryIcon}
-                      title={event.name}
+                      title={eventDisplayHeadline(event)}
                       style={styles.title}
                       numberOfLines={3}
                       maxFontSizeMultiplier={1.15}

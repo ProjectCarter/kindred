@@ -443,10 +443,13 @@ export async function loadEventsCatalogForEdition(
 
   const { data, error } = await admin
     .from("events_catalog")
-    .select("*")
+    .select(
+      "id, metro_key, provider, provider_id, dedupe_key, name, venue, city, start_at, end_at, event_timezone, official_website, ticket_url, lifecycle, verification_status, verification_confidence, event_payload, editorial_teaser, editorial_body, image_source"
+    )
     .eq("metro_key", metroKey)
     .in("lifecycle", ["verified", "upcoming", "today"])
-    .order("start_at", { ascending: true });
+    .order("start_at", { ascending: true })
+    .limit(60);
 
   if (error || !data) {
     console.error("[events:catalog] read failure", { metroKey, error });
@@ -480,6 +483,8 @@ export async function loadEventsCatalogForEdition(
   const ranked = rankLocalEventsForEdition(familyFiltered.kept, {
     now,
     readerCity: location.city,
+    readerLat: location.lat,
+    readerLon: location.lon,
   });
 
   console.log("[events:catalog] edition read", {

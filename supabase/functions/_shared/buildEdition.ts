@@ -116,7 +116,8 @@ export {
   pickProviderEventImage,
   splitEventSchedule,
 } from "./localEvents/provider.ts";
-import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { enrichEventsWithBanditNotes, eventHasPublishableEditorial } from "./localEvents/banditNotes.ts";
+import { persistEventEditorialBatch } from "./localEvents/eventsCatalog.ts";
 export { enrichEventsWithBanditNotes };
 
 export type BuildEditionResult =
@@ -987,16 +988,69 @@ export async function buildEditionForUser(
     now: editionDateObj,
     weatherIntel,
     readerCity: city ?? eventsLocation.city,
+    readerLat: weatherLat,
+    readerLon: weatherLon,
   });
+
+  let localEvents: LocalEvent[] = localEventsForEdition;
 
   console.log("[buildEdition] local events edition surface", {
     ranked: localEventsForBandit.length,
     surfaced: localEventsForEdition.length,
   });
 
-  // Story Editor first, then Local Events Bandit Notes — sequential to stay
-  // within Edge memory/CPU budget (parallel Claude fan-out + full catalog reads
-  // was triggering WORKER_RESOURCE_LIMIT on large metros like Seattle).
+  if (localEvents.length > 0 && anthropicApiKey) {
+    const editorialTarget = Math.min(LOCAL_EVENTS_EDITION_SURFACED_MAX, 12);
+    const reservePool = localEventsForBandit.filter(
+      (candidate) =>
+        !localEvents.some(
+          (picked) =>
+            `${picked.name}|${picked.startDateTime}`.toLowerCase() ===
+            `${candidate.name}|${candidate.startDateTime}`.toLowerCase()
+        )
+    );
+    const enrichQueue = [...localEvents, ...reservePool];
+    const publishable: LocalEvent[] = [];
+    const seen = new Set<string>();
+    let enrichedAttempts = 0;
+
+    while (publishable.length < editorialTarget && enrichQueue.length) {
+      const batchSize = Math.min(
+        4,
+        editorialTarget - publishable.length + 2,
+        enrichQueue.length
+      );
+      const batch = enrichQueue.splice(0, batchSize);
+      enrichedAttempts += batch.length;
+      const enriched = await timer.timed("Local Events - Bandit Notes (AI)", () =>
+        enrichEventsWithBanditNotes(batch, { editionDate, maxGenerate: batch.length })
+      );
+      for (const event of enriched) {
+        const key = `${event.name}|${event.startDateTime}`.toLowerCase();
+        if (seen.has(key) || !eventHasPublishableEditorial(event)) continue;
+        seen.add(key);
+        publishable.push(event);
+        if (publishable.length >= editorialTarget) break;
+      }
+    }
+
+    localEvents = publishable.slice(0, editorialTarget);
+
+    console.log("[buildEdition] local events editorial gate", {
+      enrichedAttempts,
+      publishable: localEvents.length,
+      remainingQueue: enrichQueue.length,
+    });
+
+    void persistEventEditorialBatch(supabaseAdmin, localEvents, catalogMetroKey).catch(
+      (err) =>
+        console.warn("[buildEdition] local events editorial persist failed", {
+          error: err instanceof Error ? err.message : String(err),
+        })
+    );
+  }
+
+  // Story Editor runs after Local Events editorial so event copy gets time budget.
   const editedBatch = await timer.timed(
     "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
     () =>
@@ -1055,9 +1109,6 @@ export async function buildEditionForUser(
       ])
   );
 
-  const localEvents = await timer.timed("Local Events - Bandit Notes (AI)", () =>
-    enrichEventsWithBanditNotes(localEventsForEdition, { editionDate })
-  );
   const [editedLead, editedPick, ...editedTopStories] = editedBatch;
 
   if (leadStory && editedLead) {

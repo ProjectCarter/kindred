@@ -12,6 +12,8 @@ import {
 import { filterHumanDetailParagraphs, buildHumanDetailsPromptBlock } from "../editorial/humanDetails.ts";
 import {
   buildLastingImpressionPromptBlock,
+  ensureLastingImpressionClosing,
+  lastingImpressionClosingForEvent,
   validateLastingImpressionClosing,
 } from "../editorial/lastingImpression.ts";
 import {
@@ -97,6 +99,42 @@ export function validateBanditNote(note: string | null | undefined): string | nu
   return trimmed;
 }
 
+/** Newspaper headline — distinct from the listing title, verified facts only. */
+export function validateEditorialHeadline(
+  headline: string | null | undefined,
+  eventName: string
+): string | null {
+  const trimmed = headline?.trim();
+  if (!trimmed) return null;
+  if (containsBannedEventCopy(trimmed)) return null;
+  if (trimmed.length < 12 || trimmed.length > 90) return null;
+  if (trimmed.toLowerCase() === eventName.trim().toLowerCase()) return null;
+  return trimmed;
+}
+
+export function resolveEditorialHeadline(
+  rawHeadline: string | null,
+  event: Pick<LocalEvent, "name" | "venue" | "category">,
+  body: string[],
+  banditNote: string | null
+): string | null {
+  const direct = validateEditorialHeadline(rawHeadline, event.name);
+  if (direct) return direct;
+
+  const candidates = [
+    banditNote,
+    body[0]?.split(/(?<=[.!?])\s+/)[0]?.trim() ?? body[0]?.trim(),
+    body[1]?.split(/(?<=[.!?])\s+/)[0]?.trim() ?? body[1]?.trim(),
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    const validated = validateEditorialHeadline(candidate, event.name);
+    if (validated) return validated;
+  }
+
+  return null;
+}
+
 const BADGE_LABEL: Record<string, string> = {
   free: "free admission",
   live_music: "live music",
@@ -152,7 +190,9 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "A concert reads differently from a farmers market. A theater performance reads differently from a food festival.\n" +
   "Do NOT use one writing style for every category.\n\n" +
   "Return ONLY JSON:\n" +
-  '{"events":[{"banditNote":"...","editorialBody":["paragraph1","paragraph2","paragraph3","paragraph4"]}]}\n\n' +
+  '{"events":[{"editorialHeadline":"...","banditNote":"...","editorialBody":["paragraph1","paragraph2","paragraph3","paragraph4"]}]}\n\n' +
+  "editorialHeadline: ONE newspaper-quality headline (12–90 chars) — specific to THIS event, " +
+  "not the raw listing title, no exclamation points\n" +
   "SUMMARIZE THE EXPERIENCE — do not restate the listing:\n" +
   "- Explain what is happening, why someone would attend, what makes it unique, what to expect\n" +
   "- Describe atmosphere and energy when inferable from category/story type — never invent crowd size\n" +
@@ -173,6 +213,15 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "\"Perfect way to spend\", \"Hidden gem\", \"Something for everyone\", \"Join us for\", \"An event is happening\"\n" +
   "- No rotating templates, canned introductions, or filler\n" +
   "- Name the venue, format, activity, or detail that makes this event distinct\n\n" +
+  "Validation checklist (every event must pass before you return JSON):\n" +
+  "- editorialHeadline: 12–90 chars, NOT the same words as Title\n" +
+  "- editorialBody: exactly 3–4 paragraphs; the full article must include one memorable-idea phrase " +
+  "(e.g. \"next time you\", \"easy to overlook\", a specific year, \"instead of\")\n" +
+  "- Final paragraph: one quiet observation about THIS event — never \"in summary\", \"don't miss\", " +
+  "\"locals love\", crowd claims, or reusable wrap-ups\n" +
+  "- banditNote: one specific sentence, max 18 words\n\n" +
+  "Example shape (adapt facts to the brief — never copy verbatim):\n" +
+  '{"editorialHeadline":"Under the Lights at T-Mobile Park","banditNote":"The Mariners host Houston on a summer night at T-Mobile Park.","editorialBody":["...","...","Next time you pass T-Mobile Park on a game night, notice how the light spill marks an evening already underway."]}\n\n' +
   buildEditorialIntelligencePromptBlock() +
   "\n\n" +
   buildHumanDetailsPromptBlock("events") +
@@ -182,28 +231,61 @@ export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   buildSourceConfidencePromptBlock("events");
 
 export type GeneratedEventEditorial = {
+  editorialHeadline: string | null;
   banditNote: string | null;
   editorialBody: string[] | null;
 };
 
 export function parseGeneratedEventEditorial(
   raw: unknown,
-  event: Pick<LocalEvent, "name" | "venue">
+  event: Pick<LocalEvent, "name" | "venue" | "category">
 ): GeneratedEventEditorial {
+  return diagnoseGeneratedEventEditorial(raw, event).copy;
+}
+
+export function diagnoseGeneratedEventEditorial(
+  raw: unknown,
+  event: Pick<LocalEvent, "name" | "venue" | "category">
+): { copy: GeneratedEventEditorial; reason?: string } {
+  const reject = (reason: string): { copy: GeneratedEventEditorial; reason: string } => ({
+    copy: { editorialHeadline: null, banditNote: null, editorialBody: null },
+    reason,
+  });
+
   if (!raw || typeof raw !== "object") {
-    return { banditNote: null, editorialBody: null };
+    return reject("invalid_row");
   }
-  const row = raw as { banditNote?: unknown; editorialBody?: unknown };
-  const rawNote = typeof row.banditNote === "string" ? row.banditNote : null;
-  const rawBody = Array.isArray(row.editorialBody)
-    ? row.editorialBody.filter((p): p is string => typeof p === "string")
+  const row = raw as {
+    editorialHeadline?: unknown;
+    editorial_headline?: unknown;
+    banditNote?: unknown;
+    bandit_note?: unknown;
+    editorialBody?: unknown;
+    editorial_body?: unknown;
+  };
+  const rawHeadline =
+    typeof row.editorialHeadline === "string"
+      ? row.editorialHeadline
+      : typeof row.editorial_headline === "string"
+        ? row.editorial_headline
+        : null;
+  const rawNote =
+    typeof row.banditNote === "string"
+      ? row.banditNote
+      : typeof row.bandit_note === "string"
+        ? row.bandit_note
+        : null;
+  const rawBodySource = row.editorialBody ?? row.editorial_body;
+  const rawBody = Array.isArray(rawBodySource)
+    ? rawBodySource.filter((p): p is string => typeof p === "string")
     : [];
 
   if (
+    containsBannedEventCopy(rawHeadline) ||
     containsBannedEventCopy(rawNote) ||
     rawBody.some((paragraph) => containsBannedEventCopy(paragraph))
   ) {
-    return { banditNote: null, editorialBody: null };
+    return reject("banned_copy");
   }
 
   const banditNote = validateBanditNote(rawNote);
@@ -211,9 +293,27 @@ export function parseGeneratedEventEditorial(
     ? sanitizeEventEditorialParagraphs(rawBody)
     : null;
 
+  const editorialHeadline = resolveEditorialHeadline(
+    rawHeadline,
+    event,
+    editorialBody ?? [],
+    banditNote
+  );
+  if (!editorialHeadline) return reject("headline_invalid");
+  if (!banditNote) return reject("bandit_note_invalid");
+  if (!editorialBody || editorialBody.length < 3) return reject("body_too_short");
+
   const candidate = {
+    editorialHeadline,
     banditNote,
-    editorialBody: editorialBody?.length ? editorialBody : null,
+    editorialBody: ensureLastingImpressionClosing(
+      editorialBody,
+      lastingImpressionClosingForEvent(
+        event.name.trim(),
+        event.name.trim(),
+        event.category ?? null
+      )
+    ),
   };
 
   if (
@@ -224,27 +324,22 @@ export function parseGeneratedEventEditorial(
       editorialBody: candidate.editorialBody,
     })
   ) {
-    return { banditNote: null, editorialBody: null };
+    return reject("golden_test");
   }
 
-  const bodyText = candidate.editorialBody?.join("\n\n") ?? "";
-  const lastParagraph = candidate.editorialBody?.at(-1) ?? "";
-  const priorParagraphs = candidate.editorialBody?.slice(0, -1) ?? [];
+  const bodyText = candidate.editorialBody.join("\n\n");
+  const lastParagraph = candidate.editorialBody.at(-1) ?? "";
+  const priorParagraphs = candidate.editorialBody.slice(0, -1);
   const lastingImpression = validateLastingImpressionClosing(lastParagraph, {
     priorParagraphs,
   });
-  const sourceConfidence = validateSourceConfidenceBody(
-    candidate.editorialBody ?? [],
-    { desk: "events" }
-  );
-  if (
-    !hasMemorableTakeaway(bodyText) ||
-    endingReadsLikeSummary(lastParagraph) ||
-    !lastingImpression.passes ||
-    !sourceConfidence.passes
-  ) {
-    return { banditNote: null, editorialBody: null };
-  }
+  const sourceConfidence = validateSourceConfidenceBody(candidate.editorialBody, {
+    desk: "events",
+  });
+  if (!hasMemorableTakeaway(bodyText)) return reject("no_memorable_takeaway");
+  if (endingReadsLikeSummary(lastParagraph)) return reject("summary_ending");
+  if (!lastingImpression.passes) return reject(`lasting_impression:${lastingImpression.reason ?? "fail"}`);
+  if (!sourceConfidence.passes) return reject(`source_confidence:${sourceConfidence.reason ?? "fail"}`);
 
-  return candidate;
+  return { copy: candidate };
 }

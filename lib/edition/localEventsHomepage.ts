@@ -6,12 +6,17 @@
  */
 
 import type { LocalEventCard } from "./localEvents";
+import { authorizedEventImageUrl } from "./localEvents";
 import {
   parseEventStartDate,
   resolveCardHorizon,
 } from "./eventHorizon";
 import { meetsLocalEventPublishThreshold } from "./editorialPublishing";
 import { resolveMajorLocalTeamHomepageBoost } from "./majorLocalTeams";
+import {
+  LOCAL_EVENTS_HOMEPAGE_DIVERSITY_WEIGHTS,
+  selectEditorialSpread,
+} from "./editorialDiversity";
 
 /** Editorial desks for a balanced front page — targets are ideals, not quotas. */
 export type LocalEventsHomepageDesk =
@@ -64,7 +69,7 @@ function significantWords(name: string): Set<string> {
   );
 }
 
-function isSimilarListing(a: LocalEventCard, b: LocalEventCard): boolean {
+export function isSimilarLocalEventListing(a: LocalEventCard, b: LocalEventCard): boolean {
   if (a.venue.trim().toLowerCase() !== b.venue.trim().toLowerCase()) return false;
   const wordsA = significantWords(a.name);
   const wordsB = significantWords(b.name);
@@ -101,6 +106,11 @@ export function classifyLocalEventHomepageDesk(
   if (category === "community" || category === "family") return "community";
   if (category === "food") return "festival_fair";
   return null;
+}
+
+/** Diversity bucket for homepage spread — desk when known, else provider category. */
+export function classifyLocalEventDiversityCategory(event: LocalEventCard): string {
+  return classifyLocalEventHomepageDesk(event) ?? event.category ?? "other";
 }
 
 function timelinessBoost(
@@ -172,8 +182,10 @@ function fallbackHomepageScore(event: LocalEventCard, reference: Date): number {
   else if (bucket === "this_weekend") score += 30;
   else if (bucket === "next_weekend") score += 20;
   else score += 10;
-  if (event.imageUrl) score += 3;
+  if (authorizedEventImageUrl(event)) score += 12;
+  else if (event.imageUrl) score += 1;
   if (event.banditNote?.trim()) score += 2;
+  if (event.editorialHeadline?.trim()) score += 2;
   return score;
 }
 
@@ -189,34 +201,7 @@ function sortByHomepageRank(
   );
 }
 
-function pickFromDesk(
-  desk: LocalEventsHomepageDesk,
-  pool: LocalEventCard[],
-  limit: number,
-  picked: LocalEventCard[],
-  pickedKeys: Set<string>,
-  reference: Date,
-  sportsMarketId?: string | null
-): void {
-  if (limit <= 0) return;
-  const pickedAtStart = picked.length;
-
-  const candidates = sortByHomepageRank(
-    pool.filter((event) => {
-      if (pickedKeys.has(eventKey(event))) return false;
-      return classifyLocalEventHomepageDesk(event) === desk;
-    }),
-    reference,
-    sportsMarketId
-  );
-
-  for (const candidate of candidates) {
-    if (picked.length - pickedAtStart >= limit) break;
-    if (picked.some((existing) => isSimilarListing(existing, candidate))) continue;
-    picked.push(candidate);
-    pickedKeys.add(eventKey(candidate));
-  }
-}
+const DESK_TARGET_BOOST = 14;
 
 export type SelectHomepageLocalEventsResult = {
   /** First N cards for the homepage grid — editorially balanced. */
@@ -227,7 +212,7 @@ export type SelectHomepageLocalEventsResult = {
 
 /**
  * Select a diverse front-page spread from the frozen edition pool.
- * Unfilled desk ideals become Editor's Choice slots (highest remaining score).
+ * Desk ideals, venue caps, geography, and category variety via editorialDiversity.
  */
 export function selectEditorialHomepageLocalEvents(
   events: readonly LocalEventCard[],
@@ -254,48 +239,34 @@ export function selectEditorialHomepageLocalEvents(
     return { homepage: ordered, ordered };
   }
 
-  const picked: LocalEventCard[] = [];
-  const pickedKeys = new Set<string>();
-
-  for (const { desk, ideal } of deskTargets) {
-    pickFromDesk(desk, published, ideal, picked, pickedKeys, reference, sportsMarketId);
-  }
-
-  const remainingPool = published.filter((event) => !pickedKeys.has(eventKey(event)));
-  const editorsPicks = sortByHomepageRank(remainingPool, reference, sportsMarketId).slice(
-    0,
-    Math.max(0, maxTotal - picked.length)
+  const deskIdeals = new Map(
+    deskTargets.map((target) => [target.desk, target.ideal])
   );
 
-  for (const event of editorsPicks) {
-    if (picked.length >= maxTotal) break;
-    if (picked.some((existing) => isSimilarListing(existing, event))) continue;
-    picked.push(event);
-    pickedKeys.add(eventKey(event));
-  }
+  const { selected, remainder } = selectEditorialSpread(published, {
+    maxSlots: maxTotal,
+    getBaseScore: (event) =>
+      scoreEventForHomepageSelection(event, reference, { sportsMarketId }),
+    getItemKey: eventKey,
+    getVenueKey: (event) => event.venue,
+    getGeographyKey: (event) => event.city,
+    getCategoryKey: classifyLocalEventDiversityCategory,
+    isNearDuplicate: isSimilarLocalEventListing,
+    getCategoryTargetBoost: (event, categoryCounts) => {
+      const desk = classifyLocalEventHomepageDesk(event);
+      if (!desk) return 0;
+      const ideal = deskIdeals.get(desk) ?? 0;
+      const current = categoryCounts.get(desk) ?? 0;
+      if (current < ideal) return DESK_TARGET_BOOST;
+      return 0;
+    },
+    weights: LOCAL_EVENTS_HOMEPAGE_DIVERSITY_WEIGHTS,
+  });
 
-  if (picked.length < maxTotal) {
-    const fill = sortByHomepageRank(
-      published.filter((event) => !pickedKeys.has(eventKey(event))),
-      reference,
-      sportsMarketId
-    );
-    for (const event of fill) {
-      if (picked.length >= maxTotal) break;
-      if (picked.some((existing) => isSimilarListing(existing, event))) continue;
-      picked.push(event);
-      pickedKeys.add(eventKey(event));
-    }
-  }
-
-  const remainder = sortByHomepageRank(
-    published.filter((event) => !pickedKeys.has(eventKey(event))),
-    reference,
-    sportsMarketId
-  );
+  const tail = sortByHomepageRank(remainder, reference, sportsMarketId);
 
   return {
-    homepage: picked.slice(0, maxTotal),
-    ordered: [...picked.slice(0, maxTotal), ...remainder],
+    homepage: selected,
+    ordered: [...selected, ...tail],
   };
 }

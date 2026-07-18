@@ -8,6 +8,9 @@ import type { DiscoveryPayload } from "./discovery/types.ts";
 import { parseDiscoveryPayload } from "./discovery/discoveryPayload.ts";
 import { allocateDiscoverySections } from "./discovery/sectionAllocation.ts";
 import { metroKeyFromLocation } from "./storyOf/metroKey.ts";
+import { eventHasPublishableEditorial } from "./localEvents/banditNotes.ts";
+import type { LocalEvent } from "./localEvents/provider.ts";
+import { isMorningHeroDetailComplete } from "./heroArtwork/presentation.ts";
 import {
   getCatalogBootstrapState,
   type CatalogBootstrapState,
@@ -37,6 +40,65 @@ export function hasBanditsPickFromPayload(bandit: unknown): boolean {
   return Boolean(headline);
 }
 
+function localEventsSectionHasCompleteEditorial(body: string | null | undefined): {
+  ok: boolean;
+  surfaced: number;
+  publishable: number;
+} {
+  if (!body?.trim()) return { ok: false, surfaced: 0, publishable: 0 };
+  try {
+    const parsed = JSON.parse(body) as { events?: unknown[] };
+    const rows = Array.isArray(parsed.events) ? parsed.events : [];
+    if (!rows.length) return { ok: false, surfaced: 0, publishable: 0 };
+    let publishable = 0;
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const event = row as Partial<LocalEvent>;
+      if (
+        typeof event.name !== "string" ||
+        typeof event.venue !== "string" ||
+        !event.name.trim()
+      ) {
+        continue;
+      }
+      if (
+        eventHasPublishableEditorial({
+          name: event.name,
+          startDateTime:
+            typeof event.startDateTime === "string" ? event.startDateTime : "Date TBA",
+          venue: event.venue,
+          city: typeof event.city === "string" ? event.city : "",
+          sourceUrl: typeof event.sourceUrl === "string" ? event.sourceUrl : "",
+          sourceName: typeof event.sourceName === "string" ? event.sourceName : "Listing",
+          editorialHeadline:
+            typeof event.editorialHeadline === "string" ? event.editorialHeadline : null,
+          banditNote: typeof event.banditNote === "string" ? event.banditNote : null,
+          editorialBody: Array.isArray(event.editorialBody)
+            ? event.editorialBody.filter((p): p is string => typeof p === "string")
+            : null,
+        })
+      ) {
+        publishable += 1;
+      }
+    }
+    return {
+      ok: publishable > 0 && publishable === rows.length,
+      surfaced: rows.length,
+      publishable,
+    };
+  } catch {
+    return { ok: false, surfaced: 0, publishable: 0 };
+  }
+}
+
+function hasCompleteMorningHero(morningEdition: unknown): boolean {
+  if (!morningEdition || typeof morningEdition !== "object") return false;
+  const hero = (morningEdition as { morningHero?: { detail?: unknown; hostedUrl?: string } })
+    .morningHero;
+  if (!hero?.hostedUrl?.trim()) return false;
+  return isMorningHeroDetailComplete(hero.detail);
+}
+
 export function assessPersistedEditionBuild(input: {
   sections: EditionSectionRow[];
   discovery: DiscoveryPayload | null | undefined;
@@ -45,6 +107,7 @@ export function assessPersistedEditionBuild(input: {
   catalogBootstrap?: CatalogBootstrapState;
   hasMorningHero?: boolean;
   libraryHasHeroArtwork?: boolean;
+  morningEdition?: unknown;
 }): { complete: boolean; reasons: string[] } {
   const types = input.sections.map((s) => s.section_type);
   const discovery =
@@ -79,6 +142,24 @@ export function assessPersistedEditionBuild(input: {
     reasons.push("bandit pick missing");
   }
 
+  const localEventsSection = input.sections.find((s) => s.section_type === "local_events");
+  if (
+    !catalogBootstrapPending &&
+    (!bootstrap || bootstrap.eventsCatalogBootstrapped) &&
+    types.includes("local_events")
+  ) {
+    const editorial = localEventsSectionHasCompleteEditorial(localEventsSection?.body ?? null);
+    if (!editorial.ok) {
+      reasons.push(
+        `local events missing publishable editorial (${editorial.publishable}/${editorial.surfaced})`
+      );
+    }
+  }
+
+  if (input.libraryHasHeroArtwork && !hasCompleteMorningHero(input.morningEdition)) {
+    reasons.push("today's masterpiece missing or incomplete");
+  }
+
   const surfaceItems = discoverySurfaceItemCount(discovery);
   if (!catalogBootstrapPending && surfaceItems === 0) {
     reasons.push("discovery has zero surfaced items");
@@ -98,10 +179,6 @@ export function assessPersistedEditionBuild(input: {
     allocation.recommendations.length === 0
   ) {
     reasons.push("discovery pool has zero recommendations after allocate");
-  }
-
-  if (input.libraryHasHeroArtwork && !input.hasMorningHero) {
-    reasons.push("morning_hero missing while hero library has eligible artwork");
   }
 
   return { complete: reasons.length === 0, reasons };
@@ -172,6 +249,7 @@ export async function assessPersistedEditionRow(
     catalogBootstrap,
     hasMorningHero,
     libraryHasHeroArtwork: options?.libraryHasHeroArtwork,
+    morningEdition: morningEditionPayload,
   });
 }
 

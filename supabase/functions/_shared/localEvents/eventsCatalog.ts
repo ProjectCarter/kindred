@@ -2,6 +2,7 @@
  * Events catalog — normalization, fingerprinting, lifecycle, deduplication.
  */
 
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import type { LocalEvent, LocalEventLocation } from "./provider.ts";
 import { parseEventStartDate } from "./horizon.ts";
 
@@ -199,4 +200,72 @@ export function rowToLocalEvent(row: EventsCatalogRow): LocalEvent {
     banditNote: payload.banditNote ?? row.editorial_teaser ?? null,
     editorialBody: payload.editorialBody ?? row.editorial_body ?? null,
   };
+}
+
+export type PersistEventEditorialResult = {
+  updated: number;
+  skipped: number;
+};
+
+/** Cache publishable event editorial back to events_catalog after edition enrichment. */
+export async function persistEventEditorialBatch(
+  admin: SupabaseClient,
+  events: LocalEvent[],
+  metroKey: string
+): Promise<PersistEventEditorialResult> {
+  let updated = 0;
+  let skipped = 0;
+
+  for (const event of events) {
+    const note = event.banditNote?.trim() || null;
+    const headline = event.editorialHeadline?.trim() || null;
+    const body = event.editorialBody?.length ? event.editorialBody : null;
+    if (!note && !body && !headline) {
+      skipped += 1;
+      continue;
+    }
+
+    const provider = event.sourceId ?? "unknown";
+    const providerId = extractEventProviderId(event);
+    const payload = serializeEventPayload({
+      ...event,
+      editorialHeadline: headline,
+      banditNote: note,
+      editorialBody: body,
+    });
+
+    const { error } = await admin
+      .from("events_catalog")
+      .update({
+        editorial_teaser: note,
+        editorial_body: body,
+        event_payload: payload,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("metro_key", metroKey)
+      .eq("provider", provider)
+      .eq("provider_id", providerId);
+
+    if (error) {
+      console.warn("[eventsCatalog] editorial persist failed", {
+        name: event.name.slice(0, 60),
+        provider,
+        error: error.message,
+      });
+      skipped += 1;
+      continue;
+    }
+
+    updated += 1;
+  }
+
+  if (updated > 0) {
+    console.log("[eventsCatalog] editorial persisted", {
+      metroKey,
+      updated,
+      skipped,
+    });
+  }
+
+  return { updated, skipped };
 }

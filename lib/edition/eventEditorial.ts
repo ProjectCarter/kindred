@@ -240,3 +240,16 @@ export function validateBanditNote(note: string | null | undefined): string | nu
   if (trimmed.length < 12 || trimmed.length > 140) return null;
   return trimmed;
 }
+
+export function validateEditorialHeadline(
+  headline: string | null | undefined,
+  eventName: string
+): string | null {
+  const trimmed = headline?.trim();
+  if (!trimmed) return null;
+  if (containsBannedEventCopy(trimmed)) return null;
+  if (containsEngineLanguage(trimmed)) return null;
+  if (trimmed.length < 12 || trimmed.length > 90) return null;
+  if (trimmed.toLowerCase() === eventName.trim().toLowerCase()) return null;
+  return trimmed;
+}

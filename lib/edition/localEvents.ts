@@ -19,7 +19,7 @@ import {
   parseEventImageRights,
   type EventImageRights,
 } from "./eventImageRights";
-import { validateBanditNote, sanitizeEventEditorialParagraphs } from "./eventEditorial";
+import { validateBanditNote, validateEditorialHeadline, sanitizeEventEditorialParagraphs } from "./eventEditorial";
 import { passesEventGoldenTest } from "./eventStorytelling";
 import { resolveEventCategoryIcon } from "./categoryIcon";
 
@@ -93,6 +93,8 @@ export type LocalEventCard = {
   imageRights?: EventImageRights | null;
   /** Bandit's invitation — why this is worth leaving the house. */
   banditNote?: string | null;
+  /** Newspaper-quality headline — distinct from the listing title. */
+  editorialHeadline?: string | null;
   /** Verified editorial paragraphs — frozen at edition build. */
   editorialBody?: string[] | null;
   /** Keyword-inferred genre, e.g. "music" or "food" — never invented. */
@@ -264,6 +266,20 @@ export function normalizeBanditNote(value: unknown): string | null {
   return validateBanditNote(value.trim());
 }
 
+export function normalizeEditorialHeadline(
+  value: unknown,
+  eventName: string
+): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  return validateEditorialHeadline(value.trim(), eventName);
+}
+
+export function eventDisplayHeadline(
+  event: Pick<LocalEventCard, "name" | "editorialHeadline">
+): string {
+  return event.editorialHeadline?.trim() || event.name.trim();
+}
+
 function normalizeEditorialBody(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const cleaned = sanitizeEventEditorialParagraphs(
@@ -320,6 +336,7 @@ export function parseLocalEventsBody(
         const venue = typeof e.venue === "string" ? e.venue.trim() : "";
         const name = e.name.trim();
         let banditNote = normalizeBanditNote(e.banditNote);
+        let editorialHeadline = normalizeEditorialHeadline(e.editorialHeadline, name);
         let editorialBody = normalizeEditorialBody(e.editorialBody);
         if (
           editorialBody &&
@@ -331,6 +348,7 @@ export function parseLocalEventsBody(
           })
         ) {
           editorialBody = undefined;
+          editorialHeadline = null;
         }
         if (
           banditNote &&
@@ -342,6 +360,9 @@ export function parseLocalEventsBody(
           })
         ) {
           banditNote = null;
+        }
+        if (!editorialHeadline || !banditNote || !editorialBody?.length) {
+          editorialHeadline = null;
         }
         const category = normalizeCategory(e.category, name, venue);
         const badges =
@@ -377,6 +398,7 @@ export function parseLocalEventsBody(
           imageSource: normalizeImageSource(e.imageSource, imageUrl),
           imageRights,
           banditNote,
+          ...(editorialHeadline ? { editorialHeadline } : {}),
           ...(editorialBody ? { editorialBody } : {}),
           category,
           categoryIcon: resolveEventCategoryIcon({ name, venue, category }),

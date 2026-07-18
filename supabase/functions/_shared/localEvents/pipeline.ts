@@ -176,6 +176,8 @@ export async function runLocalEventsPipeline(
     now,
     weatherIntel: options?.weatherIntel,
     readerCity: location.city,
+    readerLat: location.lat,
+    readerLon: location.lon,
   });
 
   const sourcesUsed = gatherResults

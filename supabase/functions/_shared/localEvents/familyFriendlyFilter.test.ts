@@ -55,10 +55,6 @@ Deno.test("assessFamilyFriendlyListing keeps legitimate performances", () => {
       venue: "Phoenix Public Library",
     },
     {
-      name: "Community Speed Dating for Singles 30+",
-      venue: "Downtown Coffee House",
-    },
-    {
       name: "Adult Contemporary Night — Live Acoustic Sets",
       venue: "The Van Buren",
     },
@@ -129,6 +125,27 @@ Deno.test("assessFamilyFriendlyListing excludes hate, scam, and illegal listings
   });
   assert(illegal.excluded);
   assertEquals(illegal.category, "violence_illegal");
+
+  const speedDating = assessFamilyFriendlyListing({
+    name: "Seattle Speed Dating | Saturday Night Ages 24-38",
+    venue: "Downtown Lounge",
+  });
+  assert(speedDating.excluded);
+  assertEquals(speedDating.category, "adult_entertainment");
+
+  const singles = assessFamilyFriendlyListing({
+    name: "Christian Singles Bonfire - Seattle, WA [25 to 35]",
+    venue: "Lake Washington Park",
+  });
+  assert(singles.excluded);
+  assertEquals(singles.category, "adult_entertainment");
+
+  const seminar = assessFamilyFriendlyListing({
+    name: "Leadership Skills 1-Day Workshop | Seattle, WA",
+    venue: "Hotel Conference Room",
+  });
+  assert(seminar.excluded);
+  assertEquals(seminar.category, "scam_fraud");
 });
 
 Deno.test("assessFamilyFriendlyListing keeps educational seminars and museum exhibits", () => {

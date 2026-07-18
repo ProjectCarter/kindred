@@ -21,6 +21,7 @@ import {
   type EditorialModule,
 } from "./contentSystem";
 import type { LocalEventCard } from "./localEvents";
+import { eventDisplayHeadline } from "./localEvents";
 import type { ClippingContentType } from "./clippingTypes";
 import { resolveEventEndsAt } from "./eventExpiry";
 import {
@@ -121,6 +122,8 @@ export type KindredArticle = {
   savedEventTime?: string | null;
   /** Provider-backed actions — never invented URLs. */
   actionContext?: import("./actionBar").ActionBarContext | null;
+  /** Frozen History Around Town snapshot — premium reader only. */
+  historyPlaceSnapshot?: import("./historyAroundTown/types").HistoryPlaceSnapshot | null;
   /**
    * ISO timestamp for when this event actually ends — resolved once, at
    * adapter time, from the event's own date/time (never from when it was
@@ -887,7 +890,7 @@ export function articleFromLocalEvent(
     ...articleFromSectionItem({
       id: `event:${event.name}:${event.date}`.slice(0, 120),
       section: "local_events",
-      headline: event.name.trim(),
+      headline: eventDisplayHeadline(event),
       body: story.join("\n\n"),
       dek: place || null,
       source: event.sourceName?.trim() || "Local listing",

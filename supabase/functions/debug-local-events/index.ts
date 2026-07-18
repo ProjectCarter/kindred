@@ -25,6 +25,17 @@ import {
 } from "../_shared/editorial/confidence.ts";
 import { LOCAL_EVENT_PUBLISH_MIN_SCORE } from "../_shared/editorial/publishing.ts";
 import { refreshEventsSection } from "../_shared/liveRefresh.ts";
+import {
+  enrichEventsWithBanditNotes,
+  eventHasPublishableEditorial,
+} from "../_shared/localEvents/banditNotes.ts";
+import {
+  EVENT_EDITORIAL_SYSTEM_PROMPT,
+  buildVerifiedEventBrief,
+  diagnoseGeneratedEventEditorial,
+} from "../_shared/localEvents/eventEditorial.ts";
+import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../_shared/editorial/editionVariety.ts";
+import { allocateLocalEventsByHorizon } from "../_shared/localEvents/horizonAllocator.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { isUsHolidayOrEve } from "../_shared/calendar/holidays.ts";
 
@@ -35,6 +46,7 @@ type ProbeRequest = {
   htichips?: string | null;
   backfillEditionId?: string;
   backfillUserId?: string;
+  testEditorial?: boolean;
 };
 
 Deno.serve(async (req) => {
@@ -76,7 +88,17 @@ Deno.serve(async (req) => {
         isBusyDay,
         htichips: body.htichips,
       }),
-      getLocalEvents(location, { isBusyDay, now: dateObj }),
+      (async () => {
+        const url = Deno.env.get("SUPABASE_URL");
+        const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const admin = url && key ? createClient(url, key) : null;
+        return getLocalEvents(location, {
+          isBusyDay,
+          now: dateObj,
+          editionDate,
+          admin: admin ?? undefined,
+        });
+      })(),
       runLocalEventsPipeline(location, { isBusyDay, now: dateObj }),
       fetchEventbriteSearchCandidates(location),
       probeTicketmasterConnection(location),
@@ -164,6 +186,101 @@ Deno.serve(async (req) => {
       }>;
     };
 
+    let editorialTest: {
+      surfaced: number;
+      publishable: number;
+      anthropicConfigured: boolean;
+      diagnosis?: { reason?: string; rawPreview?: string };
+      sample?: {
+        name: string;
+        headline: string | null;
+        note: string | null;
+        bodyParas: number;
+      };
+    } | null = null;
+
+    if (body.testEditorial && productionEvents.length > 0) {
+      const anthropicConfigured = Boolean(Deno.env.get("ANTHROPIC_API_KEY"));
+      const surfaced = allocateLocalEventsByHorizon(productionEvents, {
+        maxTotal: 4,
+        now: dateObj,
+        readerCity: location.city,
+        readerLat: location.lat,
+        readerLon: location.lon,
+      });
+      const enriched = await enrichEventsWithBanditNotes(surfaced.slice(0, 2), {
+        editionDate,
+        maxGenerate: 2,
+      });
+      const publishable = enriched.filter(eventHasPublishableEditorial);
+      const sample = publishable[0] ?? enriched[0];
+      let diagnosis: { reason?: string; rawPreview?: string } | undefined;
+      if (anthropicConfigured && publishable.length === 0 && surfaced[0]) {
+        const event = surfaced[0]!;
+        const varietySeed = buildVarietySeed(editionDate, event.name);
+        const verified = buildVerifiedEventBrief(event, 0);
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-5",
+            max_tokens: 900,
+            system: EVENT_EDITORIAL_SYSTEM_PROMPT,
+            messages: [
+              {
+                role: "user",
+                content:
+                  "Write one original newspaper headline, Bandit note, and editorial article body " +
+                  "for this verified event.\n\n" +
+                  `${verified}\n\n${buildEditionVarietyPromptBlock(varietySeed)}`,
+              },
+            ],
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          diagnosis = {
+            reason: `anthropic_http_${response.status}`,
+            rawPreview: JSON.stringify(data).slice(0, 400),
+          };
+        } else {
+        const text =
+          typeof data?.content?.[0]?.text === "string" ? data.content[0].text : "";
+        try {
+          const parsed = JSON.parse(text.trim()) as { events?: unknown[] };
+          const row = Array.isArray(parsed.events) ? parsed.events[0] : parsed;
+          diagnosis = {
+            reason: diagnoseGeneratedEventEditorial(row, event).reason ?? "accepted",
+            rawPreview: text.slice(0, 400),
+          };
+        } catch {
+          diagnosis = {
+            reason: text ? "json_parse_failed" : "anthropic_empty_response",
+            rawPreview: text.slice(0, 400) || JSON.stringify(data).slice(0, 400),
+          };
+        }
+        }
+      }
+      editorialTest = {
+        surfaced: surfaced.length,
+        publishable: publishable.length,
+        anthropicConfigured,
+        diagnosis,
+        sample: sample
+          ? {
+              name: sample.name.slice(0, 60),
+              headline: sample.editorialHeadline ?? null,
+              note: sample.banditNote?.slice(0, 100) ?? null,
+              bodyParas: sample.editorialBody?.length ?? 0,
+            }
+          : undefined,
+      };
+    }
+
     const persistenceValidation = {
       /** Same entry point generate-edition and refresh-live-data use. */
       qualifiedViaGetLocalEvents: productionEvents.length,
@@ -213,6 +330,7 @@ Deno.serve(async (req) => {
       ticketmasterSummary: pipeline.meta.ticketmaster ?? null,
       duplicatesRemoved: pipeline.meta.duplicatesRemoved ?? null,
       persistenceValidation,
+      editorialTest,
       backfill,
     });
   } catch (err) {

@@ -7,7 +7,8 @@
  */
 
 import type { WeatherIntelligence } from "../weather/providers/types.ts";
-import { KINDRED_LOCAL_RADIUS_MILES } from "../editorial/editorialStandard.ts";
+import { KINDRED_LOCAL_RADIUS_KM, KINDRED_LOCAL_RADIUS_MILES } from "../editorial/editorialStandard.ts";
+import { haversineKm } from "../discovery/geo.ts";
 import {
   isGenericEventTitle,
   venueHayFromParts,
@@ -125,20 +126,83 @@ function timelinessPoints(
   }
 }
 
-function localRelevancePoints(event: LocalEvent, readerCity: string | null): number {
+function localRelevancePoints(
+  event: LocalEvent,
+  readerCity: string | null,
+  readerLat?: number | null,
+  readerLon?: number | null
+): { score: number; reasons: KindredEventScoreReason[] } {
   const hay = venueHayFromParts([event.name, event.venue, event.city]);
+  const reasons: KindredEventScoreReason[] = [];
   let score = 0;
+  const reader = readerCity?.trim().toLowerCase() ?? "";
+  const eventCity = event.city?.trim().toLowerCase() ?? "";
 
-  if (readerCity && hay.includes(readerCity.toLowerCase())) score += 14;
-  else if (EAST_VALLEY_METRO.test(hay)) score += 10;
-  else if (event.city?.trim()) score += 6;
-
-  if (event.sourceTier === "official") score += 6;
-  else if (OFFICIAL_SOURCE_PATTERN.test(`${event.sourceUrl} ${event.sourceName}`)) {
+  if (reader && (eventCity.includes(reader) || hay.includes(reader))) {
+    score += 14;
+    reasons.push({
+      code: "reader_city_match",
+      label: "In the reader's city",
+      weight: 14,
+    });
+  } else if (
+    reader &&
+    EAST_VALLEY_METRO.test(reader) &&
+    EAST_VALLEY_METRO.test(hay)
+  ) {
+    score += 10;
+    reasons.push({
+      code: "metro_suburb",
+      label: "Within the local metro",
+      weight: 10,
+    });
+  } else if (event.lat != null && event.lon != null && readerLat != null && readerLon != null) {
+    const km = haversineKm(readerLat, readerLon, event.lat, event.lon);
+    if (km > KINDRED_LOCAL_RADIUS_KM) {
+      score -= 28;
+      reasons.push({
+        code: "outside_radius",
+        label: `Outside the ${KINDRED_LOCAL_RADIUS_MILES}-mile local paper`,
+        weight: -28,
+      });
+    } else if (km > 20) {
+      score += 4;
+      reasons.push({
+        code: "nearby_suburb",
+        label: "Nearby suburb within the local radius",
+        weight: 4,
+      });
+    } else {
+      score += 10;
+      reasons.push({
+        code: "close_to_reader",
+        label: "Close to the reader",
+        weight: 10,
+      });
+    }
+  } else if (reader && eventCity && eventCity !== reader) {
+    score -= 14;
+    reasons.push({
+      code: "distant_city",
+      label: "Different city from the reader",
+      weight: -14,
+    });
+  } else if (event.city?.trim()) {
     score += 4;
   }
 
-  return Math.min(score, 20);
+  if (event.sourceTier === "official") {
+    score += 6;
+    reasons.push({
+      code: "official_source",
+      label: "Official source listing",
+      weight: 6,
+    });
+  } else if (OFFICIAL_SOURCE_PATTERN.test(`${event.sourceUrl} ${event.sourceName}`)) {
+    score += 4;
+  }
+
+  return { score: Math.min(Math.max(score, -30), 20), reasons };
 }
 
 function communityInterestPoints(event: LocalEvent): number {
@@ -204,7 +268,25 @@ function editorialQualityPoints(event: LocalEvent): { score: number; reasons: Ki
     score += 6;
   }
   if (event.banditNote?.trim()) score += 3;
-  if (event.imageUrl?.trim()) score += 3;
+  if (event.imageRights?.authorized && event.imageUrl?.trim()) {
+    score += 12;
+    reasons.push({
+      code: "authorized_image",
+      label: "Authorized listing photography",
+      weight: 12,
+    });
+  } else if (event.imageUrl?.trim()) {
+    score += 1;
+  }
+
+  if (event.sourceId === "ticketmaster") {
+    score += 8;
+    reasons.push({
+      code: "ticketmaster",
+      label: "Ticketmaster verified listing",
+      weight: 8,
+    });
+  }
 
   if (isGenericEventTitle(event.name)) {
     score -= 12;
@@ -252,6 +334,8 @@ export function computeKindredEventEditorialScore(
     weatherIntel?: WeatherIntelligence | null;
     horizonBucket?: EventHorizonBucket | null;
     readerCity?: string | null;
+    readerLat?: number | null;
+    readerLon?: number | null;
   }
 ): KindredEventEditorialScore {
   const now = options?.now ?? new Date();
@@ -304,13 +388,15 @@ export function computeKindredEventEditorialScore(
     reasons.push({ code: "free", label: "Free to attend", weight: 6 });
   }
 
-  const localRelevance = localRelevancePoints(event, options?.readerCity ?? event.city ?? null);
-  if (localRelevance > 0) {
-    reasons.push({
-      code: "local_relevance",
-      label: `Within the ${KINDRED_LOCAL_RADIUS_MILES}-mile local paper`,
-      weight: localRelevance,
-    });
+  const localRelevanceResult = localRelevancePoints(
+    event,
+    options?.readerCity ?? event.city ?? null,
+    options?.readerLat,
+    options?.readerLon
+  );
+  const localRelevance = localRelevanceResult.score;
+  if (localRelevanceResult.reasons.length) {
+    reasons.push(...localRelevanceResult.reasons);
   }
 
   const communityInterest = communityInterestPoints(event);

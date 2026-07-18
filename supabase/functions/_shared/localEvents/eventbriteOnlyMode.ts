@@ -1,7 +1,7 @@
 /**
  * TEMPORARY — Eventbrite-only Local Events test mode.
  * Enable with LOCAL_EVENTS_EVENTBRITE_ONLY=true on generate-edition.
- * Remove or disable after Gilbert end-to-end verification.
+ * Must remain OFF for production U.S. markets (Seattle gold standard and beyond).
  */
 
 import { KINDRED_LOCAL_RADIUS_KM } from "../editorial/editorialStandard.ts";

@@ -14,6 +14,7 @@ import {
 import {
   splitFeaturedEvents,
   authorizedEventImageUrl,
+  eventDisplayHeadline,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
 import { motion, paper, press } from "../lib/edition/newspaperTheme";
@@ -36,6 +37,7 @@ export function DontMissToday({ events }: Props) {
 
   const { featured, secondary } = splitFeaturedEvents(events);
   const eventPhotoUri = featured ? authorizedEventImageUrl(featured) : null;
+  const featuredHeadline = featured ? eventDisplayHeadline(featured) : "";
 
   const [reduceMotion, setReduceMotion] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -112,7 +114,7 @@ export function DontMissToday({ events }: Props) {
         { opacity, transform: [{ translateY: rise }] },
       ]}
       accessibilityRole="summary"
-      accessibilityLabel={`Don’t miss today: ${featured.name}`}
+      accessibilityLabel={`Don’t miss today: ${featuredHeadline}`}
     >
       <Text style={styles.kicker}>Don’t miss today</Text>
 
@@ -120,7 +122,7 @@ export function DontMissToday({ events }: Props) {
         onPress={open}
         disabled={!open}
         accessibilityRole={open ? "link" : "text"}
-        accessibilityLabel={[featured.name, meta, open ? "See details" : null]
+        accessibilityLabel={[featuredHeadline, meta, open ? "See details" : null]
           .filter(Boolean)
           .join(". ")}
         style={({ pressed }) => [open && pressed && styles.pressed]}
@@ -140,7 +142,7 @@ export function DontMissToday({ events }: Props) {
               source={{ uri: eventPhotoUri }}
               style={{ width: photoWidth, height: photoHeight }}
               resizeMode="cover"
-              accessibilityLabel={featured.name}
+              accessibilityLabel={featuredHeadline}
             />
           </Animated.View>
         ) : null}
@@ -149,7 +151,7 @@ export function DontMissToday({ events }: Props) {
           style={[styles.headline, !eventPhotoUri && styles.headlineNoPhoto]}
           maxFontSizeMultiplier={1.2}
         >
-          {featured.name}
+          {featuredHeadline}
         </Text>
 
         {meta ? (
@@ -190,6 +192,7 @@ function SecondaryRecommendation({
 }) {
   const meta = whisperMeta(event);
   const thumb = authorizedEventImageUrl(event);
+  const headline = eventDisplayHeadline(event);
   const open = event.sourceUrl
     ? () => {
         void Linking.openURL(event.sourceUrl).catch(() => {});
@@ -201,7 +204,7 @@ function SecondaryRecommendation({
       onPress={open}
       disabled={!open}
       accessibilityRole={open ? "link" : "text"}
-      accessibilityLabel={[event.name, meta, open ? "See details" : null]
+      accessibilityLabel={[headline, meta, open ? "See details" : null]
         .filter(Boolean)
         .join(". ")}
       style={({ pressed }) => [
@@ -216,12 +219,12 @@ function SecondaryRecommendation({
             source={{ uri: thumb }}
             style={styles.secondaryThumb}
             resizeMode="cover"
-            accessibilityLabel={event.name}
+            accessibilityLabel={headline}
           />
         ) : null}
         <View style={styles.secondaryCopy}>
           <Text style={styles.secondaryHeadline} maxFontSizeMultiplier={1.25}>
-            {event.name}
+            {headline}
           </Text>
           {meta ? (
             <Text style={styles.secondaryMeta} maxFontSizeMultiplier={1.15}>

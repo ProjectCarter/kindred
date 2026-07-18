@@ -57,6 +57,8 @@ export function scoreLocalEventForEdition(
     weatherIntel?: WeatherIntelligence | null;
     horizonBucket?: EventHorizonBucket | null;
     readerCity?: string | null;
+    readerLat?: number | null;
+    readerLon?: number | null;
   }
 ): number {
   return computeKindredEventEditorialScore(event, options).total;
@@ -69,6 +71,8 @@ export function scoreLocalEventWithBreakdown(
     weatherIntel?: WeatherIntelligence | null;
     horizonBucket?: EventHorizonBucket | null;
     readerCity?: string | null;
+    readerLat?: number | null;
+    readerLon?: number | null;
   }
 ): { event: LocalEvent; score: KindredEventEditorialScore } {
   const score = computeKindredEventEditorialScore(event, options);
@@ -85,6 +89,8 @@ export function rankLocalEventsForEdition(
     now?: Date;
     weatherIntel?: WeatherIntelligence | null;
     readerCity?: string | null;
+    readerLat?: number | null;
+    readerLon?: number | null;
   }
 ): LocalEvent[] {
   return [...events]
@@ -94,6 +100,8 @@ export function rankLocalEventsForEdition(
         weatherIntel: options?.weatherIntel,
         horizonBucket: event.horizonBucket,
         readerCity: options?.readerCity ?? event.city,
+        readerLat: options?.readerLat,
+        readerLon: options?.readerLon,
       })
     )
     .filter(

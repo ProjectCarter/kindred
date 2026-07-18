@@ -114,6 +114,15 @@ const SCAM_FRAUD_PATTERNS: Array<{ re: RegExp; signal: string }> = [
   { re: /\b(guaranteed\s+returns|double\s+your\s+money|no[\s-]?risk\s+investment)\s+seminar\b/i, signal: "predatory financial seminar" },
   { re: /\b(debt\s+relief\s+scam|foreclosure\s+rescue\s+scam|predatory\s+lending\s+seminar)\b/i, signal: "predatory financial seminar" },
   { re: /\bfree\s+(steak\s+dinner|vacation|gift)\s+—?\s*(timeshare|presentation|seminar)\b/i, signal: "timeshare sales presentation" },
+  {
+    re: /\b(leadership|management|team|remote work|communication)\s+(skills|essentials|success).{0,48}\b(workshop|seminar|training|class)\b/i,
+    signal: "predatory professional seminar",
+  },
+  {
+    re: /\b1[\s-]?day\s+(workshop|training|seminar|class)\b.*\b(leadership|management|team|remote work|communication|crisis)\b/i,
+    signal: "predatory professional seminar",
+  },
+  { re: /\b(startup networking|networking night for startups)\b/i, signal: "networking spam event" },
 ];
 
 export type FamilyFriendlyListingInput = {
@@ -219,7 +228,7 @@ function assessAdultEntertainment(
   }
 
   if (
-    /\b(adult dating|singles hookup|hookup party|sugar daddy|sugar baby)\b/i.test(
+    /\b(adult dating|singles hookup|hookup party|sugar daddy|sugar baby|christian singles|singles bonfire|speed dating)\b/i.test(
       hay
     )
   ) {

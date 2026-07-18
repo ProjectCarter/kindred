@@ -40,9 +40,19 @@ type ScoredEvent = {
   bucket: EventHorizonBucket;
 };
 
+function hasAuthorizedImage(event: LocalEvent): boolean {
+  return Boolean(event.imageRights?.authorized && event.imageUrl?.trim());
+}
+
 function scoreAndBucket(
   events: LocalEvent[],
-  options?: { now?: Date; weatherIntel?: WeatherIntelligence | null; readerCity?: string | null }
+  options?: {
+    now?: Date;
+    weatherIntel?: WeatherIntelligence | null;
+    readerCity?: string | null;
+    readerLat?: number | null;
+    readerLon?: number | null;
+  }
 ): ScoredEvent[] {
   const now = options?.now ?? new Date();
   return events
@@ -57,6 +67,8 @@ function scoreAndBucket(
           weatherIntel: options?.weatherIntel,
           horizonBucket: bucket,
           readerCity: options?.readerCity ?? event.city,
+          readerLat: options?.readerLat,
+          readerLon: options?.readerLon,
         }),
       };
     })
@@ -66,7 +78,13 @@ function scoreAndBucket(
         isWithinEventHorizon(row.event, now) &&
         row.score >= LOCAL_EVENT_PUBLISH_MIN_SCORE &&
         shouldPublishEditorialConfidence(computeEventConfidence(row.event))
-    );
+    )
+    .sort((a, b) => {
+      const imageDelta =
+        Number(hasAuthorizedImage(b.event)) - Number(hasAuthorizedImage(a.event));
+      if (imageDelta !== 0) return imageDelta;
+      return b.score - a.score;
+    });
 }
 
 export function allocateLocalEventsByHorizon(
@@ -76,6 +94,8 @@ export function allocateLocalEventsByHorizon(
     weatherIntel?: WeatherIntelligence | null;
     maxTotal?: number;
     readerCity?: string | null;
+    readerLat?: number | null;
+    readerLon?: number | null;
   }
 ): LocalEvent[] {
   const maxTotal = options?.maxTotal ?? Number.POSITIVE_INFINITY;

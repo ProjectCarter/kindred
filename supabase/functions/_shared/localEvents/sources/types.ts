@@ -51,6 +51,13 @@ const AGGREGATOR_SOURCE_RIGHTS: EventSourceRightsPolicy = {
     "Aggregator listing photography is not licensed for Kindred reuse without a partnership.",
 };
 
+/** Ticketmaster Discovery API — event images are returned for partner display use. */
+const TICKETMASTER_SOURCE_RIGHTS: EventSourceRightsPolicy = {
+  imageReuse: "api_granted",
+  summary:
+    "Ticketmaster Discovery API grants display rights for event images returned by the API.",
+};
+
 export type LocalEventSourceId =
   | "serp_google_events"
   | "nps_park_events"
@@ -125,7 +132,7 @@ export const TRUSTED_EVENT_SOURCE_NETWORK: TrustedEventSource[] = [
   { id: "nonprofit", label: "Local nonprofit organizations", tier: "official", trustScore: 76, active: false, rights: OFFICIAL_SOURCE_RIGHTS },
   { id: "venue_website", label: "Official venue websites", tier: "venue", trustScore: 88, active: false, rights: VENUE_SOURCE_RIGHTS },
   { id: "eventbrite", label: "Eventbrite", tier: "aggregator", trustScore: 72, active: true, rights: AGGREGATOR_SOURCE_RIGHTS },
-  { id: "ticketmaster", label: "Ticketmaster", tier: "aggregator", trustScore: 70, active: true, rights: AGGREGATOR_SOURCE_RIGHTS },
+  { id: "ticketmaster", label: "Ticketmaster", tier: "aggregator", trustScore: 70, active: true, rights: TICKETMASTER_SOURCE_RIGHTS },
   { id: "axs", label: "AXS", tier: "aggregator", trustScore: 68, active: false, rights: AGGREGATOR_SOURCE_RIGHTS },
   { id: "fever", label: "Fever", tier: "aggregator", trustScore: 65, active: false, rights: AGGREGATOR_SOURCE_RIGHTS },
   { id: "serp_google_events", label: "Google Events (via SerpAPI)", tier: "aggregator", trustScore: 62, active: true, rights: AGGREGATOR_SOURCE_RIGHTS },

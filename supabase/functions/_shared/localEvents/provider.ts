@@ -82,6 +82,8 @@ export type LocalEvent = {
   imageRights?: import("./sourceRights.ts").EventImageRights;
   /** Bandit's one-line invitation — why leave the house. */
   banditNote?: string | null;
+  /** Newspaper-quality headline — distinct from the listing title. */
+  editorialHeadline?: string | null;
   /** Verified editorial article paragraphs — composed at edition build. */
   editorialBody?: string[] | null;
   /** Keyword-inferred genre — never invented, just a plain-language guess from the title. */
@@ -1149,6 +1151,9 @@ export function buildLocalEventsBody(
         imageSource: enriched.imageUrl ? enriched.imageSource ?? "provider_thumbnail" : null,
         ...(enriched.imageRights ? { imageRights: enriched.imageRights } : {}),
         banditNote: enriched.banditNote?.trim() || null,
+        ...(enriched.editorialHeadline?.trim()
+          ? { editorialHeadline: enriched.editorialHeadline.trim() }
+          : {}),
         ...(enriched.editorialBody?.length
           ? { editorialBody: enriched.editorialBody }
           : {}),

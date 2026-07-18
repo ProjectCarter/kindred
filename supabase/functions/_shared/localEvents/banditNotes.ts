@@ -8,9 +8,13 @@ import type { LocalEvent } from "./provider.ts";
 import {
   EVENT_EDITORIAL_SYSTEM_PROMPT,
   buildVerifiedEventBrief,
+  diagnoseGeneratedEventEditorial,
   parseGeneratedEventEditorial,
   sanitizeEventEditorialParagraphs,
   validateBanditNote,
+  validateEditorialHeadline,
+  resolveEditorialHeadline,
+  type GeneratedEventEditorial,
 } from "./eventEditorial.ts";
 import { buildEditionVarietyPromptBlock, buildVarietySeed } from "../editorial/editionVariety.ts";
 import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "../editorial/publishing.ts";
@@ -22,14 +26,15 @@ import {
 
 function withRefreshedBadges(
   event: LocalEvent,
-  banditNote: string | null,
-  editorialBody: string[] | null
+  copy: GeneratedEventEditorial
 ): LocalEvent {
   const base: LocalEvent = {
     ...event,
-    banditNote,
-    editorialBody,
+    editorialHeadline: copy.editorialHeadline,
+    banditNote: copy.banditNote,
+    editorialBody: copy.editorialBody,
   };
+  const banditNote = copy.banditNote;
   if (!banditNote || !event.badgeSignals) return base;
   const badgeSignals = {
     ...event.badgeSignals,
@@ -46,40 +51,56 @@ function withRefreshedBadges(
   };
 }
 
-function preserveExistingEditorial(event: LocalEvent): LocalEvent {
+function editorialCopyFromEvent(event: LocalEvent): GeneratedEventEditorial {
   const existingNote = validateBanditNote(event.banditNote);
   const existingBody = sanitizeEventEditorialParagraphs(
     (event.editorialBody ?? []).filter((p) => typeof p === "string" && p.trim())
   );
-  const editorialBody = existingBody.length ? existingBody : null;
+  const existingHeadline = resolveEditorialHeadline(
+    event.editorialHeadline ?? null,
+    event,
+    existingBody.length >= 3 ? existingBody : [],
+    existingNote
+  );
+  const editorialBody = existingBody.length >= 3 ? existingBody : null;
+  return {
+    editorialHeadline: existingHeadline,
+    banditNote: existingNote,
+    editorialBody,
+  };
+}
 
-  if (
-    !passesEventGoldenTest({
-      name: event.name,
-      venue: event.venue,
-      banditNote: existingNote,
-      editorialBody,
-    })
-  ) {
-    return withRefreshedBadges(event, null, null);
+function copyPassesPublishGate(
+  copy: GeneratedEventEditorial,
+  event: Pick<LocalEvent, "name" | "venue">
+): boolean {
+  if (!copy.editorialHeadline || !copy.banditNote || !copy.editorialBody?.length) {
+    return false;
   }
+  if (copy.editorialBody.length < 3) return false;
+  return passesEventGoldenTest({
+    name: event.name,
+    venue: event.venue,
+    banditNote: copy.banditNote,
+    editorialBody: copy.editorialBody,
+  });
+}
 
-  return withRefreshedBadges(event, existingNote, editorialBody);
+function preserveExistingEditorial(event: LocalEvent): LocalEvent {
+  const copy = editorialCopyFromEvent(event);
+  if (!copyPassesPublishGate(copy, event)) {
+    return withRefreshedBadges(event, {
+      editorialHeadline: null,
+      banditNote: null,
+      editorialBody: null,
+    });
+  }
+  return withRefreshedBadges(event, copy);
 }
 
 /** Whether an event already carries publishable editorial from catalog or a prior pass. */
 export function eventHasPublishableEditorial(event: LocalEvent): boolean {
-  const existingNote = validateBanditNote(event.banditNote);
-  const existingBody = sanitizeEventEditorialParagraphs(
-    (event.editorialBody ?? []).filter((p) => typeof p === "string" && p.trim())
-  );
-  const editorialBody = existingBody.length ? existingBody : null;
-  return passesEventGoldenTest({
-    name: event.name,
-    venue: event.venue,
-    banditNote: existingNote,
-    editorialBody,
-  });
+  return copyPassesPublishGate(editorialCopyFromEvent(event), event);
 }
 
 export type EnrichEventsEditorialOptions = {
@@ -87,6 +108,75 @@ export type EnrichEventsEditorialOptions = {
   /** Cap Claude batch size — defaults to edition See All max. */
   maxGenerate?: number;
 };
+
+async function generateSingleEventEditorial(
+  event: LocalEvent,
+  options: { editionDate?: string | null; apiKey: string; retryHint?: string }
+): Promise<GeneratedEventEditorial> {
+  const varietySeed = buildVarietySeed(options.editionDate, event.name);
+  const verified = buildVerifiedEventBrief(event, 0);
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": options.apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1200,
+      system: EVENT_EDITORIAL_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content:
+            "Write one original newspaper headline, Bandit note, and editorial article body " +
+            "for this verified event. Summarize the experience, not the listing. " +
+            "Apply the golden test before you finalize.\n\n" +
+            (options.retryHint ? `${options.retryHint}\n\n` : "") +
+            `${verified}\n\n${buildEditionVarietyPromptBlock(varietySeed)}`,
+        },
+      ],
+    }),
+  });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "");
+      console.error("[localEvents] editorial copy HTTP", response.status, errBody.slice(0, 240));
+      if (/credit balance is too low/i.test(errBody)) {
+        console.error("[localEvents] editorial copy blocked — Anthropic credits exhausted");
+      }
+      return { editorialHeadline: null, banditNote: null, editorialBody: null };
+    }
+
+  const data = await response.json();
+  const text =
+    typeof data?.content?.[0]?.text === "string" ? data.content[0].text : "";
+  const parsed = parseNotesJson(text, event);
+  if (!copyPassesPublishGate(parsed, event)) {
+    const trimmed = text.trim();
+    const candidates = [trimmed];
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) candidates.push(fenced[1].trim());
+    for (const candidate of candidates) {
+      try {
+        const row = JSON.parse(candidate) as { events?: unknown[] };
+        if (!Array.isArray(row.events) || !row.events.length) continue;
+        const diagnosis = diagnoseGeneratedEventEditorial(row.events[0], event);
+        if (diagnosis.reason) {
+          console.warn("[localEvents] editorial parse rejected", {
+            name: event.name.slice(0, 60),
+            reason: diagnosis.reason,
+          });
+        }
+        break;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return parsed;
+}
 
 export async function enrichEventsWithBanditNotes(
   events: LocalEvent[],
@@ -122,65 +212,48 @@ export async function enrichEventsWithBanditNotes(
     surfaced: events.length,
     pending: pending.length,
     generating: batch.length,
+    mode: "sequential",
   });
 
+  const merged = [...preserved];
+  let accepted = 0;
+  let rejected = 0;
+
   try {
-    const brief = batch
-      .map(({ event }, batchIndex) => {
-        const verified = buildVerifiedEventBrief(event, batchIndex);
-        const varietySeed = buildVarietySeed(options?.editionDate, event.name);
-        return `${verified}\n\n${buildEditionVarietyPromptBlock(varietySeed)}`;
-      })
-      .join("\n\n");
+    for (const { index, event } of batch) {
+      let copy: GeneratedEventEditorial | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const generated = await generateSingleEventEditorial(event, {
+          editionDate: options?.editionDate,
+          apiKey,
+          retryHint:
+            attempt === 1
+              ? "Previous draft failed editorial validation — write a fresh headline, " +
+                "Bandit note, and 3–4 distinct paragraphs with a specific closing thought."
+              : undefined,
+        });
+        if (copyPassesPublishGate(generated, event)) {
+          copy = generated;
+          break;
+        }
+      }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: Math.min(4000, 180 * batch.length + 400),
-        system: EVENT_EDITORIAL_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content:
-              "Write original Bandit notes and editorial article bodies for these verified events. " +
-              "Use each event's Story type and Writing guidance — summarize the experience, not the listing. " +
-              "Apply the golden test before you finalize each event.\n\n" +
-              brief,
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("[localEvents] editorial copy HTTP", response.status);
-      return preserved;
-    }
-
-    const data = await response.json();
-    const text =
-      typeof data?.content?.[0]?.text === "string" ? data.content[0].text : "";
-    const generated = parseNotesJson(text, batch.map((row) => row.event));
-
-    const merged = [...preserved];
-    for (let i = 0; i < batch.length; i++) {
-      const { index, event } = batch[i]!;
-      const copy = generated[i] ?? {
-        banditNote: null,
-        editorialBody: null,
-      };
-      if (!copy.banditNote && !copy.editorialBody) {
-        console.warn("[localEvents] editorial copy rejected or missing", {
+      if (copy) {
+        accepted += 1;
+        merged[index] = withRefreshedBadges(event, copy);
+      } else {
+        rejected += 1;
+        console.warn("[localEvents] editorial copy rejected after retries", {
           name: event.name.slice(0, 60),
         });
       }
-      merged[index] = withRefreshedBadges(event, copy.banditNote, copy.editorialBody);
     }
+
+    console.log("[localEvents] editorial copy result", {
+      generating: batch.length,
+      accepted,
+      rejected,
+    });
 
     return merged;
   } catch (err) {
@@ -191,10 +264,7 @@ export async function enrichEventsWithBanditNotes(
   }
 }
 
-function parseNotesJson(
-  text: string,
-  events: LocalEvent[]
-): Array<{ banditNote: string | null; editorialBody: string[] | null }> {
+function parseNotesJson(text: string, event: LocalEvent): GeneratedEventEditorial {
   const trimmed = text.trim();
   const candidates = [trimmed];
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -202,18 +272,24 @@ function parseNotesJson(
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate) as { events?: unknown[] };
-      if (!Array.isArray(parsed.events)) continue;
-      return events.map((event, index) =>
-        parseGeneratedEventEditorial(parsed.events?.[index], event)
-      );
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      if (Array.isArray(parsed.events) && parsed.events.length) {
+        return parseGeneratedEventEditorial(parsed.events[0], event);
+      }
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        ("banditNote" in parsed ||
+          "editorialBody" in parsed ||
+          "editorialHeadline" in parsed ||
+          "editorial_body" in parsed)
+      ) {
+        return parseGeneratedEventEditorial(parsed, event);
+      }
     } catch {
       continue;
     }
   }
 
-  return events.map(() => ({
-    banditNote: null,
-    editorialBody: null,
-  }));
+  return { editorialHeadline: null, banditNote: null, editorialBody: null };
 }

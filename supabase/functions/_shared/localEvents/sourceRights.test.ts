@@ -48,6 +48,21 @@ Deno.test("applyEventImageRights strips Eventbrite listing photos", () => {
   assertEquals(rights.imageRights?.sourceId, "eventbrite");
 });
 
+Deno.test("applyEventImageRights keeps Ticketmaster listing photos", () => {
+  const granted = applyEventImageRights(
+    event({
+      name: "Seattle Mariners vs. Houston Astros",
+      sourceId: "ticketmaster",
+      sourceName: "Ticketmaster",
+      sourceTier: "aggregator",
+      imageUrl: "https://s1.ticketm.net/dam/a/photo.jpg",
+    })
+  );
+  assertEquals(granted.imageUrl, "https://s1.ticketm.net/dam/a/photo.jpg");
+  assertEquals(granted.imageRights?.authorized, true);
+  assertEquals(granted.imageRights?.policy, "api_granted");
+});
+
 Deno.test("applyEventImageRights keeps photos when api_granted", () => {
   const granted = applyEventImageRights(
     event({

@@ -83,9 +83,31 @@ function sampleDiscovery(
   };
 }
 
+const sampleLocalEventsBody = JSON.stringify({
+  events: [
+    {
+      name: "Summer Concert in the Park",
+      venue: "Freestone Park",
+      city: "Gilbert",
+      date: "Sat, Jul 18",
+      time: "7 PM",
+      sourceUrl: "https://example.com/event",
+      sourceName: "Eventbrite",
+      editorialHeadline: "Freestone Park Welcomes Summer Under the Stars",
+      banditNote:
+        "Freestone Park hosts an open-air concert with room to spread out on the lawn.",
+      editorialBody: [
+        "Freestone Park fills with picnic blankets and low conversation before the band takes the stage.",
+        "The summer concert series keeps the focus on acoustic sets and easy family pacing — tickets and gates are on the listing below.",
+        "Next time you drive past Freestone Park, remember the amphitheater was built for evenings exactly like this one.",
+      ],
+    },
+  ],
+});
+
 const baseSections = [
   { section_type: "weather", headline: "Weather", body: "Sunny" },
-  { section_type: "local_events", headline: "Events", body: "[]" },
+  { section_type: "local_events", headline: "Events", body: sampleLocalEventsBody },
   { section_type: "today_in_history", headline: "History", body: "On this day" },
 ];
 
@@ -170,13 +192,12 @@ Deno.test("assessPersistedEditionBuild requires morning hero when library has ar
     hasBanditsPick: true,
     libraryHasHeroArtwork: true,
     hasMorningHero: false,
+    morningEdition: null,
   });
 
   assertEquals(missingHero.complete, false);
   assertEquals(
-    missingHero.reasons.includes(
-      "morning_hero missing while hero library has eligible artwork"
-    ),
+    missingHero.reasons.includes("today's masterpiece missing or incomplete"),
     true
   );
 });
