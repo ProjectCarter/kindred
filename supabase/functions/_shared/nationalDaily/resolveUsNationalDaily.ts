@@ -266,6 +266,50 @@ export async function probeUsNationalDailyCache(
   );
 }
 
+/** Attach cached national daily only — city workers must never generate national desks. */
+export async function loadUsNationalDailyForCityAttach(
+  admin: SupabaseClient,
+  editionDate: string,
+  editionTraceId?: string | null
+): Promise<UsNationalDailyEditorial | null> {
+  const row = await fetchNationalDailyRow(admin, editionDate);
+  const masterpiece = parseMasterpiecePayload(row?.today_masterpiece);
+  const history = parseHistoryPayload(row?.today_in_history);
+  const nationalNews = parseNationalNewsPayload(row?.national_news);
+
+  if (!row?.id || !masterpiece || !history || !nationalNews) {
+    console.warn("[usNationalDaily] city attach cache miss — refusing generation", {
+      traceId: editionTraceId ?? null,
+      editionDate,
+      hasRow: Boolean(row?.id),
+      hasMasterpiece: Boolean(masterpiece),
+      hasHistory: Boolean(history),
+      hasNationalNews: Boolean(nationalNews),
+    });
+    return null;
+  }
+
+  logNationalDaily("national_daily_cache_hit", {
+    traceId: editionTraceId ?? null,
+    editionDate,
+    elapsedMs: 0,
+    nationalDailyId: row.id,
+    masterpieceArtworkId: masterpiece.artworkId,
+    historyEventKey: row.history_event_key,
+  });
+
+  return {
+    id: row.id,
+    editionDate,
+    countryCode: US_NATIONAL_COUNTRY_CODE,
+    todayMasterpiece: masterpiece,
+    todayInHistory: history,
+    nationalNews,
+    diagnostic: "national_daily_cache_hit",
+    nationalNewsDiagnostic: "national_news_cache_hit",
+  };
+}
+
 export async function resolveUsNationalDailyEditorial(
   admin: SupabaseClient,
   input: ResolveUsNationalDailyInput

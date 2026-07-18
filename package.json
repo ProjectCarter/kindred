@@ -8,7 +8,7 @@
     "ios": "expo start --ios",
     "typecheck": "tsc --noEmit",
     "test:markets": "node --test lib/markets/*.test.ts",
-    "test:generation": "node --test lib/edition/generationJobs.test.ts",
+    "test:generation": "node --test lib/edition/generationJobs.test.ts lib/edition/editionBuildStages.test.ts",
     "test:nationwide-audit": "node --test lib/edition/nationwideAudit.test.ts lib/edition/nationalNews.test.ts lib/edition/usNationalDaily.test.ts",
     "audit:nationwide": "npx --yes tsx scripts/nationwide-editorial-audit.ts",
     "check:mirror-sync": "node scripts/check-mirror-sync.mjs",

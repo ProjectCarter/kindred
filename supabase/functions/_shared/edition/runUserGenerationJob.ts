@@ -1,17 +1,16 @@
 /**
  * Run a single user's edition generation job (shared by cron worker + on-demand worker).
+ * Each invocation processes one staged build step, then chains the next via worker trigger.
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import {
-  buildEditionForUser,
-  resolveEditionLocation,
-  type BuildEditionOptions,
-} from "../buildEdition.ts";
+import { resolveEditionLocation } from "../buildEdition.ts";
 import type { TemperatureUnitPreference } from "../weather/units.ts";
 import { logEditionBuildOutcome } from "./editionBuildOutcome.ts";
+import { runStagedEditionBuild } from "./runStagedEditionBuild.ts";
 
 const MAX_ATTEMPTS = 3;
+const STALE_PROCESSING_MINUTES = 10;
 
 export type RunUserGenerationJobInput = {
   userId: string;
@@ -79,6 +78,17 @@ async function finalizeJobByIdentity(
     .eq("metro_key", input.metroKey);
 }
 
+async function reapStaleJobs(admin: SupabaseClient): Promise<number> {
+  const { data, error } = await admin.rpc("reap_stale_generation_jobs", {
+    p_stale_after_minutes: STALE_PROCESSING_MINUTES,
+  });
+  if (error) {
+    console.warn("[runUserGenerationJob] stale reap failed", error.message);
+    return 0;
+  }
+  return typeof data === "number" ? data : 0;
+}
+
 /** Build + finalize when the job row is already claimed (cron batch worker). */
 export async function executeClaimedGenerationJob(
   admin: SupabaseClient,
@@ -116,27 +126,23 @@ export async function executeClaimedGenerationJob(
     };
   }
 
-  const buildOptions: BuildEditionOptions = {
-    editionDate: input.editionDate,
-    temperatureUnitPreference: input.temperatureUnitPreference ?? "auto",
-    editionTraceId: input.editionTraceId ?? undefined,
-  };
-
   const startedAt = performance.now();
-  let result: Awaited<ReturnType<typeof buildEditionForUser>>;
-  try {
-    result = await buildEditionForUser(
-      admin,
-      input.userId,
-      location,
-      buildOptions
-    );
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
-    await finalizeJob(admin, input.jobId, {
-      status: "failed",
-      last_error: error,
-    });
+  const result = await runStagedEditionBuild(admin, input);
+
+  const { data: jobRow } = await admin
+    .from("generation_jobs")
+    .select("status, last_error, build_stage, completed_stages")
+    .eq("id", input.jobId)
+    .maybeSingle();
+
+  if (!result.ok) {
+    const error = result.error;
+    if (jobRow?.status !== "failed") {
+      await finalizeJob(admin, input.jobId, {
+        status: "failed",
+        last_error: error,
+      });
+    }
     logEditionBuildOutcome({
       kind: "edition_build_outcome",
       at: new Date().toISOString(),
@@ -151,35 +157,16 @@ export async function executeClaimedGenerationJob(
     return { ok: false, error };
   }
 
-  if (!result.ok) {
-    await finalizeJob(admin, input.jobId, {
-      status: "failed",
-      last_error: result.error,
-    });
-    logEditionBuildOutcome({
-      kind: "edition_build_outcome",
-      at: new Date().toISOString(),
-      userId: input.userId,
-      jobId: input.jobId,
-      metroKey: input.metroKey,
-      traceId: input.editionTraceId ?? null,
-      status: "failed",
-      durationMs: Math.round(performance.now() - startedAt),
-      error: result.error,
-    });
-    return { ok: false, error: result.error };
-  }
-
   const { data: persistedEdition, error: editionReadError } = await admin
     .from("editions")
-    .select("metro_key")
+    .select("metro_key, status")
     .eq("id", result.editionId)
     .maybeSingle();
 
   if (editionReadError || !persistedEdition?.metro_key) {
     const error =
       editionReadError?.message ??
-      "Edition row missing after successful build";
+      "Edition row missing after staged build step";
     await finalizeJob(admin, input.jobId, {
       status: "failed",
       last_error: error,
@@ -215,24 +202,33 @@ export async function executeClaimedGenerationJob(
     return { ok: false, error };
   }
 
-  await finalizeJob(admin, input.jobId, { status: "ready", last_error: null });
+  const jobReady = jobRow?.status === "ready";
+  const editionReady = persistedEdition.status === "ready";
 
-  logEditionBuildOutcome({
-    kind: "edition_build_outcome",
-    at: new Date().toISOString(),
-    editionId: result.editionId,
-    userId: input.userId,
-    jobId: input.jobId,
-    metroKey: result.metroKey,
-    traceId: input.editionTraceId ?? null,
-    status: "ready",
-    durationMs: Math.round(performance.now() - startedAt),
-  });
+  if (jobReady && editionReady) {
+    logEditionBuildOutcome({
+      kind: "edition_build_outcome",
+      at: new Date().toISOString(),
+      editionId: result.editionId,
+      userId: input.userId,
+      jobId: input.jobId,
+      metroKey: input.metroKey,
+      traceId: input.editionTraceId ?? null,
+      status: "ready",
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+    return {
+      ok: true,
+      editionId: result.editionId,
+      metroKey: input.metroKey,
+    };
+  }
 
   return {
     ok: true,
     editionId: result.editionId,
-    metroKey: result.metroKey,
+    metroKey: input.metroKey,
+    skipped: "stage_complete",
   };
 }
 
@@ -256,20 +252,31 @@ export async function runUserGenerationJob(
     };
   }
 
+  await reapStaleJobs(admin);
+
   const { data: existingJob } = await admin
     .from("generation_jobs")
-    .select("id, status, attempts")
+    .select("id, status, attempts, stage_started_at, build_stage, completed_stages")
     .eq("user_id", input.userId)
     .eq("edition_date", input.editionDate)
     .eq("metro_key", input.metroKey)
     .maybeSingle();
 
   if (existingJob?.status === "processing") {
-    return {
-      ok: false,
-      error: "Job already processing",
-      skipped: "already_processing",
-    };
+    const startedMs = existingJob.stage_started_at
+      ? new Date(existingJob.stage_started_at).getTime()
+      : 0;
+    const isStale =
+      !startedMs ||
+      Date.now() - startedMs > STALE_PROCESSING_MINUTES * 60_000;
+    if (!isStale) {
+      return {
+        ok: false,
+        error: "Job already processing",
+        skipped: "already_processing",
+      };
+    }
+    await reapStaleJobs(admin);
   }
 
   const { data: claimedRaw, error: claimError } = await admin.rpc(
@@ -291,6 +298,13 @@ export async function runUserGenerationJob(
   if (!claimed?.id) {
     if (existingJob?.status === "failed" && (existingJob.attempts ?? 0) >= MAX_ATTEMPTS) {
       return { ok: false, error: "Generation attempts exhausted", skipped: "max_attempts" };
+    }
+    if (existingJob?.status === "processing") {
+      return {
+        ok: false,
+        error: "Job already processing",
+        skipped: "already_processing",
+      };
     }
     return { ok: false, error: "Job not claimable", skipped: "not_claimable" };
   }
