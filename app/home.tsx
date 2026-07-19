@@ -153,7 +153,8 @@ import {
   HOME_SCROLL_AT_TOP_PX,
   logHomeScrollDebug,
   scrollDebugSnapshot,
-  type HomeScrollRestorePhase,
+  type ArticleReturnRestorePhase,
+  type HomeScrollSessionPhase,
 } from "../lib/dev/homeScrollDebug";
 import {
   displayCityForEdition,
@@ -292,12 +293,6 @@ export default function HomeScreen() {
   } | null>(null);
   const [localEventsStatus, setLocalEventsStatus] =
     useState<LocalEventsLoadStatus>("loading");
-  const [devSectionsLoadPath, setDevSectionsLoadPath] = useState<string>(
-    "initial"
-  );
-  const [devCacheMatchedNetwork, setDevCacheMatchedNetwork] = useState<
-    boolean | null
-  >(null);
   const { pending: firstRunPending, dismiss: dismissFirstRun } =
     useLocationFirstRun();
   const loadGen = useRef(0);
@@ -331,15 +326,22 @@ export default function HomeScreen() {
   const restoredScrollRef = useRef(false);
   const skipScrollRestoreRef = useRef(false);
   const resetScrollOnLoadRef = useRef(false);
-  /** Automatic restore allowed only during initial launch or one navigation return. */
-  const scrollRestorePhaseRef = useRef<HomeScrollRestorePhase>("initial");
+  /** Initial launch restore — independent of article return. */
+  const scrollSessionPhaseRef = useRef<HomeScrollSessionPhase>("initial");
+  /** One-shot article-return restore lifecycle. */
+  const articleReturnPhaseRef = useRef<ArticleReturnRestorePhase>("idle");
+  const articleReturnTargetYRef = useRef(0);
+  const articleReturnGenerationRef = useRef(0);
   /** Set on focus cleanup — gates navigation-return restore. */
   const homeScreenBlurredRef = useRef(false);
   const homeScrollDraggingRef = useRef(false);
   const programmaticScrollRef = useRef(false);
   const homeFocusTransitionCountRef = useRef(0);
   const initialRestoreEditionRef = useRef<string | null>(null);
-  const restoreHomeScrollIfNeededRef = useRef<
+  const restoreInitialScrollIfNeededRef = useRef<
+    (contentHeight?: number) => void
+  >(() => {});
+  const restoreArticleReturnScrollIfNeededRef = useRef<
     (contentHeight?: number) => void
   >(() => {});
   const editionIdRef = useRef<string | null>(null);
@@ -422,7 +424,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!editionId || sections.length === 0) return;
     if (initialRestoreEditionRef.current === editionId) return;
-    if (scrollRestorePhaseRef.current !== "initial") return;
+    if (scrollSessionPhaseRef.current !== "initial") return;
 
     initialRestoreEditionRef.current = editionId;
     let cancelled = false;
@@ -435,7 +437,7 @@ export default function HomeScreen() {
       const saved = await loadHomeScroll(key);
       if (
         cancelled ||
-        scrollRestorePhaseRef.current !== "initial" ||
+        scrollSessionPhaseRef.current !== "initial" ||
         restoredScrollRef.current
       ) {
         return;
@@ -450,13 +452,13 @@ export default function HomeScreen() {
 
       if (saved <= 0) {
         restoredScrollRef.current = true;
-        scrollRestorePhaseRef.current = "done";
+        scrollSessionPhaseRef.current = "complete";
         return;
       }
 
       pendingScrollRestoreY.current = saved;
       restoredScrollRef.current = false;
-      restoreHomeScrollIfNeededRef.current(undefined);
+      restoreInitialScrollIfNeededRef.current(undefined);
     })();
 
     return () => {
@@ -476,21 +478,72 @@ export default function HomeScreen() {
       currentY: homeScrollYRef.current,
       pendingRestoreY: pendingScrollRestoreY.current,
       restored: restoredScrollRef.current,
-      phase: scrollRestorePhaseRef.current,
-      userLocked: scrollRestorePhaseRef.current === "locked",
+      sessionPhase: scrollSessionPhaseRef.current,
+      articleReturnPhase: articleReturnPhaseRef.current,
+      userLocked: scrollSessionPhaseRef.current === "user_control",
       dragging: homeScrollDraggingRef.current,
       focusTransitions: homeFocusTransitionCountRef.current,
       editionId: editionIdRef.current,
+      articleReturnTargetY: articleReturnTargetYRef.current,
+      returnGeneration: articleReturnGenerationRef.current,
       ...extra,
     });
   }
 
-  function lockScrollRestore(reason: string): void {
-    if (scrollRestorePhaseRef.current === "locked") return;
-    scrollRestorePhaseRef.current = "locked";
+  function logArticleReturnPhaseChange(
+    next: ArticleReturnRestorePhase,
+    reason: string
+  ): void {
+    const prev = articleReturnPhaseRef.current;
+    if (prev === next) return;
+    articleReturnPhaseRef.current = next;
+    logHomeScrollDebug("article_return_phase", {
+      ...scrollRestoreSnapshot(reason),
+      previousPhase: prev,
+      nextPhase: next,
+    });
+  }
+
+  function clearArticleReturnRestoreTarget(reason: string): void {
+    if (
+      pendingScrollRestoreY.current !== 0 ||
+      articleReturnTargetYRef.current !== 0
+    ) {
+      logHomeScrollDebug("pending_target_cleared", scrollRestoreSnapshot(reason));
+    }
     pendingScrollRestoreY.current = 0;
+    articleReturnTargetYRef.current = 0;
+  }
+
+  function completeArticleReturnRestore(reason: string): void {
+    clearArticleReturnRestoreTarget(reason);
+    logArticleReturnPhaseChange("complete", reason);
+    homeScreenBlurredRef.current = false;
     restoredScrollRef.current = true;
-    logHomeScrollDebug("restore_locked", scrollRestoreSnapshot(reason));
+  }
+
+  function lockScrollRestore(reason: string): void {
+    const returnAlreadyComplete = articleReturnPhaseRef.current === "complete";
+    const sessionAlreadyLocked = scrollSessionPhaseRef.current === "user_control";
+    if (returnAlreadyComplete && sessionAlreadyLocked) {
+      return;
+    }
+
+    articleReturnGenerationRef.current += 1;
+    if (scrollSessionPhaseRef.current !== "user_control") {
+      scrollSessionPhaseRef.current = "user_control";
+    }
+    if (articleReturnPhaseRef.current !== "complete") {
+      completeArticleReturnRestore(`user_interaction_lock:${reason}`);
+      logHomeScrollDebug(
+        "user_interaction_lock",
+        scrollRestoreSnapshot(reason)
+      );
+      return;
+    }
+    clearArticleReturnRestoreTarget(reason);
+    restoredScrollRef.current = true;
+    logHomeScrollDebug("user_interaction_lock", scrollRestoreSnapshot(reason));
   }
 
   function programmaticScrollTo(
@@ -517,9 +570,11 @@ export default function HomeScreen() {
     const key = currentHomeScrollKey();
     if (key) clearHomeScroll(key);
     skipScrollRestoreRef.current = true;
-    pendingScrollRestoreY.current = 0;
+    articleReturnGenerationRef.current += 1;
+    clearArticleReturnRestoreTarget("markHomeScrollForReset");
     restoredScrollRef.current = true;
-    scrollRestorePhaseRef.current = "done";
+    scrollSessionPhaseRef.current = "complete";
+    logArticleReturnPhaseChange("complete", "markHomeScrollForReset");
     initialRestoreEditionRef.current = null;
     homeScrollYRef.current = 0;
     mastheadScrollY.setValue(0);
@@ -565,15 +620,14 @@ export default function HomeScreen() {
   }
 
   /**
-   * One-shot restore for initial launch or navigation return only.
-   * Never re-entrant — content-size growth must not re-arm scroll commands.
+   * One-shot initial launch restore only.
    */
-  const restoreHomeScrollIfNeeded = useCallback((contentHeight?: number) => {
-    const phase = scrollRestorePhaseRef.current;
-    if (phase !== "initial" && phase !== "return") return;
+  const restoreInitialScrollIfNeeded = useCallback((contentHeight?: number) => {
+    if (scrollSessionPhaseRef.current !== "initial") return;
     if (restoredScrollRef.current) return;
     if (homeScrollDraggingRef.current) return;
     if (skipScrollRestoreRef.current) return;
+    if (articleReturnPhaseRef.current !== "idle") return;
 
     const target = pendingScrollRestoreY.current;
     if (target <= 0) return;
@@ -584,36 +638,123 @@ export default function HomeScreen() {
         : target;
     if (y <= 0) {
       restoredScrollRef.current = true;
-      scrollRestorePhaseRef.current = "done";
+      scrollSessionPhaseRef.current = "complete";
       pendingScrollRestoreY.current = 0;
       return;
     }
 
     pendingScrollRestoreY.current = 0;
     restoredScrollRef.current = true;
-    scrollRestorePhaseRef.current = "done";
+    scrollSessionPhaseRef.current = "complete";
 
-    programmaticScrollTo(y, "restoreHomeScrollIfNeeded", {
+    logHomeScrollDebug(
+      "initial_restore",
+      scrollRestoreSnapshot("restoreInitialScrollIfNeeded", {
+        targetY: target,
+        contentHeight: contentHeight ?? null,
+      })
+    );
+    programmaticScrollTo(y, "restoreInitialScrollIfNeeded", {
       targetY: target,
       contentHeight: contentHeight ?? null,
     });
   }, [mastheadScrollY]);
 
-  restoreHomeScrollIfNeededRef.current = restoreHomeScrollIfNeeded;
+  restoreInitialScrollIfNeededRef.current = restoreInitialScrollIfNeeded;
+
+  /**
+   * One-shot article-return restore — at most one programmatic scrollTo.
+   */
+  const restoreArticleReturnScrollIfNeeded = useCallback(
+    (contentHeight?: number) => {
+      const returnPhase = articleReturnPhaseRef.current;
+      if (returnPhase === "complete") {
+        logHomeScrollDebug(
+          "restore_blocked_after_complete",
+          scrollRestoreSnapshot("restoreArticleReturnScrollIfNeeded", {
+            contentHeight: contentHeight ?? null,
+          })
+        );
+        return;
+      }
+      if (returnPhase === "idle") return;
+      if (returnPhase !== "waiting_for_return_layout") return;
+      if (homeScrollDraggingRef.current) return;
+      if (skipScrollRestoreRef.current) return;
+      if (scrollSessionPhaseRef.current === "user_control") return;
+
+      const target = articleReturnTargetYRef.current;
+      if (target <= 0) {
+        completeArticleReturnRestore("no_article_return_target");
+        return;
+      }
+
+      const y =
+        contentHeight != null
+          ? Math.max(0, Math.min(target, contentHeight - 1))
+          : target;
+      if (y <= 0) {
+        completeArticleReturnRestore("article_return_target_clamped_to_zero");
+        return;
+      }
+
+      logArticleReturnPhaseChange(
+        "restoring_return_position",
+        "restoreArticleReturnScrollIfNeeded"
+      );
+      logHomeScrollDebug(
+        "article_return_restore",
+        scrollRestoreSnapshot("restoreArticleReturnScrollIfNeeded", {
+          targetY: target,
+          contentHeight: contentHeight ?? null,
+        })
+      );
+
+      programmaticScrollTo(y, "restoreArticleReturnScrollIfNeeded", {
+        targetY: target,
+        contentHeight: contentHeight ?? null,
+      });
+
+      completeArticleReturnRestore("article_return_restore_issued");
+    },
+    [mastheadScrollY]
+  );
+
+  restoreArticleReturnScrollIfNeededRef.current =
+    restoreArticleReturnScrollIfNeeded;
 
   const onHomeContentSizeChange = useCallback(
     (_w: number, h: number) => {
-      const phase = scrollRestorePhaseRef.current;
+      const returnPhase = articleReturnPhaseRef.current;
+      const sessionPhase = scrollSessionPhaseRef.current;
       logHomeScrollDebug(
         "content_size_change",
         scrollRestoreSnapshot("content_size_change", {
           contentHeight: h,
-          phase,
+          articleReturnPhase: returnPhase,
+          sessionPhase,
         })
       );
-      if (phase !== "initial" && phase !== "return") return;
-      if (restoredScrollRef.current) return;
-      restoreHomeScrollIfNeededRef.current(h);
+
+      if (returnPhase === "complete" || returnPhase === "idle") {
+        if (
+          returnPhase === "complete" &&
+          (articleReturnTargetYRef.current > 0 || pendingScrollRestoreY.current > 0)
+        ) {
+          logHomeScrollDebug(
+            "restore_blocked_after_complete",
+            scrollRestoreSnapshot("content_size_change_blocked", {
+              contentHeight: h,
+            })
+          );
+        }
+      } else if (returnPhase === "waiting_for_return_layout") {
+        restoreArticleReturnScrollIfNeededRef.current(h);
+      }
+
+      if (sessionPhase === "initial" && !restoredScrollRef.current) {
+        restoreInitialScrollIfNeededRef.current(h);
+      }
     },
     []
   );
@@ -891,10 +1032,6 @@ export default function HomeScreen() {
       intelligence: merged.intelligence,
       cachedBundle: merged,
     });
-    if (__DEV__) {
-      setDevSectionsLoadPath("cache:hydrate");
-      setDevCacheMatchedNetwork(null);
-    }
     freezeEdition({
       editionId: merged.editionId,
       editionDate: merged.editionDate,
@@ -2302,19 +2439,6 @@ export default function HomeScreen() {
     });
 
     if (__DEV__) {
-      setDevSectionsLoadPath(
-        patchEventsOnly
-          ? "patchEventsOnly"
-          : syncAfterCache
-            ? cacheMatchesNetwork
-              ? "syncAfterCache:cache"
-              : "syncAfterCache:merged"
-            : "full:network"
-      );
-      setDevCacheMatchedNetwork(syncAfterCache ? cacheMatchesNetwork : null);
-    }
-
-    if (__DEV__) {
       logLocalEventsPipeline(
         "loadEdition sections applied",
         pipelineCountsFromSections(nextSections),
@@ -2745,6 +2869,7 @@ export default function HomeScreen() {
       );
 
       let cancelled = false;
+      const focusGeneration = articleReturnGenerationRef.current;
 
       void (async () => {
         if (skipScrollRestoreRef.current) {
@@ -2752,10 +2877,22 @@ export default function HomeScreen() {
           return;
         }
         if (!homeScreenBlurredRef.current) return;
-        homeScreenBlurredRef.current = false;
+
+        logHomeScrollDebug(
+          "focus_return_after_blur",
+          scrollRestoreSnapshot("focus_return_after_blur")
+        );
+
+        logArticleReturnPhaseChange(
+          "waiting_for_return_layout",
+          "navigation_return_focus"
+        );
 
         const id = editionIdRef.current;
-        if (!id) return;
+        if (!id) {
+          completeArticleReturnRestore("navigation_return_no_edition");
+          return;
+        }
 
         const focusEditionId = id;
         const focusLocationKey = activeLocationKey(activeLocationRef.current);
@@ -2763,15 +2900,21 @@ export default function HomeScreen() {
         const saved = await loadHomeScroll(key);
         if (
           cancelled ||
+          focusGeneration !== articleReturnGenerationRef.current ||
+          articleReturnPhaseRef.current !== "waiting_for_return_layout"
+        ) {
+          return;
+        }
+        if (
           saved <= 0 ||
           editionIdRef.current !== focusEditionId ||
           activeLocationKey(activeLocationRef.current) !== focusLocationKey
         ) {
+          completeArticleReturnRestore("navigation_return_no_saved_scroll");
           return;
         }
 
-        scrollRestorePhaseRef.current = "return";
-        restoredScrollRef.current = false;
+        articleReturnTargetYRef.current = saved;
         pendingScrollRestoreY.current = saved;
 
         logHomeScrollDebug(
@@ -2779,17 +2922,16 @@ export default function HomeScreen() {
           scrollRestoreSnapshot("navigation_return", { targetY: saved })
         );
 
-        restoreHomeScrollIfNeededRef.current(undefined);
+        restoreArticleReturnScrollIfNeededRef.current(undefined);
       })();
 
       return () => {
         cancelled = true;
+        articleReturnGenerationRef.current += 1;
         homeScreenBlurredRef.current = true;
+        logArticleReturnPhaseChange("idle", "focus_leave_blur");
         persistHomeScrollNow();
-        logHomeScrollDebug(
-          "focus_leave",
-          scrollRestoreSnapshot("focus_leave")
-        );
+        logHomeScrollDebug("focus_leave_blur", scrollRestoreSnapshot("focus_leave_blur"));
       };
     }, [])
   );
@@ -3557,6 +3699,9 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
         scrollEventThrottle={16}
+        onTouchStart={() => {
+          lockScrollRestore("touch_start");
+        }}
         onScrollBeginDrag={() => {
           homeScrollDraggingRef.current = true;
           lockScrollRestore("scroll_begin_drag");
@@ -3877,10 +4022,6 @@ export default function HomeScreen() {
               knowledge={intelligence?.knowledge}
               nationalDaily={nationalDaily}
               pairedNationalDaily={pairedNationalDaily}
-              devSectionsLoadPath={__DEV__ ? devSectionsLoadPath : undefined}
-              devCacheMatchedNetwork={
-                __DEV__ ? devCacheMatchedNetwork : undefined
-              }
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}

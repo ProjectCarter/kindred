@@ -2,6 +2,17 @@
 
 const TAG = "[home:scroll-debug]";
 
+/** Initial app launch restore — separate from article return. */
+export type HomeScrollSessionPhase = "initial" | "user_control" | "complete";
+
+/** One-shot article-return restore lifecycle. */
+export type ArticleReturnRestorePhase =
+  | "idle"
+  | "waiting_for_return_layout"
+  | "restoring_return_position"
+  | "complete";
+
+/** @deprecated Use HomeScrollSessionPhase + ArticleReturnRestorePhase */
 export type HomeScrollRestorePhase =
   | "initial"
   | "return"
@@ -29,12 +40,15 @@ export function scrollDebugSnapshot(input: {
   currentY: number;
   pendingRestoreY: number;
   restored: boolean;
-  phase: HomeScrollRestorePhase;
+  sessionPhase: HomeScrollSessionPhase;
+  articleReturnPhase: ArticleReturnRestorePhase;
   userLocked: boolean;
   dragging: boolean;
   focusTransitions: number;
   contentHeight?: number | null;
   editionId?: string | null;
+  articleReturnTargetY?: number;
+  returnGeneration?: number;
 }): Record<string, unknown> {
   return {
     reason: input.reason,
@@ -42,11 +56,14 @@ export function scrollDebugSnapshot(input: {
     currentY: input.currentY,
     pendingRestoreY: input.pendingRestoreY,
     restored: input.restored,
-    phase: input.phase,
+    sessionPhase: input.sessionPhase,
+    articleReturnPhase: input.articleReturnPhase,
     userLocked: input.userLocked,
     dragging: input.dragging,
     focusTransitions: input.focusTransitions,
     contentHeight: input.contentHeight ?? null,
     editionId: input.editionId ?? null,
+    articleReturnTargetY: input.articleReturnTargetY ?? null,
+    returnGeneration: input.returnGeneration ?? null,
   };
 }
