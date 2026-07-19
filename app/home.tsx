@@ -3684,6 +3684,7 @@ export default function HomeScreen() {
       />
       <KindredStickyMasthead
         scrollY={mastheadScrollY}
+        style={styles.pageBackground}
         subtitle={readerDisplayCity()}
         trailing={
           <MastheadLink
@@ -3695,6 +3696,7 @@ export default function HomeScreen() {
       />
       <Animated.ScrollView
         ref={scrollRef}
+        style={styles.pageBackground}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         decelerationRate="normal"
@@ -4052,7 +4054,10 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: paper.sky,
+    backgroundColor: paper.page,
+  },
+  pageBackground: {
+    backgroundColor: paper.page,
   },
   content: {
     paddingHorizontal: 28,

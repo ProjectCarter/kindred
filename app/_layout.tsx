@@ -237,7 +237,12 @@ export default function RootLayout() {
             freezeOnBlur: false,
             contentStyle: { backgroundColor: paper.sky },
           }}
-        />
+        >
+          <Stack.Screen
+            name="home"
+            options={{ contentStyle: { backgroundColor: paper.page } }}
+          />
+        </Stack>
       </AppErrorBoundary>
     </SafeAreaProvider>
   );

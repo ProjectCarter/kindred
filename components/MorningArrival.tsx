@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     backgroundColor: paper.creamDeep,
   },
   heroFallback: {
-    backgroundColor: paper.chrome,
+    backgroundColor: paper.creamDeep,
     alignItems: "center",
     justifyContent: "center",
   },
