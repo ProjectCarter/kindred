@@ -36,6 +36,7 @@ import {
   type MorningBriefing,
   type MorningEditionPayload,
 } from "./morningEdition";
+import { extractWeatherSummaryFromEditorialContext } from "../weather/parseWeatherSummary";
 import type { MorningHeroExperience } from "./heroArtwork/types";
 import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
@@ -78,6 +79,8 @@ export type EditionIntelligence = {
   banditsPick: BanditsPick | null;
   /** Frozen History Around Town directory — read-only at runtime. */
   historyAroundTown: HistoryAroundTownEditionPayload | null;
+  /** Deterministic forecast summary when stored on the edition row. */
+  weatherSummary: string | null;
 };
 
 export type ParseEditionIntelligenceOptions = {
@@ -93,6 +96,7 @@ export function parseEditionIntelligence(
     memory?: unknown;
     morning_edition?: unknown;
     history_around_town?: unknown;
+    editorial_context?: unknown;
     leadStory?: LeadStory | null;
   },
   options?: ParseEditionIntelligenceOptions
@@ -197,6 +201,9 @@ export function parseEditionIntelligence(
     leadContinuityKicker,
     banditsPick: banditsPick(bandit),
     historyAroundTown,
+    weatherSummary: extractWeatherSummaryFromEditorialContext(
+      row.editorial_context
+    ),
   };
 }
 

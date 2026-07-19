@@ -48,6 +48,7 @@ export function mergeHistoryAroundTownIntoIntelligence(
       leadContinuityKicker: null,
       banditsPick: null,
       historyAroundTown,
+      weatherSummary: null,
     };
   }
   if (intelligence.historyAroundTown?.places?.length) return intelligence;

@@ -31,6 +31,8 @@ import {
   KindredFullMasthead,
   mastheadCollapse,
 } from "./KindredMasthead";
+import { HomepageWeatherLines } from "./HomepageWeatherLines";
+import type { HomepageWeatherDisplay } from "../lib/weather/homepageWeatherDisplay";
 import { motion, paper, shadow } from "../lib/edition/newspaperTheme";
 
 /** Side inset used by home folio — arrival bleeds past it for a cover photo. */
@@ -43,6 +45,7 @@ type Props = {
   locationState?: string | null;
   weatherHeadline?: string | null;
   weatherBody?: string | null;
+  homepageWeather?: HomepageWeatherDisplay | null;
   /** Bandit’s morning line — shown under weather/greeting. */
   banditGreeting?: string | null;
   /** Optional AI greeting / welcome line. */
@@ -65,6 +68,7 @@ export function MorningArrival({
   locationCity,
   weatherHeadline,
   weatherBody,
+  homepageWeather,
   banditGreeting,
   welcomeMessage,
   morningHero,
@@ -86,7 +90,6 @@ export function MorningArrival({
   const placeLabel = formatPlace(locationCity);
   const weatherLine = usefulWeather(weatherHeadline, weatherBody);
   const salutation = morningSalutation();
-  const welcome = welcomeMessage?.trim() || null;
   const bandit = banditGreeting?.trim() || null;
 
   const fallbackScrollY = useRef(new Animated.Value(0)).current;
@@ -308,21 +311,15 @@ export function MorningArrival({
         )}
       </View>
 
-      {/* Immediately under hero: weather (editorial photo only), greeting, Bandit */}
+      {/* Greeting, weather, then Bandit — Local Events follows in the folio. */}
       <View style={styles.morningCopy}>
-        {!showArtworkHero && weatherLine ? (
-          <Text style={styles.weather} maxFontSizeMultiplier={1.2}>
-            {placeLabel ? `${placeLabel} · ${weatherLine}` : weatherLine}
-          </Text>
-        ) : !showArtworkHero && placeLabel ? (
-          <Text style={styles.weather} maxFontSizeMultiplier={1.2}>
-            {placeLabel}
-          </Text>
-        ) : null}
-
         <Text style={styles.greeting} maxFontSizeMultiplier={1.25}>
-          {welcome || salutation}
+          {salutation}
         </Text>
+
+        {homepageWeather ? (
+          <HomepageWeatherLines weather={homepageWeather} />
+        ) : null}
 
         {bandit ? (
           <Text style={styles.bandit} maxFontSizeMultiplier={1.2}>

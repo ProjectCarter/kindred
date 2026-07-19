@@ -99,6 +99,7 @@ import { FolioReveal } from "./FolioReveal";
 import { EditionClose } from "./EditionClose";
 import { traceEditionReaderRender } from "../lib/perf/coldLaunchTrace";
 import { BanditCharacter } from "./BanditCharacter";
+import { resolveHomepageWeatherDisplay } from "../lib/weather/homepageWeatherDisplay";
 
 type Props = {
   sections: EditionSection[];
@@ -168,6 +169,10 @@ type Props = {
   /** Frozen History Around Town — final homepage section. */
   historyAroundTown?: HistoryAroundTownEditionPayload | null;
   onSeeAllHistoryAroundTown?: () => void;
+  /** Deterministic forecast summary from edition editorial_context when present. */
+  weatherSummary?: string | null;
+  /** Morning edition weather beat — naturalized summary fallback. */
+  morningWeatherBeat?: string | null;
 };
 
 const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
@@ -269,6 +274,8 @@ function EditionReaderInner({
   localEventsStatus = "ready",
   historyAroundTown,
   onSeeAllHistoryAroundTown,
+  weatherSummary = null,
+  morningWeatherBeat = null,
 }: Props) {
   const [fetchedNationalDaily, setFetchedNationalDaily] =
     useState<UsNationalDailyRecord | null>(null);
@@ -300,6 +307,23 @@ function EditionReaderInner({
     nationalDailyProp !== undefined ? nationalDailyProp : fetchedNationalDaily;
 
   const weather = sections.find((s) => s.section_type === "weather");
+  const homepageWeather = useMemo(
+    () =>
+      resolveHomepageWeatherDisplay({
+        editorialContext: weatherSummary
+          ? { weatherSummary }
+          : null,
+        weatherSectionHeadline: weather?.headline ?? null,
+        weatherSectionBody: weather?.body ?? null,
+        morningWeatherBeat,
+      }),
+    [
+      weather?.headline,
+      weather?.body,
+      weatherSummary,
+      morningWeatherBeat,
+    ]
+  );
   const localEvents = sections.find((s) => s.section_type === "local_events");
   const greetingSection = sections.find((s) => s.section_type === "greeting");
   const events =
@@ -868,6 +892,7 @@ function EditionReaderInner({
         locationState={locationState}
         weatherHeadline={weather?.headline ?? null}
         weatherBody={weather?.body ?? null}
+        homepageWeather={homepageWeather}
         banditGreeting={banditGreeting}
         welcomeMessage={welcomeMessage}
         morningHero={morningHero}

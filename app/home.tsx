@@ -225,6 +225,11 @@ import {
   needsNetworkHistoryAroundTownMerge,
   resolveHistoryAroundTown,
 } from "../lib/edition/resolveHistoryAroundTown";
+import {
+  mergeWeatherSummaryIntoIntelligence,
+  needsNetworkWeatherSummaryMerge,
+  resolveWeatherSummary,
+} from "../lib/edition/resolveWeatherSummary";
 import { parseHistoryAroundTownPayload } from "../lib/edition/historyAroundTown/types";
 import {
   masterpieceTraceAsync,
@@ -1116,7 +1121,56 @@ export default function HomeScreen() {
     });
     merged =
       mergeHistoryAroundTownIntoIntelligence(merged, networkHistory) ?? merged;
+    merged =
+      mergeWeatherSummaryIntoIntelligence(merged, intel.weatherSummary) ?? merged;
     return merged;
+  }
+
+  function applyNetworkWeatherSummaryMerge(
+    networkIntel: EditionIntelligence,
+    editorialContext: unknown,
+    gen: number
+  ): void {
+    if (!mountedRef.current || gen !== loadGen.current) return;
+    if (
+      !needsNetworkWeatherSummaryMerge({
+        networkIntelligence: networkIntel,
+        onScreenIntelligence: cachedBundleRef.current?.intelligence ?? null,
+        cachedBundle: cachedBundleRef.current,
+        editorialContext,
+      })
+    ) {
+      return;
+    }
+
+    const networkSummary = resolveWeatherSummary({
+      intelligence: networkIntel,
+      editorialContext,
+    });
+    if (!networkSummary) return;
+
+    const mergedIntel = mergeWeatherSummaryIntoIntelligence(
+      cachedBundleRef.current?.intelligence ?? networkIntel,
+      networkSummary
+    );
+    if (!mergedIntel) return;
+
+    setIntelligence(mergedIntel);
+    if (cachedBundleRef.current) {
+      const nextBundle = {
+        ...cachedBundleRef.current,
+        intelligence: mergedIntel,
+        cachedAt: Date.now(),
+      };
+      cachedBundleRef.current = nextBundle;
+      scheduleCachedEditionSave(nextBundle);
+    }
+
+    if (__DEV__) {
+      console.log("[home] loadEdition: merged network weatherSummary", {
+        summary: networkSummary,
+      });
+    }
   }
 
   function applyNetworkHistoryAroundTownMerge(
@@ -2256,6 +2310,8 @@ export default function HomeScreen() {
             .morning_edition,
           history_around_town: (edition as { history_around_town?: unknown })
             .history_around_town,
+          editorial_context: (edition as { editorial_context?: unknown })
+            .editorial_context,
           leadStory: lead,
         },
         { deferKnowledgeMemory }
@@ -2313,6 +2369,11 @@ export default function HomeScreen() {
       applyNetworkHistoryAroundTownMerge(
         intel,
         (edition as { history_around_town?: unknown }).history_around_town,
+        gen
+      );
+      applyNetworkWeatherSummaryMerge(
+        intel,
+        (edition as { editorial_context?: unknown }).editorial_context,
         gen
       );
     } else if (syncAfterCache) {
@@ -4014,6 +4075,8 @@ export default function HomeScreen() {
                 router.push("/recommendations");
               }}
               historyAroundTown={intelligence?.historyAroundTown}
+              weatherSummary={intelligence?.weatherSummary ?? null}
+              morningWeatherBeat={intelligence?.morning?.beats?.weather ?? null}
               onSeeAllHistoryAroundTown={() => {
                 persistHomeScrollNow();
                 stashTodaysHistoryPlaces(

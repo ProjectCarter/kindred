@@ -302,7 +302,14 @@ async function runWeatherStage(
     conditionCode,
   });
   const intel = buildWeatherIntelligence(forecast, summary);
-  const tag = composeHeroWeatherTag({ summary, intel });
+  const tag = composeHeroWeatherTag({
+    editionDate: ctx.editionDate,
+    userId: ctx.userId,
+    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
+    currentC: weather?.current?.temperature_2m ?? null,
+    conditionCode,
+    unit: ctx.tempUnit,
+  });
   const attribution = weatherSourceAttribution(forecast);
 
   await upsertEditionSection(admin, {
@@ -310,14 +317,26 @@ async function runWeatherStage(
     section_type: "weather",
     position: 1,
     headline: tag,
-    body: tag,
+    body: summary,
     source_note: attribution,
   });
+
+  const { data: existingEdition } = await admin
+    .from("editions")
+    .select("editorial_context")
+    .eq("id", ctx.editionId)
+    .maybeSingle();
+  const prevContext =
+    existingEdition?.editorial_context &&
+    typeof existingEdition.editorial_context === "object"
+      ? (existingEdition.editorial_context as Record<string, unknown>)
+      : {};
 
   await admin
     .from("editions")
     .update({
       editorial_context: {
+        ...prevContext,
         weatherSummary: summary,
         weatherIntel: intel,
       },
@@ -779,11 +798,35 @@ async function runLocalNewsStage(
   }
 
   await upsertEditionSections(admin, rows);
+  const { data: existingEdition } = await admin
+    .from("editions")
+    .select("editorial_context")
+    .eq("id", ctx.editionId)
+    .maybeSingle();
+  const prevContext =
+    existingEdition?.editorial_context &&
+    typeof existingEdition.editorial_context === "object"
+      ? (existingEdition.editorial_context as Record<string, unknown>)
+      : {};
+  const nextContext =
+    editorial.context && typeof editorial.context === "object"
+      ? (editorial.context as Record<string, unknown>)
+      : {};
+
   await admin
     .from("editions")
     .update({
       lead_story: editorial.leadStory,
-      editorial_context: editorial.context,
+      editorial_context: {
+        ...prevContext,
+        ...nextContext,
+        ...(typeof prevContext.weatherSummary === "string"
+          ? { weatherSummary: prevContext.weatherSummary }
+          : {}),
+        ...(prevContext.weatherIntel != null
+          ? { weatherIntel: prevContext.weatherIntel }
+          : {}),
+      },
     })
     .eq("id", ctx.editionId);
 
