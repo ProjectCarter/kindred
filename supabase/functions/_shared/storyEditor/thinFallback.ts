@@ -95,6 +95,87 @@ export function composeThinHonest(
   };
 }
 
+export function composeLocalNewsThinHonest(
+  intake: StoryEditorIntake,
+  reason: string
+): StoryEditorResult {
+  const headline = cleanHeadline(intake.headline);
+  const source = (intake.sourceText || headline).replace(/\s+/g, " ").trim();
+  const publisher = intake.source?.trim() || "the original publisher";
+  const paragraphs: string[] = [];
+
+  if (source && source !== headline) {
+    const first =
+      source.length > 320 ? `${source.slice(0, 317).trim()}…` : source;
+    paragraphs.push(first);
+  } else {
+    paragraphs.push(
+      `${headline} — Kindred has only a brief note from ${publisher}.`
+    );
+  }
+
+  paragraphs.push(
+    `The reporting available to Kindred’s desk is limited. ` +
+      `What appears above reflects the verified wire note — not a full account from ${publisher}.`
+  );
+  paragraphs.push(
+    `For complete coverage, read the original report at ${publisher}. ` +
+      `Kindred will not invent details that were not reported.`
+  );
+
+  const bodyText = paragraphs.join("\n\n");
+  const modest: StoryEditorScores = {
+    interest: 3,
+    curiosity: 3,
+    flow: 4,
+    human_connection: 3,
+    learning: 3,
+    memorability: 3,
+    reader_satisfaction: 4,
+  };
+
+  return {
+    headline,
+    dek: null,
+    paragraphs,
+    bodyText,
+    pullQuote: null,
+    ok: true,
+    desk: {
+      version: 1,
+      path: "thin_honest",
+      locale: intake.locale ?? "en",
+      scores: modest,
+      voluntaryFinish: true,
+      memorableInsight:
+        "Kindred stayed honest about a thin Local News wire rather than inventing depth.",
+      passes: 0,
+      lessons: [
+        {
+          changeType: "clarity",
+          rationale: reason,
+          principleIds: ["gladness_not_addiction"],
+        },
+      ],
+      constitutions: {
+        storyStandard: true,
+        memorability: true,
+        globalLanguage: true,
+        learningReady: true,
+      },
+      fourQuestions: {
+        what: headline,
+        why: "The wire note is short — the full report lives with the publisher.",
+        who: "Readers following local news in their area",
+        remember:
+          "When the wire is thin, Kindred tells you plainly rather than padding.",
+        limits: ["Full detail lives with the publisher source."],
+      },
+      editedAt: new Date().toISOString(),
+    },
+  };
+}
+
 export function composeWireFallback(intake: StoryEditorIntake): StoryEditorResult {
   const headline = cleanHeadline(intake.headline);
   const text = (intake.sourceText || headline).replace(/\s+/g, " ").trim();

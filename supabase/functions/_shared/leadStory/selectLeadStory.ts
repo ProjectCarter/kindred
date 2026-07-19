@@ -12,6 +12,10 @@ import type {
   SelectLeadStoryInput,
 } from "./types.ts";
 import { isUpliftingStory } from "../editor/tone.ts";
+import {
+  localNewsDeskBadge,
+  selectLocalNewsDeskLead,
+} from "../../../../lib/edition/localNewsDesk.ts";
 
 const DEFAULT_LOCAL_THRESHOLD = 22;
 const DIVERSITY_LIMIT = 0.38;
@@ -155,7 +159,11 @@ function buildLeadStory(
   role: LeadStoryRole,
   strategy: LeadStory["selection"]["strategy"],
   belowFoldTitles: string[],
-  extraReasons: StorySelectionReason[]
+  extraReasons: StorySelectionReason[],
+  deskMeta?: {
+    contentType?: LeadStory["contentType"];
+    deskBadge?: string | null;
+  }
 ): LeadStory {
   const imageUri = c.story.imageUrl?.trim() || null;
   return {
@@ -166,6 +174,8 @@ function buildLeadStory(
     url: c.story.url,
     publishedAt: c.story.publishedAt,
     role,
+    contentType: deskMeta?.contentType ?? null,
+    deskBadge: deskMeta?.deskBadge ?? null,
     heroImage: {
       uri: imageUri,
       alt: cleanHeadline(c.story.title),
@@ -234,9 +244,8 @@ export function selectLeadStory(
     return !candidates.some((c) => !isRecentToReader(c.story, recentKeys));
   };
 
-  // 1) Prefer important local
-  const localPick = firstFresh(
-    candidates,
+  // 1) Prefer important local — city desk uses freshness + consecutive-day gates.
+  const localPool = candidates.filter(
     (c) =>
       hasLocalSignal(c) &&
       c.score >= threshold &&
@@ -244,22 +253,92 @@ export function selectLeadStory(
         c.story,
         below.filter((b) => b.id !== c.story.id),
         c.story.id
-      ),
-    recentKeys
+      )
   );
+
+  let localPick: ScoredLike | undefined;
+  let localContentType: LeadStory["contentType"] = null;
+  if (policy.localOnly) {
+    // City desk uses the full pool (local + sports/weather/community fallbacks).
+    const deskPool = candidates.filter((c) => c.score >= threshold);
+    const chosen = selectLocalNewsDeskLead(
+      deskPool.map((c) => ({
+        id: c.story.id,
+        publishedAt: c.story.publishedAt,
+        source: c.story.source,
+        url: c.story.url,
+        title: c.story.title,
+        description: c.story.description,
+        category: c.story.category ?? null,
+        score: c.score,
+      })),
+      {
+        now: new Date(),
+        recentStoryKeys: recentKeys,
+        minScore: threshold,
+        place: input.place,
+        isRecentCoverage: (c, keys) => {
+          const full = deskPool.find((p) => p.story.id === c.id);
+          return full ? isRecentToReader(full.story, keys) : false;
+        },
+      }
+    );
+    localPick = chosen
+      ? deskPool.find((p) => p.story.id === chosen.candidate.id)
+      : undefined;
+    localContentType = chosen?.contentType ?? null;
+  } else {
+    localPick = firstFresh(
+      candidates,
+      (c) =>
+        hasLocalSignal(c) &&
+        c.score >= threshold &&
+        isDistinctFromBelow(
+          c.story,
+          below.filter((b) => b.id !== c.story.id),
+          c.story.id
+        ),
+      recentKeys
+    );
+    localContentType = localPick ? "local_news" : null;
+  }
+
   if (localPick) {
+    const badge = localContentType
+      ? localNewsDeskBadge(localContentType)
+      : localNewsDeskBadge("local_news");
+    console.log("[localNewsDesk] content type selected", {
+      contentType: localContentType,
+      deskBadge: badge,
+      storyId: localPick.story.id,
+      publishedAt: localPick.story.publishedAt,
+      source: localPick.story.source,
+      headline: localPick.story.title.slice(0, 80),
+    });
     return buildLeadStory(
       localPick,
       "local",
       "prefer_local",
-      belowFoldTitles.filter((t) => t !== localPick.story.title),
+      belowFoldTitles.filter((t) => t !== localPick!.story.title),
       [
         reason(
           "lead_prefer_local",
-          "Selected as Front Page Lead for local importance",
+          localContentType && localContentType !== "local_news"
+            ? `Local News desk fallback — ${badge}`
+            : "Selected as Front Page Lead for local importance",
           25
         ),
-      ]
+        ...(localContentType
+          ? [
+              reason(
+                `desk_${localContentType}`,
+                `Content type: ${badge}`,
+                1
+              ),
+            ]
+          : []),
+      ],
+      { contentType: localContentType, deskBadge: badge }
     );
   }
 

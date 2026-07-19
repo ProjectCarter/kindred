@@ -42,6 +42,7 @@ import {
   parseBanditPayload,
   type BanditPayload,
 } from "../lib/edition/bandit";
+import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
 import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
 import {
   companionForArticle,
@@ -157,6 +158,7 @@ import {
   type HomeScrollSessionPhase,
 } from "../lib/dev/homeScrollDebug";
 import {
+  developerPreviewPlace,
   displayCityForEdition,
   getDeveloperPreviewContextSync,
   hydrateDeveloperPreviewContext,
@@ -1482,9 +1484,13 @@ export default function HomeScreen() {
       eventsOnly,
       afterGenerate,
     });
+    // Never short-circuit on a local history snapshot when the caller already
+    // named the edition to open (Retry / post-generate). That snapshot can pin
+    // a deleted developer-preview id and skip the network load entirely.
     if (
       !eventsOnly &&
       !pendingDevGenerate &&
+      !loadEditionId &&
       (await tryApplyDevEditionPreview((bundle) => {
         if (mountedRef.current && gen === loadGen.current) {
           applyCachedBundle(bundle);
@@ -1493,6 +1499,9 @@ export default function HomeScreen() {
         }
       }))
     ) {
+      if (__DEV__) {
+        console.log("[RETRY_TRACE] loadEdition_short_circuited_dev_preview_bundle");
+      }
       return;
     }
 
@@ -1726,7 +1735,7 @@ export default function HomeScreen() {
       : Promise.resolve(null);
 
     pipelineStageBegin("edition_lookup");
-    const [cached, editionResult] = await Promise.all([
+    const [cached, editionResultInitial] = await Promise.all([
       cachePromise,
       (async () => {
         if (__DEV__) console.log("[generate] fetchEdition editions query BEGIN");
@@ -1741,6 +1750,111 @@ export default function HomeScreen() {
         return result;
       })(),
     ]);
+
+    // Stale / deleted developer-preview editionId after rebuild → prefer job edition.
+    // Use identity.editionDate (preview date) first; calendar todayStr can diverge.
+    let editionResult = editionResultInitial;
+    if (resolvedEditionId && scopedMetroKey) {
+      const recoveryDates = Array.from(
+        new Set(
+          [identity.editionDate, todayStr].filter(
+            (d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d))
+          )
+        )
+      );
+      let jobEditionId: string | null = null;
+      let jobEditionDate: string | null = null;
+      let jobStatus: string | null = null;
+      for (const date of recoveryDates) {
+        const jobForIdentity = await fetchGenerationJobForEdition(supabase, {
+          userId: user.id,
+          editionDate: date,
+          metroKey: scopedMetroKey,
+        });
+        const id =
+          (
+            jobForIdentity.data as { edition_id?: string | null } | null
+          )?.edition_id?.trim() || null;
+        const status =
+          (jobForIdentity.data as { status?: string } | null)?.status ?? null;
+        if (id && status === "ready") {
+          jobEditionId = id;
+          jobEditionDate = date;
+          jobStatus = status;
+          break;
+        }
+        if (!jobEditionId && id) {
+          jobEditionId = id;
+          jobEditionDate = date;
+          jobStatus = status;
+        }
+      }
+      const pinnedMissing =
+        Boolean(editionResultInitial.error) || !editionResultInitial.data;
+      // V1: never treat a missing Bandit's Pick as an incomplete edition.
+      const pinnedIncomplete = false;
+      const pinnedStaleVsJob =
+        Boolean(jobEditionId) &&
+        jobEditionId !== resolvedEditionId &&
+        jobStatus === "ready";
+      // Stale / deleted developer-preview pin → recover via ready job edition.
+      const shouldRecover = pinnedMissing || pinnedStaleVsJob;
+      if (shouldRecover) {
+        if (__DEV__) {
+          console.warn("[home] loadEdition: stale preview editionId — recovering", {
+            staleEditionId: resolvedEditionId,
+            jobEditionId,
+            jobEditionDate,
+            jobStatus,
+            pinnedMissing,
+            pinnedIncomplete,
+            pinnedStaleVsJob,
+            metroKey: scopedMetroKey,
+            identityEditionDate: identity.editionDate,
+            todayStr,
+            pinnedQueryError: editionResultInitial.error?.message ?? null,
+          });
+        }
+        const fallbackDate = jobEditionDate ?? identity.editionDate ?? todayStr;
+        editionResult =
+          jobEditionId && jobStatus === "ready"
+            ? await supabase
+                .from("editions")
+                .select(editionSelect)
+                .eq("id", jobEditionId)
+                .maybeSingle()
+            : await supabase
+                .from("editions")
+                .select(editionSelect)
+                .eq("user_id", user.id)
+                .eq("edition_date", fallbackDate)
+                .eq("metro_key", scopedMetroKey)
+                .eq("status", "ready")
+                .maybeSingle();
+        const recoveredId =
+          (editionResult.data as { id?: string } | null)?.id?.trim() || null;
+        const recoveredDate =
+          (editionResult.data as { edition_date?: string } | null)
+            ?.edition_date?.trim() || fallbackDate;
+        if (recoveredId && identity.preview) {
+          await setDeveloperPreviewContext({
+            ...identity.preview,
+            editionId: recoveredId,
+            editionDate: recoveredDate,
+          });
+        }
+        if (
+          recoveredId &&
+          recoveredId !== resolvedEditionId &&
+          cacheMetroKey
+        ) {
+          cachedBundleRef.current = null;
+          instantHydratedRef.current = false;
+          void clearCachedEdition(user.id, fallbackDate, cacheMetroKey);
+        }
+      }
+    }
+
     pipelineStageEnd("edition_lookup", {
       status: (editionResult.data as { status?: string } | null)?.status ?? null,
     });
@@ -1753,6 +1867,45 @@ export default function HomeScreen() {
     } = editionResult;
 
     markStartup("home_editions_query_done");
+
+    const leadRaw = (edition as { lead_story?: unknown } | null)?.lead_story;
+    const ctxRaw = (edition as { editorial_context?: unknown } | null)
+      ?.editorial_context;
+    const ctxObj =
+      ctxRaw && typeof ctxRaw === "object"
+        ? (ctxRaw as Record<string, unknown>)
+        : null;
+    const ctxSections = Array.isArray(ctxObj?.sections)
+      ? (ctxObj!.sections as Array<{ sectionType?: string; items?: unknown[] }>)
+      : [];
+    const topStoriesSection = ctxSections.find(
+      (s) => s.sectionType === "top_stories"
+    );
+    console.log("[LOCAL_NEWS_TRACE] edition_load_boundary", {
+      editionId: (edition as { id?: string } | null)?.id ?? null,
+      metroKey: (edition as { metro_key?: string } | null)?.metro_key ?? null,
+      identitySource: identity.source,
+      resolvedEditionId,
+      topLevelKeys: edition ? Object.keys(edition as object) : [],
+      local_news: (edition as { local_news?: unknown } | null)?.local_news ?? null,
+      localNews: (edition as { localNews?: unknown } | null)?.localNews ?? null,
+      lead_story: leadRaw
+        ? {
+            role: (leadRaw as { role?: string }).role ?? null,
+            headline: String(
+              (leadRaw as { headline?: string }).headline ?? ""
+            ).slice(0, 80),
+            summaryLen: String(
+              (leadRaw as { summary?: string }).summary ?? ""
+            ).length,
+          }
+        : null,
+      editorial_context_keys: ctxObj ? Object.keys(ctxObj) : null,
+      top_stories_in_context: topStoriesSection?.items?.length ?? 0,
+      national_news_present: Boolean(
+        (edition as { national_news?: unknown } | null)?.national_news
+      ),
+    });
 
     __DEV__ && console.log("[home] loadEdition: editions query", {
       filterUserId: user.id,
@@ -2063,6 +2216,12 @@ export default function HomeScreen() {
         setRefreshing(false);
         return;
       }
+      console.warn("[RETRY_TRACE] set_error_couldnt_be_reached", {
+        reason: "loadWithRetry_failed",
+        message: result.error.message,
+        elapsedMs: result.elapsedMs,
+        hasCache: false,
+      });
       setError("The paper couldn’t be reached. Pull to try again.");
       setLoading(false);
       setRefreshing(false);
@@ -2076,6 +2235,10 @@ export default function HomeScreen() {
       if (/jwt|expired|invalid.*token|refresh token/i.test(msg)) {
         void supabase.auth.signOut();
       } else if (payload.userError) {
+        console.warn("[RETRY_TRACE] set_error_couldnt_be_reached", {
+          reason: "no_user",
+          message: msg,
+        });
         setError("The paper couldn’t be reached. Pull to try again.");
       }
       setLoading(false);
@@ -2136,7 +2299,21 @@ export default function HomeScreen() {
           : null
       );
       if (payload.editionError && !cachedBundleRef.current) {
+        console.warn("[RETRY_TRACE] set_error_couldnt_be_reached", {
+          reason: "not_ready_with_editionError",
+          message: payload.editionError.message,
+          hasCache: Boolean(cachedBundleRef.current),
+        });
         setError("The paper couldn’t be reached. Pull to try again.");
+      } else if (!cachedBundleRef.current && !editionFrozenRef.current) {
+        console.warn("[RETRY_TRACE] empty_state_not_ready", {
+          reason: "not_ready_no_cache",
+          jobStatus: payload.jobResult.data?.status ?? null,
+          jobEditionId:
+            (payload.jobResult.data as { edition_id?: string | null } | null)
+              ?.edition_id ?? null,
+          editionError: payload.editionError?.message ?? null,
+        });
       }
       setLoading(false);
       setRefreshing(false);
@@ -2544,6 +2721,15 @@ export default function HomeScreen() {
 
     setLoading(false);
     setRefreshing(false);
+    editionIdRef.current = edition.id;
+    console.log("[RETRY_TRACE] painted", {
+      editionId: edition.id,
+      editionDate: edition.edition_date,
+      metroKey:
+        (edition as { metro_key?: string | null }).metro_key ?? null,
+      sectionCount: nextSections.length,
+      sectionTypes: nextSections.map((s) => s.section_type),
+    });
     devGenerateTrace(traceId ?? devGenerateTraceIdRef.current, "first_paint", {
       editionId: edition.id,
       sectionCount: nextSections.length,
@@ -3123,6 +3309,272 @@ export default function HomeScreen() {
     });
   }
 
+  /**
+   * Retry / "check again": open an already-ready job edition before regenerating.
+   * Full generate clears the folio first (dev override) — that leaves readers
+   * stranded when today's paper is already ready in Supabase.
+   */
+  async function handleRetryPress() {
+    const traceId = createDevGenerateTraceId();
+    console.log("[RETRY_TRACE] tap", {
+      traceId,
+      at: Date.now(),
+      sectionsLength: sections.length,
+      error,
+      generating: generatingRef.current,
+      editionIdRef: editionIdRef.current,
+    });
+
+    if (generatingRef.current) {
+      console.log("[RETRY_TRACE] exit_before_network", {
+        reason: "already_generating",
+        traceId,
+      });
+      return;
+    }
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await getLaunchSessionOrFetch();
+      const user = session?.user ?? null;
+      if (!user) {
+        console.log("[RETRY_TRACE] exit_before_network", {
+          reason: "no_user",
+          sessionError: sessionError?.message ?? null,
+          traceId,
+        });
+        setError("Sign in to open today's paper.");
+        return;
+      }
+
+      await hydrateDeveloperPreviewContext();
+      await hydrateDevEditionOverrideState();
+      const preview = getDeveloperPreviewContextSync();
+      const active = await resolveEffectivePlace({ refreshIfStale: true });
+      const place = preview
+        ? developerPreviewPlace(preview)
+        : active.place;
+      const metroKey =
+        preview?.metroKey?.trim() ||
+        editionCacheMetroKey(place) ||
+        null;
+      const editionDate =
+        preview?.editionDate?.trim() ||
+        (await resolveEffectiveEditionDate());
+
+      console.log("[RETRY_TRACE] request_identity", {
+        traceId,
+        metroKey,
+        editionDate,
+        city: place?.city ?? null,
+        developerPreview: Boolean(preview),
+        devOverrideActive: isDevEditionOverrideActive(),
+        previewEditionId: preview?.editionId ?? null,
+        previewDate: preview?.editionDate ?? null,
+      });
+
+      if (!metroKey || !place) {
+        console.log("[RETRY_TRACE] exit_before_network", {
+          reason: "no_metro_or_place",
+          traceId,
+        });
+        await handleGenerate(traceId, { manualBuild: true });
+        return;
+      }
+
+      const jobStarted = Date.now();
+      const jobResult = await fetchGenerationJobForEdition(supabase, {
+        userId: user.id,
+        editionDate,
+        metroKey,
+      });
+      const job = jobResult.data;
+      console.log("[RETRY_TRACE] generation_job", {
+        traceId,
+        ms: Date.now() - jobStarted,
+        jobId: job?.id ?? null,
+        jobStatus: job?.status ?? null,
+        editionId: job?.edition_id ?? null,
+        lastError: job?.last_error ?? null,
+        fetchError: jobResult.error?.message ?? null,
+      });
+
+      const readyEditionId =
+        job?.status === "ready" ? job.edition_id?.trim() || null : null;
+
+      if (!readyEditionId) {
+        console.log("[RETRY_TRACE] path", {
+          traceId,
+          action: "no_ready_job_invoke_generate",
+        });
+        await handleGenerate(traceId, { manualBuild: true });
+        return;
+      }
+
+      const editionSelect =
+        "id, edition_date, status, user_id, metro_key, lead_story, national_news, bandit, discovery, knowledge, memory, morning_edition, history_around_town, editorial_context";
+      const editionStarted = Date.now();
+      const editionResult = await supabase
+        .from("editions")
+        .select(editionSelect)
+        .eq("id", readyEditionId)
+        .maybeSingle();
+      const edition = editionResult.data as {
+        id?: string;
+        status?: string;
+        edition_date?: string;
+        metro_key?: string;
+        lead_story?: unknown;
+        bandit?: unknown;
+        discovery?: unknown;
+        morning_edition?: unknown;
+      } | null;
+
+      console.log("[RETRY_TRACE] edition_row", {
+        traceId,
+        ms: Date.now() - editionStarted,
+        editionId: readyEditionId,
+        editionStatus: edition?.status ?? null,
+        httpStatus: editionResult.status ?? null,
+        error: editionResult.error
+          ? {
+              message: editionResult.error.message,
+              code: editionResult.error.code,
+              details: editionResult.error.details,
+            }
+          : null,
+        responseBody: edition
+          ? {
+              id: edition.id,
+              status: edition.status,
+              edition_date: edition.edition_date,
+              metro_key: edition.metro_key,
+              hasBanditPick: Boolean(banditsPick(edition.bandit as BanditPayload | null)),
+              hasLead: Boolean(edition.lead_story),
+              hasMorningHero: Boolean(
+                (edition.morning_edition as { morningHero?: unknown } | null)
+                  ?.morningHero
+              ),
+              hasDiscovery: Boolean(edition.discovery),
+            }
+          : null,
+      });
+
+      if (!edition || edition.status !== "ready") {
+        console.log("[RETRY_TRACE] path", {
+          traceId,
+          action: "ready_job_but_edition_missing_invoke_generate",
+          editionExists: Boolean(edition),
+          editionStatus: edition?.status ?? null,
+        });
+        await handleGenerate(traceId, { manualBuild: true });
+        return;
+      }
+
+      const sectionsStarted = Date.now();
+      const sectionsResult = await queryEditionSections(readyEditionId);
+      const sectionRows =
+        (sectionsResult.data as EditionSection[] | null) ?? [];
+      const sectionTypes = sectionRows.map((s) => s.section_type);
+      const completeness = isPersistedEditionComplete(
+        {
+          discovery: edition.discovery,
+          lead_story: edition.lead_story,
+          bandit: edition.bandit,
+          morning_edition: edition.morning_edition,
+        },
+        sectionRows,
+        { expectStoryOf: true }
+      );
+      const fieldGate = {
+        masterpiece: Boolean(
+          (edition.morning_edition as { morningHero?: unknown } | null)
+            ?.morningHero
+        ),
+        events: sectionTypes.includes("local_events"),
+        activities: completeness.reasons.every(
+          (r) => !r.includes("activities")
+        ),
+        food_drinks: sectionTypes.includes("food_drinks"),
+        story_of_city:
+          sectionTypes.includes("story_of") ||
+          sectionTypes.includes("your_city"),
+        // V1: Bandit's Picks disabled — never fail retry on bandit.
+        bandit: true,
+        today_in_history: sectionTypes.includes("today_in_history"),
+        local_news_desk:
+          Boolean(edition.lead_story) || sectionTypes.includes("top_stories"),
+      };
+
+      console.log("[RETRY_TRACE] completeness_gate", {
+        traceId,
+        editionId: readyEditionId,
+        ms: Date.now() - sectionsStarted,
+        sectionTypes,
+        complete: completeness.complete,
+        failingReasons: completeness.reasons,
+        fields: fieldGate,
+        failingFields: Object.entries(fieldGate)
+          .filter(([, ok]) => !ok)
+          .map(([k]) => k),
+      });
+
+      console.log("[RETRY_TRACE] path", {
+        traceId,
+        action: "load_already_ready_edition",
+        editionId: readyEditionId,
+        jobId: job?.id ?? null,
+        jobStatus: job?.status ?? null,
+      });
+
+      if (preview || isDevEditionOverrideActive()) {
+        await setDeveloperPreviewContext({
+          editionId: readyEditionId,
+          metroKey,
+          city: place.city,
+          state: place.state ?? null,
+          region: place.region ?? null,
+          lat: place.lat,
+          lon: place.lon,
+          editionDate: edition.edition_date ?? editionDate,
+          traceId,
+        });
+      }
+
+      setError(null);
+      setBackgroundJob(null);
+      setLoading(true);
+
+      await loadEdition({
+        isRefresh: true,
+        afterGenerate: true,
+        traceId,
+        editionId: readyEditionId,
+        metroKey,
+      });
+
+      // Allow React state → editionIdRef sync from paint, then confirm.
+      await new Promise((r) => setTimeout(r, 0));
+      console.log("[RETRY_TRACE] load_complete", {
+        traceId,
+        requestedEditionId: readyEditionId,
+        renderedEditionId: editionIdRef.current,
+        match: editionIdRef.current === readyEditionId,
+        supabaseReadyEditionId: readyEditionId,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[RETRY_TRACE] thrown", {
+        message,
+        stack: err instanceof Error ? err.stack : null,
+      });
+      setError("The paper couldn’t be reached. Pull to try again.");
+      setLoading(false);
+    }
+  }
+
   async function handleGenerate(
     continuedTraceId?: string,
     options?: { manualBuild?: boolean }
@@ -3133,8 +3585,17 @@ export default function HomeScreen() {
       manualBuild: options?.manualBuild === true,
     });
     console.log("[generate] ENTER handleGenerate", { traceId, manualBuild: options?.manualBuild });
+    console.log("[RETRY_TRACE] handleGenerate_enter", {
+      traceId,
+      manualBuild: options?.manualBuild === true,
+      generating: generatingRef.current,
+    });
     if (generatingRef.current) {
       console.log("[generate] EXIT handleGenerate (already running)", { traceId });
+      console.log("[RETRY_TRACE] exit_before_network", {
+        reason: "already_generating_in_handleGenerate",
+        traceId,
+      });
       return;
     }
     generatingRef.current = true;
@@ -3145,6 +3606,10 @@ export default function HomeScreen() {
     if (options?.manualBuild) {
       devGenerateTrace(traceId, "manual_build_start");
       setBackgroundJob(null);
+      console.log("[RETRY_TRACE] path", {
+        traceId,
+        action: "invoke_generate_edition",
+      });
     }
 
     // Supersede any prior in-flight invoke (should be none when the guard holds).
@@ -3250,6 +3715,13 @@ export default function HomeScreen() {
         editionDate,
       });
       console.log("[generate] invoke BEGIN", { traceId });
+      console.log("[RETRY_TRACE] invoke_generate_edition_begin", {
+        traceId,
+        editionDate,
+        city: loc.city,
+        metroKey: editionCacheMetroKey(loc),
+        devPreview: isDevEditionOverrideActive(),
+      });
       const invokeStarted = Date.now();
       const generationStarted = Date.now();
       let invokeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -3328,6 +3800,13 @@ export default function HomeScreen() {
           status: responseStatus,
           body: responseBody,
         });
+        console.error("[RETRY_TRACE] invoke_generate_edition_error", {
+          traceId,
+          message: invokeError.message,
+          httpStatus: responseStatus,
+          responseBody,
+          thrown: invokeError.stack ?? null,
+        });
 
         const friendly = isNonUsEditionResponse(responseBody)
           ? SUPPORTED_REGION_MESSAGE
@@ -3343,6 +3822,11 @@ export default function HomeScreen() {
       __DEV__ && console.log("[home] generate-edition: response", {
         status: responseStatus ?? "ok (no invoke error)",
         body: responseBody,
+      });
+      console.log("[RETRY_TRACE] invoke_generate_edition_ok", {
+        traceId,
+        httpStatus: responseStatus ?? 200,
+        responseBody,
       });
 
       // Some failures arrive as JSON in data with no invokeError.
@@ -3905,7 +4389,7 @@ export default function HomeScreen() {
                   styles.button,
                   pressed && styles.linkPressed,
                 ]}
-                onPress={() => void handleGenerate(undefined, { manualBuild: true })}
+                onPress={() => void handleRetryPress()}
                 accessibilityRole="button"
                 accessibilityLabel="Retry"
               >
@@ -3991,7 +4475,9 @@ export default function HomeScreen() {
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
               discovery={intelligence?.discovery}
-              banditsPick={banditsPick(bandit)}
+              banditsPick={
+                isBanditsPicksEnabled() ? banditsPick(bandit) : null
+              }
               localEventsStatus={localEventsStatus}
               mastheadScrollY={mastheadScrollY}
               mastheadTrailing={

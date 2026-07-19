@@ -55,7 +55,12 @@ export function FolioReveal({
       translateY.setValue(0);
       return;
     }
-    if (started.current) return;
+    if (started.current) {
+      // Index can reshuffle as optional folio desks mount; stay visible.
+      opacity.setValue(1);
+      translateY.setValue(0);
+      return;
+    }
     started.current = true;
     opacity.setValue(0);
     translateY.setValue(motion.risePx);

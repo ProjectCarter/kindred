@@ -9,6 +9,7 @@ import type { EditionSection } from "../edition/types";
 import type { LeadStory } from "../edition/LeadStory";
 import type { BanditPayload } from "../edition/bandit";
 import { banditsPick } from "../edition/bandit";
+import { isBanditsPicksEnabled } from "../edition/banditsPicksFeature";
 import { parseDiscoveryPayload } from "../edition/discovery";
 import type { EditionIntelligence } from "../edition/surfaceIntelligence";
 import { allocateDiscoverySections } from "../edition/sectionAllocator";
@@ -104,8 +105,15 @@ export function traceSupabaseEditionRow(edition: {
     {
       desk: "bandits_pick",
       stage: "supabase_editions_row",
-      present: Boolean(banditsPick(bandit ?? null)),
-      detail: { hasBanditColumn: Boolean(edition.bandit) },
+      present: isBanditsPicksEnabled()
+        ? Boolean(banditsPick(bandit ?? null))
+        : true,
+      detail: {
+        hasBanditColumn: Boolean(edition.bandit),
+        ...(isBanditsPicksEnabled()
+          ? {}
+          : { note: "bandits_picks_disabled_v1" }),
+      },
     },
     {
       desk: "today_in_history",
@@ -200,8 +208,12 @@ export function traceSupabaseEditionSections(
     {
       desk: "bandits_pick",
       stage: "supabase_edition_sections",
-      present: false,
-      detail: { note: "bandits_pick comes from editions.bandit" },
+      present: !isBanditsPicksEnabled(),
+      detail: {
+        note: isBanditsPicksEnabled()
+          ? "bandits_pick comes from editions.bandit"
+          : "bandits_picks_disabled_v1",
+      },
     },
     {
       desk: "local_news",
@@ -257,7 +269,9 @@ export function traceParsedIntelligence(
     {
       desk: "bandits_pick",
       stage: "parse_intelligence",
-      present: Boolean(banditsPick(bandit)),
+      present: isBanditsPicksEnabled()
+        ? Boolean(banditsPick(bandit))
+        : true,
     },
     {
       desk: "local_news",
@@ -328,7 +342,9 @@ export function traceReactState(input: {
     {
       desk: "bandits_pick",
       stage: "react_state",
-      present: Boolean(banditsPick(input.bandit)),
+      present: isBanditsPicksEnabled()
+        ? Boolean(banditsPick(input.bandit))
+        : true,
     },
     {
       desk: "local_news",
@@ -370,9 +386,7 @@ export function traceEditionReaderRender(input: {
   const localEventsInSections = types.includes("local_events");
   const activitiesRender = allocation.activities.length > 0;
   const recommendationsRender = allocation.recommendations.length > 0;
-  const localNewsRender = Boolean(
-    input.leadStory?.headline?.trim() && /local/i.test(input.leadStory.role ?? "")
-  );
+  const localNewsRender = true;
 
   const traces: DeskTrace[] = [
     {
@@ -426,9 +440,13 @@ export function traceEditionReaderRender(input: {
     {
       desk: "bandits_pick",
       stage: "render_gate",
-      present: input.banditsPickPresent,
+      present: isBanditsPicksEnabled() ? input.banditsPickPresent : true,
       detail: {
-        skipReason: input.banditsPickPresent ? null : "no banditsPick prop",
+        skipReason: !isBanditsPicksEnabled()
+          ? "bandits_picks_disabled_v1"
+          : input.banditsPickPresent
+            ? null
+            : "no banditsPick prop",
       },
     },
     {
@@ -448,7 +466,7 @@ export function traceEditionReaderRender(input: {
       detail: {
         skipReason: localNewsRender
           ? null
-          : "TimeStylePackage local block needs leadStory with local role",
+          : "Local News folio should always render (stories or placeholder)",
         leadRole: input.leadStory?.role ?? null,
       },
     },
@@ -527,7 +545,11 @@ export function isPersistedEditionComplete(
       reasons.push("discovery pool has zero recommendations after allocate");
     }
   }
-  if (!banditsPick(edition.bandit as BanditPayload | null)) {
+  // V1: Bandit's Picks surface is disabled — never block load on bandit.
+  if (
+    isBanditsPicksEnabled() &&
+    !banditsPick(edition.bandit as BanditPayload | null)
+  ) {
     reasons.push("editions.bandit has no pick");
   }
 

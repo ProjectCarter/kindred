@@ -15,7 +15,6 @@ import {
 import { resolveStoryOfCityImage } from "./storyOfImage";
 import { resolveStateAtAGlance } from "./stateAtAGlance";
 import { dedupeProse, isNearDuplicateProse } from "./contentQuality";
-import { getGoldStandardArticle } from "./goldStandard/algalBloomArticle";
 import {
   applyContentSystem,
   type ContentType,
@@ -234,12 +233,29 @@ export function formatArticlePublishedAt(
 
 /**
  * Adapter: Front Page Lead Story → KindredArticle.
- * Phase 1: the Lead opens Kindred’s gold-standard science story —
- * the editorial blueprint for every future article.
+ * Uses the edition lead payload — never substitutes demo/gold-standard copy.
  */
 export function articleFromLeadStory(lead: LeadStory): KindredArticle {
-  // Preserve the edition lead id so clipping / session keys stay stable.
-  return getGoldStandardArticle({ id: lead.id || undefined });
+  const section = lead.role === "local" ? "local_news" : "lead";
+  const bodyText =
+    lead.body?.length && lead.body.join("").trim()
+      ? lead.body.join("\n\n")
+      : lead.summary;
+
+  return articleFromSectionItem({
+    id: lead.id,
+    section,
+    headline: lead.headline,
+    body: bodyText,
+    dek: lead.dek ?? lead.summary,
+    source: lead.source,
+    sourceUrl: lead.url,
+    publishedAt: lead.publishedAt,
+    imageUrl: lead.heroImage?.uri ?? null,
+    imageCaption: lead.heroImage?.alt ?? lead.headline,
+    role: lead.role,
+    tags: lead.role ? [lead.role] : undefined,
+  });
 }
 
 /**

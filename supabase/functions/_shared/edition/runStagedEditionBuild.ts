@@ -60,6 +60,8 @@ import { resolveEventTimezone } from "../localEvents/eventTimezone.ts";
 import { runDiscoveryDecisions } from "../discovery/index.ts";
 import type { DiscoveryPayload } from "../discovery/types.ts";
 import { runLocalEditorialDecisions } from "../editor/index.ts";
+import { enrichLocalNewsEditorial, buildUnenrichedLocalNews } from "../storyEditor/localNewsBriefing.ts";
+import { loadRecentStoryKeys } from "../stories/recentStoryKeys.ts";
 import { fetchApprovedCityArticle } from "../storyOf/library.ts";
 import { cityArticleSourceNote } from "../storyOf/sourceNote.ts";
 import { selectBanditsPick } from "../bandit/selectPick.ts";
@@ -739,7 +741,6 @@ async function runBanditsPickStage(
     .from("editions")
     .update({
       bandit: banditPayload,
-      lead_story: editorial.leadStory,
     })
     .eq("id", ctx.editionId);
 
@@ -756,10 +757,17 @@ async function runLocalNewsStage(
 ): Promise<{ itemCount: number; payloadBytes: number }> {
   const newsApiKey = Deno.env.get("NEWS_API_KEY");
   if (!newsApiKey) {
-    return { itemCount: 0, payloadBytes: 0 };
+    // Optional stage will record this failure — never silently "succeed" empty.
+    throw new Error("NEWS_API_KEY missing — Local News desk cannot run");
   }
 
-  const personalization = await loadPersonalizationProfile(admin, ctx.userId, ctx.location);
+  const [personalization, recentStoryKeys] = await Promise.all([
+    loadPersonalizationProfile(admin, ctx.userId, ctx.location),
+    loadRecentStoryKeys(admin, ctx.userId, {
+      metroKey: ctx.metroKey,
+      excludeEditionDate: ctx.editionDate,
+    }),
+  ]);
   const editorial = await runLocalEditorialDecisions({
     editionDate: ctx.editionDate,
     newsApiKey,
@@ -769,9 +777,10 @@ async function runLocalNewsStage(
       city: ctx.location.city,
       region: ctx.location.region,
       state: ctx.location.state,
+      metroKey: ctx.metroKey,
       now: new Date(),
       maxStories: 4,
-      recentStoryKeys: [],
+      recentStoryKeys,
       personalization: {
         favoriteSources: personalization.affinities.favoriteSources,
         followedTopics: personalization.affinities.followedTopics,
@@ -782,22 +791,57 @@ async function runLocalNewsStage(
       },
     },
   });
+  console.log("[localNewsDesk] stage selection", {
+    contentType: editorial.leadStory?.contentType ?? null,
+    deskBadge: editorial.leadStory?.deskBadge ?? null,
+    leadId: editorial.leadStory?.id ?? null,
+    publishedAt: editorial.leadStory?.publishedAt ?? null,
+  });
 
-  buildState.editorial = editorial;
-
-  const rows: Parameters<typeof upsertEditionSections>[1] = [];
-  if (editorial.leadStory?.headline && editorial.leadStory.summary) {
-    rows.push({
-      edition_id: ctx.editionId,
-      section_type: "top_stories",
-      position: 2,
-      headline: editorial.leadStory.headline,
-      body: editorial.leadStory.summary,
-      source_note: "Sourced from NewsAPI",
+  const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  let enriched: Awaited<ReturnType<typeof enrichLocalNewsEditorial>>;
+  try {
+    enriched = await enrichLocalNewsEditorial({
+      editorial,
+      place: {
+        city: ctx.location.city,
+        region: ctx.location.region,
+        state: ctx.location.state,
+      },
+      editionDate: ctx.editionDate,
+      interests: personalization.interests,
+      followedTopics: personalization.followedTopics,
+      anthropicApiKey,
+      recentStoryKeys,
+      metroKey: ctx.metroKey,
+    });
+  } catch (err) {
+    enriched = buildUnenrichedLocalNews({
+      editorial,
+      place: {
+        city: ctx.location.city,
+        region: ctx.location.region,
+        state: ctx.location.state,
+      },
+      editionDate: ctx.editionDate,
+      interests: personalization.interests,
+      followedTopics: personalization.followedTopics,
+      reason: err instanceof Error ? err.message : String(err),
+      recentStoryKeys,
+      metroKey: ctx.metroKey,
     });
   }
+  console.log("[localNewsDesk] enriched lead", {
+    contentType: enriched.leadStory?.contentType ?? null,
+    deskBadge: enriched.leadStory?.deskBadge ?? null,
+    leadId: enriched.leadStory?.id ?? null,
+  });
 
-  await upsertEditionSections(admin, rows);
+  buildState.editorial = {
+    ...editorial,
+    leadStory: enriched.leadStory,
+  };
+
   const { data: existingEdition } = await admin
     .from("editions")
     .select("editorial_context")
@@ -808,18 +852,15 @@ async function runLocalNewsStage(
     typeof existingEdition.editorial_context === "object"
       ? (existingEdition.editorial_context as Record<string, unknown>)
       : {};
-  const nextContext =
-    editorial.context && typeof editorial.context === "object"
-      ? (editorial.context as Record<string, unknown>)
-      : {};
 
   await admin
     .from("editions")
     .update({
-      lead_story: editorial.leadStory,
+      // Always persist lead_story from the local desk (null clears a stale lead).
+      lead_story: enriched.leadStory,
       editorial_context: {
         ...prevContext,
-        ...nextContext,
+        ...enriched.editorialContext,
         ...(typeof prevContext.weatherSummary === "string"
           ? { weatherSummary: prevContext.weatherSummary }
           : {}),
@@ -831,8 +872,8 @@ async function runLocalNewsStage(
     .eq("id", ctx.editionId);
 
   return {
-    itemCount: editorial.frontPage.stories.length,
-    payloadBytes: estimateJsonBytes(editorial),
+    itemCount: enriched.deskStories.length,
+    payloadBytes: estimateJsonBytes(enriched.editorialContext),
   };
 }
 

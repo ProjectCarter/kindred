@@ -15,11 +15,15 @@ export type TopStoryItem = {
   headline: string;
   summary: string;
   dek?: string | null;
+  /** Story Editor paragraphs when the desk has rewritten the story. */
+  body?: string[];
   source: string;
   url: string | null;
   imageUrl?: string | null;
   publishedAt?: string | null;
   role?: string | null;
+  contentType?: "local_news" | "sports" | "weather" | "community" | null;
+  deskBadge?: string | null;
 };
 
 /** Pull individual Top Stories from stored editorial_context. */
@@ -39,13 +43,26 @@ export function topStoriesFromEditorialContext(
   const out: TopStoryItem[] = [];
   for (const item of section.items) {
     const title = item.title?.trim();
-    const summary = item.summary?.trim();
+    const bodyText = Array.isArray(item.body)
+      ? item.body
+          .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+          .join("\n\n")
+          .trim()
+      : "";
+    const summary =
+      item.summary?.trim() ||
+      item.dek?.trim() ||
+      bodyText ||
+      "";
     if (!title || !summary) continue;
     out.push({
       id: (item.id?.trim() || `top:${title.slice(0, 48)}`).slice(0, 240),
       headline: title,
       summary,
       dek: item.dek?.trim() || null,
+      body: Array.isArray(item.body)
+        ? item.body.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+        : undefined,
       source: item.source?.trim() || "Kindred",
       url: item.url ?? null,
       imageUrl: item.imageUrl ?? null,
@@ -57,12 +74,19 @@ export function topStoriesFromEditorialContext(
 }
 
 export function articleFromTopStory(story: TopStoryItem): KindredArticle {
+  const section = /local/i.test(story.role ?? "")
+    ? "local_news"
+    : "top_stories";
+  const bodyText =
+    story.body?.length && story.body.join("").trim()
+      ? story.body.join("\n\n")
+      : story.summary;
   return articleFromSectionItem({
     id: story.id,
-    section: "top_stories",
+    section,
     headline: story.headline,
-    body: story.summary,
-    dek: story.dek,
+    body: bodyText,
+    dek: story.dek ?? story.summary,
     source: story.source,
     sourceUrl: story.url,
     publishedAt: story.publishedAt,

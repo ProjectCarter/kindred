@@ -160,6 +160,22 @@ Deno.test("assessPersistedEditionBuild accepts complete persisted payload", () =
   assertEquals(result.reasons.length, 0);
 });
 
+Deno.test("assessPersistedEditionBuild ignores missing Bandit pick while V1 surface disabled", () => {
+  const discovery = sampleDiscovery(
+    [ranked("act1", "activities")],
+    [ranked("rec1", "coffee")]
+  );
+
+  const result = assessPersistedEditionBuild({
+    sections: baseSections,
+    discovery,
+    hasBanditsPick: false,
+  });
+
+  assertEquals(result.reasons.includes("bandit pick missing"), false);
+  assertEquals(result.complete, true);
+});
+
 Deno.test("assessPersistedEditionBuild skips catalog desks before bootstrap", () => {
   const discovery = sampleDiscovery([], []);
   const sectionsWithoutEvents = baseSections.filter(

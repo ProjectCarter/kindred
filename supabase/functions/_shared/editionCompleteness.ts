@@ -15,6 +15,7 @@ import {
   getCatalogBootstrapState,
   type CatalogBootstrapState,
 } from "./catalog/catalogBootstrap.ts";
+import { isBanditsPicksEnabled } from "./bandit/banditsPicksFeature.ts";
 
 export type EditionSectionRow = {
   section_type: string;
@@ -34,6 +35,8 @@ export function discoverySurfaceItemCount(
 }
 
 export function hasBanditsPickFromPayload(bandit: unknown): boolean {
+  // V1: pick not required for publish completeness.
+  if (!isBanditsPicksEnabled()) return true;
   if (!bandit || typeof bandit !== "object") return false;
   const pick = (bandit as { pick?: { story?: { headline?: string } } }).pick;
   const headline = pick?.story?.headline?.trim();
@@ -138,7 +141,7 @@ export function assessPersistedEditionBuild(input: {
   if (input.expectStoryOf && !hasStoryOf) {
     reasons.push("edition_sections missing story_of");
   }
-  if (!input.hasBanditsPick) {
+  if (isBanditsPicksEnabled() && !input.hasBanditsPick) {
     reasons.push("bandit pick missing");
   }
 

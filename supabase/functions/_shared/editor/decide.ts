@@ -184,6 +184,9 @@ export async function runLocalEditorialDecisions(
     .filter(
       (c) =>
         c.story.pool === "local" ||
+        c.story.category === "sports" ||
+        c.story.category === "weather" ||
+        c.story.category === "community" ||
         c.reasons.some(
           (r) => r.code === "local_relevance" || r.code === "local_pool"
         )
@@ -191,12 +194,20 @@ export async function runLocalEditorialDecisions(
     .sort((a, b) => b.score - a.score);
 
   const provisionalSlate = selectFrontPage(scored, ranking, policy);
+  // Desk priority allows sports/weather/community fallbacks with lower wire
+  // scores than classic city-desk local reporting.
   const leadStory = selectLeadStory(
     {
       topStories: provisionalSlate.stories,
       scoredCandidates: scored,
-      localScoreThreshold: calendar.isWeekend ? 18 : 20,
+      localScoreThreshold: 8,
       recentStoryKeys: ranking.recentStoryKeys ?? [],
+      place: {
+        city: ranking.city,
+        state: ranking.state,
+        region: ranking.region,
+        metroKey: ranking.metroKey ?? null,
+      },
     },
     {
       preferWeekendFeature: false,
@@ -214,8 +225,11 @@ export async function runLocalEditorialDecisions(
   const poolForSlate = scored.filter((c) => !excludeIds.has(c.story.id));
   let frontPage = selectFrontPage(poolForSlate, ranking, policy);
   frontPage = ensureEmotionalBalance(frontPage, poolForSlate, ranking, policy);
+  // Local-only pool still goes through selectFrontPage slot labels
+  // (national/interest/feature). Relabel for the Local News homepage filter.
   frontPage = {
     ...frontPage,
+    stories: frontPage.stories.map((s) => ({ ...s, role: "local" as const })),
     scoredCandidates: scored,
   };
 
@@ -227,7 +241,7 @@ export async function runLocalEditorialDecisions(
     calendar,
     policy,
     lead: leadScored,
-    leadRole: leadStory?.role,
+    leadRole: leadStory?.role ?? (leadStory ? "local" : undefined),
     slate: frontPage.stories.map((s) => ({
       story: s.story,
       score: s.score,
@@ -249,6 +263,8 @@ export async function runLocalEditorialDecisions(
     mode: policy.mode,
     lead: leadStory?.headline?.slice(0, 60) ?? null,
     leadRole: leadStory?.role ?? null,
+    contentType: leadStory?.contentType ?? null,
+    deskBadge: leadStory?.deskBadge ?? null,
     slateRoles: frontPage.stories.map((s) => s.role),
     localPoolSize: scored.length,
   });

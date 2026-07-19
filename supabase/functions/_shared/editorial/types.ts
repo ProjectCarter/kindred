@@ -27,9 +27,11 @@ export type SectionEditorialNotes = {
     title: string;
     role?: string;
     notes: EditorialNote[];
-    /** Single-story body for Top Stories — never a mashup of unrelated wires. */
+    /** Wire or Story Editor body for this single story. */
     summary?: string;
     dek?: string | null;
+    /** Story Editor paragraphs when present. */
+    body?: string[];
     source?: string | null;
     url?: string | null;
     imageUrl?: string | null;
@@ -99,6 +101,8 @@ export type BuildEditorialContextInput = {
       /** Wire or Story Editor body for this single story. */
       description?: string;
       dek?: string | null;
+      /** Story Editor paragraphs when the desk has rewritten the story. */
+      body?: string[];
       url?: string | null;
       imageUrl?: string | null;
       role: string;

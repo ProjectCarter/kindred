@@ -13,8 +13,10 @@ export const GENERATION_STALL_MESSAGE =
   "Today's edition is taking longer than expected. Tap Retry to check again.";
 
 export type GenerationJobRow = {
+  id?: string;
   status: string;
   last_error: string | null;
+  edition_id?: string | null;
 };
 
 export type GenerateEditionEnqueueResponse =
@@ -99,7 +101,7 @@ export async function fetchGenerationJobForEdition(
 ): Promise<{ data: GenerationJobRow | null; error: Error | null }> {
   let query = supabase
     .from("generation_jobs")
-    .select("status, last_error")
+    .select("id, status, last_error, edition_id")
     .eq("user_id", input.userId)
     .eq("edition_date", input.editionDate);
 

@@ -18,6 +18,12 @@ export type LeadStoryHeroImage = {
 
 export type LeadStoryRole = "local" | "national" | "world" | "breaking";
 
+export type LocalNewsContentType =
+  | "local_news"
+  | "sports"
+  | "weather"
+  | "community";
+
 /**
  * Front Page Lead Story — one editorial-quality story per edition.
  * Stored as structured metadata; UI placeholder optional / later.
@@ -35,6 +41,13 @@ export type LeadStory = {
   url: string | null;
   publishedAt: string | null;
   role: LeadStoryRole;
+  /**
+   * Local News desk content type — drives homepage badge when the section
+   * falls back through sports / weather / community.
+   */
+  contentType?: LocalNewsContentType | null;
+  /** Homepage kicker badge, e.g. "🏈 Sports". */
+  deskBadge?: string | null;
   heroImage: LeadStoryHeroImage;
   banditsPick: BanditsPickReservation;
   selection: {
@@ -57,6 +70,7 @@ export type SelectLeadStoryInput = {
       url: string | null;
       publishedAt: string | null;
       imageUrl?: string | null;
+      category?: string | null;
       pool: string;
     };
     score: number;
@@ -73,6 +87,7 @@ export type SelectLeadStoryInput = {
       url: string | null;
       publishedAt: string | null;
       imageUrl?: string | null;
+      category?: string | null;
       pool: string;
     };
     score: number;
@@ -81,6 +96,12 @@ export type SelectLeadStoryInput = {
   localScoreThreshold?: number;
   /** Front-page keys from recent editions — prefer a Lead the reader hasn’t seen. */
   recentStoryKeys?: string[];
+  place?: {
+    city?: string | null;
+    state?: string | null;
+    region?: string | null;
+    metroKey?: string | null;
+  };
 };
 
 export type LeadStoryPolicy = {

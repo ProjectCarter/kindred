@@ -5,13 +5,21 @@
 import {
   GLOBAL_LANGUAGE_DIGEST,
   LEARNING_ENGINE_DIGEST,
+  LOCAL_NEWS_BRIEFING_DIGEST,
   MEMORABILITY_DIGEST,
   STORY_EDITOR_QUESTIONS,
   STORY_STANDARD_DIGEST,
 } from "./constitutions.ts";
 import type { ConsultationPack, StoryEditorIntake } from "./types.ts";
 
-export function storyEditorSystemPrompt(locale: string): string {
+export function storyEditorSystemPrompt(
+  locale: string,
+  surfaceRole?: StoryEditorIntake["surfaceRole"]
+): string {
+  const localNewsBlock =
+    surfaceRole === "local_news"
+      ? `\n\n${LOCAL_NEWS_BRIEFING_DIGEST}\n`
+      : "";
   return (
     "You are Kindred’s Story Editor — a senior magazine editor whose only job is " +
     "to protect the reader from boring articles while preserving absolute truth.\n\n" +
@@ -24,6 +32,7 @@ export function storyEditorSystemPrompt(locale: string): string {
     GLOBAL_LANGUAGE_DIGEST.replace("{locale}", locale) +
     "\n\n" +
     LEARNING_ENGINE_DIGEST +
+    localNewsBlock +
     "\n\n" +
     "Before approving, answer NO to continue rewriting:\n" +
     STORY_EDITOR_QUESTIONS.map((q) => `• ${q}`).join("\n") +
@@ -57,6 +66,20 @@ export function storyEditorUserPrompt(
       ? `Selection framing (not facts): ${intake.selectionWhy.join("; ")}\n`
       : "";
 
+  const place =
+    intake.readerPlace &&
+    (intake.readerPlace.city ||
+      intake.readerPlace.region ||
+      intake.readerPlace.state)
+      ? `Reader place: ${[
+          intake.readerPlace.city,
+          intake.readerPlace.region,
+          intake.readerPlace.state,
+        ]
+          .filter(Boolean)
+          .join(", ")}.\n`
+      : "";
+
   const principles = consultation.principles
     .slice(0, 8)
     .map((p) => `- [${p.id}] ${p.title}: ${p.guidance}`)
@@ -73,6 +96,7 @@ export function storyEditorUserPrompt(
     `Source: ${intake.source}\n` +
     `Published: ${intake.publishedAt ?? "unknown"}\n` +
     why +
+    place +
     `\nSOURCE TEXT (closed world — do not invent beyond this):\n${intake.sourceText}\n` +
     `\nWIRE HEADLINE:\n${intake.headline}\n` +
     prior +
@@ -86,6 +110,9 @@ export function storyEditorUserPrompt(
       : "") +
     red +
     "\nRewrite until a senior editor would proudly publish this in tomorrow’s Kindred edition. " +
+    (intake.surfaceRole === "local_news"
+      ? "Write a complete Local News briefing (4–8 paragraphs when the source supports it). "
+      : "") +
     "If the source is thin, write a short honest briefing and state limits — never pad with fiction."
   );
 }

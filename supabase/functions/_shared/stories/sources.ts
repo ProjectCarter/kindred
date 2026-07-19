@@ -36,6 +36,17 @@ export const LOW_QUALITY_SOURCE_HINTS = [
   "unilad",
 ];
 
+/** Syndicated press wires — deprioritize vs original local reporting. */
+export const PRESS_RELEASE_SOURCE_HINTS = [
+  "prnewswire",
+  "globe newswire",
+  "globenewswire",
+  "business wire",
+  "businesswire",
+  "accesswire",
+  "ein presswire",
+];
+
 export const BREAKING_HINTS =
   /\b(breaking|just in|developing|urgent|live updates|shoots up|collapses|emergency|evacuation)\b/i;
 

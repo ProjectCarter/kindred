@@ -1,5 +1,6 @@
 import { banditDayLine } from "./morningRitual";
 import { isDisqualifiedBanditsPickStory } from "./banditPickQuality";
+import { isBanditsPicksEnabled } from "./banditsPicksFeature";
 import type { DiscoveryItem } from "./discovery";
 
 /**
@@ -262,22 +263,32 @@ function parseBanditsPick(value: unknown): BanditsPick | null {
 }
 
 /**
- * Bandit's Pick for the end of the edition — null when none stored.
+ * Bandit's Pick for the end of the edition — null when none stored,
+ * malformed, or when the V1 surface is disabled (`banditsPicksFeature`).
  */
 export function banditsPick(
   payload: BanditPayload | null | undefined
 ): BanditsPick | null {
-  const pick = payload?.pick ?? null;
-  if (!pick) return null;
-  if (
-    isDisqualifiedBanditsPickStory({
-      headline: pick.story.headline,
-      summary: pick.story.summary,
-    })
-  ) {
+  if (!isBanditsPicksEnabled()) return null;
+  try {
+    if (!payload || typeof payload !== "object") return null;
+    const pick = payload.pick ?? null;
+    if (!pick || typeof pick !== "object") return null;
+    const story = pick.story;
+    if (!story || typeof story !== "object") return null;
+    if (
+      isDisqualifiedBanditsPickStory({
+        headline: typeof story.headline === "string" ? story.headline : "",
+        summary: typeof story.summary === "string" ? story.summary : "",
+      })
+    ) {
+      return null;
+    }
+    return pick;
+  } catch {
+    // Malformed pick must never throw into homepage load.
     return null;
   }
-  return pick;
 }
 
 /** Morning line for MorningGreeting — from stored payload. */

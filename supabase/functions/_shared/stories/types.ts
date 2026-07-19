@@ -40,6 +40,8 @@ export type StoryRankingProfile = {
   city: string | null;
   region: string | null;
   state: string | null;
+  /** Edition market — used for state sports desk fallbacks. */
+  metroKey?: string | null;
 };
 
 export type PersonalizationRankingSignals = {

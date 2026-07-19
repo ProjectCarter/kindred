@@ -3,7 +3,7 @@
  */
 
 import { isPlaceholderCopy } from "../contentQuality.ts";
-import type { StoryEditorScores } from "./types.ts";
+import type { StoryEditorScores, StorySurfaceRole } from "./types.ts";
 import { STORY_EDITOR_SCORE_KEYS } from "./types.ts";
 
 const AI_TELLS =
@@ -71,6 +71,11 @@ export function isThinSource(sourceText: string): boolean {
   return wordCount(sourceText) < 40;
 }
 
+/** Rich wire notes can support a full Local News briefing. */
+export function isRichLocalNewsSource(sourceText: string): boolean {
+  return wordCount(sourceText) >= 80;
+}
+
 export type ValidationIssue = {
   code: string;
   message: string;
@@ -85,6 +90,7 @@ export function validateStoryDraft(input: {
   voluntaryFinish: boolean;
   memorableInsight: string | null;
   requirePerfectScores: boolean;
+  surfaceRole?: StorySurfaceRole;
 }): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const body = input.paragraphs.join("\n\n");
@@ -155,6 +161,36 @@ export function validateStoryDraft(input: {
     issues.push({
       code: "too_thin_for_source",
       message: "Source supported more understanding than this draft delivers.",
+    });
+  }
+
+  if (
+    input.surfaceRole === "local_news" &&
+    isRichLocalNewsSource(input.sourceText)
+  ) {
+    if (input.paragraphs.length < 4) {
+      issues.push({
+        code: "briefing_too_short",
+        message:
+          "Local News briefing should be 4–8 paragraphs when the source supports it.",
+      });
+    }
+    if (input.paragraphs.length > 8) {
+      issues.push({
+        code: "briefing_too_long",
+        message: "Local News briefing exceeds eight paragraphs.",
+      });
+    }
+  }
+
+  if (
+    input.surfaceRole === "local_news" &&
+    isThinSource(input.sourceText) &&
+    input.paragraphs.length > 3
+  ) {
+    issues.push({
+      code: "thin_source_padded",
+      message: "Thin wire padded beyond an honest Local News briefing.",
     });
   }
 

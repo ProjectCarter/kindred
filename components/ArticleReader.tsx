@@ -50,6 +50,7 @@ import {
 } from "../lib/personalization";
 import { supabase } from "../lib/supabase";
 import { resolveArticleHero, supportingFiguresForArticle } from "../lib/edition/articleHero";
+import { isWireNewsSection } from "../lib/edition/articleIntegrity";
 import {
   resolveClipTarget,
   checkClipped,
@@ -247,6 +248,7 @@ export function ArticleReader({
   const swapInEditorialHero = useCallback(() => {
     if (
       isProtectedHistoricalSection(article.section) ||
+      isWireNewsSection(article.section) ||
       article.section === "bandits_pick" ||
       article.section === "discovery" ||
       article.section === "local_events" ||
@@ -303,6 +305,7 @@ export function ArticleReader({
         if (!heroReadyRef.current) {
           if (
             isProtectedHistoricalSection(article.section) ||
+            isWireNewsSection(article.section) ||
             article.section === "bandits_pick" ||
             article.section === "discovery" ||
             article.section === "local_events" ||
@@ -742,19 +745,20 @@ export function ArticleReader({
                   setHeroReady(true);
                   return;
                 }
-                if (
-                  isProtectedHistoricalSection(article.section) ||
-                  article.section === "bandits_pick" ||
-                  article.section === "discovery" ||
-                  article.section === "local_events" ||
-                  article.savedContentType
-                ) {
-                  setHeroFailed(true);
-                  setEditorialFallback(null);
-                  setHeroReady(true);
-                  return;
-                }
-                swapInEditorialHero();
+          if (
+            isProtectedHistoricalSection(article.section) ||
+            isWireNewsSection(article.section) ||
+            article.section === "bandits_pick" ||
+            article.section === "discovery" ||
+            article.section === "local_events" ||
+            article.savedContentType
+          ) {
+            setHeroFailed(true);
+            setEditorialFallback(null);
+            setHeroReady(true);
+            return;
+          }
+          swapInEditorialHero();
               }}
             />
           )}
@@ -1133,6 +1137,24 @@ function HeroFigure({
   const showHero = Boolean(heroLocal) || (Boolean(heroUri) && !heroFailed);
 
   if (!showHero) {
+    if (heroUri && heroFailed) {
+      return (
+        <View style={[styles.heroBleed, { width: windowWidth }]}>
+          <View
+            style={[
+              styles.imageUnavailable,
+              { width: windowWidth, height: Math.round(windowWidth * 0.72) },
+            ]}
+            accessibilityRole="text"
+            accessibilityLabel="Photograph unavailable"
+          >
+            <Text style={styles.imageUnavailableText} maxFontSizeMultiplier={1.1}>
+              Photograph unavailable
+            </Text>
+          </View>
+        </View>
+      );
+    }
     return <View style={styles.heroAbsentRule} />;
   }
 
@@ -1541,6 +1563,20 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
     marginHorizontal: reader.gutter,
+  },
+  imageUnavailable: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: paper.creamDeep,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: paper.inkRule,
+    paddingHorizontal: 16,
+  },
+  imageUnavailableText: {
+    ...reader.caption,
+    fontStyle: "normal",
+    color: paper.inkMuted,
+    textAlign: "center",
   },
   textOnlyLead: {
     width: "100%",

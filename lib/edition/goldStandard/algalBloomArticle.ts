@@ -5,7 +5,7 @@
  * (scene → stakes → discovery → evidence → implication), not a reprint.
  * Prose is original to Kindred’s science desk.
  *
- * Open via articleFromLeadStory / GOLD_STANDARD_ARTICLE_ID.
+ * Open via GOLD_STANDARD_ARTICLE_ID for the Phase 1 editorial blueprint.
  */
 
 import type { ImageSourcePropType } from "react-native";

@@ -24,6 +24,7 @@ import {
   resolveArticleSessionSync,
   type ResolveArticleSessionResult,
 } from "../../lib/edition/resolveArticleSession";
+import { articleMatchesRouteId } from "../../lib/edition/articleIntegrity";
 import type { ArticleSession } from "../../lib/edition/articleSession";
 import { openKindredArticle } from "../../lib/edition/openArticle";
 import { paper } from "../../lib/edition/newspaperTheme";
@@ -136,6 +137,31 @@ export default function ArticleScreen() {
   }
 
   const article: KindredArticle = session.article;
+  if (
+    routeArticleId &&
+    !articleMatchesRouteId(routeArticleId, article)
+  ) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <StatusBar style="dark" />
+        <Text style={styles.missingTitle}>This story isn’t available</Text>
+        <Text style={styles.missingBody}>
+          The article reader could not verify this story. Return to your edition
+          and open it again from the front page.
+        </Text>
+        <Pressable
+          onPress={goBack}
+          accessibilityRole="button"
+          accessibilityLabel="Back to today’s paper"
+          hitSlop={12}
+          style={({ pressed }) => pressed && { opacity: 0.55 }}
+        >
+          <Text style={styles.backLink}>← Today’s paper</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
   const resolvedBack =
     routeBackLabel?.trim() || session.backLabel || "← Today’s paper";
   const resolvedEdition = routeEditionId || session.editionId || null;

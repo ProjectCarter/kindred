@@ -18,6 +18,7 @@ import type { MorningBriefing } from "../lib/edition/morningEdition";
 import type { RankedDiscoveryItem, DiscoveryPayload } from "../lib/edition/discovery";
 import type { KindredArticle } from "../lib/edition/article";
 import type { BanditsPick as BanditsPickData } from "../lib/edition/bandit";
+import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
 import {
   articleFromBanditsPick,
   articleFromDiscoveryItem,
@@ -49,6 +50,10 @@ import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { sectionIntro } from "../lib/edition/sectionIntro";
+import {
+  LOCAL_NEWS_EMPTY_PLACEHOLDER,
+  resolveLocalNewsHomePackage,
+} from "../lib/edition/localNewsHome";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localEvents";
 import {
@@ -81,7 +86,6 @@ import {
   freezeEdition,
   getFrozenDiscovery,
 } from "../lib/edition/editionFreeze";
-import { resolveArticleHero } from "../lib/edition/articleHero";
 import { fetchUsNationalDailyByDate } from "../lib/edition/fetchUsNationalDaily";
 import {
   resolveTodayInHistoryImage,
@@ -191,8 +195,7 @@ const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
 };
 
 /**
- * Wire photo when the story has one, otherwise a curated editorial fallback.
- * Used for authorized news desks — not listing sections.
+ * Wire photo when the story has one — never substitute unrelated editorial stock.
  */
 function wireOrFallbackImage(input: {
   imageUrl?: string | null;
@@ -200,16 +203,10 @@ function wireOrFallbackImage(input: {
   section: string;
   summary?: string | null;
   source?: string | null;
-}): ImageSourcePropType {
+}): ImageSourcePropType | null {
   const uri = input.imageUrl?.trim();
   if (uri) return { uri };
-  const hero = resolveArticleHero({
-    headline: input.headline,
-    section: input.section,
-    body: input.summary ? [input.summary] : [],
-    source: input.source ?? null,
-  });
-  return (hero.source ?? require("../assets/heroes/hero-default-morning.jpg")) as ImageSourcePropType;
+  return null;
 }
 
 /**
@@ -554,9 +551,14 @@ function EditionReaderInner({
   const editionAnchors = useMemo(
     () =>
       buildEditionAnchors({
-        banditsPickTitle: banditsPick?.story.headline ?? null,
-        banditsPickCategory:
-          banditsPick?.story.discoveryItem?.category ?? banditsPick?.kind ?? null,
+        banditsPickTitle: isBanditsPicksEnabled()
+          ? banditsPick?.story?.headline ?? null
+          : null,
+        banditsPickCategory: isBanditsPicksEnabled()
+          ? banditsPick?.story?.discoveryItem?.category ??
+            banditsPick?.kind ??
+            null
+          : null,
         historyHeadline: history?.headline ?? history?.body?.slice(0, 160) ?? null,
         heroStyle: [
           morningHero?.artworkTitle,
@@ -741,8 +743,10 @@ function EditionReaderInner({
         cards: historyCarouselCards.length,
       },
       localNews: {
-        leadPresent: Boolean(leadStory && /local/i.test(leadStory.role ?? "")),
-        topStories: topStories.length,
+        leadPresent: Boolean(localNewsPackage.lead),
+        featureTopStoryPresent: Boolean(localNewsPackage.featureTopStory),
+        topStories: localTopStories.length,
+        hasStories: localNewsPackage.hasStories,
       },
     });
   }, [
@@ -773,6 +777,14 @@ function EditionReaderInner({
   const localTopStories = topStories.filter((s) =>
     /local/i.test(s.role ?? "")
   );
+  const localNewsPackage = useMemo(
+    () =>
+      resolveLocalNewsHomePackage({
+        leadStory: leadStory ?? null,
+        topStories,
+      }),
+    [leadStory, topStories]
+  );
 
   const localBiz = sectionAllocation.nonEventItems.filter((d) =>
     ["coffee", "restaurants"].includes(d.item.category)
@@ -784,7 +796,7 @@ function EditionReaderInner({
   );
 
   const banditsPickArticle = useMemo(() => {
-    if (!banditsPick) return null;
+    if (!isBanditsPicksEnabled() || !banditsPick) return null;
     if (banditsPick.kind !== "article" && banditsPick.story.discoveryItem) {
       return articleFromDiscoveryItem(
         {
@@ -1035,7 +1047,7 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {banditsPick ? (
+      {isBanditsPicksEnabled() && banditsPick ? (
         <FolioReveal index={folioCursor++}>
           {banditsPick.intro?.trim() ? (
             <View
@@ -1090,26 +1102,58 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      <FolioReveal index={folioCursor++}>
-        {leadStory && /local/i.test(leadStory.role ?? "") ? (
+      {/* Local News — section chrome always mounts; data only gates cards vs empty copy. */}
+      <FolioReveal index={folioCursor++} disabled>
+        {(() => {
+          console.log("[LOCAL_NEWS_RENDER_PROOF] section mounted", {
+            contentType:
+              localNewsPackage.lead?.contentType ??
+              localNewsPackage.featureTopStory?.contentType ??
+              null,
+            deskBadge: localNewsPackage.deskBadge,
+            hasStories: localNewsPackage.hasStories,
+          });
+          return null;
+        })()}
+        {localNewsPackage.hasStories &&
+        (localNewsPackage.lead || localNewsPackage.featureTopStory) ? (
           <TimeStylePackage
             sectionLabel="Local News"
-            feature={{
-              id: leadStory.id,
-              kicker: "Local",
-              headline: leadStory.headline,
-              dek: leadStory.summary,
-              byline: leadStory.source,
-              image: wireOrFallbackImage({
-                imageUrl: leadStory.heroImage?.uri,
-                headline: leadStory.headline,
-                section: "local_news",
-                summary: leadStory.summary,
-                source: leadStory.source,
-              }),
-              imageLabel: leadStory.heroImage?.alt,
-            }}
-            sides={localTopStories.slice(0, 2).map((s) => ({
+            feature={
+              localNewsPackage.lead
+                ? {
+                    id: localNewsPackage.lead.id,
+                    kicker: localNewsPackage.deskBadge,
+                    headline: localNewsPackage.lead.headline,
+                    dek: localNewsPackage.lead.summary,
+                    byline: localNewsPackage.lead.source,
+                    image: wireOrFallbackImage({
+                      imageUrl: localNewsPackage.lead.heroImage?.uri,
+                      headline: localNewsPackage.lead.headline,
+                      section: "local_news",
+                      summary: localNewsPackage.lead.summary,
+                      source: localNewsPackage.lead.source,
+                    }),
+                    imageLabel: localNewsPackage.lead.heroImage?.alt,
+                  }
+                : {
+                    id: localNewsPackage.featureTopStory!.id,
+                    kicker: localNewsPackage.deskBadge,
+                    headline: localNewsPackage.featureTopStory!.headline,
+                    dek:
+                      localNewsPackage.featureTopStory!.dek ??
+                      localNewsPackage.featureTopStory!.summary,
+                    byline: localNewsPackage.featureTopStory!.source,
+                    image: wireOrFallbackImage({
+                      imageUrl: localNewsPackage.featureTopStory!.imageUrl,
+                      headline: localNewsPackage.featureTopStory!.headline,
+                      section: "local_news",
+                      summary: localNewsPackage.featureTopStory!.summary,
+                      source: localNewsPackage.featureTopStory!.source,
+                    }),
+                  }
+            }
+            sides={localNewsPackage.sideStories.map((s) => ({
               id: s.id,
               headline: s.headline,
               byline: s.source,
@@ -1124,17 +1168,39 @@ function EditionReaderInner({
             onOpen={
               onOpenArticle
                 ? (id) => {
-                    if (id === leadStory.id) {
-                      openLead(leadStory);
+                    if (
+                      localNewsPackage.lead &&
+                      id === localNewsPackage.lead.id
+                    ) {
+                      openLead(localNewsPackage.lead);
                       return;
                     }
-                    const story = localTopStories.find((s) => s.id === id);
+                    const story =
+                      localNewsPackage.sideStories.find((s) => s.id === id) ??
+                      (localNewsPackage.featureTopStory?.id === id
+                        ? localNewsPackage.featureTopStory
+                        : null);
                     if (story) onOpenArticle(articleFromTopStory(story));
                   }
                 : undefined
             }
           />
-        ) : null}
+        ) : (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>Local News</Text>
+              <View style={styles.sectionRule} />
+            </View>
+            {sectionIntro("local_news") ? (
+              <Text style={styles.sectionIntro}>
+                {sectionIntro("local_news")}
+              </Text>
+            ) : null}
+            <Text style={styles.sectionDek}>
+              {LOCAL_NEWS_EMPTY_PLACEHOLDER}
+            </Text>
+          </View>
+        )}
       </FolioReveal>
 
       {lookingAhead ? (

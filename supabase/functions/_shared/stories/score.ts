@@ -3,6 +3,7 @@ import {
   INTEREST_MAP,
   LOW_QUALITY_SOURCE_HINTS,
   NATIONAL_HINTS,
+  PRESS_RELEASE_SOURCE_HINTS,
   QUALITY_SOURCES,
   UPLIFTING_HINTS,
   WORLD_HINTS,
@@ -19,6 +20,7 @@ import {
   isPublicSafetyStory,
   shouldDeprioritizeForTone,
 } from "../editor/tone.ts";
+import { isPressReleaseWire } from "../../../../lib/edition/localNewsFreshness.ts";
 import type {
   CandidateStory,
   StoryRankingContext,
@@ -521,6 +523,20 @@ export function scoreCandidate(
   const quality = sourceQuality(story.source);
   score += quality.score;
   if (quality.reason) reasons.push(quality.reason);
+
+  if (
+    isPressReleaseWire({ source: story.source, url: story.url }) ||
+    PRESS_RELEASE_SOURCE_HINTS.some((h) =>
+      normalize(story.source).includes(h)
+    )
+  ) {
+    score -= 20;
+    reasons.push({
+      code: "press_release_penalty",
+      label: "Syndicated press release — prefer original local reporting",
+      weight: -20,
+    });
+  }
 
   const interest = interestScore(story, ctx.interests);
   score += interest.score;

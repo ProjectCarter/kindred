@@ -66,6 +66,8 @@ import {
   type TemperatureUnitPreference,
 } from "./weather/units.ts";
 import { runStoryEditorSafe } from "./storyEditor/index.ts";
+import { localNewsSurfaceRole, promoteLocalLeadFromFrontPage } from "./storyEditor/localNewsBriefing.ts";
+import { loadRecentStoryKeys } from "./stories/recentStoryKeys.ts";
 import { NEWSPAPER_STYLE_RULES, stripLeadingSalutation } from "./editorialStyle.ts";
 import type { LeadStory } from "./leadStory/types.ts";
 import {
@@ -443,58 +445,7 @@ async function writeEditionSection(
  * Load recent front-page / lead headlines so today’s paper avoids repetition.
  * Keys are titles, ids, and urls from the last several editions.
  */
-async function loadRecentStoryKeys(
-  supabaseAdmin: SupabaseClient,
-  userId: string,
-  limit = 10
-): Promise<string[]> {
-  const { data, error } = await supabaseAdmin
-    .from("editions")
-    .select("edition_date, lead_story, editorial_context")
-    .eq("user_id", userId)
-    .order("edition_date", { ascending: false })
-    .limit(limit);
-
-  if (error || !data?.length) {
-    if (error) {
-      console.log("[buildEdition] recent story keys lookup", {
-        error: error.message,
-      });
-    }
-    return [];
-  }
-
-  const keys: string[] = [];
-  for (const row of data) {
-    const lead = row.lead_story as {
-      id?: string;
-      headline?: string;
-      url?: string | null;
-    } | null;
-    if (lead?.headline) keys.push(lead.headline);
-    if (lead?.id) keys.push(lead.id);
-    if (lead?.url) keys.push(lead.url);
-
-    const ctx = row.editorial_context as {
-      sections?: Array<{
-        sectionType?: string;
-        items?: Array<{ title?: string; id?: string }>;
-      }>;
-    } | null;
-    const top = ctx?.sections?.find((s) => s.sectionType === "top_stories");
-    for (const item of top?.items ?? []) {
-      if (item.title) keys.push(item.title);
-      if (item.id) keys.push(item.id);
-    }
-  }
-
-  const unique = Array.from(new Set(keys.map((k) => k.trim()).filter(Boolean)));
-  console.log("[buildEdition] recent story keys", {
-    editionCount: data.length,
-    keyCount: unique.length,
-  });
-  return unique;
-}
+// loadRecentStoryKeys — shared with staged Local News (stories/recentStoryKeys.ts)
 
 /**
  * Load recent From the desk picks so recommendations rotate across mornings.
@@ -676,7 +627,10 @@ export async function buildEditionForUser(
   const [recentStoryKeys, recentDiscoveryKeys, personalization, memoryArchive, banditReader] =
     await Promise.all([
       timer.timed("Recent Story Keys (DB)", () =>
-        loadRecentStoryKeys(supabaseAdmin, userId)
+        loadRecentStoryKeys(supabaseAdmin, userId, {
+          metroKey: editionMetroKey,
+          excludeEditionDate: options.editionDate ?? null,
+        })
       ),
       timer.timed("Recent Discovery Keys (DB)", () =>
         loadRecentDiscoveryKeys(supabaseAdmin, userId)
@@ -806,6 +760,7 @@ export async function buildEditionForUser(
           city,
           region,
           state,
+          metroKey: editionMetroKey,
           now: new Date(),
           maxStories: 4,
           recentStoryKeys: blendedRecentKeys,
@@ -864,7 +819,15 @@ export async function buildEditionForUser(
 
   const frontPage = editorial.frontPage;
   const topStories = frontPage.stories;
-  let leadStory: LeadStory | null = editorial.leadStory;
+  let leadStory: LeadStory | null = promoteLocalLeadFromFrontPage(editorial, {
+    recentStoryKeys: blendedRecentKeys,
+    place: {
+      city: location.city,
+      region: location.region,
+      state: location.state,
+      metroKey: editionMetroKey,
+    },
+  });
 
   // Computed early (was previously derived just before the real Discovery
   // Engine call) — Bandit's Pick needs it too, and every input here
@@ -1120,8 +1083,13 @@ export async function buildEditionForUser(
                   source: leadStory.source,
                   url: leadStory.url,
                   publishedAt: leadStory.publishedAt,
-                  surfaceRole: "lead",
+                  surfaceRole: localNewsSurfaceRole(leadStory.role, "lead"),
                   locale: "en",
+                  readerPlace: {
+                    city: city ?? location.city,
+                    region: region ?? location.region,
+                    state: state ?? location.state,
+                  },
                   selectionWhy: leadStory.selection.reasons
                     .map((r) => r.label)
                     .slice(0, 4),
@@ -1155,8 +1123,13 @@ export async function buildEditionForUser(
                 source: ranked.story.source,
                 url: ranked.story.url,
                 publishedAt: ranked.story.publishedAt,
-                surfaceRole: "top_story",
+                surfaceRole: localNewsSurfaceRole(ranked.role, "top_story"),
                 locale: "en",
+                readerPlace: {
+                  city: city ?? location.city,
+                  region: region ?? location.region,
+                  state: state ?? location.state,
+                },
                 selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
               },
               anthropicApiKey
@@ -1171,12 +1144,16 @@ export async function buildEditionForUser(
   const [editedLead, editedPick, ...editedTopStories] = editedBatch;
 
   if (leadStory && editedLead) {
+    const cardSummary =
+      editedLead.dek?.trim() ||
+      editedLead.paragraphs[0]?.trim().slice(0, 220) ||
+      leadStory.summary;
     leadStory = {
       ...leadStory,
       headline: editedLead.headline || leadStory.headline,
-      summary: editedLead.bodyText || leadStory.summary,
+      summary: cardSummary,
       body: editedLead.paragraphs,
-      dek: editedLead.dek,
+      dek: editedLead.dek ?? cardSummary,
       desk: editedLead.desk as unknown as Record<string, unknown>,
     };
     console.log("[buildEdition] storyEditor lead", {
@@ -1193,6 +1170,7 @@ export async function buildEditionForUser(
     title: string;
     description: string;
     dek: string | null;
+    body: string[];
     url: string | null;
     imageUrl: string | null;
     role: string;
@@ -1209,11 +1187,14 @@ export async function buildEditionForUser(
       passes: edited.desk.passes,
       paras: edited.paragraphs.length,
     });
+    const wireSummary =
+      ranked.story.description?.trim() || ranked.story.title.trim();
     return {
       id: ranked.story.id,
       title: edited.headline || ranked.story.title,
-      description: edited.bodyText || ranked.story.description,
+      description: edited.bodyText || wireSummary,
       dek: edited.dek,
+      body: edited.paragraphs,
       url: ranked.story.url,
       imageUrl: ranked.story.imageUrl ?? null,
       role: ranked.role,

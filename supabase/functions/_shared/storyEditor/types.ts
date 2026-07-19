@@ -6,12 +6,19 @@
 
 export type StorySurfaceRole =
   | "lead"
+  | "local_news"
   | "top_story"
   | "top_stories_section"
   | "bandits_pick"
   | "discovery"
   | "knowledge"
   | "desk_section";
+
+export type StoryEditorReaderPlace = {
+  city: string | null;
+  region: string | null;
+  state: string | null;
+};
 
 export type StoryEditorLocale = string; // BCP-47, e.g. "en", "es", "ja"
 
@@ -67,6 +74,8 @@ export type StoryEditorIntake = {
   } | null;
   selectionWhy?: string[];
   consultation?: ConsultationPack | null;
+  /** Reader geography — required context for Local News briefings. */
+  readerPlace?: StoryEditorReaderPlace | null;
 };
 
 export type StoryEditorDeskMeta = {

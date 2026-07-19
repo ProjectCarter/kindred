@@ -10,7 +10,7 @@ import {
   validateStoryDraft,
   type ValidationIssue,
 } from "./validators.ts";
-import { composeThinHonest, composeWireFallback } from "./thinFallback.ts";
+import { composeThinHonest, composeWireFallback, composeLocalNewsThinHonest } from "./thinFallback.ts";
 import {
   STORY_EDITOR_MAX_PASSES,
   type StoryEditorIntake,
@@ -141,7 +141,7 @@ async function callStoryEditorModel(
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
       max_tokens: 2200,
-      system: storyEditorSystemPrompt(locale),
+      system: storyEditorSystemPrompt(locale, intake.surfaceRole),
       messages: [
         {
           role: "user",
@@ -263,6 +263,7 @@ export async function runStoryEditor(
         voluntaryFinish: Boolean(thinAttempt.voluntary_finish),
         memorableInsight: thinAttempt.memorable_insight ?? null,
         requirePerfectScores: false,
+        surfaceRole: intake.surfaceRole,
       });
       const factIssues = issues.filter(
         (i) =>
@@ -280,10 +281,15 @@ export async function runStoryEditor(
         return result;
       }
     }
-    return composeThinHonest(
-      working,
-      "Thin source — published honest briefing without invented depth."
-    );
+    return intake.surfaceRole === "local_news"
+      ? composeLocalNewsThinHonest(
+          working,
+          "Thin source — published honest Local News briefing without invented depth."
+        )
+      : composeThinHonest(
+          working,
+          "Thin source — published honest briefing without invented depth."
+        );
   }
 
   let redPen: string[] = [];
@@ -322,6 +328,7 @@ export async function runStoryEditor(
       voluntaryFinish: Boolean(draft.voluntary_finish),
       memorableInsight: draft.memorable_insight ?? null,
       requirePerfectScores: true,
+      surfaceRole: intake.surfaceRole,
     });
 
     const candidate = toResult(working, draft, pass, "full");
@@ -360,6 +367,7 @@ export async function runStoryEditor(
       voluntaryFinish: best.desk.voluntaryFinish,
       memorableInsight: best.desk.memorableInsight,
       requirePerfectScores: false,
+      surfaceRole: intake.surfaceRole,
     });
     const fatal = softIssues.filter((i) =>
       [
@@ -399,10 +407,15 @@ export async function runStoryEditor(
   console.log("[storyEditor] breaker — thin honest", {
     id: intake.id.slice(0, 48),
   });
-  return composeThinHonest(
-    working,
-    "Story Editor could not clear excellence gates within the build budget; published honest briefing."
-  );
+  return intake.surfaceRole === "local_news"
+    ? composeLocalNewsThinHonest(
+        working,
+        "Story Editor could not clear excellence gates within the build budget; published honest Local News briefing."
+      )
+    : composeThinHonest(
+        working,
+        "Story Editor could not clear excellence gates within the build budget; published honest briefing."
+      );
 }
 
 /**
@@ -412,7 +425,14 @@ export async function runStoryEditorSafe(
   intake: StoryEditorIntake,
   apiKey: string | null | undefined
 ): Promise<StoryEditorResult> {
-  if (!apiKey) return composeWireFallback(intake);
+  if (!apiKey) {
+    return intake.surfaceRole === "local_news"
+      ? composeLocalNewsThinHonest(
+          intake,
+          "Story Editor unavailable — honest Local News briefing."
+        )
+      : composeWireFallback(intake);
+  }
   try {
     return await runStoryEditor(intake, apiKey);
   } catch (err) {
@@ -420,9 +440,14 @@ export async function runStoryEditorSafe(
       id: intake.id.slice(0, 48),
       error: err instanceof Error ? err.message : String(err),
     });
-    return composeThinHonest(
-      intake,
-      "Story Editor threw — honest fallback published."
-    );
+    return intake.surfaceRole === "local_news"
+      ? composeLocalNewsThinHonest(
+          intake,
+          "Story Editor threw — honest Local News fallback published."
+        )
+      : composeThinHonest(
+          intake,
+          "Story Editor threw — honest fallback published."
+        );
   }
 }

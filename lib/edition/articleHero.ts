@@ -9,6 +9,7 @@ import type { KindredArticle, ArticleFigure } from "./article";
 import { getHeroCatalog } from "./hero/catalog";
 import type { HeroImageAsset } from "./hero/types";
 import { getSeason } from "./hero/selectHeroImage";
+import { isWireNewsSection } from "./articleIntegrity.ts";
 
 export type ArticleHeroImage = {
   /** Remote news / wire photograph. */
@@ -159,7 +160,7 @@ export function resolveArticleHero(input: {
 
   if (wireUri) {
     const sourceName = input.source?.trim() || "Kindred";
-  const isHistory = isAuthenticHistoricalSection(input.section);
+    const isHistory = isAuthenticHistoricalSection(input.section);
     return {
       uri: wireUri,
       source: null,
@@ -171,6 +172,16 @@ export function resolveArticleHero(input: {
         input.existing?.credit?.trim() ||
         (isHistory ? null : `Photograph via ${sourceName}`),
       kind: isHistory ? "historical" : "wire",
+    };
+  }
+
+  if (isWireNewsSection(input.section)) {
+    return {
+      uri: null,
+      source: null,
+      caption: input.headline,
+      credit: null,
+      kind: "wire",
     };
   }
 
@@ -217,6 +228,23 @@ export function ensureArticleHero(article: KindredArticle): KindredArticle {
   const hasWire = Boolean(article.heroImage?.uri?.trim());
   const hasLocal = Boolean(article.heroImage?.source);
   const isHistory = isAuthenticHistoricalSection(article.section);
+
+  if (isWireNewsSection(article.section)) {
+    if (hasWire) {
+      return {
+        ...article,
+        heroImage: {
+          ...article.heroImage!,
+          credit:
+            article.heroImage?.credit?.trim() ||
+            `Photograph via ${article.source}`,
+          caption: article.heroImage?.caption || article.headline,
+          kind: "wire",
+        },
+      };
+    }
+    return { ...article, heroImage: null };
+  }
 
   if (hasWire || hasLocal) {
     if (hasWire && !article.heroImage?.credit && !isHistory) {
@@ -287,6 +315,10 @@ export function supportingFiguresForArticle(
     article.section === "local_events" ||
     article.savedContentType
   ) {
+    return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
+  }
+
+  if (isWireNewsSection(article.section)) {
     return article.figures?.filter((f) => Boolean(f.uri?.trim() || f.source)) ?? [];
   }
 

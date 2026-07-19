@@ -16,6 +16,12 @@ export type LeadStoryHeroImage = {
 
 export type LeadStoryRole = "local" | "national" | "world" | "breaking";
 
+export type LocalNewsContentType =
+  | "local_news"
+  | "sports"
+  | "weather"
+  | "community";
+
 export type LeadStory = {
   id: string;
   headline: string;
@@ -28,6 +34,10 @@ export type LeadStory = {
   url: string | null;
   publishedAt: string | null;
   role: LeadStoryRole;
+  /** Local News desk content type for homepage badge. */
+  contentType?: LocalNewsContentType | null;
+  /** Homepage kicker, e.g. "🏈 Sports". */
+  deskBadge?: string | null;
   heroImage: LeadStoryHeroImage;
   banditsPick: BanditsPickReservation;
   selection: {
@@ -107,6 +117,21 @@ export function parseLeadStory(value: unknown): LeadStory | null {
       )
     : [];
 
+  const contentTypeRaw =
+    typeof raw.contentType === "string" ? raw.contentType.trim() : "";
+  const contentType: LocalNewsContentType | null =
+    contentTypeRaw === "local_news" ||
+    contentTypeRaw === "sports" ||
+    contentTypeRaw === "weather" ||
+    contentTypeRaw === "community"
+      ? contentTypeRaw
+      : null;
+
+  const deskBadge =
+    typeof raw.deskBadge === "string" && raw.deskBadge.trim()
+      ? raw.deskBadge.trim()
+      : null;
+
   return {
     id,
     headline,
@@ -118,6 +143,8 @@ export function parseLeadStory(value: unknown): LeadStory | null {
     url: typeof raw.url === "string" ? raw.url : null,
     publishedAt: typeof raw.publishedAt === "string" ? raw.publishedAt : null,
     role,
+    contentType,
+    deskBadge,
     heroImage: {
       uri: heroUri,
       alt:

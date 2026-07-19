@@ -35,6 +35,8 @@ export type SectionEditorialNotes = {
     /** Single-story body when this item is a Top Stories entry. */
     summary?: string;
     dek?: string | null;
+    /** Story Editor paragraphs when present. */
+    body?: string[];
     source?: string | null;
     url?: string | null;
     imageUrl?: string | null;
