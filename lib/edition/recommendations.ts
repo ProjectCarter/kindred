@@ -4,32 +4,32 @@
  * purpose — same grid, same rhythm, its own editorial voice.
  */
 
-import type { RankedDiscoveryItem } from "./discovery";
+import type { RankedDiscoveryItem } from "./discovery.ts";
 import type { EditorialGridCard } from "../../components/EditorialCardGrid";
-import { resolveVenueClassification } from "./venueClassification";
+import { resolveVenueClassification } from "./venueClassification.ts";
 import {
   type ReaderLocation,
-} from "./localDiscoveryScope";
+} from "./localDiscoveryScope.ts";
 import {
   foodDrinkSortScore,
   FOOD_DRINK_SECTION_INTRO,
-} from "./foodDrinkDesk";
+} from "./foodDrinkDesk.ts";
 import {
   curateFoodDrinkEdition,
-  foodEditorFingerprintLabel,
-} from "./foodDrinkCuration";
-import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing";
-import { prepareFoodDrinkPool } from "./foodDrinkGuide";
+} from "./foodDrinkCuration.ts";
+import { foodDrinkCollectionLabel } from "./foodDrinkCollections.ts";
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing.ts";
+import { prepareFoodDrinkPool } from "./foodDrinkGuide.ts";
 import {
   homepageVenueEditorialSortScore,
   VENUE_EDITORIAL_TIER_STRONG,
-} from "./venueEditorialScore";
+} from "./venueEditorialScore.ts";
 import {
   isLowValueVenue,
   isScenicOrHiddenGem,
   venueHayFromParts,
-} from "./venueQuality";
-import { resolveDiscoveryCategoryIcon } from "./categoryIcon";
+} from "./venueQuality.ts";
+import { resolveDiscoveryCategoryIcon } from "./categoryIcon.ts";
 
 export {
   FOOD_DRINK_SECTION_INTRO,
@@ -37,7 +37,7 @@ export {
   FOOD_DRINK_SECTION_TITLE,
   FOOD_DRINK_SECTION_QUESTION,
   FOOD_DRINK_SEE_ALL_LABEL,
-} from "./foodDrinkDesk";
+} from "./foodDrinkDesk.ts";
 
 function isCompleteCard(item: RankedDiscoveryItem["item"]): boolean {
   return Boolean(item.title?.trim());
@@ -91,7 +91,7 @@ function recommendationSortScore(
 }
 
 function recommendationOverline(item: RankedDiscoveryItem["item"]): string {
-  return foodEditorFingerprintLabel(item);
+  return foodDrinkCollectionLabel(item);
 }
 
 export function selectRecommendationCards(

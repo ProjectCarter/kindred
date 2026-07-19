@@ -7,9 +7,9 @@
  * Keep in sync with supabase/functions/_shared/editorial/venueEditorialScore.ts
  */
 
-import type { VenueLifecycle } from "./venueLifecycle";
-import { isGuideEligibleLifecycle } from "./venueLifecycle";
-import { venueHayFromParts, isScenicOrHiddenGem } from "./venueQuality";
+import type { VenueLifecycle } from "./venueLifecycle.ts";
+import { isGuideEligibleLifecycle } from "./venueLifecycle.ts";
+import { venueHayFromParts, isScenicOrHiddenGem } from "./venueQuality.ts";
 
 /** Structured editorial labels — stored as ids, displayed with labels. */
 export const VENUE_EDITORIAL_LABEL_IDS = [

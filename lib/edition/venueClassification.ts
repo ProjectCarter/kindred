@@ -6,13 +6,13 @@
  * Server mirror: supabase/functions/_shared/venueClassification.ts
  */
 
-import type { ImageCategoryTag } from "./imageTaxonomy";
-import type { EditorialCategoryId } from "./editorialCategory";
+import type { ImageCategoryTag } from "./imageTaxonomy.ts";
+import type { EditorialCategoryId } from "./editorialCategory.ts";
 import {
   buildCategoryImageSearchQueries,
   resolveVerifiedEditorialCategory,
   type EditorialCategoryInput,
-} from "./editorialCategory";
+} from "./editorialCategory.ts";
 
 export type VenueClassificationInput = EditorialCategoryInput & {
   tags?: string[] | null;

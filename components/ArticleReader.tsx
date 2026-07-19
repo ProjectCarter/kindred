@@ -67,6 +67,7 @@ import {
 import { mergePullDownNavOnScroll } from "../lib/navigation/pullDownNavScrollProps";
 import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
 import { ContentTemplateModules } from "./ContentTemplateModules";
+import { StateAtAGlanceSection } from "./StateAtAGlanceSection";
 import {
   categoryLabelForType,
 } from "../lib/edition/contentSystem";
@@ -463,9 +464,6 @@ export function ArticleReader({
   );
   const banditPickItems = (continueItems ?? []).filter(
     (i) => i.kind === "bandit"
-  );
-  const continueNavItems = (continueItems ?? []).filter(
-    (i) => i.kind === "edition" || i.action === "return_to_edition"
   );
 
   const onReadingScroll = useCallback(
@@ -960,8 +958,16 @@ export function ArticleReader({
               </View>
             ))}
 
+            {isCityHistorySection(article.section) && article.stateAtAGlance ? (
+              <StateAtAGlanceSection
+                glance={article.stateAtAGlance}
+                contentWidth={readingWidth}
+              />
+            ) : null}
+
             {/* Desk modules — practical questions answered in prose (UCS) */}
-            {(article.modules?.length ?? 0) > 0 ? (
+            {(article.modules?.length ?? 0) > 0 &&
+            !isCityHistorySection(article.section) ? (
               <ContentTemplateModules modules={article.modules!} />
             ) : null}
 
@@ -1007,13 +1013,6 @@ export function ArticleReader({
               <Text style={styles.attribution}>
                 From this morning’s paper  ·  {article.source}
               </Text>
-              <Text style={styles.closingCadence} maxFontSizeMultiplier={1.25}>
-                {article.section === "bandits_pick"
-                  ? "That is Bandit’s pick for today. See you tomorrow."
-                  : briefing
-                    ? "That is the desk’s note on this story. Sit with it a moment."
-                    : "That is the end of this story. Sit with it a moment."}
-              </Text>
             </View>
 
             {/* 10. Related stories */}
@@ -1042,36 +1041,13 @@ export function ArticleReader({
             {/* 11. Continue Reading */}
             <EndMatterBlock
               kicker="Continue reading"
-              intro="The rest of the morning paper is waiting when you are ready."
+              intro="The rest of today’s morning paper is waiting."
             >
-              {(continueNavItems.length > 0
-                ? continueNavItems
-                : [
-                    {
-                      kind: "edition" as const,
-                      label: "Return to today’s edition",
-                      title: "Back to the morning paper",
-                      summary: "The rest of today’s paper is waiting.",
-                      action: "return_to_edition" as const,
-                    },
-                  ]
-              ).map((item, index, arr) => (
-                <EndMatterItem
-                  key={`continue-${item.kind}-${index}`}
-                  item={item}
-                  isLast={index === arr.length - 1}
-                  linkLabel={
-                    item.action === "return_to_edition" ? "Return" : "Continue"
-                  }
-                  onPress={() => {
-                    if (item.action === "return_to_edition") {
-                      handleBack();
-                      return;
-                    }
-                    onOpenContinue?.(item);
-                  }}
-                />
-              ))}
+              <ActionLink
+                label="Return to Today’s Paper"
+                onPress={handleBack}
+                prefix="← "
+              />
             </EndMatterBlock>
 
             {/* 12. What's Special Right Now */}
@@ -1090,17 +1066,6 @@ export function ArticleReader({
                 ))}
               </EndMatterBlock>
             ) : null}
-
-            <View style={styles.actionsBlock}>
-              <Text style={styles.actionsKicker}>This page</Text>
-              <View style={styles.actionsList}>
-                <ActionLink
-                  label={backLabel.replace(/^←\s*/, "") || "Today's paper"}
-                  onPress={handleBack}
-                  prefix="← "
-                />
-              </View>
-            </View>
           </View>
         </Animated.View>
       </ScrollView>
@@ -1709,16 +1674,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     textAlign: "center",
   },
-  closingCadence: {
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 26,
-    fontStyle: "italic",
-    color: paper.inkBody,
-    textAlign: "center",
-    maxWidth: 340,
-    marginTop: 4,
-  },
   endMatter: {
     marginTop: 48,
     paddingTop: 36,
@@ -1789,19 +1744,6 @@ const styles = StyleSheet.create({
     color: paper.terracotta,
     letterSpacing: 0.2,
   },
-  actionsBlock: {
-    marginTop: 48,
-    paddingTop: 28,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: paper.inkRule,
-    paddingBottom: 20,
-  },
-  actionsKicker: {
-    ...type.kicker,
-    color: paper.inkFaint,
-    letterSpacing: 1.9,
-    marginBottom: 16,
-  },
   clipError: {
     fontFamily: "Georgia",
     fontSize: 14,
@@ -1809,9 +1751,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.terracotta,
     marginBottom: 12,
-  },
-  actionsList: {
-    gap: 2,
   },
   actionRow: {
     alignSelf: "flex-start",

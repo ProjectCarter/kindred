@@ -58,7 +58,7 @@ const EDITOR_WHY: Record<ContinueReadingItem["kind"], string> = {
   local: "How this lands close to home.",
   opposing: "A careful view from another side — only when the desk found one.",
   bandit: "One quiet recommendation from the editor.",
-  edition: "The rest of today’s paper is waiting.",
+  edition: "The rest of today’s morning paper is waiting.",
 };
 
 export type EditorialContinuationInput = {
@@ -85,9 +85,8 @@ function returnToEdition(): ContinueReadingItem {
   return {
     kind: "edition",
     label: DISPLAY.edition,
-    title: "Back to the morning paper",
+    title: "Return to Today’s Paper",
     summary: EDITOR_WHY.edition,
-    editorWhy: EDITOR_WHY.edition,
     action: "return_to_edition",
   };
 }

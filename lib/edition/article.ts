@@ -13,6 +13,7 @@ import {
   storyOfImageFromSourceNote,
 } from "./storyOf";
 import { resolveStoryOfCityImage } from "./storyOfImage";
+import { resolveStateAtAGlance } from "./stateAtAGlance";
 import { dedupeProse, isNearDuplicateProse } from "./contentQuality";
 import { getGoldStandardArticle } from "./goldStandard/algalBloomArticle";
 import {
@@ -125,6 +126,8 @@ export type KindredArticle = {
   actionContext?: import("./actionBar").ActionBarContext | null;
   /** Frozen History Around Town snapshot — premium reader only. */
   historyPlaceSnapshot?: import("./historyAroundTown/types").HistoryPlaceSnapshot | null;
+  /** Story of reader-only closing section — resolved from metro state code. */
+  stateAtAGlance?: import("./stateAtAGlance").StateAtAGlance | null;
   /**
    * ISO timestamp for when this event actually ends — resolved once, at
    * adapter time, from the event's own date/time (never from when it was
@@ -336,6 +339,15 @@ export function withContentSystem(
     seedDek?: string | null;
   }
 ): KindredArticle {
+  // Story of closes with State at a Glance — never repeat the dek as "Why we remember".
+  if (isStoryOfSection(article.section)) {
+    return {
+      ...article,
+      contentType: article.contentType ?? "history",
+      modules: article.modules?.length ? article.modules : [],
+    };
+  }
+
   if (
     article.contentType &&
     article.modules &&
@@ -482,14 +494,23 @@ export function articleFromEditionSection(
     imageCredit: historical?.credit ?? null,
   });
 
+  let result: KindredArticle = article;
+
   if (historical?.url && article.heroImage) {
-    return {
-      ...article,
-      heroImage: { ...article.heroImage, kind: "historical" },
+    result = {
+      ...result,
+      heroImage: { ...result.heroImage!, kind: "historical" },
     };
   }
 
-  return article;
+  if (isStoryOfSection(section.section_type)) {
+    return {
+      ...result,
+      stateAtAGlance: resolveStateAtAGlance(storyNote?.metroKey ?? null),
+    };
+  }
+
+  return result;
 }
 
 /** Edition section with stored knowledge payload (Today in History image). */

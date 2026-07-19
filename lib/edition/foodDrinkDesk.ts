@@ -3,9 +3,9 @@
  * places to eat and drink. Not a directory; curated, local-first.
  */
 
-import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
-import { venueHayFromParts } from "./venueQuality";
-import { VENUE_EDITORIAL_TIER_GUIDE_MIN } from "./venueEditorialScore";
+import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery.ts";
+import { venueHayFromParts } from "./venueQuality.ts";
+import { VENUE_EDITORIAL_TIER_GUIDE_MIN } from "./venueEditorialScore.ts";
 
 export const FOOD_DRINK_SECTION_KICKER = "🍽️ Food & Drinks";
 export const FOOD_DRINK_SECTION_TITLE = "Food & Drinks";

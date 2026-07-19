@@ -184,9 +184,8 @@ export function getGoldStandardCompanion(): ArticleCompanion {
       relatedItem({
         kind: "edition",
         label: "Return to today’s edition",
-        title: "Back to the morning paper",
-        summary: "The rest of today’s paper is waiting.",
-        editorWhy: "The rest of today’s paper is waiting.",
+        title: "Return to Today’s Paper",
+        summary: "The rest of today’s morning paper is waiting.",
         action: "return_to_edition",
       }),
     ],

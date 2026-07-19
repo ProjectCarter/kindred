@@ -4071,7 +4071,15 @@ export default function HomeScreen() {
               }}
               onSeeAllRecommendations={(items) => {
                 persistHomeScrollNow();
-                stashTodaysRecommendations(sliceForSeeAll(items));
+                stashTodaysRecommendations(
+                  items,
+                  activeLocation?.place
+                    ? {
+                        lat: activeLocation.place.lat,
+                        lon: activeLocation.place.lon,
+                      }
+                    : null
+                );
                 router.push("/recommendations");
               }}
               historyAroundTown={intelligence?.historyAroundTown}

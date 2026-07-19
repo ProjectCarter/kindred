@@ -20,6 +20,10 @@ const recommendationsSectionSource = readFileSync(
   join(__dirname, "../../components/RecommendationsSection.tsx"),
   "utf8"
 );
+const recommendationsScreenSource = readFileSync(
+  join(__dirname, "../../app/recommendations.tsx"),
+  "utf8"
+);
 
 const FOOD_DRINK_SECTION_KICKER = "🍽️ Food & Drinks";
 const FOOD_DRINK_SEE_ALL_LABEL = (count: number) =>
@@ -89,10 +93,16 @@ test("See all footer is omitted when there are no additional items", () => {
   );
 });
 
-test("full Food & Drinks list opens via recommendations route", () => {
-  assert.equal(LIST_SCROLL_KEYS.recommendations, "recommendations");
-  assert.match(recommendationsSectionSource, /seeAllTotal=\{items\.length\}/);
-  assert.match(recommendationsSectionSource, /onSeeAll=\{showSeeAll \? onSeeAll/);
+test("full list screen uses stashed guide pool without extra See All cap", () => {
+  assert.doesNotMatch(recommendationsScreenSource, /sliceForSeeAll/);
+  assert.match(recommendationsScreenSource, /getTodaysRecommendations/);
+  assert.match(recommendationsScreenSource, /foodDrinkGuidePlaceCount/);
+});
+
+test("See all handoff passes filtered pool not raw items length", () => {
+  assert.match(recommendationsSectionSource, /resolveFoodDrinkSeeAllPool/);
+  assert.match(recommendationsSectionSource, /seeAllTotal=\{seeAllPool\.length\}/);
+  assert.match(recommendationsSectionSource, /onSeeAll\?\.\(seeAllPool\)/);
 });
 
 test("homepage desk order keeps Food & Drinks between Activities and Story of", () => {

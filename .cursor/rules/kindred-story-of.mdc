@@ -6,7 +6,8 @@ globs:
   - "**/StoryOfSection*"
   - "**/city-articles/**"
   - "**/kindred_city_articles*"
-  - "**/storyOfEditorial*"
+  - "**/stateAtAGlance*"
+  - "**/StateAtAGlance*"
 ---
 
 # The Story of [City Name] — Editorial Standard (v1)
@@ -82,3 +83,51 @@ Reader finishes thinking: *"I've lived here for years... and I never knew that."
 
 **Lasting Thought Test:** The full article must leave the reader with one
 memorable idea (`kindred-memorable-writing.mdc`).
+
+## Reader ending (Story of articles)
+
+After the body and **State at a Glance**, close cleanly — no redundant wrap-ups.
+
+**Show:**
+- Horizontal rule · centered `◆` · `FROM THIS MORNING'S PAPER · KINDRED EDITORIAL`
+- Continue Reading · *The rest of today's morning paper is waiting.* · `← Return to Today's Paper`
+
+**Never show on Story of:**
+- UCS **“Why we remember”** desk module (subtitle must not repeat under a kicker)
+- Redundant closing cadence, duplicate return copy, or a second “This page” navigation block
+
+## State at a Glance (reader closing module)
+
+After the city-history body, Story of articles include **[State] at a Glance** —
+verified statehood, nickname, capital, and symbols. Reader-only; never on the
+homepage card.
+
+### Display order
+
+1. Statehood — admission date and order (e.g. `February 14, 1912 • 48th State`)
+2. State Nickname
+3. Capital — city name only (e.g. `Phoenix`)
+4. Illustrated grid (capitol first when verified, then flag, bird, tree, flower)
+
+### Capitol Photo Standard (permanent)
+
+For every U.S. state in State at a Glance:
+
+- **Authentic photograph of the official state capitol building only.**
+- Never skylines, aerial city views, downtown photos, or generic city images.
+- Never AI-generated, illustrated, or digitally created stand-ins.
+- Sources: Wikimedia Commons (verified license), official state government
+  photography, Library of Congress, or equivalent trusted archives.
+- Verify the building shown is the official state capitol before publishing.
+- If a capitol image cannot be verified, **omit the grid cell** — never substitute.
+
+Capitol grid cells use the **same dimensions, border radius, spacing, caption
+style, and responsive behavior** as Flag, Bird, Tree, and Flower.
+
+### Verification gate
+
+Engineering: `lib/edition/stateAtAGlance.ts` · `stateAtAGlanceImage.ts`
+
+Every fact from official state government or authoritative historical sources.
+Every image verified before shipping. If confidence is below the publishing
+threshold, omit — accuracy beats completeness.

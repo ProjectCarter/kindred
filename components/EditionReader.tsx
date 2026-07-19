@@ -63,8 +63,14 @@ import {
 } from "../lib/edition/localEventsPipeline";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import {
+  analyzeFoodDrinkSeeAllPool,
+  logFoodDrinkCountDebug,
+} from "../lib/edition/foodDrinkSeeAll";
+import {
   resolveFoodDrinksHomepageItems,
   isRenderedFoodDrinksSectionType,
+  findFoodDrinksSection,
+  parseFoodDrinksSectionBody,
 } from "../lib/edition/foodDrinksSection";
 import {
   resolveReaderLocation,
@@ -651,6 +657,39 @@ function EditionReaderInner({
   const storyOfTitlePresent = Boolean(storyOf?.headline?.trim());
   const storyOfWillRender = Boolean(storyOf && storyOfTitlePresent && storyOfBodyPresent);
 
+  const foodDrinkSeeAllAnalysis = useMemo(
+    () =>
+      analyzeFoodDrinkSeeAllPool(
+        curatedFullAllocation.recommendations,
+        resolvedReaderLocation
+      ),
+    [curatedFullAllocation.recommendations, resolvedReaderLocation]
+  );
+
+  useEffect(() => {
+    const section = findFoodDrinksSection(sections);
+    const parsed = parseFoodDrinksSectionBody(section?.body);
+    logFoodDrinkCountDebug({
+      stage: "edition_reader",
+      generatedCount:
+        stableDiscovery?.picks?.filter((p) =>
+          ["restaurants", "coffee", "bakeries"].includes(p.category)
+        ).length ?? 0,
+      sectionRowCount: parsed?.items?.length ?? 0,
+      uniqueBeforeFilter: curatedFullAllocation.recommendations.length,
+      uniqueAfterFilter: foodDrinkSeeAllAnalysis.uniqueAfterFilter,
+      homepageCount: foodDrinkSeeAllAnalysis.uniqueAfterFilter,
+      paginationLimit: null,
+      exclusions: foodDrinkSeeAllAnalysis.exclusions.slice(0, 8),
+    });
+  }, [
+    sections,
+    stableDiscovery,
+    curatedFullAllocation.recommendations.length,
+    foodDrinkSeeAllAnalysis.uniqueAfterFilter,
+    foodDrinkSeeAllAnalysis.exclusions,
+  ]);
+
   useEffect(() => {
     if (!__DEV__) return;
     console.log("[home:sections:diagnostics]", {
@@ -959,8 +998,7 @@ function EditionReaderInner({
           onSeeAll={
             curatedFullAllocation.recommendations.length > 0 &&
             onSeeAllRecommendations
-              ? () =>
-                  onSeeAllRecommendations(curatedFullAllocation.recommendations)
+              ? (pool) => onSeeAllRecommendations(pool)
               : undefined
           }
         />

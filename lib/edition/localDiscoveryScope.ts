@@ -2,14 +2,14 @@
  * Local discovery scope — 25-mile radius for Food & Drink and Activities.
  */
 
-import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery";
-import { distanceKm } from "../location/locationKey";
-import { KINDRED_LOCAL_RADIUS_KM } from "./editorialStandard";
+import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery.ts";
+import { distanceKm } from "../location/locationKey.ts";
+import { KINDRED_LOCAL_RADIUS_KM } from "./editorialStandard.ts";
 import {
   DESTINATION_ACTIVITY_CATEGORIES,
   FOOD_DRINK_CATEGORIES,
   RECOMMENDATION_CATEGORIES,
-} from "./foodDrinkDesk";
+} from "./foodDrinkDesk.ts";
 
 export {
   DESTINATION_ACTIVITY_CATEGORIES,

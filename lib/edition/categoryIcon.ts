@@ -11,6 +11,10 @@ import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
 import type { EditorialCategoryId } from "./editorialCategory";
 import type { BanditsPickKind } from "./bandit";
 import {
+  isFoodDrinkDiscoveryItem,
+  resolveFoodDrinkCuisineEmoji,
+} from "./foodDrinkCuisineEmoji";
+import {
   CATEGORY_ICON_DICTIONARY,
   CATEGORY_ICON_FALLBACK,
   EDITORIAL_EMOJI,
@@ -169,6 +173,10 @@ export function resolveDiscoveryCategoryIcon(
 ): string {
   const venueIcon = resolveEditorialVenueEmoji(item.title);
   if (venueIcon) return venueIcon;
+
+  if (isFoodDrinkDiscoveryItem(item, context)) {
+    return resolveFoodDrinkCuisineEmoji(item);
+  }
 
   if (item.editorialCategoryId && EDITORIAL_CATEGORY_ICON[item.editorialCategoryId]) {
     return EDITORIAL_CATEGORY_ICON[item.editorialCategoryId]!;

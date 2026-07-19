@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { RankedDiscoveryItem } from "./discovery";
+import type { RankedDiscoveryItem } from "./discovery.ts";
 import {
   computeVenueEditorialScore,
   resolveVenueEditorialWithOverrides,
@@ -8,14 +8,14 @@ import {
   venueEditorialScoreMaterialFingerprint,
   VENUE_EDITORIAL_TIER_SIGNATURE,
   VENUE_EDITORIAL_UNVERIFIED_CAP,
-} from "./venueEditorialScore";
-import { selectHomepageRecommendationCards } from "./recommendations";
-import { organizeFoodDrinkGuide } from "./foodDrinkGuide";
+} from "./venueEditorialScore.ts";
+import { selectHomepageRecommendationCards } from "./recommendations.ts";
+import { organizeFoodDrinkGuide } from "./foodDrinkGuide.ts";
 import {
   curateFoodDrinkEdition,
-  inferFoodEditorFingerprint,
-} from "./foodDrinkCuration";
-import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing";
+} from "./foodDrinkCuration.ts";
+import { inferFoodDrinkCollection } from "./foodDrinkCollections.ts";
+import { HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorialPublishing.ts";
 
 function venueInput(overrides: Partial<Parameters<typeof computeVenueEditorialScore>[0]> = {}) {
   return {
@@ -190,11 +190,11 @@ test("homepage returns exactly 8 diverse picks ranked by editorial score", () =>
         ),
     }
   );
-  for (const fp of ["coffee_shop", "bakery", "pizza"] as const) {
+  for (const collection of ["coffee_cafes", "desserts_bakeries", "pizza"] as const) {
     const count = curated.filter(
-      (r) => inferFoodEditorFingerprint(r.item) === fp
+      (r) => inferFoodDrinkCollection(r.item) === collection
     ).length;
-    assert.ok(count <= 1, `expected at most one ${fp}, got ${count}`);
+    assert.ok(count <= 1, `expected at most one ${collection}, got ${count}`);
   }
 });
 
@@ -226,7 +226,7 @@ test("complete guide sorts categories by Editorial Score", () => {
     row("High Coffee", 88),
     row("Mid Coffee", 74),
   ]);
-  const coffee = sections.find((s) => s.id === "coffee");
+  const coffee = sections.find((s) => s.id === "coffee_cafes");
   assert.ok(coffee);
   assert.equal(coffee!.cards[0]?.title, "High Coffee");
 });

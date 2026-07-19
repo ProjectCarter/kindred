@@ -2,10 +2,15 @@
  * Food & Drink desk curation — newspaper food editor variety, not top-N ranking.
  */
 
-import type { RankedDiscoveryItem } from "./discovery";
-import { resolveVenueClassification } from "./venueClassification";
-import { venueHayFromParts } from "./venueQuality";
-import { foodDrinkSortScore } from "./foodDrinkDesk";
+import type { RankedDiscoveryItem } from "./discovery.ts";
+import { resolveVenueClassification } from "./venueClassification.ts";
+import { venueHayFromParts } from "./venueQuality.ts";
+import { foodDrinkSortScore } from "./foodDrinkDesk.ts";
+import {
+  FOOD_DRINK_COLLECTION_SPREAD_ORDER,
+  inferFoodDrinkCollection,
+  type FoodDrinkCollectionId,
+} from "./foodDrinkCollections.ts";
 
 export type FoodEditorFingerprint =
   | "coffee_shop"
@@ -197,6 +202,13 @@ export function foodEditorFingerprintLabel(
   return FOOD_EDITOR_FINGERPRINT_LABEL[inferFoodEditorFingerprint(item)];
 }
 
+/** @deprecated Homepage spread now uses editorial collections — see foodDrinkCollections.ts */
+export function inferFoodEditorFingerprintForLegacy(
+  item: RankedDiscoveryItem["item"]
+): FoodEditorFingerprint {
+  return inferFoodEditorFingerprint(item);
+}
+
 /** One chain identity per edition — avoids multiple Starbucks locations, etc. */
 export function resolveFoodChainKey(item: RankedDiscoveryItem["item"]): string | null {
   if (!item.tags?.includes("chain")) return null;
@@ -261,32 +273,32 @@ export function curateFoodDrinkEdition(
 
   const sorted = [...items].sort((a, b) => compareByScore(a, b, getScore));
   const pool = dedupeFoodChains(sorted, getScore);
-  const fingerprintCounts = new Map<FoodEditorFingerprint, number>();
+  const collectionCounts = new Map<FoodDrinkCollectionId, number>();
   const curated: RankedDiscoveryItem[] = [];
   const usedIds = new Set<string>();
 
   const tryPick = (item: RankedDiscoveryItem): boolean => {
     if (usedIds.has(item.item.id)) return false;
-    const fp = inferFoodEditorFingerprint(item.item);
-    const count = fingerprintCounts.get(fp) ?? 0;
+    const collection = inferFoodDrinkCollection(item.item);
+    const count = collectionCounts.get(collection) ?? 0;
     if (count >= maxPerFingerprint) return false;
     curated.push(item);
     usedIds.add(item.item.id);
-    fingerprintCounts.set(fp, count + 1);
+    collectionCounts.set(collection, count + 1);
     return true;
   };
 
-  // Round 1 — one pick per fingerprint in editorial spread order.
-  for (const fp of FOOD_EDITOR_SPREAD_ORDER) {
+  // Round 1 — one pick per collection in editorial spread order.
+  for (const collection of FOOD_DRINK_COLLECTION_SPREAD_ORDER) {
     const candidates = pool
       .filter((item) => !usedIds.has(item.item.id))
-      .filter((item) => inferFoodEditorFingerprint(item.item) === fp)
+      .filter((item) => inferFoodDrinkCollection(item.item) === collection)
       .sort((a, b) => compareByScore(a, b, getScore));
     if (candidates[0]) tryPick(candidates[0]);
     if (depth != null && curated.length >= depth) break;
   }
 
-  // Round 2 — fill remaining slots; prefer unseen fingerprints, allow repeats
+  // Round 2 — fill remaining slots; prefer unseen collections, allow repeats
   // only when the pick is clearly stronger than alternatives.
   const targetLen = depth ?? pool.length;
   while (curated.length < targetLen) {
@@ -299,10 +311,10 @@ export function curateFoodDrinkEdition(
     );
 
     const pick = band.sort((a, b) => {
-      const fpA = inferFoodEditorFingerprint(a.item);
-      const fpB = inferFoodEditorFingerprint(b.item);
-      const countA = fingerprintCounts.get(fpA) ?? 0;
-      const countB = fingerprintCounts.get(fpB) ?? 0;
+      const colA = inferFoodDrinkCollection(a.item);
+      const colB = inferFoodDrinkCollection(b.item);
+      const countA = collectionCounts.get(colA) ?? 0;
+      const countB = collectionCounts.get(colB) ?? 0;
 
       if (countA !== countB) return countA - countB;
 
@@ -323,13 +335,13 @@ export function curateFoodDrinkEdition(
       return compareByScore(a, b, getScore);
     })[0]!;
 
-    const fp = inferFoodEditorFingerprint(pick.item);
-    const count = fingerprintCounts.get(fp) ?? 0;
+    const collection = inferFoodDrinkCollection(pick.item);
+    const count = collectionCounts.get(collection) ?? 0;
     if (count >= maxPerFingerprint) {
       const nextDifferent = remaining.find(
         (item) =>
           !usedIds.has(item.item.id) &&
-          (fingerprintCounts.get(inferFoodEditorFingerprint(item.item)) ?? 0) <
+          (collectionCounts.get(inferFoodDrinkCollection(item.item)) ?? 0) <
             maxPerFingerprint
       );
       if (!nextDifferent) {

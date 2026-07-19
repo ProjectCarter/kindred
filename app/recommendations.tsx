@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Text, StyleSheet, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -6,6 +6,11 @@ import { EditorialCardGrid } from "../components/EditorialCardGrid";
 import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
+import {
+  countRenderedFoodDrinkGuideCards,
+  logFoodDrinkCountDebug,
+  resolveFoodDrinkSeeAllPool,
+} from "../lib/edition/foodDrinkSeeAll";
 import {
   FOOD_DRINK_SECTION_INTRO,
   FOOD_DRINK_SECTION_KICKER,
@@ -16,13 +21,15 @@ import {
   foodDrinkGuidePlaceCount,
   organizeFoodDrinkGuide,
 } from "../lib/edition/foodDrinkGuide";
-import { getTodaysRecommendations } from "../lib/edition/recommendationsListStore";
+import {
+  getTodaysRecommendations,
+  getTodaysRecommendationsReaderLocation,
+} from "../lib/edition/recommendationsListStore";
 import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
 import { getActiveEditionId } from "../lib/edition/editionContext";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { LIST_SCROLL_KEYS } from "../lib/edition/listScrollSession";
 import { useListScrollRestoration } from "../lib/edition/useListScrollRestoration";
-import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
 /** Complete Food & Drink guide — up to 20 curated places within ~25 miles. */
@@ -31,9 +38,40 @@ export default function RecommendationsScreen() {
   const { scrollRef, onScrollOffset, persistNow } = useListScrollRestoration(
     LIST_SCROLL_KEYS.recommendations
   );
-  const items = useMemo(() => sliceForSeeAll(getTodaysRecommendations()), []);
-  const sections = useMemo(() => organizeFoodDrinkGuide(items), [items]);
-  const placeCount = useMemo(() => foodDrinkGuidePlaceCount(items), [items]);
+  const handoffItems = useMemo(() => getTodaysRecommendations(), []);
+  const readerLocation = useMemo(
+    () => getTodaysRecommendationsReaderLocation(),
+    []
+  );
+  const items = useMemo(
+    () => resolveFoodDrinkSeeAllPool(handoffItems, readerLocation),
+    [handoffItems, readerLocation]
+  );
+  const sections = useMemo(
+    () => organizeFoodDrinkGuide(items, { readerLocation }),
+    [items, readerLocation]
+  );
+  const placeCount = useMemo(
+    () => foodDrinkGuidePlaceCount(items, { readerLocation }),
+    [items, readerLocation]
+  );
+  const renderedCount = useMemo(
+    () => countRenderedFoodDrinkGuideCards(sections),
+    [sections]
+  );
+
+  useEffect(() => {
+    logFoodDrinkCountDebug({
+      stage: "full_list_screen",
+      cacheCount: handoffItems.length,
+      uniqueBeforeFilter: handoffItems.length,
+      uniqueAfterFilter: items.length,
+      fullListHandoffCount: handoffItems.length,
+      homepageCount: null,
+      renderedCount,
+      paginationLimit: null,
+    });
+  }, [handoffItems.length, items.length, renderedCount]);
   const articlesById = useMemo(
     () => discoveryArticlesById(items, "recommendation"),
     [items]
