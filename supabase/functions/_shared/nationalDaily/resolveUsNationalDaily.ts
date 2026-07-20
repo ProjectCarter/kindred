@@ -13,8 +13,17 @@ import { buildTodayInHistoryGrounding } from "../knowledge/providers/synthesize.
 import type { TodayInHistorySelection } from "../history/selectStory.ts";
 import type { HistoricalImageAsset } from "../history/types.ts";
 import { historicalImageMatchesEvent } from "../history/imageEventMatch.ts";
+import { getFrozenHeroArtworkSelection } from "../heroArtwork/library.ts";
 import { resolveUsNationalNews } from "./resolveNationalNews.ts";
 import type { UsNationalNewsPackagePayload } from "./types.ts";
+import {
+  calendarMonthDayFromEditionDate,
+  formatNationalDailyValidationFailure,
+  nationalDailyValidationPassed,
+  priorCalendarEditionDate,
+  snapshotFromNationalDailyRow,
+  validateNationalDailyForAttach,
+} from "./nationalDailyValidation.ts";
 
 export const US_NATIONAL_COUNTRY_CODE = "US" as const;
 
@@ -32,6 +41,7 @@ export type UsNationalTodayInHistoryPayload = {
     candidateCount: number;
     selectedRank: number;
     editorNotes: string[];
+    calendarMonthDay?: string;
   };
 };
 
@@ -67,6 +77,8 @@ export type ResolveUsNationalDailyInput = {
   historyImage?: HistoricalImageAsset | null;
   heroContext?: HeroArtworkSelectionContext;
   newsApiKey?: string | null;
+  /** Test-only escape hatch — production builds never clone the prior calendar day. */
+  allowIdenticalFromPriorDay?: boolean;
 };
 
 type NationalDailyRow = {
@@ -162,6 +174,7 @@ async function fetchNationalDailyRow(
 }
 
 function buildHistoryPayload(
+  editionDate: string,
   selection: TodayInHistorySelection,
   written: { headline: string; body: string }
 ): UsNationalTodayInHistoryPayload {
@@ -179,8 +192,108 @@ function buildHistoryPayload(
       candidateCount: selection.candidateCount,
       selectedRank: selection.selectedRank,
       editorNotes: selection.editorNotes,
+      calendarMonthDay: calendarMonthDayFromEditionDate(editionDate) ?? undefined,
     },
   };
+}
+
+async function fetchNationalDailyValidationContext(
+  admin: SupabaseClient,
+  editionDate: string
+) {
+  const priorDate = priorCalendarEditionDate(editionDate);
+  const [priorRow, heroSelection] = await Promise.all([
+    priorDate ? fetchNationalDailyRow(admin, priorDate) : Promise.resolve(null),
+    getFrozenHeroArtworkSelection(admin, editionDate),
+  ]);
+
+  return {
+    priorDay: priorRow ? snapshotFromNationalDailyRow(priorRow) : null,
+    heroSelectionArtworkId: heroSelection?.artworkId ?? null,
+  };
+}
+
+async function forceClearNationalDailyDesks(
+  admin: SupabaseClient,
+  editionDate: string,
+  clear: { masterpiece?: boolean; history?: boolean; news?: boolean }
+): Promise<void> {
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (clear.masterpiece) {
+    patch.today_masterpiece = null;
+    patch.masterpiece_artwork_id = null;
+  }
+  if (clear.history) {
+    patch.today_in_history = null;
+    patch.history_event_key = null;
+  }
+  if (clear.news) {
+    patch.national_news = null;
+  }
+  if (Object.keys(patch).length <= 1) return;
+
+  await admin
+    .from("kindred_us_national_daily")
+    .upsert(
+      {
+        edition_date: editionDate,
+        country_code: US_NATIONAL_COUNTRY_CODE,
+      },
+      { onConflict: "edition_date,country_code", ignoreDuplicates: true }
+    );
+
+  const { error } = await admin
+    .from("kindred_us_national_daily")
+    .update(patch)
+    .eq("edition_date", editionDate)
+    .eq("country_code", US_NATIONAL_COUNTRY_CODE);
+
+  if (error) {
+    console.warn("[usNationalDaily] stale desk clear failed", {
+      editionDate,
+      message: error.message,
+      clear,
+    });
+  }
+}
+
+function desksToClearFromValidationIssues(
+  issues: ReturnType<typeof validateNationalDailyForAttach>
+): { masterpiece?: boolean; history?: boolean; news?: boolean } {
+  const codes = new Set(issues.map((issue) => issue.code));
+  return {
+    masterpiece:
+      codes.has("missing_masterpiece") ||
+      codes.has("missing_hero_selection") ||
+      codes.has("stale_masterpiece_edition_date") ||
+      codes.has("identical_masterpiece_from_prior_day") ||
+      codes.has("hero_selection_artwork_mismatch"),
+    history:
+      codes.has("missing_history") ||
+      codes.has("history_calendar_month_day_mismatch") ||
+      codes.has("identical_history_from_prior_day"),
+    news:
+      codes.has("missing_national_news") ||
+      codes.has("stale_national_news_edition_date") ||
+      codes.has("identical_national_news_from_prior_day"),
+  };
+}
+
+async function validateStoredNationalDaily(
+  admin: SupabaseClient,
+  row: NationalDailyRow,
+  allowIdenticalFromPriorDay = false
+): Promise<ReturnType<typeof validateNationalDailyForAttach>> {
+  const validationContext = await fetchNationalDailyValidationContext(
+    admin,
+    row.edition_date
+  );
+  return validateNationalDailyForAttach({
+    row: snapshotFromNationalDailyRow(row),
+    heroSelectionArtworkId: validationContext.heroSelectionArtworkId,
+    priorDay: validationContext.priorDay,
+    allowIdenticalFromPriorDay,
+  });
 }
 
 async function upsertMasterpiece(
@@ -278,18 +391,26 @@ function parseNationalNewsPayload(raw: unknown): UsNationalNewsPackagePayload | 
   return { ...row, stories: stories.sort((a, b) => a.rank - b.rank) };
 }
 
-/** True when today's shared U.S. layer is fully populated — city builds can skip duplicate history fetches. */
+/** True when today's shared U.S. layer is fully populated and validated for city attach. */
 export async function probeUsNationalDailyCache(
   admin: SupabaseClient,
   editionDate: string
 ): Promise<boolean> {
   const row = await fetchNationalDailyRow(admin, editionDate);
-  return Boolean(
-    row &&
-      parseMasterpiecePayload(row.today_masterpiece) &&
-      parseHistoryPayload(row.today_in_history) &&
-      parseNationalNewsPayload(row.national_news)
-  );
+  if (
+    !row ||
+    !parseMasterpiecePayload(row.today_masterpiece) ||
+    !parseHistoryPayload(row.today_in_history) ||
+    !parseNationalNewsPayload(row.national_news)
+  ) {
+    return false;
+  }
+
+  const history = parseHistoryPayload(row.today_in_history);
+  if (!history || !historyImageVerified(history)) return false;
+
+  const issues = await validateStoredNationalDaily(admin, row, false);
+  return nationalDailyValidationPassed(issues);
 }
 
 /** Attach cached national daily only — city workers must never generate national desks. */
@@ -312,6 +433,17 @@ export async function loadUsNationalDailyForCityAttach(
       hasHistory: Boolean(history),
       hasVerifiedHistoryImage: historyImageVerified(history),
       hasNationalNews: Boolean(nationalNews),
+    });
+    return null;
+  }
+
+  const issues = await validateStoredNationalDaily(admin, row, false);
+  if (!nationalDailyValidationPassed(issues)) {
+    console.warn("[usNationalDaily] city attach rejected — stale or cloned national daily", {
+      traceId: editionTraceId ?? null,
+      editionDate,
+      nationalDailyId: row.id,
+      failure: formatNationalDailyValidationFailure(editionDate, issues),
     });
     return null;
   }
@@ -351,27 +483,58 @@ export async function resolveUsNationalDailyEditorial(
   let diagnostic: UsNationalDailyDiagnostic;
   let nationalNewsDiagnostic: string | null = null;
 
-  if (masterpiece && history && nationalNews && row && historyImageVerified(history)) {
-    diagnostic = "national_daily_cache_hit";
-    nationalNewsDiagnostic = "national_news_cache_hit";
-    logNationalDaily(diagnostic, {
+  if (
+    row &&
+    masterpiece &&
+    history &&
+    nationalNews &&
+    historyImageVerified(history)
+  ) {
+    const cacheIssues = await validateStoredNationalDaily(
+      admin,
+      row,
+      input.allowIdenticalFromPriorDay ?? false
+    );
+    if (nationalDailyValidationPassed(cacheIssues)) {
+      diagnostic = "national_daily_cache_hit";
+      nationalNewsDiagnostic = "national_news_cache_hit";
+      logNationalDaily(diagnostic, {
+        traceId: input.editionTraceId,
+        editionDate,
+        elapsedMs: Math.round(performance.now() - started),
+        nationalDailyId: row.id,
+        masterpieceArtworkId: masterpiece.artworkId,
+        historyEventKey: row.history_event_key,
+      });
+      return {
+        id: row.id,
+        editionDate,
+        countryCode: US_NATIONAL_COUNTRY_CODE,
+        todayMasterpiece: masterpiece,
+        todayInHistory: history,
+        nationalNews,
+        diagnostic,
+        nationalNewsDiagnostic,
+      };
+    }
+
+    console.warn("[usNationalDaily] cached national daily failed validation — regenerating", {
       traceId: input.editionTraceId,
       editionDate,
-      elapsedMs: Math.round(performance.now() - started),
       nationalDailyId: row.id,
-      masterpieceArtworkId: masterpiece.artworkId,
-      historyEventKey: row.history_event_key,
+      failure: formatNationalDailyValidationFailure(editionDate, cacheIssues),
     });
-    return {
-      id: row.id,
+    await forceClearNationalDailyDesks(
+      admin,
       editionDate,
-      countryCode: US_NATIONAL_COUNTRY_CODE,
-      todayMasterpiece: masterpiece,
-      todayInHistory: history,
-      nationalNews,
-      diagnostic,
-      nationalNewsDiagnostic,
-    };
+      desksToClearFromValidationIssues(cacheIssues)
+    );
+    row = await fetchNationalDailyRow(admin, editionDate);
+    masterpiece = parseMasterpiecePayload(row?.today_masterpiece);
+    history = parseHistoryPayload(row?.today_in_history);
+    const parsedNews = parseNationalNewsPayload(row?.national_news);
+    nationalNews =
+      parsedNews && parsedNews.editionDate === editionDate ? parsedNews : null;
   }
 
   if (history && !historyImageVerified(history)) {
@@ -419,7 +582,7 @@ export async function resolveUsNationalDailyEditorial(
             anthropicApiKey: input.anthropicApiKey,
             varietySeed: editionDate,
           });
-          return buildHistoryPayload(input.historySelection, written);
+          return buildHistoryPayload(editionDate, input.historySelection, written);
         })(),
     nationalNews
       ? Promise.resolve({
@@ -467,6 +630,21 @@ export async function resolveUsNationalDailyEditorial(
       traceId: input.editionTraceId,
       editionDate,
       elapsedMs: Math.round(performance.now() - started),
+    });
+    return null;
+  }
+
+  const finalIssues = await validateStoredNationalDaily(
+    admin,
+    row,
+    input.allowIdenticalFromPriorDay ?? false
+  );
+  if (!nationalDailyValidationPassed(finalIssues)) {
+    console.warn("[usNationalDaily] generation finished but validation failed", {
+      traceId: input.editionTraceId,
+      editionDate,
+      nationalDailyId: row.id,
+      failure: formatNationalDailyValidationFailure(editionDate, finalIssues),
     });
     return null;
   }

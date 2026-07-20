@@ -35,6 +35,11 @@ import { stashTodaysActivities } from "../lib/edition/activitiesListStore";
 import { stashTodaysHistoryPlaces } from "../lib/edition/historyAroundTownListStore";
 import { stashTodaysRecommendations } from "../lib/edition/recommendationsListStore";
 import { sliceForSeeAll } from "../lib/edition/editorialPublishing";
+import {
+  accessibleActivitiesSeeAllCount,
+  buildActivitiesSeeAllPool,
+  logActivitiesCountDebug,
+} from "../lib/edition/activitiesSeeAll";
 import { allocateDiscoverySections } from "../lib/edition/sectionAllocator";
 import {
   banditMorningLine,
@@ -97,9 +102,17 @@ import {
 } from "../lib/edition/editionCache";
 import {
   isCachedEditionPaintable,
+  isCachedEditionDateStale,
   isStaleCachedEdition,
   networkSectionsMatchCache,
 } from "../lib/edition/instantEdition";
+import {
+  calendarEditionDate,
+  editionDateTraceBase,
+  isPastEditionDate,
+  logEditionDateTrace,
+  todayInHistoryMonthDayFromEditionDate,
+} from "../lib/edition/editionDateGuard";
 import { loadWithRetry } from "../lib/edition/loadWithRetry";
 import {
   countValidEventsInSections,
@@ -1021,6 +1034,17 @@ export default function HomeScreen() {
   }
 
   function applyCachedBundle(bundle: CachedEditionBundle): void {
+    const calendarToday = calendarEditionDate();
+    if (isPastEditionDate(bundle.editionDate, calendarToday)) {
+      if (__DEV__) {
+        console.warn("[home] applyCachedBundle: rejected stale calendar date", {
+          cachedEditionDate: bundle.editionDate,
+          calendarToday,
+          editionId: bundle.editionId,
+        });
+      }
+      return;
+    }
     const merged = mergeHistoryAroundTownIntoCachedBundle(
       mergeMorningHeroIntoCachedBundle(bundle)
     );
@@ -1542,6 +1566,7 @@ export default function HomeScreen() {
     void syncDeviceTimezone(user.id);
 
     const todayStr = await resolveEffectiveEditionDate();
+    const calendarToday = calendarEditionDate();
     const identity = await resolveEditionLoadIdentity({
       handoff: "loadEdition",
       traceId,
@@ -1562,12 +1587,29 @@ export default function HomeScreen() {
     if (__DEV__) {
       console.log("[home] loadEdition: date filters", {
         localEditionDate: todayStr,
+        calendarEditionDate: calendarToday,
         cacheMetroKey,
         scopedMetroKey,
         resolvedEditionId,
         identitySource: identity.source,
         previewCity: identity.place?.city ?? null,
         timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+      });
+      logEditionDateTrace({
+        ...editionDateTraceBase("loadEdition-start"),
+        calculatedEditionDate: todayStr,
+        requestedSupabaseEditionDate: resolvedEditionId ? null : todayStr,
+        returnedEditionDate: null,
+        cachedEditionDate: cachedBundleRef.current?.editionDate ?? null,
+        cacheHit: null,
+        masterpieceId:
+          cachedBundleRef.current?.morningHero?.artworkId ??
+          cachedBundleRef.current?.heroImageId ??
+          null,
+        todayInHistoryMonthDay: todayInHistoryMonthDayFromEditionDate(todayStr),
+        rawActivityCount: null,
+        validUniqueActivityCount: null,
+        seeAllAccessibleCount: null,
       });
     }
 
@@ -1627,7 +1669,14 @@ export default function HomeScreen() {
               ? cachedBundleRef.current
               : null);
           if (warm) {
-            if (
+            if (isCachedEditionDateStale(warm, calendarToday)) {
+              if (__DEV__) {
+                console.warn("[home] loadEdition: skipping warm cache — stale date", {
+                  cachedEditionDate: warm.editionDate,
+                  calendarToday,
+                });
+              }
+            } else if (
               warm &&
               mountedRef.current &&
               gen === loadGen.current &&
@@ -1667,6 +1716,7 @@ export default function HomeScreen() {
             });
             if (
               cached &&
+              !isCachedEditionDateStale(cached, calendarToday) &&
               mountedRef.current &&
               gen === loadGen.current &&
               !instantHydratedRef.current
@@ -1757,7 +1807,7 @@ export default function HomeScreen() {
     if (resolvedEditionId && scopedMetroKey) {
       const recoveryDates = Array.from(
         new Set(
-          [identity.editionDate, todayStr].filter(
+          [todayStr, identity.editionDate].filter(
             (d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}$/.test(d))
           )
         )
@@ -1852,6 +1902,43 @@ export default function HomeScreen() {
           instantHydratedRef.current = false;
           void clearCachedEdition(user.id, fallbackDate, cacheMetroKey);
         }
+      }
+    }
+
+    const loadedEditionDateProbe =
+      (editionResult.data as { edition_date?: string } | null)?.edition_date?.trim() ??
+      null;
+    if (
+      editionResult.data &&
+      scopedMetroKey &&
+      isPastEditionDate(loadedEditionDateProbe, calendarToday)
+    ) {
+      if (__DEV__) {
+        console.warn("[home] loadEdition: past edition row — refetching today", {
+          loadedEditionDate: loadedEditionDateProbe,
+          calendarToday,
+          editionId: (editionResult.data as { id?: string }).id ?? null,
+          resolvedEditionId,
+        });
+      }
+      if (identity.preview) {
+        await setDeveloperPreviewContext({
+          ...identity.preview,
+          editionId: null,
+          editionDate: calendarToday,
+        });
+      }
+      editionResult = await supabase
+        .from("editions")
+        .select(editionSelect)
+        .eq("user_id", user.id)
+        .eq("edition_date", calendarToday)
+        .eq("metro_key", scopedMetroKey)
+        .maybeSingle();
+      if (cacheMetroKey && loadedEditionDateProbe) {
+        cachedBundleRef.current = null;
+        instantHydratedRef.current = false;
+        void clearCachedEdition(user.id, loadedEditionDateProbe, cacheMetroKey);
       }
     }
 
@@ -2686,6 +2773,51 @@ export default function HomeScreen() {
           narrativeFrozen,
         }
       );
+      const onScreenIntelForTrace =
+        patchEventsOnly || syncAfterCache
+          ? cachedBundleRef.current?.intelligence ?? intel
+          : intel;
+      const activityAllocation = allocateDiscoverySections(
+        onScreenIntelForTrace?.discovery,
+        onScreenIntelForTrace?.discoveryItems,
+        {
+          readerLocation: active.place
+            ? { lat: active.place.lat, lon: active.place.lon }
+            : null,
+        }
+      );
+      const readerLocation = active.place
+        ? { lat: active.place.lat, lon: active.place.lon }
+        : null;
+      const seeAllPool = buildActivitiesSeeAllPool(activityAllocation.activities, {
+        city: active.place?.city ?? null,
+        readerLocation,
+      });
+      logEditionDateTrace({
+        ...editionDateTraceBase("loadEdition-painted"),
+        calculatedEditionDate: edition.edition_date,
+        requestedSupabaseEditionDate: edition.edition_date,
+        returnedEditionDate: edition.edition_date,
+        cachedEditionDate: cachedBundleRef.current?.editionDate ?? null,
+        cacheHit: Boolean(cachedBundleRef.current),
+        masterpieceId:
+          onScreenIntelForTrace?.morningHero?.artworkId ??
+          cachedBundleRef.current?.morningHero?.artworkId ??
+          cachedBundleRef.current?.heroImageId ??
+          null,
+        todayInHistoryMonthDay: todayInHistoryMonthDayFromEditionDate(
+          edition.edition_date
+        ),
+        rawActivityCount: activityAllocation.activities.length,
+        validUniqueActivityCount: seeAllPool.length,
+        seeAllAccessibleCount: sliceForSeeAll(seeAllPool).length,
+      });
+      logActivitiesCountDebug({
+        stage: "loadEdition_painted",
+        rawActivityCount: activityAllocation.activities.length,
+        validUniqueActivityCount: seeAllPool.length,
+        seeAllAccessibleCount: sliceForSeeAll(seeAllPool).length,
+      });
     }
 
     // First paint — text is readable; everything below runs in the background.
@@ -4551,8 +4683,27 @@ export default function HomeScreen() {
                       : null,
                   }
                 );
+                const readerLocation = activeLocation?.place
+                  ? {
+                      lat: activeLocation.place.lat,
+                      lon: activeLocation.place.lon,
+                    }
+                  : null;
+                const seeAllPool = buildActivitiesSeeAllPool(full.activities, {
+                  city: activeLocation?.place?.city ?? null,
+                  readerLocation,
+                });
+                const handoff = sliceForSeeAll(seeAllPool);
+                if (__DEV__) {
+                  logActivitiesCountDebug({
+                    stage: "see_all_handoff",
+                    rawActivityCount: full.activities.length,
+                    validUniqueActivityCount: seeAllPool.length,
+                    seeAllAccessibleCount: handoff.length,
+                  });
+                }
                 persistHomeScrollNow();
-                stashTodaysActivities(sliceForSeeAll(full.activities));
+                stashTodaysActivities(handoff);
                 router.push("/activities");
               }}
               onSeeAllRecommendations={(items) => {

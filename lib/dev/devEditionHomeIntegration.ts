@@ -1,5 +1,6 @@
 import { isDeveloperMode } from "./developerMode";
 import type { CachedEditionBundle } from "../edition/editionCache";
+import { calendarEditionDate, isPastEditionDate } from "../edition/editionDateGuard";
 import {
   getDevActivePreviewEntry,
   isDevEditionOverrideActive,
@@ -15,6 +16,13 @@ export async function tryApplyDevEditionPreview(
   await hydrateDevEditionOverrideState();
   const preview = getDevActivePreviewEntry();
   if (!preview?.bundle) return false;
+  const calendarToday = calendarEditionDate();
+  if (
+    isPastEditionDate(preview.bundle.editionDate, calendarToday) ||
+    preview.bundle.editionDate !== calendarToday
+  ) {
+    return false;
+  }
   applyBundle(preview.bundle);
   return true;
 }

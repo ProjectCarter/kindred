@@ -11,6 +11,7 @@ test("isStagedEditionBuildComplete — requires finalize_edition", () => {
   assert.equal(
     isStagedEditionBuildComplete([
       "initialize_edition",
+      "generate_national_daily",
       "attach_national_daily",
     ]),
     false
@@ -18,6 +19,7 @@ test("isStagedEditionBuildComplete — requires finalize_edition", () => {
   assert.equal(
     isStagedEditionBuildComplete([
       "initialize_edition",
+      "generate_national_daily",
       "attach_national_daily",
       "finalize_edition",
     ]),
@@ -29,7 +31,7 @@ test("editionNeedsStagedBuildResume — true after early MVP attach only", () =>
   assert.equal(
     editionNeedsStagedBuildResume({
       editionStatus: "ready",
-      completedStages: ["initialize_edition", "attach_national_daily"],
+      completedStages: ["initialize_edition", "generate_national_daily", "attach_national_daily"],
     }),
     true
   );
@@ -39,7 +41,7 @@ test("isEditionFullyBuilt — false when ready but stages incomplete", () => {
   assert.equal(
     isEditionFullyBuilt({
       editionStatus: "ready",
-      completedStages: ["initialize_edition", "attach_national_daily"],
+      completedStages: ["initialize_edition", "generate_national_daily", "attach_national_daily"],
     }),
     false
   );

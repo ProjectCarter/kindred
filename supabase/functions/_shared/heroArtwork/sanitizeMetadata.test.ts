@@ -74,3 +74,16 @@ Deno.test("sanitizeEditorialText never leaves QS syntax", () => {
   assertFalse(/labe…/.test(cleaned));
   assertEquals(cleaned.startsWith("Stream in the Liebethaler Grund is"), true);
 });
+
+Deno.test("sanitizeEditorialText preserves paragraph breaks", () => {
+  const body = [
+    "First paragraph with enough words to survive editorial validation gates cleanly.",
+    "Second paragraph with enough words to survive editorial validation gates cleanly.",
+    "Third paragraph with enough words to survive editorial validation gates cleanly.",
+    "Fourth paragraph with enough words to survive editorial validation gates cleanly.",
+    "Fifth paragraph with enough words to survive editorial validation gates cleanly.",
+    "Sixth paragraph with enough words to survive editorial validation gates cleanly.",
+  ].join("\n\n");
+  const cleaned = sanitizeEditorialText(body);
+  assertEquals(cleaned.split(/\n{2,}/).length, 6);
+});

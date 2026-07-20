@@ -5,6 +5,7 @@
 
 export const EDITION_BUILD_STAGES = [
   "initialize_edition",
+  "generate_national_daily",
   "attach_national_daily",
   "weather",
   "local_events",

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { RankedDiscoveryItem } from "../lib/edition/discovery";
 import { selectActivityCards } from "../lib/edition/activities";
+import { accessibleActivitiesSeeAllCount } from "../lib/edition/activitiesSeeAll";
 import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../lib/edition/editorialPublishing";
 import { EditorialCardGrid } from "./EditorialCardGrid";
 import { ACTIVITIES_GRID_LIMIT } from "../lib/edition/activitiesListStore";
@@ -45,6 +46,15 @@ export function ActivitiesSection({
     [items, locationCity, readerLocation]
   );
 
+  const seeAllAccessibleCount = useMemo(
+    () =>
+      accessibleActivitiesSeeAllCount(items, {
+        city: locationCity,
+        readerLocation,
+      }),
+    [items, locationCity, readerLocation]
+  );
+
   if (!cards.length) return null;
 
   return (
@@ -52,6 +62,7 @@ export function ActivitiesSection({
       kicker="Activities"
       cards={cards}
       initialRenderCount={initialRenderCount ?? limit}
+      seeAllTotal={seeAllAccessibleCount}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} activities`}
       emptyCopy="Nothing new to try nearby this month — check back tomorrow."

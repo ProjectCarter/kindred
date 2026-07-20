@@ -14,6 +14,12 @@ import {
   type DeveloperPreviewContext,
 } from "./developerPreviewContext";
 import { hydrateDevEditionOverrideState } from "./editionOverrideStore";
+import {
+  calendarEditionDate,
+  isPastEditionDate,
+  liveHomeEditionDate,
+} from "../edition/editionDateGuard";
+import { clearDeveloperPreviewContext } from "./developerPreviewContext";
 
 export type EditionIdentitySource =
   | "generate-response"
@@ -75,8 +81,13 @@ export async function resolveEditionLoadIdentity(input: {
 }): Promise<EditionLoadIdentity> {
   await hydrateDevEditionOverrideState();
   await hydrateDeveloperPreviewContext();
-  const preview = getDeveloperPreviewContextSync();
+  let preview = getDeveloperPreviewContextSync();
+  const calendarToday = calendarEditionDate();
   const editionDate = await resolveEffectiveEditionDate();
+  if (preview && isPastEditionDate(preview.editionDate, calendarToday)) {
+    await clearDeveloperPreviewContext();
+    preview = null;
+  }
 
   const generatedEditionId = input.loadEditionId?.trim() || null;
   const generatedMetroKey = input.loadMetroKey?.trim() || null;
@@ -122,7 +133,7 @@ export async function resolveEditionLoadIdentity(input: {
       editionId,
       metroKey,
       place,
-      editionDate: preview.editionDate || editionDate,
+      editionDate: liveHomeEditionDate(preview.editionDate || editionDate, calendarToday),
       isDeveloperPreview: true,
       source,
       activeLocation: devPreviewActiveLocation(place),

@@ -36,6 +36,16 @@ describe("sanitizeMetadata", () => {
     assert.equal(/QS:/i.test(body), false);
     assert.equal(body.startsWith("Stream in the Liebethaler Grund is"), true);
   });
+
+  it("preserves paragraph breaks in long-form editorial text", () => {
+    const body = [
+      "First paragraph with enough words to survive editorial validation gates cleanly.",
+      "Second paragraph with enough words to survive editorial validation gates cleanly.",
+      "Third paragraph with enough words to survive editorial validation gates cleanly.",
+    ].join("\n\n");
+    const cleaned = sanitizeEditorialText(body);
+    assert.equal(cleaned.split(/\n{2,}/).length, 3);
+  });
 });
 
 describe("normalizeMorningHeroExperience", () => {

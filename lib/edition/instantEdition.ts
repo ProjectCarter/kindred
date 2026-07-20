@@ -5,7 +5,7 @@
 
 import type { EditionSection } from "./types";
 import type { CachedEditionBundle } from "./editionCache";
-import { localEditionDate } from "./dates";
+import { calendarEditionDate } from "./editionDateGuard";
 
 /** Stable section identity for diffing cache vs network without full body compare. */
 export function sectionsFingerprint(sections: EditionSection[]): string {
@@ -19,12 +19,21 @@ export function sectionsFingerprint(sections: EditionSection[]): string {
  */
 export function isCachedEditionPaintable(
   bundle: CachedEditionBundle,
-  editionDate: string = localEditionDate(),
+  editionDate: string = calendarEditionDate(),
   metroKey?: string | null
 ): boolean {
   if (metroKey && bundle.metroKey !== metroKey) return false;
   if (bundle.editionDate !== editionDate) return false;
   return Array.isArray(bundle.sections) && bundle.sections.length > 0;
+}
+
+/** Cached bundle belongs to a prior calendar day — never paint as today's paper. */
+export function isCachedEditionDateStale(
+  bundle: CachedEditionBundle | null | undefined,
+  calendarToday: string = calendarEditionDate()
+): boolean {
+  if (!bundle) return false;
+  return bundle.editionDate !== calendarToday;
 }
 
 /** True when network sections match what is already on screen from cache. */

@@ -203,11 +203,7 @@ export function sanitizeArtworkYear(
   );
 }
 
-/** Sanitize long-form editorial copy; strips Wikidata blocks from embedded text. */
-export function sanitizeEditorialText(
-  raw: string | null | undefined
-): string {
-  if (!raw?.trim()) return "";
+function sanitizeEditorialParagraph(raw: string): string {
   let text = stripHtml(raw);
   text = text.replace(
     /\s+(?:title|label|description|aliases?)\s+QS:\w+(?:,\s*[a-z]{2,3}:"[^"]*")?(?:,\s*"[^"]*")?/gi,
@@ -223,7 +219,22 @@ export function sanitizeEditorialText(
       text = prefix && prefix.length >= 4 ? prefix : quoted;
     }
   }
-  return text.replace(/\s+/g, " ").trim();
+  return text.replace(/[^\S\n]+/g, " ").trim();
+}
+
+/** Sanitize long-form editorial copy; strips Wikidata blocks from embedded text. */
+export function sanitizeEditorialText(
+  raw: string | null | undefined
+): string {
+  if (!raw?.trim()) return "";
+  const paragraphs = raw.split(/\n{2,}/);
+  if (paragraphs.length <= 1) {
+    return sanitizeEditorialParagraph(raw);
+  }
+  return paragraphs
+    .map((paragraph) => sanitizeEditorialParagraph(paragraph))
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /** Validate and clean a field before persistence. Logs when syntax survives cleaning. */

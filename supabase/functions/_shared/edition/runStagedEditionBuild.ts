@@ -38,6 +38,7 @@ import {
   loadUsNationalDailyForCityAttach,
   logNationalDailyAttachedToCity,
 } from "../nationalDaily/resolveUsNationalDaily.ts";
+import { generateUsNationalDailyForEditionDate } from "../nationalDaily/generateUsNationalDaily.ts";
 import { logNationalNewsAttachedToCity } from "../nationalDaily/resolveNationalNews.ts";
 import {
   fetchWeatherForecast,
@@ -202,6 +203,35 @@ async function runInitializeStage(
   return { editionId: edition.id as string, itemCount: 1 };
 }
 
+async function runGenerateNationalStage(
+  admin: SupabaseClient,
+  ctx: StageContext
+): Promise<{ itemCount: number; payloadBytes: number }> {
+  const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
+  const newsApiKey = Deno.env.get("NEWS_API_KEY")?.trim();
+  if (!anthropicApiKey) {
+    throw new Error("ANTHROPIC_API_KEY missing — cannot generate national daily");
+  }
+  if (!newsApiKey) {
+    throw new Error("NEWS_API_KEY missing — cannot generate national daily");
+  }
+
+  const national = await generateUsNationalDailyForEditionDate(admin, {
+    editionDate: ctx.editionDate,
+    editionTraceId: ctx.traceId,
+    anthropicApiKey,
+    newsApiKey,
+  });
+
+  const payloadBytes = estimateJsonBytes({
+    masterpiece: national.todayMasterpiece,
+    history: national.todayInHistory,
+    nationalNews: national.nationalNews,
+  });
+
+  return { itemCount: 3, payloadBytes };
+}
+
 async function runAttachNationalStage(
   admin: SupabaseClient,
   ctx: StageContext
@@ -213,7 +243,7 @@ async function runAttachNationalStage(
   );
   if (!national) {
     throw new Error(
-      "Shared U.S. national daily not ready — warm kindred_us_national_daily before city build"
+      "Shared U.S. national daily not ready — generate_national_daily must succeed before city attach"
     );
   }
 
@@ -1067,6 +1097,12 @@ export async function runEditionBuildStage(
         const init = await runInitializeStage(admin, initCtx);
         editionId = init.editionId;
         itemCount = init.itemCount;
+        break;
+      }
+      case "generate_national_daily": {
+        const r = await runGenerateNationalStage(admin, ctx!);
+        itemCount = r.itemCount;
+        payloadBytes = r.payloadBytes;
         break;
       }
       case "attach_national_daily": {

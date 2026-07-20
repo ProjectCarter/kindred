@@ -1,6 +1,7 @@
 import type { ActiveLocation, KindredPlace } from "../location/types";
 import { resolveActivePlace } from "../location/kindredLocation";
 import { localEditionDate } from "../edition/dates";
+import { liveHomeEditionDate } from "../edition/editionDateGuard";
 import { isDeveloperMode } from "../dev/developerMode";
 import {
   getDevEditionOverrideStateSync,
@@ -10,30 +11,32 @@ import {
 import { getDevHistoryEntry } from "../dev/editionOverrideStore";
 
 export async function resolveEffectiveEditionDate(now = new Date()): Promise<string> {
-  if (!isDeveloperMode()) return localEditionDate(now);
+  const calendarToday = localEditionDate(now);
+  if (!isDeveloperMode()) return calendarToday;
   await hydrateDevEditionOverrideState();
   const state = getDevEditionOverrideStateSync();
   if (state.activePreviewId) {
     const preview = getDevHistoryEntry(state.activePreviewId);
-    if (preview) return preview.editionDate;
+    if (preview) return liveHomeEditionDate(preview.editionDate, calendarToday);
   }
   if (state.override.enabled) {
-    return resolveDevEditionDate(state.override, now);
+    return liveHomeEditionDate(resolveDevEditionDate(state.override, now), calendarToday);
   }
-  return localEditionDate(now);
+  return calendarToday;
 }
 
 export function resolveEffectiveEditionDateSync(now = new Date()): string {
-  if (!isDeveloperMode()) return localEditionDate(now);
+  const calendarToday = localEditionDate(now);
+  if (!isDeveloperMode()) return calendarToday;
   const state = getDevEditionOverrideStateSync();
   if (state.activePreviewId) {
     const preview = getDevHistoryEntry(state.activePreviewId);
-    if (preview) return preview.editionDate;
+    if (preview) return liveHomeEditionDate(preview.editionDate, calendarToday);
   }
   if (state.override.enabled) {
-    return resolveDevEditionDate(state.override, now);
+    return liveHomeEditionDate(resolveDevEditionDate(state.override, now), calendarToday);
   }
-  return localEditionDate(now);
+  return calendarToday;
 }
 
 export async function resolveEffectivePlace(options?: {

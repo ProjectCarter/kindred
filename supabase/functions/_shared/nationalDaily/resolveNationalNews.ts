@@ -118,7 +118,7 @@ export async function resolveUsNationalNews(
 
   const row = await fetchNationalNewsFromRow(admin, editionDate);
   const cached = parseNationalNewsPayload(row?.national_news);
-  if (cached && row?.id) {
+  if (cached && row?.id && cached.editionDate === editionDate) {
     logNationalNews("national_news_cache_hit", {
       traceId: input.editionTraceId,
       editionDate,

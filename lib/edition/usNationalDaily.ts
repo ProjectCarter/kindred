@@ -24,6 +24,7 @@ export type UsNationalTodayInHistory = {
     candidateCount: number;
     selectedRank: number;
     editorNotes: string[];
+    calendarMonthDay?: string;
   } | null;
 };
 
