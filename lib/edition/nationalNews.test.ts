@@ -234,3 +234,22 @@ test("second city cache hit reuses package without regenerating story ids", () =
   const second = parseNationalNewsPackage(SAMPLE_PACKAGE);
   assert.deepEqual(nationalNewsStoryIds(first), nationalNewsStoryIds(second));
 });
+
+test("resolveNationalNewsForRender keeps national_news when local top stories exist", () => {
+  const resolved = resolveNationalNewsForRender({
+    edition: { national_news: SAMPLE_PACKAGE },
+    topStories: [
+      {
+        id: "local-1",
+        headline: "City council approves park plan",
+        summary: "Neighbors gathered for the vote.",
+        source: "Local Paper",
+        url: null,
+        role: "local",
+      },
+    ],
+    editionDate: "2026-07-18",
+  });
+  assert.equal(resolved?.packageId, SAMPLE_PACKAGE.packageId);
+  assert.equal(resolved?.stories.length, SAMPLE_PACKAGE.stories.length);
+});

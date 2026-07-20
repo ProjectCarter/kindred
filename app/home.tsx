@@ -2630,6 +2630,23 @@ export default function HomeScreen() {
       } else if (__DEV__) {
         console.log("[home] loadEdition: network verified cache — no UI churn");
       }
+      const syncedTopStories = applyEditionNewsDesks(
+        edition as { national_news?: unknown; editorial_context?: unknown },
+        edition.edition_date
+      );
+      const syncedNationalNews = resolveNationalNewsForRender({
+        edition: edition as { national_news?: unknown; editorial_context?: unknown },
+        topStories: syncedTopStories,
+        editionDate: edition.edition_date,
+      });
+      if (cachedBundleRef.current) {
+        cachedBundleRef.current = {
+          ...cachedBundleRef.current,
+          topStories: syncedTopStories,
+          nationalNews: syncedNationalNews,
+        };
+        scheduleCachedEditionSave(cachedBundleRef.current);
+      }
       applyNetworkHistoryAroundTownMerge(
         intel,
         (edition as { history_around_town?: unknown }).history_around_town,
