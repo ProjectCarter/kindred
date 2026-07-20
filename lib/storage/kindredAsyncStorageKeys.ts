@@ -31,9 +31,10 @@ export const KINDRED_ASYNC_STORAGE_KEYS: KindredStorageEntry[] = [
     source: "lib/edition/editionCache.ts — `{userId}:{editionDate}:{metroKey}`",
   },
   {
-    label: "home_scroll_position",
+    label: "home_scroll_position_legacy",
     keyOrPrefix: "@kindred/home-scroll/",
-    source: "lib/edition/homeSession.ts — `{editionId}:{locationKey}`",
+    source:
+      "lib/edition/homeSession.ts — legacy disk keys purged on boot; scroll is session-scoped in memory only",
   },
   {
     label: "list_scroll_position",

@@ -2,7 +2,7 @@
 
 const TAG = "[home:scroll-debug]";
 
-/** Initial app launch restore — separate from article return. */
+/** Homepage scroll session phase — article return uses articleReturnPhase separately. */
 export type HomeScrollSessionPhase = "initial" | "user_control" | "complete";
 
 /** One-shot article-return restore lifecycle. */

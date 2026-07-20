@@ -56,13 +56,16 @@ import {
   type EditionIntelligence,
 } from "../lib/edition/surfaceIntelligence";
 import {
-  topStoriesFromEditorialContext,
   type TopStoryItem,
 } from "../lib/edition/topStories";
 import {
-  resolveNationalNewsForRender,
   type NationalNewsPackage,
 } from "../lib/edition/nationalNews";
+import {
+  resolveEditionNewsDesks,
+  resolveNationalNewsForCachedBundle,
+  withSyncedNewsDesksInCache,
+} from "../lib/edition/homepageNewsHydration";
 import {
   inferTopicFromSection,
   trackReadingSignal,
@@ -346,8 +349,8 @@ export default function HomeScreen() {
   const restoredScrollRef = useRef(false);
   const skipScrollRestoreRef = useRef(false);
   const resetScrollOnLoadRef = useRef(false);
-  /** Initial launch restore — independent of article return. */
-  const scrollSessionPhaseRef = useRef<HomeScrollSessionPhase>("initial");
+  /** Fresh launches start at the masthead — no cold-launch scroll restore. */
+  const scrollSessionPhaseRef = useRef<HomeScrollSessionPhase>("complete");
   /** One-shot article-return restore lifecycle. */
   const articleReturnPhaseRef = useRef<ArticleReturnRestorePhase>("idle");
   const articleReturnTargetYRef = useRef(0);
@@ -357,10 +360,6 @@ export default function HomeScreen() {
   const homeScrollDraggingRef = useRef(false);
   const programmaticScrollRef = useRef(false);
   const homeFocusTransitionCountRef = useRef(0);
-  const initialRestoreEditionRef = useRef<string | null>(null);
-  const restoreInitialScrollIfNeededRef = useRef<
-    (contentHeight?: number) => void
-  >(() => {});
   const restoreArticleReturnScrollIfNeededRef = useRef<
     (contentHeight?: number) => void
   >(() => {});
@@ -439,52 +438,6 @@ export default function HomeScreen() {
       logHomeScrollDebug("home_scroll_unmount");
     };
   }, []);
-
-  /** One initial restore per edition — only before the reader takes control. */
-  useEffect(() => {
-    if (!editionId || sections.length === 0) return;
-    if (initialRestoreEditionRef.current === editionId) return;
-    if (scrollSessionPhaseRef.current !== "initial") return;
-
-    initialRestoreEditionRef.current = editionId;
-    let cancelled = false;
-
-    void (async () => {
-      const key = homeScrollSessionKey(
-        editionId,
-        activeLocationKey(activeLocationRef.current)
-      );
-      const saved = await loadHomeScroll(key);
-      if (
-        cancelled ||
-        scrollSessionPhaseRef.current !== "initial" ||
-        restoredScrollRef.current
-      ) {
-        return;
-      }
-
-      logHomeScrollDebug(
-        "restore_arm_eval",
-        scrollRestoreSnapshot("initial_launch", {
-          targetY: saved,
-        })
-      );
-
-      if (saved <= 0) {
-        restoredScrollRef.current = true;
-        scrollSessionPhaseRef.current = "complete";
-        return;
-      }
-
-      pendingScrollRestoreY.current = saved;
-      restoredScrollRef.current = false;
-      restoreInitialScrollIfNeededRef.current(undefined);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [editionId, sections.length]);
 
   function currentHomeScrollKey(): string | null {
     const id = editionIdRef.current;
@@ -595,7 +548,6 @@ export default function HomeScreen() {
     restoredScrollRef.current = true;
     scrollSessionPhaseRef.current = "complete";
     logArticleReturnPhaseChange("complete", "markHomeScrollForReset");
-    initialRestoreEditionRef.current = null;
     homeScrollYRef.current = 0;
     mastheadScrollY.setValue(0);
     programmaticScrollTo(0, "markHomeScrollForReset");
@@ -638,49 +590,6 @@ export default function HomeScreen() {
       if (resolved) stashArticle(resolved);
     }
   }
-
-  /**
-   * One-shot initial launch restore only.
-   */
-  const restoreInitialScrollIfNeeded = useCallback((contentHeight?: number) => {
-    if (scrollSessionPhaseRef.current !== "initial") return;
-    if (restoredScrollRef.current) return;
-    if (homeScrollDraggingRef.current) return;
-    if (skipScrollRestoreRef.current) return;
-    if (articleReturnPhaseRef.current !== "idle") return;
-
-    const target = pendingScrollRestoreY.current;
-    if (target <= 0) return;
-
-    const y =
-      contentHeight != null
-        ? Math.max(0, Math.min(target, contentHeight - 1))
-        : target;
-    if (y <= 0) {
-      restoredScrollRef.current = true;
-      scrollSessionPhaseRef.current = "complete";
-      pendingScrollRestoreY.current = 0;
-      return;
-    }
-
-    pendingScrollRestoreY.current = 0;
-    restoredScrollRef.current = true;
-    scrollSessionPhaseRef.current = "complete";
-
-    logHomeScrollDebug(
-      "initial_restore",
-      scrollRestoreSnapshot("restoreInitialScrollIfNeeded", {
-        targetY: target,
-        contentHeight: contentHeight ?? null,
-      })
-    );
-    programmaticScrollTo(y, "restoreInitialScrollIfNeeded", {
-      targetY: target,
-      contentHeight: contentHeight ?? null,
-    });
-  }, [mastheadScrollY]);
-
-  restoreInitialScrollIfNeededRef.current = restoreInitialScrollIfNeeded;
 
   /**
    * One-shot article-return restore — at most one programmatic scrollTo.
@@ -771,10 +680,6 @@ export default function HomeScreen() {
       } else if (returnPhase === "waiting_for_return_layout") {
         restoreArticleReturnScrollIfNeededRef.current(h);
       }
-
-      if (sessionPhase === "initial" && !restoredScrollRef.current) {
-        restoreInitialScrollIfNeededRef.current(h);
-      }
     },
     []
   );
@@ -861,16 +766,10 @@ export default function HomeScreen() {
     edition: { national_news?: unknown; editorial_context?: unknown },
     editionDate: string
   ): TopStoryItem[] {
-    const stories = topStoriesFromEditorialContext(edition.editorial_context);
-    setTopStories(stories);
-    setNationalNews(
-      resolveNationalNewsForRender({
-        edition,
-        topStories: stories,
-        editionDate,
-      })
-    );
-    return stories;
+    const desks = resolveEditionNewsDesks(edition, editionDate);
+    setTopStories(desks.topStories);
+    setNationalNews(desks.nationalNews);
+    return desks.topStories;
   }
 
   function tryApplyInstantCache(
@@ -1055,7 +954,7 @@ export default function HomeScreen() {
     setEditionId(merged.editionId);
     setLeadStory(merged.leadStory);
     setTopStories(merged.topStories);
-    setNationalNews(merged.nationalNews ?? null);
+    setNationalNews(resolveNationalNewsForCachedBundle(merged));
     setBandit(merged.bandit);
     setIntelligence(merged.intelligence);
     setPairedNationalDaily(merged.pairedNationalDaily ?? null);
@@ -2630,21 +2529,17 @@ export default function HomeScreen() {
       } else if (__DEV__) {
         console.log("[home] loadEdition: network verified cache — no UI churn");
       }
-      const syncedTopStories = applyEditionNewsDesks(
+      const syncedDesks = resolveEditionNewsDesks(
         edition as { national_news?: unknown; editorial_context?: unknown },
         edition.edition_date
       );
-      const syncedNationalNews = resolveNationalNewsForRender({
-        edition: edition as { national_news?: unknown; editorial_context?: unknown },
-        topStories: syncedTopStories,
-        editionDate: edition.edition_date,
-      });
+      setTopStories(syncedDesks.topStories);
+      setNationalNews(syncedDesks.nationalNews);
       if (cachedBundleRef.current) {
-        cachedBundleRef.current = {
-          ...cachedBundleRef.current,
-          topStories: syncedTopStories,
-          nationalNews: syncedNationalNews,
-        };
+        cachedBundleRef.current = withSyncedNewsDesksInCache(
+          cachedBundleRef.current,
+          syncedDesks
+        );
         scheduleCachedEditionSave(cachedBundleRef.current);
       }
       applyNetworkHistoryAroundTownMerge(
@@ -2668,10 +2563,12 @@ export default function HomeScreen() {
       // Network row is authoritative for narrative desks — cache hydrate must
       // not leave discovery/intelligence frozen at an incomplete snapshot.
       setLeadStory(lead);
-      applyEditionNewsDesks(
+      const syncedDesks = resolveEditionNewsDesks(
         edition as { national_news?: unknown; editorial_context?: unknown },
         edition.edition_date
       );
+      setTopStories(syncedDesks.topStories);
+      setNationalNews(syncedDesks.nationalNews);
       setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
       setIntelligence(intel);
       freezeEdition({
@@ -2683,14 +2580,6 @@ export default function HomeScreen() {
       });
       editionFrozenRef.current = true;
       preloadMorningHeroImage(intel.morningHero);
-      const parsedTopStories = topStoriesFromEditorialContext(
-        (edition as { editorial_context?: unknown }).editorial_context
-      );
-      const parsedNationalNews = resolveNationalNewsForRender({
-        edition: edition as { national_news?: unknown; editorial_context?: unknown },
-        topStories: parsedTopStories,
-        editionDate: edition.edition_date,
-      });
       const bundle: CachedEditionBundle = {
         userId: user.id,
         editionId: edition.id,
@@ -2702,8 +2591,8 @@ export default function HomeScreen() {
         cachedAt: Date.now(),
         sections: nextSections,
         leadStory: lead,
-        topStories: parsedTopStories,
-        nationalNews: parsedNationalNews,
+        topStories: syncedDesks.topStories,
+        nationalNews: syncedDesks.nationalNews,
         bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
         intelligence: intel,
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
@@ -3031,8 +2920,9 @@ export default function HomeScreen() {
       }
 
       if (!patchEventsOnly && !syncAfterCache) {
-        const bgTopStories = topStoriesFromEditorialContext(
-          (edition as { editorial_context?: unknown }).editorial_context
+        const bgDesks = resolveEditionNewsDesks(
+          edition as { national_news?: unknown; editorial_context?: unknown },
+          edition.edition_date
         );
         const bundle: CachedEditionBundle = {
           userId: user.id,
@@ -3045,15 +2935,8 @@ export default function HomeScreen() {
           cachedAt: Date.now(),
           sections: bgSections,
           leadStory: lead,
-          topStories: bgTopStories,
-          nationalNews: resolveNationalNewsForRender({
-            edition: edition as {
-              national_news?: unknown;
-              editorial_context?: unknown;
-            },
-            topStories: bgTopStories,
-            editionDate: edition.edition_date,
-          }),
+          topStories: bgDesks.topStories,
+          nationalNews: bgDesks.nationalNews,
           bandit: parseBanditPayload((edition as { bandit?: unknown }).bandit),
           intelligence: bgIntel,
           heroImageId: cachedBundleRef.current?.heroImageId ?? null,

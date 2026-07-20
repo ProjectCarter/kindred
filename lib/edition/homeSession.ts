@@ -4,21 +4,20 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
  * Homepage scroll persistence, keyed by edition + location so a new day's
  * paper (or a city change) never inherits yesterday's offset.
  *
- * The in-memory `memory` Map is a *module-level* singleton — it survives a
- * full remount of the Home screen component (React unmounting/remounting
- * the component tree does not reload this module), which is what makes
- * restoration reliable even if the navigator doesn't keep Home mounted in
- * the background across a push/pop. AsyncStorage is the second-tier,
- * slower fallback that survives an actual app relaunch.
+ * Scroll offsets are **session-scoped only** — kept in the module-level
+ * memory Map for the lifetime of the JS process. They survive Home screen
+ * remounts within the same app session (navigation return) but are never
+ * restored after a true cold launch.
+ *
+ * Legacy `@kindred/home-scroll/*` AsyncStorage keys are purged once per
+ * process on app boot via `purgePersistedHomeScrollOffsets`.
  */
 
 const PREFIX = "@kindred/home-scroll/";
 
 const memory = new Map<string, number>();
 
-function storageKey(key: string): string {
-  return `${PREFIX}${key}`;
-}
+let diskPurgedThisProcess = false;
 
 export function homeScrollSessionKey(
   editionId: string,
@@ -31,7 +30,6 @@ export function updateHomeScroll(sessionKey: string, scrollY: number): void {
   if (!sessionKey || !Number.isFinite(scrollY) || scrollY < 0) return;
   const y = Math.round(scrollY);
   memory.set(sessionKey, y);
-  void AsyncStorage.setItem(storageKey(sessionKey), String(y)).catch(() => {});
 }
 
 export function getHomeScrollSync(sessionKey: string): number {
@@ -39,26 +37,44 @@ export function getHomeScrollSync(sessionKey: string): number {
 }
 
 export async function loadHomeScroll(sessionKey: string): Promise<number> {
-  const cached = memory.get(sessionKey);
-  if (cached != null) return cached;
-  try {
-    const raw = await AsyncStorage.getItem(storageKey(sessionKey));
-    if (!raw) return 0;
-    const y = Number(raw);
-    if (!Number.isFinite(y) || y < 0) return 0;
-    memory.set(sessionKey, y);
-    return y;
-  } catch {
-    return 0;
-  }
+  return getHomeScrollSync(sessionKey);
 }
 
 export function clearHomeScroll(sessionKey: string): void {
   memory.delete(sessionKey);
-  void AsyncStorage.removeItem(storageKey(sessionKey)).catch(() => {});
 }
 
 /** TEMP(Phase One perf): wipe scroll memory for cold-launch simulation. */
 export function clearAllHomeScrollSessions(): void {
   memory.clear();
+}
+
+/**
+ * Remove legacy disk-persisted homepage scroll offsets.
+ * Called once per process from root layout boot — a new JS process is a
+ * fresh app session and must not inherit a prior session's scroll offset.
+ */
+export async function purgePersistedHomeScrollOffsets(): Promise<void> {
+  if (diskPurgedThisProcess) return;
+  diskPurgedThisProcess = true;
+  try {
+    const allKeys = (await AsyncStorage.getAllKeys()) ?? [];
+    const stale = allKeys.filter((key) => key.startsWith(PREFIX));
+    if (stale.length > 0) {
+      await AsyncStorage.multiRemove(stale);
+    }
+  } catch {
+    /* non-fatal — memory-only path still correct */
+  }
+}
+
+/** @internal Test hook — whether this process already purged disk scroll keys. */
+export function homeScrollDiskPurgedThisProcess(): boolean {
+  return diskPurgedThisProcess;
+}
+
+/** @internal Test hook — reset module state between tests. */
+export function resetHomeScrollSessionForTests(): void {
+  memory.clear();
+  diskPurgedThisProcess = false;
 }

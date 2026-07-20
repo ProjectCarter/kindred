@@ -16,6 +16,7 @@ import {
   invalidateLaunchSession,
   primeLaunchSession,
 } from "../lib/auth/launchSession";
+import { purgePersistedHomeScrollOffsets } from "../lib/edition/homeSession";
 
 installStartupFetchProbe();
 beginStartupMetricsProbe();
@@ -112,6 +113,7 @@ export default function RootLayout() {
 
     async function boot() {
       markStartup("layout_boot_start");
+      void purgePersistedHomeScrollOffsets();
       try {
         const initialUrl = await Linking.getInitialURL();
         await createSessionFromUrl(initialUrl);
