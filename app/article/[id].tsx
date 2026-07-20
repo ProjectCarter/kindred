@@ -8,8 +8,6 @@ import { HistoryPlaceReader } from "../../components/HistoryPlaceReader";
 import { PaperLoading } from "../../components/PaperLoading";
 import type { KindredArticle } from "../../lib/edition/article";
 import { articleFromSectionItem, articleFromBanditsPick } from "../../lib/edition/article";
-import { articleFromHistoryPlace } from "../../lib/edition/historyAroundTown/article";
-import { getHistoryPlaceById } from "../../lib/edition/historyAroundTownListStore";
 import { getStashedArticle } from "../../lib/edition/articleStore";
 import {
   getArticleCompanion,
@@ -259,14 +257,6 @@ export default function ArticleScreen() {
           place={article.historyPlaceSnapshot}
           onBack={goBack}
           backLabel={resolvedBack}
-          onOpenNearby={(placeId) => {
-            const nearby = getHistoryPlaceById(placeId);
-            if (!nearby) return;
-            openKindredArticle(router, articleFromHistoryPlace(nearby), {
-              editionId: resolvedEdition,
-              backLabel: resolvedBack,
-            });
-          }}
         />
       ) : (
         <ArticleReader

@@ -5,11 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   resolveStateAtAGlance,
+  resolveStateAtAGlanceForPlace,
   stateAtAGlanceCellWidth,
+  stateAtAGlanceEditorialImageHeight,
+  stateAtAGlanceEditorialImageWidth,
   stateAtAGlanceSymbolOrder,
   stateCodeFromMetroKey,
+  stateCodeFromStateField,
   resolveStateSymbolImageUri,
 } from "./stateAtAGlance.ts";
+import { US_STATE_CODES } from "./stateAtAGlanceFacts.ts";
 import { isVerifiedStateSymbolImageUrl } from "./stateAtAGlanceImage.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,13 +38,14 @@ test("resolveStateAtAGlance returns verified Arizona symbols for Gilbert", () =>
   assert.equal(glance!.sectionTitle, "Arizona at a Glance");
   assert.match(glance!.statehood, /February 14, 1912 • 48th State/);
   assert.equal(glance!.nickname, "The Grand Canyon State");
+  assert.equal(glance!.motto, "Ditat Deus");
   assert.equal(glance!.capital, "Phoenix");
   assert.ok(glance!.capitol);
   assert.equal(glance!.capitol!.name, "Arizona State Capitol");
   assert.equal(stateAtAGlanceSymbolOrder(glance!).length, 5);
   assert.equal(stateAtAGlanceSymbolOrder(glance!)[0].name, "Arizona State Capitol");
-  assert.equal(glance!.symbols.bird.name, "Cactus Wren");
-  assert.equal(glance!.symbols.flower.name, "Saguaro Blossom");
+  assert.equal(glance!.symbols.bird!.name, "Cactus Wren");
+  assert.equal(glance!.symbols.flower!.name, "Saguaro Blossom");
 });
 
 test("resolveStateAtAGlance returns verified Washington symbols for Seattle", () => {
@@ -53,13 +59,48 @@ test("resolveStateAtAGlance returns verified Washington symbols for Seattle", ()
   assert.equal(glance!.capitol!.name, "Washington State Capitol");
   assert.equal(stateAtAGlanceSymbolOrder(glance!).length, 5);
   assert.equal(stateAtAGlanceSymbolOrder(glance!)[0].name, "Washington State Capitol");
-  assert.equal(glance!.symbols.bird.name, "Willow Goldfinch");
-  assert.equal(glance!.symbols.tree.name, "Western Hemlock");
-  assert.equal(glance!.symbols.flower.name, "Coast Rhododendron");
+  assert.equal(glance!.symbols.bird!.name, "Willow Goldfinch");
+  assert.equal(glance!.symbols.tree!.name, "Western Hemlock");
+  assert.equal(glance!.symbols.flower!.name, "Coast Rhododendron");
 });
 
-test("resolveStateAtAGlance omits unknown states", () => {
-  assert.equal(resolveStateAtAGlance("austin-tx"), null);
+test("resolveStateAtAGlance returns verified text facts for every U.S. state", () => {
+  assert.equal(US_STATE_CODES.length, 50);
+  for (const code of US_STATE_CODES) {
+    const glance = resolveStateAtAGlanceForPlace({ state: code });
+    assert.ok(glance, `expected glance for ${code}`);
+    assert.equal(glance!.stateCode, code);
+    assert.ok(glance!.statehood.trim());
+    assert.ok(glance!.nickname.trim());
+    assert.ok(glance!.capital.trim());
+  }
+});
+
+test("states without approved symbol assets still show text-only glance", () => {
+  const glance = resolveStateAtAGlance("austin-tx");
+  assert.ok(glance);
+  assert.equal(glance!.stateName, "Texas");
+  assert.match(glance!.statehood, /December 29, 1845 • 28th State/);
+  assert.equal(glance!.nickname, "The Lone Star State");
+  assert.equal(glance!.motto, "Friendship");
+  assert.equal(glance!.capital, "Austin");
+  assert.equal(stateAtAGlanceSymbolOrder(glance!).length, 0);
+});
+
+test("resolveStateAtAGlance omits non-U.S. state codes", () => {
+  assert.equal(resolveStateAtAGlanceForPlace({ state: "XX" }), null);
+});
+
+test("resolveStateAtAGlanceForPlace resolves from place state field", () => {
+  const glance = resolveStateAtAGlanceForPlace({ state: "AZ" });
+  assert.ok(glance);
+  assert.equal(glance!.stateCode, "AZ");
+  assert.equal(glance!.motto, "Ditat Deus");
+});
+
+test("stateCodeFromStateField normalizes two-letter abbreviations", () => {
+  assert.equal(stateCodeFromStateField("az"), "AZ");
+  assert.equal(stateCodeFromStateField(" Washington "), null);
 });
 
 test("gilbert metro key resolves Arizona glance data", () => {
@@ -76,6 +117,15 @@ test("article adapter wires resolveStateAtAGlance for story_of sections", () => 
   assert.match(source, /resolveStateAtAGlance/);
   assert.match(source, /stateAtAGlance\?:/);
   assert.match(source, /isStoryOfSection\(section\.section_type\)/);
+});
+
+test("history article adapter wires state glance from place state", () => {
+  const source = readFileSync(
+    path.join(__dirname, "./historyAroundTown/article.ts"),
+    "utf8"
+  );
+  assert.match(source, /resolveStateAtAGlanceForPlace/);
+  assert.match(source, /state: snapshot\.state/);
 });
 
 test("stateAtAGlance grid cells stay equal width on narrow screens", () => {
@@ -121,17 +171,37 @@ test("capitol leads the symbol grid before flag bird tree and flower", () => {
   assert.equal(order[4].label, "State Flower");
 });
 
-test("StateAtAGlanceSection uses one grid for capitol and symbols", () => {
+test("StateAtAGlanceSection omits symbol blocks when no approved assets exist", () => {
   const source = readFileSync(
     path.join(__dirname, "../../components/StateAtAGlanceSection.tsx"),
     "utf8"
   );
-  const capitalIdx = source.indexOf("Capital:");
-  const gridIdx = source.indexOf("<View style={styles.grid}>");
-  assert.ok(capitalIdx >= 0);
-  assert.ok(gridIdx > capitalIdx);
-  assert.doesNotMatch(source, /CapitalPhoto/);
-  assert.doesNotMatch(source, /stateAtAGlanceCapitalImageHeight/);
+  assert.match(source, /symbols\.length > 0/);
+  assert.doesNotMatch(source, /Photograph unavailable/);
+});
+
+test("HistoryPlaceReader renders editorial state glance after Did You Know", () => {
+  const source = readFileSync(
+    path.join(__dirname, "../../components/HistoryPlaceReader.tsx"),
+    "utf8"
+  );
+  const didYouKnowIdx = source.indexOf('heading="Did You Know?"');
+  const glanceIdx = source.indexOf('layout="editorial"');
+  const whyRememberIdx = source.indexOf('heading="Why We Remember"');
+  const nearbyIdx = source.indexOf('heading="Nearby"');
+  assert.ok(didYouKnowIdx >= 0);
+  assert.ok(glanceIdx > didYouKnowIdx);
+  assert.ok(whyRememberIdx > glanceIdx);
+  assert.equal(nearbyIdx, -1);
+  assert.match(source, /ArticleEditorialClosing/);
+});
+
+test("editorial state symbol images scale from content width", () => {
+  const width = 360;
+  const imageWidth = stateAtAGlanceEditorialImageWidth(width);
+  const imageHeight = stateAtAGlanceEditorialImageHeight(imageWidth);
+  assert.equal(imageWidth, width);
+  assert.ok(imageHeight > 0);
 });
 
 test("ArticleReader renders state glance after body paragraphs", () => {

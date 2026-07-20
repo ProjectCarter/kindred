@@ -36,13 +36,14 @@ import { PullDownNavHeader } from "./PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
 import { ArticleActionList } from "./ArticleActionList";
+import { ArticleEditorialClosing } from "./ArticleEditorialClosing";
+import { StateAtAGlanceSection } from "./StateAtAGlanceSection";
 
 type Props = {
   article: KindredArticle;
   place: HistoryPlaceSnapshot;
   onBack: () => void;
   backLabel?: string;
-  onOpenNearby?: (placeId: string) => void;
 };
 
 function EditorialSection({
@@ -68,7 +69,6 @@ export function HistoryPlaceReader({
   place,
   onBack,
   backLabel = "← Today's paper",
-  onOpenNearby,
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -94,6 +94,7 @@ export function HistoryPlaceReader({
   const uniqueFacts = useMemo(() => filterUniqueFacts(snapshot), [snapshot]);
   const visitorRows = useMemo(() => visitorInfoRows(snapshot), [snapshot]);
   const region = cityRegionLine(snapshot);
+  const stateAtAGlance = article.stateAtAGlance ?? null;
 
   const pullDownNavScreen = usePullDownNavScreen({
     onBack,
@@ -332,14 +333,6 @@ export function HistoryPlaceReader({
             </EditorialSection>
           ) : null}
 
-          {snapshot.whyItMatters ? (
-            <EditorialSection heading="Why It Matters">
-              <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
-                {snapshot.whyItMatters}
-              </Text>
-            </EditorialSection>
-          ) : null}
-
           {snapshot.lookingCloser.length > 0 ? (
             <EditorialSection heading="Looking Closer">
               {snapshot.lookingCloser.map((item, index) => (
@@ -373,6 +366,22 @@ export function HistoryPlaceReader({
             </EditorialSection>
           ) : null}
 
+          {snapshot.visitingToday ? (
+            <EditorialSection heading="Visiting Today">
+              <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
+                {snapshot.visitingToday}
+              </Text>
+            </EditorialSection>
+          ) : null}
+
+          {snapshot.beforeYouGo ? (
+            <EditorialSection heading="Before You Go">
+              <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
+                {snapshot.beforeYouGo}
+              </Text>
+            </EditorialSection>
+          ) : null}
+
           {uniqueFacts.length > 0 ? (
             <EditorialSection heading="Did You Know?">
               {uniqueFacts.map((fact, index) => (
@@ -387,47 +396,18 @@ export function HistoryPlaceReader({
             </EditorialSection>
           ) : null}
 
-          {snapshot.visitingToday ? (
-            <EditorialSection heading="Visiting Today">
-              <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
-                {snapshot.visitingToday}
-              </Text>
-            </EditorialSection>
+          {stateAtAGlance ? (
+            <StateAtAGlanceSection
+              glance={stateAtAGlance}
+              contentWidth={readingWidth}
+              layout="editorial"
+            />
           ) : null}
 
-          {snapshot.nearbyLinks.length > 0 ? (
-            <EditorialSection heading="Nearby">
-              {snapshot.nearbyLinks.map((nearby) => (
-                <Pressable
-                  key={nearby.id}
-                  onPress={
-                    onOpenNearby ? () => onOpenNearby(nearby.id) : undefined
-                  }
-                  disabled={!onOpenNearby}
-                  style={({ pressed }) => [
-                    styles.nearbyItem,
-                    onOpenNearby && pressed && styles.pressed,
-                  ]}
-                  accessibilityRole={onOpenNearby ? "button" : "text"}
-                >
-                  <Text style={styles.nearbyName}>{nearby.placeName}</Text>
-                  {nearby.historicalMetadataLine ? (
-                    <Text style={styles.nearbyMeta}>{nearby.historicalMetadataLine}</Text>
-                  ) : null}
-                  {nearby.teaser ? (
-                    <Text style={styles.nearbyTeaser} numberOfLines={2}>
-                      {nearby.teaser}
-                    </Text>
-                  ) : null}
-                </Pressable>
-              ))}
-            </EditorialSection>
-          ) : null}
-
-          {snapshot.beforeYouGo ? (
-            <EditorialSection heading="Before You Go">
+          {snapshot.whyItMatters ? (
+            <EditorialSection heading="Why We Remember">
               <Text style={styles.paragraph} maxFontSizeMultiplier={1.2}>
-                {snapshot.beforeYouGo}
+                {snapshot.whyItMatters}
               </Text>
             </EditorialSection>
           ) : null}
@@ -439,6 +419,11 @@ export function HistoryPlaceReader({
               </Text>
             </View>
           ) : null}
+
+          <ArticleEditorialClosing
+            source={article.source}
+            onReturn={onBack}
+          />
         </View>
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
@@ -630,39 +615,8 @@ const styles = StyleSheet.create({
     color: paper.inkBody,
     marginBottom: 10,
   },
-  nearbyItem: {
-    marginBottom: 16,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.inkRule,
-  },
-  nearbyName: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 26,
-    fontWeight: "600",
-    color: paper.ink,
-    marginBottom: 4,
-  },
-  nearbyMeta: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    lineHeight: 20,
-    fontStyle: "italic",
-    color: paper.inkMuted,
-    marginBottom: 4,
-  },
-  nearbyTeaser: {
-    fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 23,
-    color: paper.inkBody,
-  },
   closingBlock: {
-    marginTop: 36,
-    paddingTop: 24,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: paper.inkRule,
+    marginTop: 28,
   },
   closingNote: {
     fontFamily: "Georgia",

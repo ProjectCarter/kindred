@@ -1,6 +1,7 @@
 import type { KindredArticle } from "../article";
 import type { HistoryPlaceSnapshot } from "./types";
 import { cityRegionLine, normalizeHistoryPlaceSnapshot } from "./types";
+import { resolveStateAtAGlanceForPlace } from "../stateAtAGlance";
 
 function locationLine(place: HistoryPlaceSnapshot): string | null {
   const parts = [place.address, place.city, place.state].filter(Boolean);
@@ -12,7 +13,8 @@ function locationLine(place: HistoryPlaceSnapshot): string | null {
  * Reads only from the frozen library snapshot — no runtime generation.
  */
 export function articleFromHistoryPlace(
-  place: HistoryPlaceSnapshot
+  place: HistoryPlaceSnapshot,
+  options?: { metroKey?: string | null }
 ): KindredArticle {
   const snapshot = normalizeHistoryPlaceSnapshot(place);
   const location = locationLine(snapshot);
@@ -40,6 +42,10 @@ export function articleFromHistoryPlace(
     savedLocation: location,
     sourceUrl: snapshot.officialWebsite,
     historyPlaceSnapshot: snapshot,
+    stateAtAGlance: resolveStateAtAGlanceForPlace({
+      metroKey: options?.metroKey,
+      state: snapshot.state,
+    }),
     actionContext: {
       surface: "history_around_town",
       mapsDestination:
