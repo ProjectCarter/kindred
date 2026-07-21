@@ -111,7 +111,7 @@ import { catalogMetroKeyForMarket } from "../../../lib/markets/resolveEditionMar
 import {
   logDiscoveryGeography,
   resolveDiscoveryGeographySnapshot,
-} from "../editorial/discoveryGeography.ts";
+} from "./editorial/discoveryGeography.ts";
 import { editionsConflictTarget } from "./markets/editionIdentity.ts";
 import { publishMinimumViableEditionCheckpoint } from "./edition/earlyEditionPublish.ts";
 import {
