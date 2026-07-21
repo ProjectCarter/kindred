@@ -54,13 +54,14 @@ test("footer attribution stays compact", () => {
   const note = localNewsBriefingFooterNote({
     desk: {
       fourQuestions: {
-        limits: ["Source: AZCentral. Kindred summary — read the original for the full report."],
+        limits: ["This summary reflects reporting published by AZCentral."],
       },
     },
     source: "AZCentral",
   });
   assert.match(note ?? "", /AZCentral/);
   assert.doesNotMatch(note ?? "", /does not invent details/);
+  assert.doesNotMatch(note ?? "", /Kindred summary/);
 });
 
 test("localNewsArticle wires classified modules and footer through adapters", () => {

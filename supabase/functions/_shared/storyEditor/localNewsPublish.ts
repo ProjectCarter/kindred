@@ -42,6 +42,7 @@ export function isPublishableLocalNewsStory(
       body: edited.paragraphs,
       desk: "local_news",
       subjectTokens: [edited.headline, source?.title ?? ""].filter(Boolean),
+      minWords: edited.desk.path === "thin_honest" ? 20 : undefined,
     }).passes;
 }
 

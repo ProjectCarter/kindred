@@ -8,6 +8,7 @@ import {
   readLocalNewsFieldAnswers,
   resolveLocalNewsStoryType,
 } from "./localNewsStoryStructure.ts";
+import { newspaperSourceAttribution } from "./newspaperAttribution.ts";
 
 export const LOCAL_NEWS_DISCLAIMER_PATTERNS = [
   /\bkindred summary\b/i,
@@ -85,8 +86,9 @@ export function localNewsBriefingFooterNote(input: {
   const publisher = input.source?.trim() || "the original publisher";
 
   if (limits.length) {
-    return limits[0]!;
+    const first = limits[0]!;
+    if (!isLocalNewsDisclaimerParagraph(first)) return first;
   }
 
-  return `Source: ${publisher}. Kindred summary — read the original for the full report.`;
+  return newspaperSourceAttribution(publisher);
 }

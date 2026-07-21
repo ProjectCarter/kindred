@@ -42,6 +42,14 @@ THIN SOURCES (editorial standards §4, §10 apply):
 - Put source-verified facts in paragraphs; put general education in field_answers.background (or the desk's context section).
 - Put watch-for framing in field_answers.looking_ahead — hedged, never predictive certainty.
 
+SPORTS DESK (story_type sports):
+- Never publish a one-sentence roster alert when the wire supports more.
+- Lead with what happened — injury, roster move, result, or announcement.
+- why_it_matters: why local fans should care this week.
+- background: season context, recent history, or player/team background from verified reporting.
+- looking_ahead: next game, expected replacement, timeline, or organizational outlook — hedged, verified only.
+- Answer: who is affected, what happens next, and why a local reader should care.
+
 NEVER in paragraphs or field_answers:
 - "Kindred summary," "reporting available," "will not invent," "read the original report," or other legal/disclaimer copy.
 - Put attribution only in four_questions.limits for the compact footer.

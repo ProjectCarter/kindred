@@ -13,6 +13,7 @@ import { validateLastingThought } from "./memorableWriting.ts";
 import { validateLastingImpressionBody } from "./lastingImpression.ts";
 import { validateSourceConfidenceBody } from "./sourceConfidence.ts";
 import { validateUniqueConclusion, extractLastParagraph } from "./uniqueConclusions.ts";
+import { detectEditorialRedundancy } from "../../../../lib/edition/editorialRedundancy.ts";
 
 export {
   validateKindredArticleProse,
@@ -96,6 +97,14 @@ export function validateHistoryArticle(
   }
   if (!hasMemorableTakeaway(body)) {
     reasons.push("no_memorable_takeaway");
+  }
+
+  const redundancy = detectEditorialRedundancy({
+    headline: `${year} — ${eventText.trim()}`,
+    paragraphs,
+  });
+  for (const reason of redundancy.reasons) {
+    reasons.push(`redundancy:${reason}`);
   }
 
   const lastingImpression = validateLastingImpressionBody(paragraphs, {

@@ -11,6 +11,11 @@ import {
   extractLastParagraph,
   validateUniqueConclusion,
 } from "../editorial/uniqueConclusions.ts";
+import {
+  detectEditorialRedundancy,
+  proseNearDuplicate,
+} from "../../../../lib/edition/editorialRedundancy.ts";
+export { proseNearDuplicate } from "../../../../lib/edition/editorialRedundancy.ts";
 import type { StoryEditorScores, StorySurfaceRole } from "./types.ts";
 import { STORY_EDITOR_SCORE_KEYS } from "./types.ts";
 
@@ -158,18 +163,6 @@ const LOCAL_NEWS_SECTION_KEYS = [
   "verified_facts",
   "economic_impact",
 ] as const;
-
-export function proseNearDuplicate(a: string, b: string): boolean {
-  const left = normalizeForContainment(a);
-  const right = normalizeForContainment(b);
-  if (!left || !right) return false;
-  if (left === right) return true;
-  const shorter = left.length <= right.length ? left : right;
-  const longer = left.length > right.length ? left : right;
-  if (shorter.length < 20) return longer.includes(shorter);
-  const sig = shorter.slice(0, Math.min(72, shorter.length));
-  return longer.includes(sig);
-}
 
 function populatedLocalNewsSections(
   fieldAnswers?: LocalNewsFieldAnswers | null
@@ -494,6 +487,18 @@ export function validateStoryDraft(input: {
     issues.push({
       code: "generic_conclusion",
       message: `Swap Test failed: ${unique.reason ?? "generic"}.`,
+    });
+  }
+
+  const redundancy = detectEditorialRedundancy({
+    headline: input.headline,
+    dek: input.dek,
+    paragraphs: input.paragraphs,
+  });
+  for (const reason of redundancy.reasons) {
+    issues.push({
+      code: "editorial_redundancy",
+      message: reason,
     });
   }
 

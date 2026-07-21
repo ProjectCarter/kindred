@@ -4,6 +4,11 @@
 
 import type { StoryEditorIntake, StoryEditorResult, StoryEditorScores } from "./types.ts";
 import { proseNearDuplicate, wordCount } from "./validators.ts";
+import {
+  newspaperBriefWireNote,
+  newspaperSourceAttribution,
+  newspaperThinWireAttribution,
+} from "../../../../lib/edition/newspaperAttribution.ts";
 
 const ZERO_SCORES: StoryEditorScores = {
   interest: 0,
@@ -75,7 +80,14 @@ function buildDistinctDek(headline: string, sourceBody: string): string | null {
 
 function buildVerifiedLead(headline: string, sourceBody: string): string | null {
   const split = splitVerifiedBriefing(headline, sourceBody);
-  if (split.lead) return split.lead;
+  if (
+    split.lead &&
+    wordCount(split.lead) >= 8 &&
+    split.lead.length >= 40 &&
+    !proseNearDuplicate(split.lead, headline)
+  ) {
+    return split.lead;
+  }
   if (!sourceBody || proseNearDuplicate(sourceBody, headline)) return null;
   const lead = sourceBody.length <= 320 ? sourceBody : `${sourceBody.slice(0, 317).trim()}…`;
   if (!lead || proseNearDuplicate(lead, headline)) return null;
@@ -89,7 +101,13 @@ function stableBackgroundParagraph(
   if (/\b(training camp|roster|preseason|regular season)\b/.test(hay)) {
     return "Training camp is when teams evaluate players and shape rosters before the regular season begins.";
   }
-  if (/\b(city council|town council|zoning|bond measure)\b/.test(hay)) {
+  if (/\b(injured list|injury list|disabled list|placed on the il|10-day il|15-day il)\b/.test(hay)) {
+    return "Injured-list moves open roster spots and can reshuffle playing time until a player returns or the club adds a replacement.";
+  }
+  if (/\b(recalled|optioned|designated for assignment|dfad|waiver)\b/.test(hay)) {
+    return "Roster moves at this point in the season can change lineup options for upcoming games and bullpen or bench depth.";
+  }
+  if (/\b(city council|town council|zoning|bond measure|\bcouncil\b)\b/.test(hay)) {
     return "Local councils vote on policies and budgets that shape everyday life in a community.";
   }
   if (/\b(weather warning|heat advisory|flood warning|storm watch)\b/.test(hay)) {
@@ -157,14 +175,11 @@ export function composeThinHonest(
     paragraphs.push(first);
   } else {
     paragraphs.push(
-      `${headline} — Kindred has only a brief note from ${intake.source || "the wires"}.`
+      `${headline} — ${newspaperBriefWireNote(intake.source)}`
     );
   }
 
-  paragraphs.push(
-    "That is the full wire note available to the desk. " +
-      "For the complete report, open the original source — Kindred will not invent what was not reported."
-  );
+  paragraphs.push(newspaperThinWireAttribution(intake.source));
 
   const bodyText = paragraphs.join("\n\n");
   const modest: StoryEditorScores = {
@@ -208,11 +223,10 @@ export function composeThinHonest(
       },
       fourQuestions: {
         what: headline,
-        why: "The wire note is short — the full report lives with the publisher.",
-        who: "Readers following this thread",
-        remember:
-          "When the wire is thin, Kindred tells you plainly rather than padding.",
-        limits: ["Full detail lives with the publisher source."],
+        why: "",
+        who: "",
+        remember: "",
+        limits: [newspaperThinWireAttribution(intake.source)],
       },
       editedAt: new Date().toISOString(),
     },
@@ -258,7 +272,7 @@ export function composeLocalNewsThinHonest(
   if (
     proseNearDuplicate(bodyText, headline) ||
     proseNearDuplicate(dek, headline) ||
-    proseNearDuplicate(dek, lead)
+    proseNearDuplicate(lead, headline)
   ) {
     return composeLocalNewsUnavailable(
       intake,
@@ -310,9 +324,7 @@ export function composeLocalNewsThinHonest(
         why: "",
         who: "",
         remember: "",
-        limits: [
-          `Source: ${publisher}. Kindred summary — read the original for the full report.`,
-        ],
+        limits: [newspaperSourceAttribution(publisher)],
       },
       fieldAnswers: {
         verified_facts: lead,

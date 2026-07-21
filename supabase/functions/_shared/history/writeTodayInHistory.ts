@@ -41,6 +41,7 @@ const HISTORY_SYSTEM_PROMPT =
   "5. Long-term impact — how it changed something concrete (law, city, habit, border, industry)\n" +
   "6. Lasting legacy — ONE memorable closing observation unique to this event (Swap Test + Lasting Thought)\n" +
   "Vary paragraph length. Smooth transitions — never repeat the same opener twice. " +
+  "Never repeat the same fact, sentence, or clause in different paragraphs — each paragraph must teach something new. " +
   "CONCLUSION (Swap Test): The final paragraph must belong only to this event and year — " +
   "an observation, never a summary recap. Never a reusable Kindred wrap-up, never 'explains how we got here,' " +
   "never generic statements about history. " +
@@ -84,13 +85,11 @@ function thinHistoryFallback(
   const body = [
     opener,
     `${year} sat inside a wider moment — institutions, borders, and daily habits were all shifting in ways people at the time could feel but not always name.`,
-    event.length
-      ? `The verified record points to ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")} — a detail worth holding onto because anniversaries compress a long story into one readable morning.`
-      : `${year} left one anchor date on the calendar — enough to start noticing how the rest of the century rearranged itself around it.`,
-    `At the time, the stakes were immediate: who held power, who lost it, and which ordinary routines suddenly looked different by dinner.`,
+    `Readers who lived through it often remembered the logistics first: who moved, who waited, and which ordinary routines changed before anyone agreed on the name for what had happened.`,
+    `At the time, the stakes were immediate: who held power, who lost it, and which communities felt the shift before the formal announcements caught up.`,
     `The aftershocks did not stay in ${year}. Laws, maps, industries, and arguments we treat as modern often trace back to mornings like this one.`,
     event.length
-      ? `What began with ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")} still surfaces in places you might not expect — worth noticing once before the rest of the day pulls you forward.`
+      ? `Long after the headlines from ${year} faded, that morning still surfaces in places you might not expect — worth noticing once before the rest of the day pulls you forward.`
       : `${year} left marks that still organize how cities, courts, and classrooms explain themselves — a thread worth following forward from this anniversary.`,
   ].join("\n\n");
   return { headline, body };
@@ -191,7 +190,7 @@ export async function writeTodayInHistorySection(
       input,
       `Previous draft failed editorial quality (${quality.reasons.join(", ")}). ` +
         "Rewrite with exactly 6 paragraphs, 450+ words, a unique final observation tied to this event, " +
-        "at least one memorable verified takeaway, and no generic AI phrases."
+        "at least one memorable verified takeaway, no generic AI phrases, and no repeated facts or sentences."
     );
     response = retry.response;
     data = retry.data;
@@ -206,8 +205,12 @@ export async function writeTodayInHistorySection(
     quality = validateHistoryArticle(body, input.year, input.eventText);
   }
 
-  if (!quality.passes && wordCount(body) >= 40) {
-    console.warn("[buildEdition] writeTodayInHistorySection publishing with quality notes", {
+  if (!quality.passes) {
+    const fallback = thinHistoryFallback(input.year, input.eventText);
+    headline = fallback.headline;
+    body = fallback.body;
+    quality = validateHistoryArticle(body, input.year, input.eventText);
+    console.warn("[buildEdition] writeTodayInHistorySection quality fallback", {
       reasons: quality.reasons,
       paragraphCount: quality.paragraphCount,
       words: quality.words,

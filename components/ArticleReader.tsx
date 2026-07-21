@@ -936,8 +936,8 @@ export function ArticleReader({
             {briefing && !isLocalNewsArticle ? (
               <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
                 {article.body.length <= 1
-                  ? "A short Kindred note — the full report lives with the publisher."
-                  : "A Kindred summary for your morning paper — not the publisher’s full article."}
+                  ? "This summary reflects the reporting available from the original publication."
+                  : "This report is presented as published by the original source."}
               </Text>
             ) : null}
 

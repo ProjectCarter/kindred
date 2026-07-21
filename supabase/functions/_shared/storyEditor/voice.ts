@@ -50,7 +50,7 @@ export function storyEditorSystemPrompt(
     '"background":string,"looking_ahead":string,"limits":string[]},' +
     '"lessons":[{"changeType":"opening"|"delete_para"|"reorder"|"ending"|"curiosity"|"human_focus"|"insight"|"clarity"|"other",' +
     '"rationale":string,"principleIds":string[]}],"notes":string[]}\n' +
-    "For local_news: classify with story_type first. paragraphs = lead only (source-verified facts). field_answers = that desk's sections: background = general verified education; why_it_matters = source facts or their significance; looking_ahead = watch-for framing only (hedged). Omit empty keys. No disclaimers in body or field_answers.\n" +
+    "For local_news: classify with story_type first. paragraphs = lead only (source-verified facts). field_answers = that desk's sections: background = general verified education; why_it_matters = source facts or their significance; looking_ahead = watch-for framing only (hedged). Omit empty keys. No disclaimers in body or field_answers. Never repeat the same fact or sentence across paragraphs — each paragraph must add new information. For sports, expand roster and injury alerts into why it matters, background, and what to watch next when the wire supports it.\n" +
     "No markdown fences. No preamble."
   );
 }

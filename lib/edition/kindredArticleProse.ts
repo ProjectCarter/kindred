@@ -7,12 +7,13 @@ import {
   containsGenericAiPhrase,
   endingReadsLikeSummary,
   filterGenericAiParagraphs,
-} from "./editorialIntelligence";
-import { validateLastingThought } from "./memorableWriting";
+} from "./editorialIntelligence.ts";
+import { validateLastingThought } from "./memorableWriting.ts";
 import {
   extractLastParagraph,
   validateUniqueConclusion,
-} from "./uniqueConclusions";
+} from "./uniqueConclusions.ts";
+import { detectEditorialRedundancy } from "./editorialRedundancy.ts";
 
 /** Banned newspaper wrap-ups — never publish. */
 export const NEWSPAPER_WRAP_UP_PATTERNS: RegExp[] = [
@@ -168,6 +169,15 @@ export function validateKindredArticleProse(
   const lasting = validateLastingThought(paragraphs.join("\n\n"), { subjectTokens });
   if (!lasting.passes && (input.desk === "history" || input.desk === "masterpiece" || input.desk === "story_of")) {
     reasons.push(`lasting_thought:${lasting.reason ?? "fail"}`);
+  }
+
+  const redundancy = detectEditorialRedundancy({
+    headline,
+    dek,
+    paragraphs,
+  });
+  for (const reason of redundancy.reasons) {
+    reasons.push(`redundancy:${reason}`);
   }
 
   return { passes: reasons.length === 0, reasons };
