@@ -87,9 +87,9 @@ export type EditorialAIUseCase =
 export {
   editorialContextForAI,
   type EditorialAISlice,
-} from "./editorialAi";
+} from "./editorialAi.ts";
 
-import { editorialContextForAI } from "./editorialAi";
+import { editorialContextForAI } from "./editorialAi.ts";
 
 /** Parse stored jsonb from editions.editorial_context. */
 export function parseEditorialContext(

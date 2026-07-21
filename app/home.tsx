@@ -62,10 +62,19 @@ import {
   type NationalNewsPackage,
 } from "../lib/edition/nationalNews";
 import {
+  mergeNationalNewsState,
   resolveEditionNewsDesks,
   resolveNationalNewsForCachedBundle,
   withSyncedNewsDesksInCache,
 } from "../lib/edition/homepageNewsHydration";
+import {
+  logNationalNewsHydration,
+  mergeNationalNewsHydration,
+  nationalNewsStoryCount,
+  parseNationalNewsFromEditionRow,
+  resolveNationalNewsPackageForEdition,
+  type NationalNewsHydrationSource,
+} from "../lib/edition/nationalNewsHydration";
 import {
   inferTopicFromSection,
   trackReadingSignal,
@@ -343,6 +352,8 @@ export default function HomeScreen() {
   const startupSummaryLoggedRef = useRef(false);
   /** Cached bundle used when the network is slow or unavailable. */
   const cachedBundleRef = useRef<CachedEditionBundle | null>(null);
+  /** Survives transient UI clears — authoritative until replaced by network. */
+  const nationalNewsHydrationRef = useRef<NationalNewsPackage | null>(null);
 
   /** Tracks location when home last focused — reload edition if it changes. */
   const focusedLocationKeyRef = useRef<string | null>(null);
@@ -766,13 +777,167 @@ export default function HomeScreen() {
     logStartupSummary(context, { editionComplete });
   }
 
+  function clearNationalNewsHydration(reason: string): void {
+    nationalNewsHydrationRef.current = null;
+    setNationalNews(null);
+    if (__DEV__) {
+      console.log("[home:nationalNews:hydration] cleared", {
+        reason,
+        editionId: editionIdRef.current,
+        at: new Date().toISOString(),
+      });
+    }
+  }
+
+  function setNationalNewsHydrated(
+    source: NationalNewsHydrationSource,
+    incoming: NationalNewsPackage | null,
+    meta: {
+      editionId?: string | null;
+      editionDate?: string | null;
+      cacheHasNationalNews?: boolean;
+      networkHasNationalNews?: boolean;
+    }
+  ): boolean {
+    const merged = mergeNationalNewsHydration(
+      nationalNewsHydrationRef.current,
+      incoming
+    );
+    const accepted = Boolean(merged.value);
+    const blockedReason =
+      !incoming && merged.preventedNullOverwrite
+        ? "null_incoming_preserving_valid_package"
+        : !incoming && !merged.value
+          ? "null_incoming_no_existing_package"
+          : null;
+
+    if (merged.value) {
+      nationalNewsHydrationRef.current = merged.value;
+    }
+    setNationalNews(merged.value);
+    logNationalNewsHydration({
+      editionId: meta.editionId ?? editionIdRef.current,
+      editionDate: meta.editionDate ?? editionDate,
+      source,
+      cacheHasNationalNews: meta.cacheHasNationalNews ?? Boolean(
+        cachedBundleRef.current?.nationalNews
+      ),
+      networkHasNationalNews:
+        meta.networkHasNationalNews ?? nationalNewsStoryCount(incoming) > 0,
+      storyCount: nationalNewsStoryCount(merged.value),
+      packageId: merged.value?.packageId ?? null,
+      preventedNullOverwrite: merged.preventedNullOverwrite,
+      accepted,
+      blockedReason,
+      at: new Date().toISOString(),
+    });
+    return accepted;
+  }
+
+  function hydrateNationalNewsFromEditionRow(
+    edition: {
+      id?: string;
+      edition_date?: string;
+      national_news?: unknown;
+    },
+    source: NationalNewsHydrationSource
+  ): boolean {
+    const pkg = resolveNationalNewsPackageForEdition(edition);
+    return setNationalNewsHydrated(source, pkg, {
+      editionId: edition.id ?? editionIdRef.current,
+      editionDate: edition.edition_date ?? editionDate,
+      cacheHasNationalNews: Boolean(cachedBundleRef.current?.nationalNews),
+      networkHasNationalNews: nationalNewsStoryCount(pkg) > 0,
+    });
+  }
+
+  async function ensureNationalNewsHydrated(
+    edition: {
+      id: string;
+      edition_date: string;
+      national_news?: unknown;
+    },
+    source: NationalNewsHydrationSource
+  ): Promise<boolean> {
+    if (hydrateNationalNewsFromEditionRow(edition, source)) {
+      if (cachedBundleRef.current && nationalNewsHydrationRef.current) {
+        cachedBundleRef.current = withSyncedNewsDesksInCache(
+          cachedBundleRef.current,
+          {
+            topStories: cachedBundleRef.current.topStories,
+            nationalNews: nationalNewsHydrationRef.current,
+          }
+        );
+        scheduleCachedEditionSave(cachedBundleRef.current);
+      }
+      return true;
+    }
+    if (nationalNewsHydrationRef.current) return true;
+    await backfillNationalNewsFromNetwork(
+      edition.id,
+      edition.edition_date,
+      source === "patch_refresh" ? "patch_refresh" : "network_backfill"
+    );
+    return Boolean(nationalNewsHydrationRef.current);
+  }
+
+  async function backfillNationalNewsFromNetwork(
+    editionId: string,
+    editionDateValue: string,
+    source: NationalNewsHydrationSource = "network_backfill"
+  ): Promise<void> {
+    if (!isSupabaseConfigured) return;
+    const { data, error } = await supabase
+      .from("editions")
+      .select("national_news")
+      .eq("id", editionId)
+      .maybeSingle();
+    if (error) {
+      if (__DEV__) {
+        console.warn("[home:nationalNews:backfill] query failed", {
+          editionId,
+          message: error.message,
+        });
+      }
+      return;
+    }
+    const pkg = parseNationalNewsFromEditionRow(data);
+    if (!pkg || !mountedRef.current) return;
+    setNationalNewsHydrated(source, pkg, {
+      editionId,
+      editionDate: editionDateValue,
+      cacheHasNationalNews: Boolean(cachedBundleRef.current?.nationalNews),
+      networkHasNationalNews: true,
+    });
+    if (cachedBundleRef.current) {
+      cachedBundleRef.current = withSyncedNewsDesksInCache(
+        cachedBundleRef.current,
+        {
+          topStories: cachedBundleRef.current.topStories,
+          nationalNews: pkg,
+        }
+      );
+      scheduleCachedEditionSave(cachedBundleRef.current);
+    }
+  }
+
   function applyEditionNewsDesks(
     edition: { national_news?: unknown; editorial_context?: unknown },
-    editionDate: string
+    editionDateValue: string,
+    source: NationalNewsHydrationSource = "network"
   ): TopStoryItem[] {
-    const desks = resolveEditionNewsDesks(edition, editionDate);
+    const desks = resolveEditionNewsDesks(edition, editionDateValue);
     setTopStories(desks.topStories);
-    setNationalNews(desks.nationalNews);
+    setNationalNewsHydrated(source, desks.nationalNews, {
+      editionDate: editionDateValue,
+      networkHasNationalNews: nationalNewsStoryCount(desks.nationalNews) > 0,
+    });
+    if (cachedBundleRef.current && desks.nationalNews) {
+      cachedBundleRef.current = withSyncedNewsDesksInCache(
+        cachedBundleRef.current,
+        desks
+      );
+    }
     return desks.topStories;
   }
 
@@ -848,6 +1013,17 @@ export default function HomeScreen() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    console.log("[home:nationalNews:reader]", {
+      editionId,
+      editionDate,
+      storyCount: nationalNews?.stories?.length ?? 0,
+      packageId: nationalNews?.packageId ?? null,
+      refStoryCount: nationalNewsHydrationRef.current?.stories?.length ?? 0,
+    });
+  }, [editionId, editionDate, nationalNews]);
 
   useEffect(() => {
     if (loading || !editionId) return;
@@ -937,6 +1113,12 @@ export default function HomeScreen() {
   }
 
   function applyCachedBundle(bundle: CachedEditionBundle): void {
+    if (
+      editionIdRef.current &&
+      editionIdRef.current !== bundle.editionId
+    ) {
+      clearNationalNewsHydration("edition_id_changed_cache_paint");
+    }
     const calendarToday = calendarEditionDate();
     if (isPastEditionDate(bundle.editionDate, calendarToday)) {
       if (__DEV__) {
@@ -958,7 +1140,24 @@ export default function HomeScreen() {
     setEditionId(merged.editionId);
     setLeadStory(merged.leadStory);
     setTopStories(merged.topStories);
-    setNationalNews(resolveNationalNewsForCachedBundle(merged));
+    const cachedNationalNews = resolveNationalNewsForCachedBundle(merged);
+    setNationalNewsHydrated(
+      cachedNationalNews ? "cache" : "cache",
+      cachedNationalNews,
+      {
+        editionId: merged.editionId,
+        editionDate: merged.editionDate,
+        cacheHasNationalNews: Boolean(merged.nationalNews),
+        networkHasNationalNews: false,
+      }
+    );
+    if (!cachedNationalNews && merged.editionId) {
+      void backfillNationalNewsFromNetwork(
+        merged.editionId,
+        merged.editionDate,
+        "network_backfill"
+      );
+    }
     setBandit(merged.bandit);
     setIntelligence(merged.intelligence);
     setPairedNationalDaily(merged.pairedNationalDaily ?? null);
@@ -1375,7 +1574,7 @@ export default function HomeScreen() {
       setEditionId(null);
       setLeadStory(null);
       setTopStories([]);
-      setNationalNews(null);
+      clearNationalNewsHydration("load_edition_reset_scroll");
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -1970,7 +2169,7 @@ export default function HomeScreen() {
       setEditionId(null);
       setLeadStory(null);
       setTopStories([]);
-      setNationalNews(null);
+      clearNationalNewsHydration("load_edition_reset_scroll");
       setBandit(null);
       setIntelligence(null);
       setLoading(false);
@@ -2277,7 +2476,7 @@ export default function HomeScreen() {
         setEditionId(null);
         setLeadStory(null);
         setTopStories([]);
-        setNationalNews(null);
+        clearNationalNewsHydration("not_ready_no_cache");
         setBandit(null);
         setIntelligence(null);
         setClippedIds(new Set());
@@ -2384,7 +2583,7 @@ export default function HomeScreen() {
       setEditionId(null);
       setLeadStory(null);
       setTopStories([]);
-      setNationalNews(null);
+      clearNationalNewsHydration("load_edition_reset_scroll");
       setBandit(null);
       setIntelligence(null);
       setClippedIds(new Set());
@@ -2504,6 +2703,10 @@ export default function HomeScreen() {
         loaded
       );
       setSections(nextSections);
+      await ensureNationalNewsHydrated(
+        edition as { id: string; edition_date: string; national_news?: unknown },
+        "patch_refresh"
+      );
     } else if (syncAfterCache && cacheMatchesNetwork) {
       const cachedSections = cachedBundleRef.current?.sections ?? loaded;
       nextSections = mergeFrozenSections(cachedSections, loaded);
@@ -2585,7 +2788,12 @@ export default function HomeScreen() {
         edition.edition_date
       );
       setTopStories(syncedDesks.topStories);
-      setNationalNews(syncedDesks.nationalNews);
+      setNationalNewsHydrated("sync_after_cache", syncedDesks.nationalNews, {
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        cacheHasNationalNews: Boolean(cachedBundleRef.current?.nationalNews),
+        networkHasNationalNews: nationalNewsStoryCount(syncedDesks.nationalNews) > 0,
+      });
       if (cachedBundleRef.current) {
         cachedBundleRef.current = withSyncedNewsDesksInCache(
           cachedBundleRef.current,
@@ -2619,7 +2827,12 @@ export default function HomeScreen() {
         edition.edition_date
       );
       setTopStories(syncedDesks.topStories);
-      setNationalNews(syncedDesks.nationalNews);
+      setNationalNewsHydrated("sync_after_cache", syncedDesks.nationalNews, {
+        editionId: edition.id,
+        editionDate: edition.edition_date,
+        cacheHasNationalNews: Boolean(cachedBundleRef.current?.nationalNews),
+        networkHasNationalNews: nationalNewsStoryCount(syncedDesks.nationalNews) > 0,
+      });
       setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
       setIntelligence(intel);
       freezeEdition({
@@ -2665,7 +2878,8 @@ export default function HomeScreen() {
       setLeadStory(lead);
       applyEditionNewsDesks(
         edition as { national_news?: unknown; editorial_context?: unknown },
-        edition.edition_date
+        edition.edition_date,
+        isRefresh ? "refresh" : "network"
       );
       setBandit(parseBanditPayload((edition as { bandit?: unknown }).bandit));
       setIntelligence(intel);
@@ -2677,6 +2891,19 @@ export default function HomeScreen() {
         heroImageId: cachedBundleRef.current?.heroImageId ?? null,
       });
       editionFrozenRef.current = true;
+    }
+
+    if (mountedRef.current && gen === loadGen.current) {
+      await ensureNationalNewsHydrated(
+        edition as { id: string; edition_date: string; national_news?: unknown },
+        patchEventsOnly
+          ? "patch_refresh"
+          : syncAfterCache
+            ? "sync_after_cache"
+            : isRefresh
+              ? "refresh"
+              : "ensure_edition"
+      );
     }
 
     traceParsedIntelligence(
@@ -3713,7 +3940,7 @@ export default function HomeScreen() {
         setEditionId(null);
         setLeadStory(null);
         setTopStories([]);
-        setNationalNews(null);
+        clearNationalNewsHydration("dev_generate_cache_clear");
         setBandit(null);
         setIntelligence(null);
         setClippedIds(new Set());

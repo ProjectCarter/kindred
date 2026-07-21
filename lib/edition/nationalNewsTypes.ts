@@ -109,13 +109,23 @@ export function nationalNewsFromLegacyTopStories(
   };
 }
 
+/** Homepage hydration — editions.national_news column only (never top_stories). */
+export function resolveNationalNewsFromEditionColumn(
+  edition: { national_news?: unknown } | null | undefined
+): NationalNewsPackage | null {
+  return nationalNewsFromEdition(edition ?? null);
+}
+
 export function resolveNationalNewsForRender(input: {
   edition?: { national_news?: unknown } | null;
   topStories?: LegacyTopStoryItem[];
   editionDate?: string | null;
+  /** When true, only read editions.national_news (homepage default). */
+  columnOnly?: boolean;
 }): NationalNewsPackage | null {
   const fromColumn = nationalNewsFromEdition(input.edition ?? null);
   if (fromColumn) return fromColumn;
+  if (input.columnOnly) return null;
   if (input.topStories?.length && input.editionDate) {
     return nationalNewsFromLegacyTopStories(input.topStories, input.editionDate);
   }

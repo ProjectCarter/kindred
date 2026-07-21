@@ -1,5 +1,6 @@
 import type { CachedEditionBundle } from "./editionCache.ts";
 import {
+  nationalNewsFromEdition,
   resolveNationalNewsForRender,
   type NationalNewsPackage,
 } from "./nationalNewsTypes.ts";
@@ -13,6 +14,15 @@ export type EditionNewsRow = {
   editorial_context?: unknown;
 };
 
+/** Never replace hydrated National News with null from a stale cache field. */
+export function mergeNationalNewsState(
+  existing: NationalNewsPackage | null | undefined,
+  incoming: NationalNewsPackage | null | undefined
+): NationalNewsPackage | null {
+  if (incoming) return incoming;
+  return existing ?? null;
+}
+
 /** Resolve Local + National news desks from a network edition row. */
 export function resolveEditionNewsDesks(
   edition: EditionNewsRow,
@@ -23,28 +33,33 @@ export function resolveEditionNewsDesks(
     edition,
     topStories,
     editionDate,
+    columnOnly: true,
   });
   return { topStories, nationalNews };
 }
 
 /**
- * Warm-cache hydration — prefer persisted nationalNews; fall back to legacy
- * top_stories adapter when older bundles omit the dedicated column.
+ * Warm-cache hydration — prefer persisted nationalNews. When absent, callers
+ * must hydrate from the network edition row; legacy top_stories are not a
+ * reliable National News source once Local News owns the slate.
  */
 export function resolveNationalNewsForCachedBundle(
   bundle: Pick<
     CachedEditionBundle,
     "nationalNews" | "topStories" | "editionDate"
-  >
+  >,
+  options?: { editionNationalNews?: unknown }
 ): NationalNewsPackage | null {
   if (bundle.nationalNews) {
     return bundle.nationalNews;
   }
-  return resolveNationalNewsForRender({
-    edition: null,
-    topStories: bundle.topStories ?? [],
-    editionDate: bundle.editionDate,
-  });
+  const fromEdition = nationalNewsFromEdition(
+    options?.editionNationalNews != null
+      ? { national_news: options.editionNationalNews }
+      : null
+  );
+  if (fromEdition) return fromEdition;
+  return null;
 }
 
 /** Persist national news into a cached bundle after network desk sync. */
@@ -55,6 +70,6 @@ export function withSyncedNewsDesksInCache(
   return {
     ...bundle,
     topStories: desks.topStories,
-    nationalNews: desks.nationalNews,
+    nationalNews: mergeNationalNewsState(bundle.nationalNews, desks.nationalNews),
   };
 }

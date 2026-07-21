@@ -15,6 +15,11 @@ import {
   resolveNationalNewsForRender,
   type NationalNewsPackage,
 } from "./nationalNewsTypes.ts";
+import {
+  mergeNationalNewsState,
+  resolveNationalNewsForCachedBundle,
+  withSyncedNewsDesksInCache,
+} from "./homepageNewsHydration.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const homeSource = readFileSync(join(__dirname, "../../app/home.tsx"), "utf8");
@@ -84,8 +89,13 @@ test("syncAfterCache && cacheMatchesNetwork path still hydrates National News", 
   );
   assert.match(
     homeSource,
-    /nationalNews=\{nationalNews\}/,
-    "EditionReader must receive nationalNews prop"
+    /ensureNationalNewsHydrated\(/,
+    "loadEdition must always ensure national news from edition row"
+  );
+  assert.match(
+    homeSource,
+    /\[home:nationalNews:reader\]/,
+    "EditionReader nationalNews prop must be logged in dev"
   );
 });
 
@@ -135,7 +145,76 @@ test("National News collapses when no data exists", () => {
       edition: {},
       topStories: [LOCAL_TOP_STORY],
       editionDate: "2026-07-19",
+      columnOnly: true,
     }),
     null
   );
+});
+
+test("homepage never synthesizes National News from top_stories alone", () => {
+  assert.equal(
+    resolveNationalNewsForRender({
+      edition: {},
+      topStories: [
+        {
+          id: "nat-1",
+          headline: "National wire only",
+          summary: "Should not become National News on homepage.",
+          source: "AP",
+          url: null,
+          role: "national",
+        },
+      ],
+      editionDate: "2026-07-19",
+      columnOnly: true,
+    }),
+    null
+  );
+});
+
+test("legacy cache without nationalNews hydrates from edition row", () => {
+  const resolved = resolveNationalNewsForCachedBundle(
+    {
+      editionDate: "2026-07-19",
+      topStories: [LOCAL_TOP_STORY],
+    },
+    { editionNationalNews: SAMPLE_NATIONAL_NEWS }
+  );
+  assert.equal(resolved?.packageId, SAMPLE_NATIONAL_NEWS.packageId);
+});
+
+test("all-local top_stories do not backfill national news from cache alone", () => {
+  assert.equal(
+    resolveNationalNewsForCachedBundle({
+      editionDate: "2026-07-19",
+      topStories: [LOCAL_TOP_STORY],
+    }),
+    null
+  );
+});
+
+test("mergeNationalNewsState preserves valid hydrated national news", () => {
+  assert.equal(
+    mergeNationalNewsState(SAMPLE_NATIONAL_NEWS, null)?.packageId,
+    SAMPLE_NATIONAL_NEWS.packageId
+  );
+});
+
+test("withSyncedNewsDesksInCache backfills nationalNews", () => {
+  const bundle = withSyncedNewsDesksInCache(
+    {
+      userId: "user-1",
+      editionId: "edition-1",
+      editionDate: "2026-07-19",
+      metroKey: "phoenix-az",
+      cachedAt: Date.now(),
+      sections: [],
+      leadStory: null,
+      topStories: [],
+      bandit: null,
+      intelligence: null,
+    },
+    { topStories: [LOCAL_TOP_STORY], nationalNews: SAMPLE_NATIONAL_NEWS }
+  );
+  assert.equal(bundle.nationalNews?.packageId, SAMPLE_NATIONAL_NEWS.packageId);
 });
