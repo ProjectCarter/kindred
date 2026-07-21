@@ -16,6 +16,16 @@ import type {
   EditorialPolicy,
 } from "./types.ts";
 import { isUpliftingStory, shouldDeprioritizeForTone } from "./tone.ts";
+import {
+  isEvergreenLocalNewsFiller,
+  isTitleOnlyCandidate,
+} from "../../../../lib/edition/localNewsSourceQuality.ts";
+import {
+  assessLocalNewsGeographicEligibility,
+  geographicTierPriority,
+  hasAcceptableFallbackSourceMaterial,
+  hasMinimumLeadSourceMaterial,
+} from "../../../../lib/edition/localNewsGeographicEligibility.ts";
 
 export type RunEditorialDecisionsInput = {
   ranking: StoryRankingContext;
@@ -178,20 +188,132 @@ export async function runLocalEditorialDecisions(
     },
   };
 
+  const readerPlace = {
+    city: ranking.city,
+    state: ranking.state,
+    region: ranking.region,
+    metroKey: ranking.metroKey ?? null,
+  };
+
   const candidates = await fetchLocalStoryCandidates(ranking, input.newsApiKey);
-  const scored = candidates
-    .map((story) => scoreCandidate(story, ranking))
-    .filter(
-      (c) =>
-        c.story.pool === "local" ||
-        c.story.category === "sports" ||
-        c.story.category === "weather" ||
-        c.story.category === "community" ||
-        c.reasons.some(
-          (r) => r.code === "local_relevance" || r.code === "local_pool"
-        )
-    )
-    .sort((a, b) => b.score - a.score);
+  const geoDiagnostics = candidates.map((story) => {
+    const scored = scoreCandidate(story, ranking);
+    const geo = assessLocalNewsGeographicEligibility({
+      id: story.id,
+      title: story.title,
+      description: story.description,
+      source: story.source,
+      category: story.category,
+      score: scored.score,
+      place: readerPlace,
+    });
+    return { scored, geo };
+  });
+
+  const scored = geoDiagnostics
+    .filter(({ geo }) => {
+      if (!geo.eligible) {
+        console.log("[editor] local geo rejected", {
+          id: geo.storyId.slice(0, 48),
+          title: geo.title.slice(0, 80),
+          reason: geo.rejectionReason,
+          tier: geo.geographicTier,
+        });
+        return false;
+      }
+      return true;
+    })
+    .map(({ scored: candidate, geo }) => {
+      candidate.reasons.push({
+        code: "geo_eligibility",
+        label: geo.eligibilityReason,
+        weight: geographicTierPriority(geo.geographicTier) * 6,
+      });
+      return candidate;
+    })
+    .filter((c) => {
+      const wire = {
+        title: c.story.title,
+        description: c.story.description,
+        source: c.story.source,
+        category: c.story.category,
+      };
+      if (isEvergreenLocalNewsFiller(wire)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const wireA = {
+        title: a.story.title,
+        description: a.story.description,
+      };
+      const wireB = {
+        title: b.story.title,
+        description: b.story.description,
+      };
+      const geoA = assessLocalNewsGeographicEligibility({
+        id: a.story.id,
+        title: a.story.title,
+        description: a.story.description,
+        source: a.story.source,
+        category: a.story.category,
+        score: a.score,
+        place: readerPlace,
+      });
+      const geoB = assessLocalNewsGeographicEligibility({
+        id: b.story.id,
+        title: b.story.title,
+        description: b.story.description,
+        source: b.story.source,
+        category: b.story.category,
+        score: b.score,
+        place: readerPlace,
+      });
+      const tierDelta =
+        geographicTierPriority(geoB.geographicTier) -
+        geographicTierPriority(geoA.geographicTier);
+      if (tierDelta !== 0) return tierDelta;
+      const wireOnlyA = {
+        title: a.story.title,
+        description: a.story.description,
+      };
+      const wireOnlyB = {
+        title: b.story.title,
+        description: b.story.description,
+      };
+      const titleOnlyDelta =
+        Number(isTitleOnlyCandidate(wireOnlyA)) -
+        Number(isTitleOnlyCandidate(wireOnlyB));
+      if (titleOnlyDelta !== 0) return titleOnlyDelta;
+      const richDelta =
+        Number(hasMinimumLeadSourceMaterial(wireB)) -
+        Number(hasMinimumLeadSourceMaterial(wireA));
+      if (richDelta !== 0) return richDelta;
+      const fallbackDelta =
+        Number(hasAcceptableFallbackSourceMaterial(wireB)) -
+        Number(hasAcceptableFallbackSourceMaterial(wireA));
+      if (fallbackDelta !== 0) return fallbackDelta;
+      return b.score - a.score;
+    });
+
+  console.log("[editor] local geo diagnostics", {
+    metroKey: readerPlace.metroKey,
+    city: readerPlace.city,
+    candidateCount: candidates.length,
+    eligibleCount: scored.length,
+    top: scored.slice(0, 5).map((c) => ({
+      title: c.story.title.slice(0, 72),
+      score: c.score,
+      geo: assessLocalNewsGeographicEligibility({
+        id: c.story.id,
+        title: c.story.title,
+        description: c.story.description,
+        source: c.story.source,
+        category: c.story.category,
+        score: c.score,
+        place: readerPlace,
+      }),
+    })),
+  });
 
   const provisionalSlate = selectFrontPage(scored, ranking, policy);
   // Desk priority allows sports/weather/community fallbacks with lower wire

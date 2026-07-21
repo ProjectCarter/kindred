@@ -22,22 +22,10 @@ import {
 import { resolveDiscoveryCategoryIcon } from "./categoryIcon.ts";
 import { resolveVenueClassification } from "./venueClassification.ts";
 import { buildFoodDrinkGuidePool } from "./foodDrinkSeeAll.ts";
-
-function recommendationLocationLine(
-  item: RankedDiscoveryItem["item"],
-  fallbackCity?: string | null
-): string | null {
-  if (item.address?.trim()) return item.address.trim();
-  const city = item.place?.city?.trim() || fallbackCity?.trim();
-  return city || null;
-}
-
-function recommendationNote(item: RankedDiscoveryItem["item"]): string | null {
-  const dek = item.dek?.trim();
-  if (!dek) return null;
-  if (dek === item.title.trim()) return null;
-  return dek;
-}
+import {
+  foodDrinkEditorialNote,
+  foodDrinkLocationLine,
+} from "./foodDrinkPresentation.ts";
 
 export type FoodDrinkGuideSection = {
   id: string;
@@ -100,8 +88,8 @@ function toGuideCard(
       "recommendation"
     ),
     title: d.item.title.trim(),
-    subtitle: recommendationLocationLine(d.item, city),
-    note: recommendationNote(d.item),
+    subtitle: foodDrinkLocationLine(d.item, city),
+    note: foodDrinkEditorialNote(d.item, city),
   };
 }
 

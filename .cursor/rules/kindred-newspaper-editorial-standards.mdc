@@ -1,0 +1,126 @@
+---
+description: Universal Kindred editorial standards — every article, every desk; newspaper not content generation
+alwaysApply: true
+---
+
+# Kindred Newspaper Editorial Standards
+
+**Permanent law for every article Kindred ever publishes** — Local News, Events,
+Recommendations, Masterpiece, History, Science, Bandit's Pick, and all future desks.
+
+Kindred is **not trying to generate content**. Kindred is **trying to edit a newspaper**.
+
+Every article should feel as if it passed through an **experienced newspaper editor**.
+
+Engineering source of truth: `lib/edition/kindredEditorialStandards.ts` ·
+`supabase/functions/_shared/storyEditor/constitutions.ts` ·
+`supabase/functions/_shared/editorialStyle.ts`
+
+## 1. Lead with the news
+
+The first paragraph should immediately tell the reader **what happened**.
+
+Never waste the opening paragraph repeating the headline.
+
+## 2. Answer the reader's questions
+
+While writing, constantly ask:
+
+- What happened?
+- Why does it matter?
+- Who is involved?
+- Why should I care?
+- What happens next?
+
+The article should naturally answer these questions.
+
+## 3. Build understanding
+
+If readers may not know the topic, **explain it**.
+
+| Desk | Examples |
+| --- | --- |
+| Sports | What position does the player play? Why is this roster battle important? How does training camp work? |
+| Business | What does this company do? Why is this important locally? |
+| Government | What proposal is being discussed? What changes if it passes? |
+| Science | Explain concepts in everyday language. |
+| History | Give verified historical context. |
+
+**Never assume prior knowledge.**
+
+## 4. Context is encouraged — fabrication is forbidden
+
+Background information is **encouraged** when it is factual, widely established,
+and clearly separated from the reported facts.
+
+**Never invent:** quotes · timelines · statistics · interviews · eyewitness accounts ·
+motives · reactions · future outcomes · story-specific details · unreported causes.
+
+When reporting is limited, enrich with **verified general background** — not invented story details.
+
+## 5. Write like a newspaper
+
+Not like AI. Not like a blog. Not like marketing. Not like Wikipedia.
+
+Use calm, confident, professional journalism.
+
+## 6. Respect uncertainty
+
+If something is unknown — **say it is unknown**.
+
+Never fill gaps with guesses.
+
+## 7. Every paragraph must earn its place
+
+No filler. No repeated ideas. No rewording the same sentence.
+
+Every paragraph should teach the reader something new.
+
+## 8. Local relevance
+
+Every article should answer:
+
+> "Why does this matter to someone reading today's Kindred edition?"
+
+## 9. Editorial hierarchy
+
+Readers should finish every article knowing:
+
+1. What happened
+2. Why it matters
+3. The important background
+4. What comes next — **only if supported by reporting**
+
+## 10. Trust over length
+
+A 3-paragraph article full of verified information is better than an
+8-paragraph article padded with speculation.
+
+## 11. Reader test
+
+Before publishing, ask:
+
+> "If this appeared in tomorrow morning's newspaper, would readers trust it?"
+
+If the answer is **no** → regenerate the article.
+
+## 12. Kindred Standard
+
+Our goal is not to write more. Our goal is to write **better**.
+
+Every article should leave the reader feeling **informed, educated, and confident
+that every fact is authentic**.
+
+## Publication gates (engineering)
+
+| Module | Purpose |
+| --- | --- |
+| `lib/edition/kindredEditorialStandards.ts` | Universal standards digest + publication questions |
+| `storyEditor/constitutions.ts` | Story Editor prompt law |
+| `storyEditor/validators.ts` | Fact integrity, headline repeat, fabrication gates |
+| `editorialStyle.ts` | Appended to every editorial AI prompt (Morning Edition, History, Masterpiece, Bandit, sections) |
+| `kindred-editorial-constitution.mdc` | Trust and verification — complements this craft standard |
+| `kindred-unique-conclusions.mdc` | Original endings |
+| `kindred-memorable-writing.mdc` | Lasting thought |
+
+**Accuracy and credibility always take priority over length.**

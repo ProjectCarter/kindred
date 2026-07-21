@@ -1,12 +1,11 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  Animated,
   Image,
-  Text,
-  View,
   Pressable,
   StyleSheet,
-  Animated,
-  type ImageSourcePropType,
+  Text,
+  View,
 } from "react-native";
 import {
   SECTION_LABELS,
@@ -50,10 +49,7 @@ import { whyThisMatters } from "../lib/edition/knowledge";
 import type { KnowledgePayload } from "../lib/edition/knowledge";
 import { paper, press, space, type } from "../lib/edition/newspaperTheme";
 import { sectionIntro } from "../lib/edition/sectionIntro";
-import {
-  LOCAL_NEWS_EMPTY_PLACEHOLDER,
-  resolveLocalNewsHomePackage,
-} from "../lib/edition/localNewsHome";
+import { resolveLocalNewsHomePackage } from "../lib/edition/localNewsHome";
 import type { HeroRegionId } from "../lib/edition/HeroImageService";
 import { parseLocalEventsBody, type LocalEventCard } from "../lib/edition/localEvents";
 import {
@@ -99,7 +95,15 @@ import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { resolveSportsMarketId } from "../lib/edition/hometownTeams";
 import { metroKeyFromPlace } from "../lib/location/metroKey";
 import { LocalEventsGrid } from "./LocalEventsGrid";
-import { TimeStylePackage } from "./TimeStylePackage";
+import { EditorialCardGrid } from "./EditorialCardGrid";
+import { NewsArticleSection } from "./NewsArticleSection";
+import { banditsPickToListingCards } from "../lib/edition/homepageListingCards";
+import {
+  LOCAL_NEWS_EMPTY_PLACEHOLDER,
+  NATIONAL_NEWS_EMPTY_PLACEHOLDER,
+  localNewsPackageToArticleTeasers,
+  resolveNationalNewsArticleTeasers,
+} from "../lib/edition/homepageNewsTeasers";
 import { ActivitiesSection } from "./ActivitiesSection";
 import { RecommendationsSection } from "./RecommendationsSection";
 import { HistoryAroundTownSection } from "./HistoryAroundTownSection";
@@ -110,6 +114,10 @@ import { EditionClose } from "./EditionClose";
 import { traceEditionReaderRender } from "../lib/perf/coldLaunchTrace";
 import { BanditCharacter } from "./BanditCharacter";
 import { resolveHomepageWeatherDisplay } from "../lib/weather/homepageWeatherDisplay";
+import {
+  analyzeEditionDeskAvailability,
+  resolveWeatherPlanningNote,
+} from "../lib/weather/weatherPlanningNote";
 
 type Props = {
   sections: EditionSection[];
@@ -184,30 +192,6 @@ type Props = {
   /** Morning edition weather beat — naturalized summary fallback. */
   morningWeatherBeat?: string | null;
 };
-
-const BANDITS_PICK_KICKER: Record<BanditsPickData["kind"], string> = {
-  article: "From Bandit",
-  event: "Happening Soon",
-  activity: "Something To Do",
-  hidden_gem: "Hidden Gem",
-  place: "Worth Finding",
-  seasonal: "Right Now",
-};
-
-/**
- * Wire photo when the story has one — never substitute unrelated editorial stock.
- */
-function wireOrFallbackImage(input: {
-  imageUrl?: string | null;
-  headline: string;
-  section: string;
-  summary?: string | null;
-  source?: string | null;
-}): ImageSourcePropType | null {
-  const uri = input.imageUrl?.trim();
-  if (uri) return { uri };
-  return null;
-}
 
 /**
  * Folio teaser — invite the full story without reprinting it on the front page.
@@ -310,7 +294,7 @@ function EditionReaderInner({
     nationalDailyProp !== undefined ? nationalDailyProp : fetchedNationalDaily;
 
   const weather = sections.find((s) => s.section_type === "weather");
-  const homepageWeather = useMemo(
+  const homepageWeatherBase = useMemo(
     () =>
       resolveHomepageWeatherDisplay({
         editorialContext: weatherSummary
@@ -388,7 +372,6 @@ function EditionReaderInner({
     () => (history ? historyYearLabel(history, knowledge) : null),
     [history, knowledge]
   );
-  const topStoriesSection = remaining.find((s) => s.section_type === "top_stories");
   const otherSections = remaining.filter(
     (s) =>
       s.section_type !== "looking_ahead" &&
@@ -578,11 +561,41 @@ function EditionReaderInner({
         allocation: fullAllocationWithFoodDrinks,
         anchors: editionAnchors,
         sportsMarketId,
+        activitiesReaderLocation: resolvedReaderLocation,
       }),
-    [events, fullAllocationWithFoodDrinks, editionAnchors, sportsMarketId]
+    [events, fullAllocationWithFoodDrinks, editionAnchors, sportsMarketId, resolvedReaderLocation]
   );
 
   const curatedFullAllocation = curatedEdition.allocation;
+
+  const homepageWeather = useMemo(() => {
+    if (!homepageWeatherBase) return null;
+    const planningNote = resolveWeatherPlanningNote({
+      weatherSummary,
+      weatherSectionHeadline: weather?.headline ?? null,
+      weatherSectionBody: weather?.body ?? null,
+      morningWeatherBeat,
+      condition: homepageWeatherBase.condition,
+      editionDesks: analyzeEditionDeskAvailability({
+        activities: fullAllocationWithFoodDrinks.activities,
+        foodDrinks: foodDrinksItems,
+        localEventsCount: events.length,
+      }),
+    });
+    return {
+      ...homepageWeatherBase,
+      planningNote,
+    };
+  }, [
+    homepageWeatherBase,
+    weather?.headline,
+    weather?.body,
+    weatherSummary,
+    morningWeatherBeat,
+    fullAllocationWithFoodDrinks.activities,
+    foodDrinksItems,
+    events.length,
+  ]);
 
   const curatedSectionAllocation = useMemo(
     () => ({
@@ -821,13 +834,69 @@ function EditionReaderInner({
     (s) => !/local/i.test(s.role ?? "")
   );
   const nationalNewsStories = nationalNews?.stories ?? [];
-  const showLegacyNationalNews =
-    nationalNewsStories.length === 0 &&
-    (Boolean(leadStory && !/local/i.test(leadStory.role ?? "")) ||
-      nationalTopStories.length > 0 ||
-      Boolean(topStoriesSection));
+
+  const localNewsArticleTeasers = useMemo(
+    () => localNewsPackageToArticleTeasers(localNewsPackage, locationCity),
+    [localNewsPackage, locationCity]
+  );
+
+  const nationalNewsArticleTeasers = useMemo(
+    () =>
+      resolveNationalNewsArticleTeasers({
+        nationalStories: nationalNewsStories,
+        leadStory: leadStory ?? null,
+        nationalTopStories,
+      }),
+    [nationalNewsStories, leadStory, nationalTopStories]
+  );
+
+  const banditsPickListingCards = useMemo(() => {
+    if (!banditsPick) return [];
+    const sideIcons = new Map<string, string | null | undefined>();
+    for (const side of banditPickSides) {
+      sideIcons.set(
+        side.item.id,
+        localBizArticlesById.get(side.item.id)?.categoryIcon ?? null
+      );
+    }
+    return banditsPickToListingCards({
+      pick: banditsPick,
+      mainCategoryIcon: banditsPickArticle?.categoryIcon ?? null,
+      sides: banditPickSides,
+      sideCategoryIconsById: sideIcons,
+    });
+  }, [banditsPick, banditPickSides, banditsPickArticle, localBizArticlesById]);
 
   let folioCursor = 0;
+
+  function openLocalNewsArticle(id: string) {
+    if (!onOpenArticle) return;
+    if (localNewsPackage.lead && id === localNewsPackage.lead.id) {
+      openLead(localNewsPackage.lead);
+      return;
+    }
+    const story =
+      localNewsPackage.sideStories.find((s) => s.id === id) ??
+      (localNewsPackage.featureTopStory?.id === id
+        ? localNewsPackage.featureTopStory
+        : null);
+    if (story) onOpenArticle(articleFromTopStory(story));
+  }
+
+  function openNationalNewsArticle(id: string) {
+    if (!onOpenArticle) return;
+    const packageStory = nationalNewsStories.find((s) => s.id === id);
+    if (packageStory) {
+      onOpenArticle(articleFromNationalNewsStory(packageStory));
+      return;
+    }
+    if (leadStory && leadStory.id === id && !/local/i.test(leadStory.role ?? "")) {
+      openLead(leadStory);
+      return;
+    }
+    const story = nationalTopStories.find((s) => s.id === id);
+    if (story) onOpenArticle(articleFromTopStory(story));
+  }
 
   function articleForSection(section: EditionSection): KindredArticle {
     if (section.section_type === "today_in_history") {
@@ -1066,34 +1135,18 @@ function EditionReaderInner({
               </Text>
             </View>
           ) : null}
-          <TimeStylePackage
-            sectionLabel="Bandit’s Pick"
-            feature={{
-              id: banditsPick.story.id,
-              kicker: BANDITS_PICK_KICKER[banditsPick.kind],
-              headline: banditsPick.story.headline,
-              categoryIcon: banditsPickArticle?.categoryIcon ?? null,
-              dek: banditsPick.story.summary,
-              byline:
-                banditsPick.kind === "article" && banditsPick.story.source
-                  ? `by ${banditsPick.story.source}`
-                  : "— Bandit",
-            }}
-            sides={banditPickSides.map((d) => ({
-              id: d.item.id,
-              kicker: "Local",
-              headline: d.item.title,
-              categoryIcon: localBizArticlesById.get(d.item.id)?.categoryIcon ?? null,
-              byline: d.item.place?.city ?? d.item.source?.name ?? null,
-            }))}
-            onOpen={
+          <EditorialCardGrid
+            kicker="Bandit’s Pick"
+            cards={banditsPickListingCards}
+            analyticsSectionType="bandits_pick"
+            onOpenCard={
               onOpenArticle
-                ? (id) => {
-                    if (id === banditsPick.story.id) {
+                ? (card) => {
+                    if (card.id === banditsPick.story.id) {
                       if (banditsPickArticle) onOpenArticle(banditsPickArticle);
                       return;
                     }
-                    const article = localBizArticlesById.get(id);
+                    const article = localBizArticlesById.get(card.id);
                     if (article) onOpenArticle(article);
                   }
                 : undefined
@@ -1102,105 +1155,25 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {/* Local News — section chrome always mounts; data only gates cards vs empty copy. */}
+      {/* Local News — always mounts; National News follows immediately after. */}
       <FolioReveal index={folioCursor++} disabled>
-        {(() => {
-          console.log("[LOCAL_NEWS_RENDER_PROOF] section mounted", {
-            contentType:
-              localNewsPackage.lead?.contentType ??
-              localNewsPackage.featureTopStory?.contentType ??
-              null,
-            deskBadge: localNewsPackage.deskBadge,
-            hasStories: localNewsPackage.hasStories,
-          });
-          return null;
-        })()}
-        {localNewsPackage.hasStories &&
-        (localNewsPackage.lead || localNewsPackage.featureTopStory) ? (
-          <TimeStylePackage
-            sectionLabel="Local News"
-            feature={
-              localNewsPackage.lead
-                ? {
-                    id: localNewsPackage.lead.id,
-                    kicker: localNewsPackage.deskBadge,
-                    headline: localNewsPackage.lead.headline,
-                    dek: localNewsPackage.lead.summary,
-                    byline: localNewsPackage.lead.source,
-                    image: wireOrFallbackImage({
-                      imageUrl: localNewsPackage.lead.heroImage?.uri,
-                      headline: localNewsPackage.lead.headline,
-                      section: "local_news",
-                      summary: localNewsPackage.lead.summary,
-                      source: localNewsPackage.lead.source,
-                    }),
-                    imageLabel: localNewsPackage.lead.heroImage?.alt,
-                  }
-                : {
-                    id: localNewsPackage.featureTopStory!.id,
-                    kicker: localNewsPackage.deskBadge,
-                    headline: localNewsPackage.featureTopStory!.headline,
-                    dek:
-                      localNewsPackage.featureTopStory!.dek ??
-                      localNewsPackage.featureTopStory!.summary,
-                    byline: localNewsPackage.featureTopStory!.source,
-                    image: wireOrFallbackImage({
-                      imageUrl: localNewsPackage.featureTopStory!.imageUrl,
-                      headline: localNewsPackage.featureTopStory!.headline,
-                      section: "local_news",
-                      summary: localNewsPackage.featureTopStory!.summary,
-                      source: localNewsPackage.featureTopStory!.source,
-                    }),
-                  }
-            }
-            sides={localNewsPackage.sideStories.map((s) => ({
-              id: s.id,
-              headline: s.headline,
-              byline: s.source,
-              image: wireOrFallbackImage({
-                imageUrl: s.imageUrl,
-                headline: s.headline,
-                section: "local_news",
-                summary: s.summary,
-                source: s.source,
-              }),
-            }))}
-            onOpen={
-              onOpenArticle
-                ? (id) => {
-                    if (
-                      localNewsPackage.lead &&
-                      id === localNewsPackage.lead.id
-                    ) {
-                      openLead(localNewsPackage.lead);
-                      return;
-                    }
-                    const story =
-                      localNewsPackage.sideStories.find((s) => s.id === id) ??
-                      (localNewsPackage.featureTopStory?.id === id
-                        ? localNewsPackage.featureTopStory
-                        : null);
-                    if (story) onOpenArticle(articleFromTopStory(story));
-                  }
-                : undefined
-            }
-          />
-        ) : (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>Local News</Text>
-              <View style={styles.sectionRule} />
-            </View>
-            {sectionIntro("local_news") ? (
-              <Text style={styles.sectionIntro}>
-                {sectionIntro("local_news")}
-              </Text>
-            ) : null}
-            <Text style={styles.sectionDek}>
-              {LOCAL_NEWS_EMPTY_PLACEHOLDER}
-            </Text>
-          </View>
-        )}
+        <NewsArticleSection
+          sectionLabel="Local News"
+          articles={localNewsArticleTeasers}
+          emptyCopy={LOCAL_NEWS_EMPTY_PLACEHOLDER}
+          analyticsSectionType="local_news"
+          onOpenArticle={onOpenArticle ? openLocalNewsArticle : undefined}
+        />
+      </FolioReveal>
+
+      <FolioReveal index={folioCursor++}>
+        <NewsArticleSection
+          sectionLabel="National News"
+          articles={nationalNewsArticleTeasers}
+          emptyCopy={NATIONAL_NEWS_EMPTY_PLACEHOLDER}
+          analyticsSectionType="national_news"
+          onOpenArticle={onOpenArticle ? openNationalNewsArticle : undefined}
+        />
       </FolioReveal>
 
       {lookingAhead ? (
@@ -1230,123 +1203,6 @@ function EditionReaderInner({
                 {folioTeaser(lookingAhead.body).dek}
               </Text>
             </Pressable>
-          </View>
-        </FolioReveal>
-      ) : null}
-
-      {nationalNewsStories.length > 0 ? (
-        <FolioReveal index={folioCursor++}>
-          <TimeStylePackage
-            sectionLabel="National News"
-            feature={{
-              id: nationalNewsStories[0].id,
-              kicker: nationalNewsStories[0].category ?? "National",
-              headline: nationalNewsStories[0].headline,
-              dek: nationalNewsStories[0].summary,
-              byline: nationalNewsStories[0].sourceName,
-              image: wireOrFallbackImage({
-                imageUrl: nationalNewsStories[0].image?.url,
-                headline: nationalNewsStories[0].headline,
-                section: "national_news",
-                summary: nationalNewsStories[0].summary,
-                source: nationalNewsStories[0].sourceName,
-              }),
-            }}
-            sides={nationalNewsStories.slice(1, 3).map((s) => ({
-              id: s.id,
-              headline: s.headline,
-              byline: s.sourceName,
-              image: wireOrFallbackImage({
-                imageUrl: s.image?.url,
-                headline: s.headline,
-                section: "national_news",
-                summary: s.summary,
-                source: s.sourceName,
-              }),
-            }))}
-            onOpen={
-              onOpenArticle
-                ? (id) => {
-                    const story = nationalNewsStories.find((s) => s.id === id);
-                    if (story) onOpenArticle(articleFromNationalNewsStory(story));
-                  }
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
-
-      {showLegacyNationalNews && leadStory && !/local/i.test(leadStory.role ?? "") ? (
-        <FolioReveal index={folioCursor++}>
-          <TimeStylePackage
-            sectionLabel="From the wider world"
-            feature={{
-              id: leadStory.id,
-              kicker: leadStory.role?.replace(/_/g, " ") ?? "National",
-              headline: leadStory.headline,
-              dek: leadStory.summary,
-              byline: leadStory.source,
-              image: wireOrFallbackImage({
-                imageUrl: leadStory.heroImage?.uri,
-                headline: leadStory.headline,
-                section: leadStory.role ?? "national",
-                summary: leadStory.summary,
-                source: leadStory.source,
-              }),
-            }}
-            sides={nationalTopStories.slice(0, 2).map((s) => ({
-              id: s.id,
-              headline: s.headline,
-              byline: s.source,
-              image: wireOrFallbackImage({
-                imageUrl: s.imageUrl,
-                headline: s.headline,
-                section: s.role ?? "national",
-                summary: s.summary,
-                source: s.source,
-              }),
-            }))}
-            onOpen={
-              onOpenArticle
-                ? (id) => {
-                    if (id === leadStory.id) {
-                      openLead(leadStory);
-                      return;
-                    }
-                    const story = nationalTopStories.find((s) => s.id === id);
-                    if (story) onOpenArticle(articleFromTopStory(story));
-                  }
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : showLegacyNationalNews && (nationalTopStories.length > 0 || topStoriesSection) ? (
-        <FolioReveal index={folioCursor++}>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>From the wider world</Text>
-              <View style={styles.sectionRule} />
-            </View>
-            {(nationalTopStories.length > 0 ? nationalTopStories : topStories)
-              .slice(0, 4)
-              .map((story, index, arr) => (
-                <Pressable
-                  key={story.id}
-                  onPress={() => onOpenArticle?.(articleFromTopStory(story))}
-                  style={({ pressed }) => [
-                    styles.topStoryItem,
-                    index === arr.length - 1 && styles.topStoryItemLast,
-                    pressed && styles.tapPressed,
-                  ]}
-                >
-                  <Text style={styles.sectionHeadline}>{story.headline}</Text>
-                  {story.summary ? (
-                    <Text style={styles.sectionDek} numberOfLines={2}>
-                      {folioTeaser(story.summary).dek}
-                    </Text>
-                  ) : null}
-                </Pressable>
-              ))}
           </View>
         </FolioReveal>
       ) : null}

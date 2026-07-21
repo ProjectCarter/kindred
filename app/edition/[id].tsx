@@ -26,6 +26,7 @@ import {
   parseBanditPayload,
   type BanditPayload,
 } from "../../lib/edition/bandit";
+import { isBanditsPicksEnabled } from "../../lib/edition/banditsPicksFeature";
 import {
   companionForArticle,
   parseEditionIntelligence,
@@ -338,7 +339,9 @@ export default function EditionScreen() {
               discoveryEditorNote={intelligence?.discoveryEditorNote}
               discoveryItems={intelligence?.discoveryItems}
               discovery={intelligence?.discovery}
-              banditsPick={banditsPick(bandit)}
+              banditsPick={
+                isBanditsPicksEnabled() ? banditsPick(bandit) : null
+              }
               mastheadScrollY={mastheadScrollY}
               mastheadLeading={
                 <MastheadLink

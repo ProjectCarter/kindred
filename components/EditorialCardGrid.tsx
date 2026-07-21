@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -7,8 +8,12 @@ import {
 } from "react-native";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { HOMEPAGE_INITIAL_RENDER_COUNT, sliceForInitialRender } from "../lib/edition/editorialPublishing";
+import { trackSectionViewedOnce } from "../lib/analytics";
+import type { EventInfoBadgeId } from "../lib/edition/eventBadges";
+import { eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
 import { BanditCharacter } from "./BanditCharacter";
 import { EditorialTitle } from "./EditorialTitle";
+import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
 
 export type EditorialGridCard = {
   id: string;
@@ -17,10 +22,12 @@ export type EditorialGridCard = {
   /** Single editorial category emoji — shown before title. */
   categoryIcon?: string | null;
   title: string;
-  /** Venue-equivalent line (neighborhood, address). */
+  /** City, source, or neighborhood line beneath the headline. */
   subtitle?: string | null;
   /** Kindred's own one-line editorial voice for this card. */
   note?: string | null;
+  /** Utility badges — Local Events and future verified listing metadata. */
+  badges?: readonly EventInfoBadgeId[];
 };
 
 type Props = {
@@ -44,6 +51,8 @@ type Props = {
    * the busy front page never carries more than one Bandit at a time.
    */
   showBanditWhenEmpty?: boolean;
+  /** Fire section_viewed once per edition when the desk mounts on the homepage. */
+  analyticsSectionType?: string;
 };
 
 /**
@@ -62,9 +71,16 @@ export function EditorialCardGrid({
   seeAllTotal: seeAllTotalProp,
   emptyCopy = "Nothing new to surface here today — check back tomorrow.",
   showBanditWhenEmpty = false,
+  analyticsSectionType,
 }: Props) {
   const { width } = useWindowDimensions();
   const completeCards = cards.filter((card) => Boolean(card.title?.trim()));
+
+  useEffect(() => {
+    if (!analyticsSectionType || completeCards.length === 0) return;
+    trackSectionViewedOnce(analyticsSectionType);
+  }, [analyticsSectionType, completeCards.length]);
+
   const renderCount =
     initialRenderCount ??
     (typeof limit === "number" ? limit : undefined) ??
@@ -141,6 +157,9 @@ export function EditorialCardGrid({
                   card.title,
                   card.subtitle,
                   card.note,
+                  card.badges?.length
+                    ? eventInfoBadgeAccessibilitySummary([...card.badges])
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(". ")}
@@ -165,6 +184,13 @@ export function EditorialCardGrid({
                     numberOfLines={3}
                     maxFontSizeMultiplier={1.15}
                   />
+
+                  {card.badges?.length ? (
+                    <EventInfoBadgeRow
+                      badges={[...card.badges]}
+                      style={styles.badgeRow}
+                    />
+                  ) : null}
 
                   {card.subtitle ? (
                     <Text
@@ -218,9 +244,9 @@ export function EditorialCardGrid({
 
 const styles = StyleSheet.create({
   section: {
-    marginTop: 8,
-    marginBottom: 48,
-    paddingBottom: 44,
+    marginTop: 4,
+    marginBottom: 24,
+    paddingBottom: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },
@@ -228,7 +254,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    marginBottom: 26,
+    marginBottom: 16,
   },
   kicker: {
     fontSize: 11,
@@ -265,8 +291,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   rowRule: {
-    paddingBottom: 28,
-    marginBottom: 28,
+    paddingBottom: 16,
+    marginBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.inkRule,
   },
@@ -308,6 +334,9 @@ const styles = StyleSheet.create({
     color: paper.ink,
     marginBottom: 8,
   },
+  badgeRow: {
+    marginBottom: 10,
+  },
   venue: {
     fontSize: 12,
     lineHeight: 17,
@@ -321,8 +350,8 @@ const styles = StyleSheet.create({
     color: paper.inkBody,
   },
   seeAllRow: {
-    marginTop: 30,
-    paddingVertical: 18,
+    marginTop: 18,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
   },

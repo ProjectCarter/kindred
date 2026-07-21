@@ -20,6 +20,11 @@ export function HomepageWeatherLines({ weather }: Props) {
       <Text style={styles.condition} maxFontSizeMultiplier={1.15}>
         {weather.condition.label}
       </Text>
+      {weather.planningNote?.trim() ? (
+        <Text style={styles.planningNote} maxFontSizeMultiplier={1.15}>
+          {weather.planningNote.trim()}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -49,5 +54,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: paper.inkBody,
+  },
+  planningNote: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 22,
+    color: paper.inkMuted,
+    marginTop: 8,
+    maxWidth: 520,
   },
 });

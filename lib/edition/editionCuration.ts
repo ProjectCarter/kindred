@@ -10,7 +10,7 @@
 
 import type { RankedDiscoveryItem } from "./discovery";
 import type { SectionAllocation } from "./sectionAllocator";
-import { inferActivitySubtype } from "./activities";
+import { inferActivitySubtype } from "./activitySubtype";
 import { curateFoodDrinkEdition } from "./foodDrinkCuration";
 import { resolveVenueClassification } from "./venueClassification";
 import {
@@ -20,7 +20,10 @@ import type { LocalEventCard } from "./localEvents";
 import {
   selectEditorialHomepageLocalEvents,
   localEventSelectionKey,
+  hasHomepageReaderEditorial,
 } from "./localEventsHomepage";
+import { filterLocalEventsForHomepageCuration } from "./localEventsHomepageEditorial";
+import { curateActivitiesForHomepage } from "./activitiesHomepage";
 import {
   parseEventStartDate,
   resolveCardHorizon,
@@ -467,12 +470,16 @@ export function curateLocalEventsForHomepage(
     options?.initialRenderCount ?? HOMEPAGE_INITIAL_RENDER_COUNT;
   const reference = options?.reference ?? new Date();
   const sportsMarketId = options?.sportsMarketId ?? null;
-  const published = events.filter((event) =>
-    meetsLocalEventPublishThreshold(scoreLocalEventForCuration(event, reference))
+  const published = filterLocalEventsForHomepageCuration(
+    events.filter(
+      (event) =>
+        hasHomepageReaderEditorial(event) &&
+        meetsLocalEventPublishThreshold(scoreLocalEventForCuration(event, reference))
+    )
   );
   if (published.length <= 1) return [...published];
 
-  const { homepage: gridSeed, ordered } = selectEditorialHomepageLocalEvents(
+  const { homepage: gridSeed } = selectEditorialHomepageLocalEvents(
     published,
     {
       maxTotal: initialRenderCount,
@@ -480,28 +487,24 @@ export function curateLocalEventsForHomepage(
       sportsMarketId,
     }
   );
-  const curatedGrid = curateOrderedList(gridSeed, {
+  const curatedHomepage = curateOrderedList(gridSeed, {
     getScore: (event) => scoreLocalEventForCuration(event, reference),
     getFingerprint: inferEditionFingerprintFromLocalEvent,
     context,
     tieScoreDelta: LOCAL_EVENT_CURATION_TIE_DELTA,
-    curateDepth: initialRenderCount,
+    curateDepth: gridSeed.length,
   });
 
-  const seedKeys = new Set(gridSeed.map(localEventSelectionKey));
-  const tail = ordered.filter((event) => !seedKeys.has(localEventSelectionKey(event)));
-  return [...curatedGrid, ...tail];
+  return curatedHomepage;
 }
 
 export function applyEditionCurationToAllocation(
   allocation: SectionAllocation,
-  context: EditionCurationContext
+  context: EditionCurationContext,
+  options?: { activitiesReaderLocation?: import("./localDiscoveryScope").ReaderLocation | null }
 ): SectionAllocation {
-  const activities = curateOrderedList(allocation.activities, {
-    getScore: (item) => item.score,
-    getFingerprint: inferEditionFingerprintFromDiscoveryItem,
-    context,
-    tieScoreDelta: DISCOVERY_CURATION_TIE_DELTA,
+  const activities = curateActivitiesForHomepage(allocation.activities, {
+    readerLocation: options?.activitiesReaderLocation ?? null,
   });
 
   const notebook = curateOrderedList(allocation.notebook, {
@@ -529,6 +532,7 @@ export function curateHomepageEdition(input: {
   anchors?: EditionCurationAnchors | null;
   initialRenderCount?: number;
   sportsMarketId?: string | null;
+  activitiesReaderLocation?: import("./localDiscoveryScope").ReaderLocation | null;
 }): {
   localEvents: LocalEventCard[];
   allocation: SectionAllocation;
@@ -540,7 +544,9 @@ export function curateHomepageEdition(input: {
     initialRenderCount: input.initialRenderCount,
     sportsMarketId: input.sportsMarketId,
   });
-  const allocation = applyEditionCurationToAllocation(input.allocation, context);
+  const allocation = applyEditionCurationToAllocation(input.allocation, context, {
+    activitiesReaderLocation: input.activitiesReaderLocation ?? null,
+  });
 
   return { localEvents, allocation };
 }

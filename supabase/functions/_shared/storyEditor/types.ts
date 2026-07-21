@@ -80,7 +80,7 @@ export type StoryEditorIntake = {
 
 export type StoryEditorDeskMeta = {
   version: 1;
-  path: "full" | "thin_honest" | "fallback_wire";
+  path: "full" | "accepted_thin" | "thin_honest" | "fallback_wire" | "unavailable";
   locale: StoryEditorLocale;
   scores: StoryEditorScores;
   voluntaryFinish: boolean;
@@ -98,9 +98,28 @@ export type StoryEditorDeskMeta = {
     why: string;
     who: string;
     remember: string;
+    background?: string;
+    looking_ahead?: string;
     limits: string[];
   };
+  /** Labeled Local News sections rendered below the lead in the reader. */
+  fieldAnswers?: {
+    why_it_matters?: string;
+    background?: string;
+    looking_ahead?: string;
+    verified_facts?: string;
+    economic_impact?: string;
+  };
+  storyType?:
+    | "sports"
+    | "local_government"
+    | "business"
+    | "community"
+    | "public_safety"
+    | "general";
   editedAt: string;
+  /** Development-safe acceptance diagnostics — no model payloads. */
+  editorDiagnostic?: Record<string, unknown>;
 };
 
 export type StoryEditorResult = {

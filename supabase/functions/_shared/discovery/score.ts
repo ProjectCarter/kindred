@@ -339,8 +339,8 @@ export function scoreDiscoveryItem(
     });
   }
 
-  // Local first: a chain is still allowed, but it should never crowd out
-  // a strong local alternative a reader couldn't have found on their own.
+  // Local Business First: chains allowed, but should not crowd out a verified
+  // local alternative when quality is comparable (kindred-local-business-first.mdc).
   if (item.tags.includes("chain")) {
     const chainPenalty =
       item.category === "coffee" ||

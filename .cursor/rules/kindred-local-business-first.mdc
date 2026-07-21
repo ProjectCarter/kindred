@@ -1,0 +1,103 @@
+---
+description: Local Business First — permanent Kindred identity; prioritize independent local businesses when quality is comparable
+alwaysApply: true
+---
+
+# Local Business First Philosophy
+
+Kindred exists to help people **experience the unique character of a city**.
+
+This is not a Food & Drinks rule alone. It is **permanent product law** — part of
+Kindred's identity in every city Kindred serves across the United States.
+
+**Foundation:** `kindred-editorial-constitution.mdc` (trust and verification) ·
+`kindred-recommendations.mdc` (discovery desks) ·
+`kindred-mission.mdc` (The Kindred Effect)
+
+## Local Business First Philosophy
+
+- Whenever comparable quality exists, **independently owned local businesses**
+  should be prioritized over national chains.
+- Local restaurants, coffee shops, bakeries, breweries, wineries, taco shops,
+  BBQ restaurants, pizza shops, diners, bookstores, and specialty stores help
+  **define a city's identity**.
+- National chains remain important and should **never be excluded entirely** —
+  but they should usually serve as **fallback recommendations**, not the face
+  of the local experience.
+- A visitor does not travel to San Diego to eat at McDonald's.
+- A visitor travels to discover San Diego's best taco shop, local pizza,
+  neighborhood coffee shop, seafood restaurant, brewery, or family-owned
+  hidden gem.
+- The same philosophy applies in **every city** across the United States.
+
+This philosophy extends **beyond restaurants** whenever appropriate. Kindred
+should highlight the places that give a city its personality — neighborhood
+bookstores, family-owned shops, local breweries, specialty markets, and other
+independent destinations worth leaving the house for.
+
+## City character (examples)
+
+| City | What defines it |
+| --- | --- |
+| **Chicago** | Deep dish, Italian beef, neighborhood bakeries |
+| **Seattle** | Pike Place area, seafood, coffee, teriyaki, local breweries |
+| **Phoenix** | Sonoran Mexican food, local BBQ, neighborhood coffee shops, family-owned restaurants |
+| **Nashville** | Hot chicken, BBQ, local music venues, neighborhood diners |
+| **Miami** | Cuban food, seafood, local cafés |
+
+These are editorial instincts, not quotas. Every edition should read like it was
+assembled by someone who **knows what makes that city worth visiting**.
+
+## Kindred vs Google Maps
+
+**Google Maps answers:** *"What's nearby?"*
+
+**Kindred answers:** *"What's worth experiencing?"*
+
+That distinction is one of Kindred's **permanent guiding principles**. Kindred
+is not trying to compete with directories. Kindred helps readers discover what
+makes a place memorable — not what is closest.
+
+## Editorial ranking rule (permanent)
+
+When **quality, verification, and trust are comparable**, independently owned
+local businesses should receive an **editorial preference** over national chains.
+
+- **Never fabricate "local" status.**
+- **Never unfairly suppress chains.**
+- Simply allow local businesses to earn the spotlight whenever they genuinely
+  deserve it.
+
+A chain may still win when it is the verified best option, locally iconic, or
+no strong independent alternative exists — but chains must not **define** the
+local experience or crowd out character.
+
+## Publication gates
+
+Before surfacing any place in Activities, Recommendations, Food & Drinks,
+Bandit's Pick, or Bandit's Notebook, ask:
+
+1. Does this help someone **experience this city's character**?
+2. If a comparable independent local option exists, does this pick still earn
+   its place on merit — not convenience?
+3. Would an experienced local editor be proud to recommend this to a visitor?
+
+If a listing is interchangeable with any other city — a generic chain the reader
+could find instantly on Google Maps — it should usually rank below a verified
+local alternative.
+
+## Engineering gates
+
+| Module | Purpose |
+| --- | --- |
+| `lib/edition/localBusinessFirst.ts` | Philosophy digest + ranking rule (client) |
+| `supabase/functions/_shared/editorial/localBusinessFirst.ts` | Server mirror |
+| `places/chains.ts` | Known-chain detection — under-flag chains, never mislabel independents |
+| `discovery/score.ts` | `chain_deprioritized` when quality is comparable |
+| `editorial/venueEditorialScore.ts` | Independent local boost · chain listing penalty |
+| `foodDrinkCuration.ts` | One chain identity per edition · local spread |
+| `sectionAllocator.ts` | Cross-section dedupe · variety |
+
+**Accuracy always beats local preference.** A verified chain beats an unverified
+"local" listing every time. Local Business First applies **after** trust gates —
+never instead of them.

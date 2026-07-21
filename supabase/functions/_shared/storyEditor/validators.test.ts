@@ -63,4 +63,31 @@ assert.deepEqual(
   []
 );
 
+function extractQuotedPassages(text: string): string[] {
+  const matches = text.match(/"([^"]{6,})"/g) ?? [];
+  return matches.map((q) => q.slice(1, -1).trim());
+}
+
+function quoteSubstantivelyInSource(quote: string, sourceText: string): boolean {
+  const norm = normalizeForContainment(quote);
+  const src = normalizeForContainment(sourceText);
+  if (!norm || norm.length < 6) return true;
+  return src.includes(norm.slice(0, Math.min(48, norm.length)));
+}
+
+function fabricatedQuotes(draft: string, sourceText: string): string[] {
+  return extractQuotedPassages(draft).filter(
+    (q) => !quoteSubstantivelyInSource(q, sourceText)
+  );
+}
+
+assert.deepEqual(
+  fabricatedQuotes('Coach Smith said "We are ready for camp."', "Coach Smith said We are ready for camp."),
+  []
+);
+assert.equal(
+  fabricatedQuotes('Mayor Lee said "This will fix everything overnight."', "Council voted on zoning.").length,
+  1
+);
+
 console.log("storyEditor validator smoke tests: ok");

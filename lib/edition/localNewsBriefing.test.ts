@@ -18,10 +18,6 @@ function isThinSource(sourceText: string): boolean {
   return wordCount(sourceText) < 40;
 }
 
-function isRichLocalNewsSource(sourceText: string): boolean {
-  return wordCount(sourceText) >= 80;
-}
-
 function isLocalNewsRole(role: string | null | undefined): boolean {
   return /local/i.test(role ?? "");
 }
@@ -34,22 +30,50 @@ function localNewsSurfaceRole(
   return placement === "lead" ? "lead" : "top_story";
 }
 
+function normalizeForContainment(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s.%$]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function proseNearDuplicate(a: string, b: string): boolean {
+  const left = normalizeForContainment(a);
+  const right = normalizeForContainment(b);
+  if (!left || !right) return false;
+  if (left === right) return true;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length > right.length ? left : right;
+  if (shorter.length < 20) return longer.includes(shorter);
+  const sig = shorter.slice(0, Math.min(72, shorter.length));
+  return longer.includes(sig);
+}
+
 function validateLocalNewsBriefing(input: {
+  headline: string;
   paragraphs: string[];
   sourceText: string;
+  storyType?: string | null;
+  fieldAnswers?: Record<string, string | undefined> | null;
 }): string[] {
   const issues: string[] = [];
-  if (
-    isRichLocalNewsSource(input.sourceText) &&
-    input.paragraphs.length < 4
-  ) {
-    issues.push("briefing_too_short");
+  const open = input.paragraphs[0]?.trim() ?? "";
+
+  if (open && proseNearDuplicate(open, input.headline)) {
+    issues.push("headline_repeats_in_open");
   }
-  if (input.paragraphs.length > 8) {
-    issues.push("briefing_too_long");
+  if (isThinSource(input.sourceText) && open && proseNearDuplicate(open, input.sourceText)) {
+    issues.push("wire_repeated_in_open");
   }
-  if (isThinSource(input.sourceText) && input.paragraphs.length > 3) {
-    issues.push("thin_source_padded");
+  if (!input.storyType?.trim()) {
+    issues.push("missing_story_type");
+  }
+  const sections = Object.values(input.fieldAnswers ?? {}).filter(
+    (v) => typeof v === "string" && v.trim().length >= 12
+  );
+  if (sections.length === 0) {
+    issues.push("missing_context");
   }
   return issues;
 }
@@ -61,7 +85,7 @@ test("local news roles map to local_news surface", () => {
   assert.equal(localNewsSurfaceRole("national", "lead"), "lead");
 });
 
-test("localNewsBriefing module has no orphaned placeLabel body", () => {
+test("localNewsBriefing module persists classified desk metadata", () => {
   const source = readFileSync(
     path.join(
       __dirname,
@@ -69,47 +93,58 @@ test("localNewsBriefing module has no orphaned placeLabel body", () => {
     ),
     "utf8"
   );
-  // Orphaned duplicate body (pre-placeLabel) would break Deno/esbuild load.
-  assert.doesNotMatch(
-    source,
-    /\}\s*\n\s*const parts = \[place\.city[\s\S]*?function placeLabel/
-  );
-  assert.match(source, /function placeLabel\(place: LocalNewsReaderPlace\)/);
-  assert.match(source, /role: "local"/);
+  assert.match(source, /Classify the story first/);
+  assert.match(source, /desk: edited\.desk/);
   assert.match(source, /selectLocalNewsDeskLead/);
-  assert.match(source, /localLeadAgeBand/);
-  assert.match(source, /recentStoryKeys/);
-  assert.doesNotMatch(source, /recentStoryKeys:\s*\[\]/);
 });
 
-test("rich local sources require fuller briefings", () => {
-  const richSource =
-    "City council voted Tuesday to approve a $12 million bond for water infrastructure after months of debate. " +
-    "The measure passed 5–2 following testimony from residents in the north district who reported recurring outages. " +
-    "Work is expected to begin next spring on mains serving roughly 18,000 households. " +
-    "Officials said the project would replace lines that date to the 1970s and reduce boil-water notices. " +
-    "Financing will be repaid through a modest rate adjustment spread across five years according to the city manager.";
-
-  assert.equal(isRichLocalNewsSource(richSource), true);
-  assert.deepEqual(
-    validateLocalNewsBriefing({ paragraphs: ["one", "two"], sourceText: richSource }),
-    ["briefing_too_short"]
-  );
+test("quality gates reject headline repetition and missing context", () => {
   assert.deepEqual(
     validateLocalNewsBriefing({
-      paragraphs: ["a", "b", "c", "d"],
-      sourceText: richSource,
+      headline: "Council approves water bond",
+      paragraphs: ["Council approves water bond after Tuesday vote."],
+      sourceText: "Short wire note.",
+      storyType: "local_government",
+      fieldAnswers: {
+        why_it_matters: "The vote clears the way for mains serving 18,000 households.",
+      },
+    }),
+    ["headline_repeats_in_open"]
+  );
+
+  assert.deepEqual(
+    validateLocalNewsBriefing({
+      headline: "Council approves water bond",
+      paragraphs: [
+        "City council voted Tuesday to approve a $12 million bond for water infrastructure after months of debate.",
+      ],
+      sourceText:
+        "City council voted Tuesday to approve a $12 million bond for water infrastructure after months of debate.",
+      storyType: "local_government",
+      fieldAnswers: {
+        background:
+          "City councils typically approve bond measures after public hearings and staff review.",
+      },
+    }),
+    ["wire_repeated_in_open"]
+  );
+
+  assert.deepEqual(
+    validateLocalNewsBriefing({
+      headline: "Council approves water bond",
+      paragraphs: [
+        "After months of debate, the council approved a $12 million bond for water infrastructure.",
+      ],
+      sourceText:
+        "City council voted Tuesday to approve a $12 million bond for water infrastructure after months of debate.",
+      storyType: "local_government",
+      fieldAnswers: {
+        background:
+          "Bond measures in Arizona require public hearings before council votes.",
+        why_it_matters: "Roughly 18,000 households rely on aging mains in the north district.",
+        looking_ahead: "Construction is expected to begin next spring.",
+      },
     }),
     []
-  );
-});
-
-test("thin wires must not be padded", () => {
-  assert.deepEqual(
-    validateLocalNewsBriefing({
-      paragraphs: ["a", "b", "c", "d"],
-      sourceText: "Short wire note.",
-    }),
-    ["thin_source_padded"]
   );
 });

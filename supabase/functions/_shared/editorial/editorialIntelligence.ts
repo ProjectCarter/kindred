@@ -26,6 +26,8 @@ export const GENERIC_AI_PHRASE_PATTERNS: RegExp[] = [
   /\bhas something for everyone\b/i,
   /\bfor all ages\b/i,
   /\bperfect for couples and families alike\b/i,
+  /\bthat wraps up\b/i,
+  /\bthis article (?:discussed|explored|covered)\b/i,
 ];
 
 export const EDITORIAL_INTELLIGENCE_QUESTIONS =
@@ -80,6 +82,8 @@ export const SUMMARY_ENDING_PATTERNS: RegExp[] = [
   /^overall\b/i,
   /^all in all\b/i,
   /^to sum (?:it )?up\b/i,
+  /^that wraps up\b/i,
+  /^this article (?:discussed|explored|covered)\b/i,
   /^in the end,?\s+(?:this|it)\s+(?:is|offers|provides)\b/i,
 ];
 

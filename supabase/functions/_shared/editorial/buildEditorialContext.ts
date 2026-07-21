@@ -379,6 +379,10 @@ export function buildEditionEditorialContext(
         body: Array.isArray(story.body)
           ? story.body.filter((p) => typeof p === "string" && p.trim())
           : undefined,
+        desk:
+          story.desk && typeof story.desk === "object"
+            ? story.desk
+            : null,
         source: story.source,
         url: story.url ?? null,
         imageUrl: story.imageUrl ?? null,

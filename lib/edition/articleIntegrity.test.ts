@@ -15,7 +15,8 @@ test("articleFromLeadStory uses edition lead fields instead of gold standard", (
   assert.doesNotMatch(source, /getGoldStandardArticle\(\{ id: lead\.id/);
   assert.match(source, /lead\.headline/);
   assert.match(source, /lead\.heroImage\?\.uri/);
-  assert.match(source, /lead\.role === "local" \? "local_news" : "lead"/);
+  assert.match(source, /lead\.role === "local"/);
+  assert.match(source, /articleFromLocalNewsStory\(/);
 });
 
 test("ensureArticleHero skips editorial substitutes for wire news", () => {

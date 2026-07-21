@@ -1,9 +1,9 @@
 /**
  * Server mirror of `lib/edition/banditsPicksFeature.ts`.
- * Keep in sync — Bandit's Picks completeness must not block publish in V1.
+ * Keep in sync — V1 hides the homepage desk; completeness must not block publish.
  */
 
-/** Temporary V1 disable — not a permanent deletion of the feature. */
+/** V1 surface hidden — not a permanent removal of the feature. */
 export const BANDITS_PICKS_ENABLED = false;
 
 export function isBanditsPicksEnabled(): boolean {

@@ -62,3 +62,35 @@ If a reference conflicts with Kindred, **choose Kindred**.
 - Never redesign locked sections unless the user specifically asks.
 - Touch only the assigned section in a sprint.
 - Prefer Kindred paper tokens (`newspaperTheme`) over reference brand palettes.
+
+## Homepage Editorial Design Standard (permanent)
+
+Kindred is a **modern morning newspaper, not a social media feed.** The homepage
+must feel clean, elegant, fast, and easy to scan.
+
+**Standard homepage sections — text-first, no listing photos:** Local Events ·
+Activities · Food & Drinks · Local News · National News · Bandit's Picks.
+
+**Display only:** appropriate emoji(s) · headline · one- or two-sentence
+editorial summary · city · editorial badges (Free, 21+, Dog Friendly, etc.).
+
+**Do not** display photographs or thumbnail images on these homepage listings.
+The emoji is the visual identifier — accurate and context-specific; multiple
+emojis allowed when clarity improves; never generic when a better match exists.
+
+**Article pages** — where Kindred becomes visual: authorized feature image,
+additional authorized images, Maps, website, hours, address, parking, contact,
+tickets, verified details.
+
+**Image policy:** official, licensed, public domain, Creative Commons (with
+attribution), government, museum/library, business, or organizer supplied only.
+**Never** AI-generated images · never fabricated images · never AI artwork
+pretending to represent a real place, business, event, or person. No authorized
+image → clean layout without an image.
+
+**Homepage exceptions (feature stories, not listings):** Today's Masterpiece ·
+Story of Your City · Today in History · History Around Town — may keep large
+feature artwork on the homepage.
+
+**Principle:** The homepage is today's front page. The article is where
+photography belongs. Maintain across all future development.

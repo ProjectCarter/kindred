@@ -18,7 +18,6 @@ import type { EditionIntelligence } from "./surfaceIntelligence";
 import type { MorningHeroExperience } from "./heroArtwork/types";
 import { parseMorningHeroExperience } from "./morningEdition";
 import { mergeMorningHeroIntoCachedBundle } from "./resolveMorningHero";
-import { resolveNationalNewsForCachedBundle } from "./homepageNewsHydration.ts";
 import type { UsNationalDailyRecord } from "./usNationalDaily";
 import {
   articleIdentityFromSection,
@@ -131,9 +130,6 @@ function normalizeCachedBundle(
   }
   parsed.metroKey = metroKey;
   parsed.morningHeroArticleVersion = EDITION_CACHE_ARTICLE_VERSION;
-  if (!parsed.nationalNews) {
-    parsed.nationalNews = resolveNationalNewsForCachedBundle(parsed);
-  }
   return mergeMorningHeroIntoCachedBundle(parsed);
 }
 

@@ -5,7 +5,10 @@
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { primaryNewsCategory } from "./stories/sources.ts";
 import { buildEditionEditorialContext, buildLookingAheadGrounding } from "./editorial/index.ts";
-import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "./editorial/publishing.ts";
+import {
+  HOMEPAGE_INITIAL_RENDER_COUNT,
+  LOCAL_EVENTS_EDITION_SURFACED_MAX,
+} from "./editorial/publishing.ts";
 import { loadPersonalizationProfile } from "./personalization/index.ts";
 import { generateBanditPayload, loadBanditReaderProfile } from "./bandit/index.ts";
 import {
@@ -129,7 +132,8 @@ export {
   pickProviderEventImage,
   splitEventSchedule,
 } from "./localEvents/provider.ts";
-import { enrichEventsWithBanditNotes, eventHasPublishableEditorial } from "./localEvents/banditNotes.ts";
+import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
+import { surfaceLocalEventsForEdition } from "./localEvents/surfaceLocalEventsForEdition.ts";
 import { persistEventEditorialBatch } from "./localEvents/eventsCatalog.ts";
 export { enrichEventsWithBanditNotes };
 
@@ -1023,49 +1027,34 @@ export async function buildEditionForUser(
   });
 
   async function enrichLocalEventsForEdition(): Promise<LocalEvent[]> {
-    let events = localEventsForEdition;
-    if (events.length === 0 || !anthropicApiKey) return events;
+    if (localEventsForEdition.length === 0) return localEventsForEdition;
 
-    const editorialTarget = Math.min(LOCAL_EVENTS_EDITION_SURFACED_MAX, 12);
     const reservePool = localEventsForBandit.filter(
       (candidate) =>
-        !events.some(
+        !localEventsForEdition.some(
           (picked) =>
             `${picked.name}|${picked.startDateTime}`.toLowerCase() ===
             `${candidate.name}|${candidate.startDateTime}`.toLowerCase()
         )
     );
-    const enrichQueue = [...events, ...reservePool];
-    const publishable: LocalEvent[] = [];
-    const seen = new Set<string>();
-    let enrichedAttempts = 0;
 
-    while (publishable.length < editorialTarget && enrichQueue.length) {
-      const batchSize = Math.min(
-        4,
-        editorialTarget - publishable.length + 2,
-        enrichQueue.length
-      );
-      const batch = enrichQueue.splice(0, batchSize);
-      enrichedAttempts += batch.length;
-      const enriched = await timer.timed("Local Events - Bandit Notes (AI)", () =>
-        enrichEventsWithBanditNotes(batch, { editionDate, maxGenerate: batch.length })
-      );
-      for (const event of enriched) {
-        const key = `${event.name}|${event.startDateTime}`.toLowerCase();
-        if (seen.has(key) || !eventHasPublishableEditorial(event)) continue;
-        seen.add(key);
-        publishable.push(event);
-        if (publishable.length >= editorialTarget) break;
-      }
-    }
-
-    events = publishable.slice(0, editorialTarget);
+    const events = await timer.timed("Local Events - Editorial Surface", () =>
+      surfaceLocalEventsForEdition(localEventsForEdition, reservePool, {
+        editionDate,
+        allowAiEnrichment: Boolean(anthropicApiKey),
+        homepageMinimum: HOMEPAGE_INITIAL_RENDER_COUNT,
+        now: editionDateObj,
+        readerCity: city ?? eventsLocation.city,
+        readerLat: weatherLat,
+        readerLon: weatherLon,
+      })
+    );
 
     console.log("[buildEdition] local events editorial gate", {
-      enrichedAttempts,
+      allocated: localEventsForEdition.length,
+      reserve: reservePool.length,
       publishable: events.length,
-      remainingQueue: enrichQueue.length,
+      homepageTarget: HOMEPAGE_INITIAL_RENDER_COUNT,
     });
 
     void persistEventEditorialBatch(supabaseAdmin, events, catalogMetroKey).catch(

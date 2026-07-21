@@ -10,6 +10,7 @@ import {
   parseBanditPayload,
   type BanditsPick,
 } from "./bandit";
+import { isBanditsPicksEnabled } from "./banditsPicksFeature";
 import {
   discoveryItemsForSurface,
   parseDiscoveryPayload,
@@ -130,12 +131,12 @@ export function parseEditionIntelligence(
     since?.summary?.trim() ||
     (since?.title?.trim() ? since.title.trim() : null);
 
-  // Prefer Bandit's Picks, then weekend ideas, then hidden gems.
-  const pickSurfaces = [
-    "bandits_picks",
-    "weekend_ideas",
-    "hidden_gems",
-  ] as const;
+  // Prefer Bandit's Picks when enabled, then weekend ideas, then hidden gems.
+  const pickSurfaces = (
+    isBanditsPicksEnabled()
+      ? (["bandits_picks", "weekend_ideas", "hidden_gems"] as const)
+      : (["weekend_ideas", "hidden_gems"] as const)
+  );
   let discoveryItems: RankedDiscoveryItem[] = [];
   let discoveryHeadline = "Worth your time";
   let discoveryEditorNote: string | null = null;
@@ -358,10 +359,21 @@ function buildCompanion(
 
 /** Companion metadata for the article reader. */
 export function companionForLead(
-  _intelligence: EditionIntelligence,
-  _lead: LeadStory
+  intelligence: EditionIntelligence,
+  lead: LeadStory
 ): ArticleCompanion {
-  // Phase 1 blueprint — gold-standard companion rides with the Lead.
+  if (lead.role === "local") {
+    const packet = intelligence.knowledge?.byStoryKey?.[lead.id] ?? null;
+    return buildCompanion(
+      intelligence,
+      packet,
+      null,
+      intelligence.leadWhyThisMatters,
+      lead.headline,
+      lead.id
+    );
+  }
+  // Phase 1 blueprint — gold-standard companion rides with the national Lead.
   return getGoldStandardCompanion();
 }
 

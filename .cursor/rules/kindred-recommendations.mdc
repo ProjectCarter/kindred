@@ -6,9 +6,8 @@ alwaysApply: true
 # Kindred Is Not a Directory
 
 Kindred is not trying to compete with Google Maps, Yelp, or TripAdvisor.
-Google can tell you where the nearest Starbucks is. Kindred should tell you
-how to have an amazing day. Long-term, Kindred should be known as the app
-that helps people **experience** their city, not just search it.
+**Google Maps answers:** *"What's nearby?"* **Kindred answers:**
+*"What's worth experiencing?"* — permanent law in `kindred-local-business-first.mdc`.
 
 Every recommendation the engine surfaces (Activities, Recommendations,
 Bandit's Picks, Bandit's Notebook) follows these rules.
@@ -24,14 +23,17 @@ rides, scenic viewpoints, beaches, parks, hiking trails, local festivals.
 These generally rank above coffee shops and other everyday errands
 (`score.ts` — "experience_first").
 
-## 2. Local first
+## 2. Local Business First
 
-When a quality local business exists, recommend it before a national
-chain — a family-owned bakery over Panera, a neighborhood table over
-Chili's, Joe's Coffee over Starbucks. Chains are still allowed when they're
-genuinely the best option or no strong local alternative exists, but they
-should never dominate a section (`score.ts` — chain deprioritization,
-`places/chains.ts`). Help readers discover places they'd never have found
+**Permanent identity law:** `kindred-local-business-first.mdc`
+
+When comparable quality, verification, and trust exist, recommend independently
+owned local businesses before national chains — a family-owned bakery over Panera,
+a neighborhood table over Chili's, Joe's Coffee over Starbucks. Chains remain
+allowed when genuinely the best option or no strong local alternative exists,
+but they should usually serve as fallback picks, not define the local experience
+(`score.ts` — chain deprioritization · `places/chains.ts` ·
+`venueEditorialScore.ts`). Help readers discover places they'd never have found
 on their own.
 
 ## 3. Hard variety rule

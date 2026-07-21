@@ -4,6 +4,8 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { runStoryEditorSafe } from "../storyEditor/index.ts";
+import type { StoryEditorResult } from "../storyEditor/types.ts";
+import { validateKindredArticleProse } from "../../../../lib/edition/kindredArticleProse.ts";
 import {
   buildNationalNewsStoryPayload,
   selectNationalNewsStories,
@@ -13,6 +15,38 @@ import type {
   UsNationalNewsPackagePayload,
 } from "./types.ts";
 import { US_NATIONAL_COUNTRY_CODE } from "./resolveUsNationalDaily.ts";
+
+function nationalStoryCopyFromEdit(
+  ranked: Awaited<ReturnType<typeof selectNationalNewsStories>>["selected"][number],
+  result: StoryEditorResult | null | undefined
+): { headline: string; summary: string } {
+  const wireHeadline = ranked.story.title.trim();
+  const wireSummary = (ranked.story.description || ranked.story.title).trim();
+
+  if (!result?.ok || !result.paragraphs.length) {
+    return { headline: wireHeadline, summary: wireSummary };
+  }
+
+  const prose = validateKindredArticleProse({
+    headline: result.headline,
+    dek: result.dek,
+    body: result.paragraphs,
+    desk: "national_news",
+    subjectTokens: [result.headline, ranked.story.source].filter(Boolean),
+  });
+
+  if (!prose.passes) {
+    return { headline: wireHeadline, summary: wireSummary };
+  }
+
+  const headline = result.headline.trim() || wireHeadline;
+  const summary =
+    result.dek?.trim() ||
+    result.paragraphs[0]?.trim() ||
+    wireSummary;
+
+  return { headline, summary };
+}
 
 function parseNationalNewsPayload(raw: unknown): UsNationalNewsPackagePayload | null {
   if (!raw || typeof raw !== "object") return null;
@@ -186,11 +220,7 @@ export async function resolveUsNationalNews(
               input.anthropicApiKey
             ).then((result) => ({
               ranked,
-              headline: result?.headline?.trim() || ranked.story.title,
-              summary:
-                result?.bodyText?.trim() ||
-                ranked.story.description ||
-                ranked.story.title,
+              ...nationalStoryCopyFromEdit(ranked, result),
             }))
           )
         )

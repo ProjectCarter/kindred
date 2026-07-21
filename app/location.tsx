@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { clearAppCachesForColdLaunch } from "../lib/perf/clearAppCachesForColdLaunch";
+import { trackCacheCleared } from "../lib/analytics";
 import { friendlyCacheKeyLabel } from "../lib/storage/kindredAsyncStorageKeys";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -329,6 +330,10 @@ export default function LocationSettingsScreen() {
               onPress={() =>
                 void withBusy(async () => {
                   const result = await clearAppCachesForColdLaunch();
+                  trackCacheCleared({
+                    removed_keys: result.removedKeyCount,
+                    memory_caches: result.memoryCachesCleared.length,
+                  });
                   const labels = [
                     ...new Set(
                       result.removedKeys.map((key) => friendlyCacheKeyLabel(key))

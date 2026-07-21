@@ -125,6 +125,7 @@ export function RecommendationsSection({
           : undefined
       }
       seeAllLabel={FOOD_DRINK_SEE_ALL_LABEL}
+      analyticsSectionType="recommendations"
       emptyCopy="Nothing new on the Food & Drinks desk this month — check back tomorrow."
       onOpenCard={
         onOpenItem

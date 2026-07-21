@@ -25,8 +25,8 @@ import {
 import { resolveEventTimezone } from "./localEvents/eventTimezone.ts";
 import { assertEventsVerifiedForPublication } from "./localEvents/eventDateVerification.ts";
 import { allocateLocalEventsByHorizon } from "./localEvents/horizonAllocator.ts";
-import { enrichEventsWithBanditNotes } from "./localEvents/banditNotes.ts";
-import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "./editorial/publishing.ts";
+import { LOCAL_EVENTS_EDITION_SURFACED_MAX, HOMEPAGE_INITIAL_RENDER_COUNT } from "./editorial/publishing.ts";
+import { surfaceLocalEventsForEdition } from "./localEvents/surfaceLocalEventsForEdition.ts";
 import { isUsHolidayOrEve } from "./calendar/holidays.ts";
 import { getLocalPlacesForEdition } from "./places/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
@@ -134,11 +134,24 @@ export async function refreshEventsSection(
       readerCity: input.location.city,
     });
 
-    const events = assertEventsVerifiedForPublication(
-      await enrichEventsWithBanditNotes(surfaced, {
-        editionDate: input.editionDate,
-      }),
-      {
+    const reservePool = fetched.filter(
+      (candidate) =>
+        !surfaced.some(
+          (picked) =>
+            `${picked.name}|${picked.startDateTime}`.toLowerCase() ===
+            `${candidate.name}|${candidate.startDateTime}`.toLowerCase()
+        )
+    );
+
+    const publishable = await surfaceLocalEventsForEdition(surfaced, reservePool, {
+      editionDate: input.editionDate,
+      allowAiEnrichment: Boolean(Deno.env.get("ANTHROPIC_API_KEY")),
+      homepageMinimum: HOMEPAGE_INITIAL_RENDER_COUNT,
+      now: new Date(),
+      readerCity: input.location.city,
+    });
+
+    const events = assertEventsVerifiedForPublication(publishable, {
         now: new Date(),
         location: input.location,
         eventTimezone,

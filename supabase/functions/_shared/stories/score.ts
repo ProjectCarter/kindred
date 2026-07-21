@@ -21,6 +21,11 @@ import {
   shouldDeprioritizeForTone,
 } from "../editor/tone.ts";
 import { isPressReleaseWire } from "../../../../lib/edition/localNewsFreshness.ts";
+import {
+  isEvergreenLocalNewsFiller,
+  isTitleOnlyCandidate,
+  scoreLocalNewsSourceRichness,
+} from "../../../../lib/edition/localNewsSourceQuality.ts";
 import type {
   CandidateStory,
   StoryRankingContext,
@@ -604,6 +609,36 @@ export function scoreCandidate(
         code: "repetition_soft",
         label: "Echoes a recent edition — deprioritized",
         weight: -12,
+      });
+    }
+  }
+
+  if (story.pool === "local" || ctx.metroKey) {
+    const richness = scoreLocalNewsSourceRichness({
+      title: story.title,
+      description: story.description,
+      source: story.source,
+      category: story.category,
+    });
+    score += richness.score;
+    if (richness.titleOnly) {
+      reasons.push({
+        code: "title_only_source",
+        label: "Wire note is effectively title-only",
+        weight: -40,
+      });
+    } else if (richness.sourceWords >= 40) {
+      reasons.push({
+        code: "source_richness",
+        label: "Wire includes useful verified description",
+        weight: 18,
+      });
+    }
+    if (richness.evergreenFiller) {
+      reasons.push({
+        code: "evergreen_filler",
+        label: "Evergreen roster/history filler — not breaking local news",
+        weight: -24,
       });
     }
   }

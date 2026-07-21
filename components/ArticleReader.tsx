@@ -27,6 +27,7 @@ import {
 } from "../lib/edition/article";
 import { isV1TextOnlyListing } from "../lib/edition/v1ImagePolicy";
 import { EditorialTitle } from "./EditorialTitle";
+import { trackArticleShared } from "../lib/analytics";
 import {
   getArticleCompanion,
   type ArticleCompanion,
@@ -142,6 +143,7 @@ export function ArticleReader({
 
   const briefing = isKindredBriefing(article);
   const textOnlyListing = isV1TextOnlyListing(article);
+  const isLocalNewsArticle = article.section === "local_news";
 
   const handleBack = useCallback(() => {
     updateArticleSessionScroll(article.id, scrollYRef.current);
@@ -672,6 +674,11 @@ export function ArticleReader({
         message: parts.join("\n"),
         title: article.headline,
       });
+      trackArticleShared({
+        contentId: article.id,
+        contentTitle: article.headline,
+        sectionType: article.section,
+      });
     } catch {
       /* User dismissed share sheet. */
     }
@@ -865,7 +872,9 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {!textOnlyListing && articleContextActions.length > 0 ? (
+            {!textOnlyListing &&
+            articleContextActions.length > 0 &&
+            !isLocalNewsArticle ? (
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
@@ -924,7 +933,7 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {briefing ? (
+            {briefing && !isLocalNewsArticle ? (
               <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
                 {article.body.length <= 1
                   ? "A short Kindred note — the full report lives with the publisher."
@@ -1009,6 +1018,16 @@ export function ArticleReader({
                   {article.closingBanditNote}
                 </Text>
               </View>
+            ) : null}
+
+            {isLocalNewsArticle && articleContextActions.length > 0 ? (
+              <ArticleActionList actions={articleContextActions} />
+            ) : null}
+
+            {isLocalNewsArticle && article.briefingFooterNote ? (
+              <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
+                {article.briefingFooterNote}
+              </Text>
             ) : null}
 
             <View style={styles.colophon}>

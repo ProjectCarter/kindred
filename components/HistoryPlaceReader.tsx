@@ -30,6 +30,7 @@ import {
 } from "../lib/edition/clippings";
 import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
 import { supabase } from "../lib/supabase";
+import { trackArticleShared } from "../lib/analytics";
 import { paper, press, reader } from "../lib/edition/newspaperTheme";
 import { KindredDetailBackButton } from "./KindredDetailBackButton";
 import { PullDownNavHeader } from "./PullDownNavHeader";
@@ -184,8 +185,17 @@ export function HistoryPlaceReader({
       snapshot.teaser,
       snapshot.officialWebsite,
     ].filter(Boolean);
-    await Share.share({ message: lines.join("\n\n") }).catch(() => {});
-  }, [snapshot]);
+    try {
+      await Share.share({ message: lines.join("\n\n") });
+      trackArticleShared({
+        contentId: article.id,
+        contentTitle: snapshot.placeName,
+        sectionType: article.section,
+      });
+    } catch {
+      /* dismissed */
+    }
+  }, [snapshot, article.id, article.section]);
 
   return (
     <SafeAreaView style={styles.container} edges={["left", "right"]}>

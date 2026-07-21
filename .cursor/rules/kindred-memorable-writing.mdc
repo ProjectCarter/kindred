@@ -66,9 +66,11 @@ Calm newspaper prose. Never dramatic for effect. Never poetic filler. Never
 exaggerate. Never invent details. Every sentence earns its place. Every
 paragraph introduces new information. Every article has its own personality.
 
-## Publication gates — all four tests
+## Publication gates
 
-Every article must pass:
+**Foundation:** `kindred-newspaper-editorial-standards.mdc` — every article, every desk.
+
+Every article must also pass:
 
 1. **Accuracy Test** — verified facts only (`kindred-editorial-constitution.mdc`)
 2. **Swap Test** — no reusable conclusions (`kindred-unique-conclusions.mdc`)

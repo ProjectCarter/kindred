@@ -65,6 +65,7 @@ export function ActivitiesSection({
       seeAllTotal={seeAllAccessibleCount}
       onSeeAll={cards.length > 0 ? onSeeAll : undefined}
       seeAllLabel={(n) => `See all ${n} activities`}
+      analyticsSectionType="activities"
       emptyCopy="Nothing new to try nearby this month — check back tomorrow."
       onOpenCard={
         onOpenItem

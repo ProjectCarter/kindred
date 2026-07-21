@@ -65,7 +65,6 @@ export function seedAnswersFromDek(
     science: "why_it_matters",
     history: "why_remember",
     news: "why_now",
-    local_news: "who_affected",
   };
 
   const fieldId = primaryByType[type];

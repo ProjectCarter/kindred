@@ -31,6 +31,7 @@
  */
 
 import type { BanditsPick } from "./bandit";
+import { isBanditsPicksEnabled } from "./banditsPicksFeature";
 import type { ContinueReadingItem } from "./articleCompanion";
 import type { KnowledgeFacet, KnowledgePacket } from "./knowledge";
 import {
@@ -190,6 +191,7 @@ function banditItem(
   currentArticleId: string | null | undefined,
   currentTitle: string | null | undefined
 ): ContinueReadingItem | null {
+  if (!isBanditsPicksEnabled()) return null;
   if (!pick?.story?.headline?.trim()) return null;
   if (currentArticleId && pick.story.id === currentArticleId) return null;
   const title = pick.story.headline.trim();

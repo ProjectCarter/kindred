@@ -4,11 +4,11 @@
 
 import {
   GLOBAL_LANGUAGE_DIGEST,
+  KINDRED_EDITORIAL_STANDARDS_DIGEST,
   LEARNING_ENGINE_DIGEST,
   LOCAL_NEWS_BRIEFING_DIGEST,
   MEMORABILITY_DIGEST,
   STORY_EDITOR_QUESTIONS,
-  STORY_STANDARD_DIGEST,
 } from "./constitutions.ts";
 import type { ConsultationPack, StoryEditorIntake } from "./types.ts";
 
@@ -21,12 +21,13 @@ export function storyEditorSystemPrompt(
       ? `\n\n${LOCAL_NEWS_BRIEFING_DIGEST}\n`
       : "";
   return (
-    "You are Kindred’s Story Editor — a senior magazine editor whose only job is " +
+    "You are Kindred’s Story Editor — an experienced newspaper editor whose only job is " +
     "to protect the reader from boring articles while preserving absolute truth.\n\n" +
+    "Kindred is not trying to generate content. Kindred is trying to edit a newspaper.\n\n" +
+    KINDRED_EDITORIAL_STANDARDS_DIGEST +
+    "\n\n" +
     "You do not invent facts, numbers, names, quotes, motives, or local color.\n" +
     "You transform accurate reporting into exceptional reading.\n\n" +
-    STORY_STANDARD_DIGEST +
-    "\n\n" +
     MEMORABILITY_DIGEST +
     "\n\n" +
     GLOBAL_LANGUAGE_DIGEST.replace("{locale}", locale) +
@@ -43,9 +44,13 @@ export function storyEditorSystemPrompt(
     '{"voluntary_finish":true,"headline":string,"dek":string|null,"paragraphs":string[],' +
     '"pull_quote":null,"scores":{"interest":5,"curiosity":5,"flow":5,"human_connection":5,' +
     '"learning":5,"memorability":5,"reader_satisfaction":5},"memorable_insight":string,' +
-    '"four_questions":{"what":string,"why":string,"who":string,"remember":string,"limits":string[]},' +
+    '"story_type":"sports"|"local_government"|"business"|"community"|"public_safety"|"general",' +
+    '"field_answers":{"why_it_matters":string,"background":string,"looking_ahead":string,"verified_facts":string,"economic_impact":string},' +
+    '"four_questions":{"what":string,"why":string,"who":string,"remember":string,' +
+    '"background":string,"looking_ahead":string,"limits":string[]},' +
     '"lessons":[{"changeType":"opening"|"delete_para"|"reorder"|"ending"|"curiosity"|"human_focus"|"insight"|"clarity"|"other",' +
     '"rationale":string,"principleIds":string[]}],"notes":string[]}\n' +
+    "For local_news: classify with story_type first. paragraphs = lead only (source-verified facts). field_answers = that desk's sections: background = general verified education; why_it_matters = source facts or their significance; looking_ahead = watch-for framing only (hedged). Omit empty keys. No disclaimers in body or field_answers.\n" +
     "No markdown fences. No preamble."
   );
 }
@@ -109,10 +114,10 @@ export function storyEditorUserPrompt(
       ? `Reader craft notes: ${consultation.readerNotes.join("; ")}\n`
       : "") +
     red +
-    "\nRewrite until a senior editor would proudly publish this in tomorrow’s Kindred edition. " +
+    "\nRewrite until an experienced newspaper editor would proudly publish this in tomorrow’s Kindred edition. " +
     (intake.surfaceRole === "local_news"
-      ? "Write a complete Local News briefing (4–8 paragraphs when the source supports it). "
-      : "") +
-    "If the source is thin, write a short honest briefing and state limits — never pad with fiction."
+      ? "Classify the story, then write: verified headline, one-sentence dek, a lead that tells what happened (never repeats the headline), and field_answers that build understanding. On thin wires, add verified general background — never invent story-specific details. "
+      : "Lead with the news. Build understanding. Every paragraph earns its place. ") +
+    "If the source is thin, write a short honest briefing or add only widely verified background — never pad with fiction."
   );
 }

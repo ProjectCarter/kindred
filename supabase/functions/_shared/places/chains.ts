@@ -1,6 +1,6 @@
 /**
- * Lightweight, practical chain detection for the "Local First" rule
- * (kindred-recommendations.mdc). Kindred isn't trying to out-index Google
+ * Lightweight, practical chain detection for the Local Business First rule
+ * (kindred-local-business-first.mdc · kindred-recommendations.mdc). Kindred
  * Maps with a perfect chain database — this only needs to catch the
  * common national chains that would otherwise crowd out a strong local
  * alternative. Anything not on this list is treated as local by default,

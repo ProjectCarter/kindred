@@ -14,6 +14,12 @@ import { validateLastingImpressionBody } from "./lastingImpression.ts";
 import { validateSourceConfidenceBody } from "./sourceConfidence.ts";
 import { validateUniqueConclusion, extractLastParagraph } from "./uniqueConclusions.ts";
 
+export {
+  validateKindredArticleProse,
+  type KindredArticleProseInput,
+  type KindredArticleProseResult,
+} from "../../../../lib/edition/kindredArticleProse.ts";
+
 /** Phase 3 intelligence framework — smarter articles, not longer ones. */
 export const EDITORIAL_QUESTIONS_FRAMEWORK = buildEditorialIntelligencePromptBlock();
 

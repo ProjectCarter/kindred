@@ -7,6 +7,12 @@ alwaysApply: true
 
 **Trust is our most valuable feature.**
 
+**Universal craft standard:** `kindred-newspaper-editorial-standards.mdc` — how every
+article is written (lead with the news, build understanding, trust over length).
+**Local identity standard:** `kindred-local-business-first.mdc` — what makes a city
+worth experiencing (local business first when quality is comparable).
+This file covers **what may be published** and verification gates.
+
 Kindred **NEVER** guesses, assumes, fabricates, or fills missing information
 with AI inference. If something cannot be verified with sufficient confidence,
 **it is not published.**
@@ -35,26 +41,74 @@ would confidently send our own family there.
 `buildEdition.ts` publish re-check. Only `verificationStatus = "verified"` enters
 the edition.
 
-### Editorial exclusion filter (permanent)
+### Family-Friendly Discovery Standard (permanent)
 
-Kindred is a **premium, family-friendly morning newspaper**. Surface inspiring,
-educational, cultural, historical, recreational, and community content only.
+Kindred is a **family-friendly discovery platform** that helps people discover
+the best experiences in their city. This rule is **not** based on whether an
+event is 21+, politics, viewpoints, or popularity. It **is** based on whether
+the **primary purpose** of the venue or event aligns with Kindred's mission of
+helping people discover the best places in their city.
 
-**Always exclude:** adult entertainment (strip clubs, revues, escort services,
-swinger/BDSM/fetish events, sex expos, pornography, adult bookstores/arcades,
-explicit burlesque); hate groups and extremist rallies; violence or illegal
-activity promotion; scams (pyramid schemes, MLM recruiting, timeshare pitches,
-get-rich-quick and predatory financial seminars, fake crypto/investment schemes).
+**Allow when editorial quality is high:** restaurants · breweries · wineries ·
+cocktail bars · distilleries · coffee shops · fine dining · live music · jazz
+clubs · comedy clubs · theater · museums · festivals · farmers markets ·
+sporting events · community events · cultural celebrations · casinos (where
+legal) · 21+ events that are legitimate entertainment or hospitality
+experiences. Rank on quality, verification, editorial value, Local Business First.
 
-**Never exclude when legitimate:** Broadway, theater, ballet, opera, symphony,
-concerts, comedy, live music, museums, festivals, art exhibits, family
-performances, educational seminars, charity events, community gatherings,
-sporting events.
+**Exclude before ranking:** strip clubs · gentlemen's clubs · adult bookstores ·
+pornography or sexually explicit businesses · escort services · sexually themed
+venues or performances · drag shows or drag-themed performances · adult novelty
+stores · fetish or BDSM events · nude or partially nude entertainment · any
+venue whose primary purpose is explicit sexual entertainment. Remove from the
+candidate pool entirely — never just lower the score.
+
+**Engineering rule:** age restriction alone must **never** exclude an event.
+**Primary purpose** is the determining factor. Legitimate food, culture, music,
+comedy, nightlife, hospitality, sports, history, education, or community → may
+include. Adult or sexually themed entertainment → remove before ranking so it
+never reaches homepage, recommendations, search, affiliate recommendations, or
+future city editions. Applies globally across every Kindred edition.
+
+**Surfaces:** Local Events · Activities · Food & Drinks · Bandit's Picks ·
+Recommendations · Search · future affiliate recommendations.
+
+**Also exclude (non-adult):** hate groups and extremist rallies; violence or
+illegal activity promotion; scams (pyramid schemes, MLM recruiting, timeshare
+pitches, get-rich-quick and predatory financial seminars, fake crypto/investment
+schemes).
 
 **Diagnostics:** log filtered count, reason (`signal` + `category`), and sample
 titles each edition. Provider-agnostic — applies to Eventbrite, Ticketmaster, and
-all future sources. Same gate in `discovery/score.ts` for Activities,
-Recommendations, and Bandit's Pick.
+all future sources.
+
+**Gate:** `localEvents/familyFriendlyFilter.ts` (before dedupe + rank) ·
+`discovery/score.ts` for Activities, Recommendations, and Bandit's Pick ·
+`buildEdition.ts` publish re-check.
+
+### The Kindred Test (permanent — final editorial filter)
+
+Every recommendation must pass one question **after** verification, ranking,
+and safety checks:
+
+> "If someone was visiting this city for the first time, would I be genuinely
+> excited to recommend this?"
+
+**YES** → may continue through editorial review. **NO** → do not publish, even if
+it technically qualifies. Applies to every desk and surface.
+
+**Usually PASS:** beloved neighborhood restaurant · great local brewery · scenic
+overlook · museum · concert · farmers market · cultural festival · historic
+landmark · unique coffee shop · local bookstore · reputable comedy club ·
+highly rated cocktail bar · local art gallery.
+
+**Usually FAIL:** adult or sexually themed venues/performances · strip clubs ·
+gentlemen's clubs · drag shows or drag-themed performances · airport terminals ·
+office parks · generic chains with no local significance when better locals exist ·
+sales seminars · MLM events · spam · placeholders · duplicates · low-quality
+filler · anything that makes the city feel less authentic or less welcoming.
+
+Kindred is not trying to list everything. Kindred is trying to recommend the best.
 
 ### Activities
 
@@ -77,6 +131,10 @@ place provider verification.
 
 **Gate:** same discovery confidence stack; `familyFriendlyFilter.ts` ·
 `contentQuality.ts` · `places/chains.ts` for local-first, verified listings.
+**Local Business First:** `kindred-local-business-first.mdc` ·
+`localBusinessFirst.ts` · `venueEditorialScore.ts` · `discovery/score.ts` —
+when quality and trust are comparable, verified independents rank above chains;
+never fabricate local status.
 
 ### Maps
 
@@ -84,6 +142,10 @@ Never guess coordinates. Always verify the pin opens at the intended
 destination. **If coordinates cannot be verified, do not publish.**
 
 ### Articles
+
+See **`kindred-newspaper-editorial-standards.mdc`** for the full 12 editorial
+standards (lead with the news, build understanding, write like a newspaper,
+trust over length, reader test). That standard applies to **every desk**.
 
 Never invent history, facts, rankings, awards, or claims. Write only from
 verified information. If confidence is low, **omit the statement** — do not
@@ -102,7 +164,8 @@ generic takeaways. If nothing would stick an hour later, rewrite it.
 structure, facts-first Overview, no cross-section repetition, 1,200–2,000 words
 when verified material supports it.
 
-**Gate:** `storyEditor/` · `editorial/confidence.ts` · `uniqueConclusions.ts` ·
+**Gate:** `kindredEditorialStandards.ts` · `storyEditor/` · `editorialStyle.ts` ·
+`editorial/confidence.ts` · `uniqueConclusions.ts` ·
 `memorableWriting.ts` · `categoryIcon.ts` · hero/detail templates must use verified
 library metadata only.
 

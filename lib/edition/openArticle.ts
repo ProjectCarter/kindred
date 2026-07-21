@@ -18,6 +18,7 @@ import {
   inferTopicFromSection,
   trackReadingSignal,
 } from "../personalization";
+import { trackArticleOpenedOnce } from "../analytics";
 
 export type OpenArticleOptions = {
   editionId?: string | null;
@@ -89,6 +90,12 @@ export function openKindredArticle(
       };
 
   router.push(pushParams);
+
+  trackArticleOpenedOnce({
+    contentId: withHero.id,
+    contentTitle: withHero.headline,
+    sectionType: withHero.section,
+  });
 
   void trackReadingSignal({
     signalType: "open",

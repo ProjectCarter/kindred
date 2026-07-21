@@ -30,6 +30,10 @@ import {
   venueHayFromParts,
 } from "./venueQuality.ts";
 import { resolveDiscoveryCategoryIcon } from "./categoryIcon.ts";
+import {
+  foodDrinkEditorialNote,
+  foodDrinkLocationLine,
+} from "./foodDrinkPresentation.ts";
 
 export {
   FOOD_DRINK_SECTION_INTRO,
@@ -122,6 +126,13 @@ export function selectHomepageRecommendationCards(
   const readerLocation = options?.readerLocation ?? null;
   const editionDate = options?.editionDate ?? null;
   const pool = prepareFoodDrinkPool(items, { readerLocation }).filter((d) => {
+    const hay = venueHayFromParts([
+      d.item.title,
+      d.item.dek,
+      ...(d.item.venueCategories ?? []),
+      d.item.address,
+    ]);
+    if (isLowValueVenue(hay)) return false;
     const score = d.item.venueEditorial?.score;
     if (typeof score === "number" && score > 0 && score < VENUE_EDITORIAL_TIER_STRONG - 10) {
       return false;
@@ -132,8 +143,10 @@ export function selectHomepageRecommendationCards(
   const ranked = curateFoodDrinkEdition(pool, {
     getScore: (d) => recommendationSortScore(d, editionDate),
     depth: HOMEPAGE_INITIAL_RENDER_COUNT,
-    maxPerFingerprint: 1,
-    repeatScoreGap: Number.POSITIVE_INFINITY,
+    // Up to two per collection — matches section variety law and lets thin
+    // metros (e.g. no Mexican picks today) still fill all eight homepage slots.
+    maxPerFingerprint: 2,
+    repeatScoreGap: 10,
   });
 
   return ranked
@@ -180,7 +193,7 @@ function toRecommendationCard(
       ),
       title: d.item.title.trim(),
       subtitle: recommendationLocationLine(d.item, city),
-      note: recommendationNote(d.item),
+      note: recommendationNote(d.item, city),
     };
 }
 
@@ -188,16 +201,12 @@ export function recommendationLocationLine(
   item: RankedDiscoveryItem["item"],
   fallbackCity?: string | null
 ): string | null {
-  if (item.address?.trim()) return item.address.trim();
-  const city = item.place?.city?.trim() || fallbackCity?.trim();
-  return city || null;
+  return foodDrinkLocationLine(item, fallbackCity);
 }
 
 export function recommendationNote(
-  item: RankedDiscoveryItem["item"]
+  item: RankedDiscoveryItem["item"],
+  fallbackCity?: string | null
 ): string | null {
-  const dek = item.dek?.trim();
-  if (!dek) return null;
-  if (dek === item.title.trim()) return null;
-  return dek;
+  return foodDrinkEditorialNote(item, fallbackCity);
 }

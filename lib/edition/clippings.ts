@@ -12,6 +12,7 @@
  */
 import type { ImageSourcePropType } from "react-native";
 import { supabase } from "../supabase";
+import { trackArticleSaved } from "../analytics";
 import { isClippableSectionId, type KindredArticle } from "./article";
 import {
   CLIPPING_TYPE_LABEL,
@@ -117,7 +118,14 @@ export async function saveClipping(
     payload: article,
   });
 
-  if (!error) return { ok: true };
+  if (!error) {
+    trackArticleSaved({
+      contentId: target.clipKey,
+      contentTitle: article.headline,
+      sectionType: article.section,
+    });
+    return { ok: true };
+  }
 
   const duplicate =
     error.code === "23505" || /duplicate|unique/i.test(error.message ?? "");

@@ -51,6 +51,7 @@ import {
 } from "./editorialPublishing";
 import { meetsDiscoveryPublishConfidence } from "./editorialConfidence";
 import {
+  isActivityProShopParts,
   isParticipatoryActivityVenue,
   venueHayFromParts,
 } from "./venueQuality";
@@ -124,6 +125,9 @@ function belongsInActivities(item: RankedDiscoveryItem): boolean {
       item.item.dek,
       ...(item.item.venueCategories ?? []),
     ]);
+    if (isActivityProShopParts([item.item.title, item.item.dek, ...(item.item.venueCategories ?? [])])) {
+      return false;
+    }
     return isParticipatoryActivityVenue(hay);
   }
 

@@ -10,6 +10,7 @@ import { paper, press } from "../lib/edition/newspaperTheme";
 import type { ActionBarAction } from "../lib/edition/actionBar";
 import { openGoogleMapsDestination } from "../lib/edition/googleMaps";
 import type { MapsDestination } from "../lib/edition/googleMaps";
+import { trackActionBarExternalAction, trackArticleShared } from "../lib/analytics";
 
 type Props = {
   actions: ActionBarAction[];
@@ -21,6 +22,11 @@ type Props = {
   variant?: "card" | "article";
   shareMessage?: string;
   shareTitle?: string;
+  analyticsShare?: {
+    contentId: string;
+    contentTitle?: string | null;
+    sectionType?: string | null;
+  };
 };
 
 function openUrl(url: string) {
@@ -41,6 +47,7 @@ export function ActionBar({
   variant = "card",
   shareMessage,
   shareTitle,
+  analyticsShare,
 }: Props) {
   const visible = actions.filter((action) => {
     if (action.kind === "save" && !onSave) return false;
@@ -76,6 +83,9 @@ export function ActionBar({
             message: shareMessage,
             title: shareTitle ?? undefined,
           });
+          if (analyticsShare) {
+            trackArticleShared(analyticsShare);
+          }
         } catch {
           /* dismissed */
         }
@@ -94,6 +104,7 @@ export function ActionBar({
       return;
     }
     if (action.kind === "url" && action.url) {
+      trackActionBarExternalAction(action);
       openUrl(action.url);
     }
   }

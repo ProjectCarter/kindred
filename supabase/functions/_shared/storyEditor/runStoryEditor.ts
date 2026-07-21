@@ -6,19 +6,40 @@
 import { buildConsultationPack } from "./consultation.ts";
 import {
   allScoresAreFive,
+  canAcceptLocalNewsThinDraft,
+  isFactIntegrityIssue,
   isThinSource,
   validateStoryDraft,
   type ValidationIssue,
 } from "./validators.ts";
-import { composeThinHonest, composeWireFallback, composeLocalNewsThinHonest } from "./thinFallback.ts";
+import {
+  composeThinHonest,
+  composeWireFallback,
+  composeLocalNewsThinHonest,
+} from "./thinFallback.ts";
+import {
+  attachStoryEditorDiagnostic,
+  buildStoryEditorDiagnostic,
+  logStoryEditorDiagnostic,
+  type StoryEditorSelectedPath,
+} from "./storyEditorDiagnostics.ts";
 import {
   STORY_EDITOR_MAX_PASSES,
   type StoryEditorIntake,
   type StoryEditorLesson,
   type StoryEditorResult,
   type StoryEditorScores,
+  type StorySurfaceRole,
 } from "./types.ts";
-import { storyEditorSystemPrompt, storyEditorUserPrompt } from "./voice.ts";
+import {
+  LOCAL_NEWS_SECTION_IDS,
+  resolveLocalNewsStoryType,
+} from "../../../../lib/edition/localNewsStoryStructure.ts";
+import { hasUsefulDescription } from "../../../../lib/edition/localNewsSourceQuality.ts";
+import {
+  storyEditorSystemPrompt,
+  storyEditorUserPrompt,
+} from "./voice.ts";
 
 type ModelDraft = {
   voluntary_finish?: boolean;
@@ -28,11 +49,21 @@ type ModelDraft = {
   pull_quote?: string | null;
   scores?: Partial<StoryEditorScores>;
   memorable_insight?: string | null;
+  field_answers?: {
+    why_it_matters?: string;
+    background?: string;
+    looking_ahead?: string;
+    verified_facts?: string;
+    economic_impact?: string;
+  };
+  story_type?: string;
   four_questions?: {
     what?: string;
     why?: string;
     who?: string;
     remember?: string;
+    background?: string;
+    looking_ahead?: string;
     limits?: string[];
   };
   lessons?: Array<{
@@ -110,12 +141,92 @@ function asLessons(
     .filter(Boolean) as StoryEditorLesson[];
 }
 
-function normalizeParagraphs(paragraphs: string[] | undefined): string[] {
+function normalizeParagraphs(
+  paragraphs: string[] | undefined,
+  surfaceRole?: StorySurfaceRole
+): string[] {
   if (!Array.isArray(paragraphs)) return [];
+  const max = surfaceRole === "local_news" ? 4 : 12;
   return paragraphs
     .map((p) => p.replace(/\s+/g, " ").replace(/!+/g, ".").trim())
     .filter(Boolean)
-    .slice(0, 12);
+    .slice(0, max);
+}
+
+function normalizeFieldAnswers(draft: ModelDraft) {
+  const fa = draft.field_answers ?? {};
+  const fq = draft.four_questions ?? {};
+  const pick = (value: unknown) =>
+    typeof value === "string" && value.trim()
+      ? value.replace(/\s+/g, " ").trim()
+      : "";
+  const out: NonNullable<StoryEditorResult["desk"]["fieldAnswers"]> = {};
+
+  for (const key of LOCAL_NEWS_SECTION_IDS) {
+    const value = pick(fa[key as keyof typeof fa]);
+    if (value) out[key] = value;
+  }
+
+  if (!out.background) {
+    const background = pick(fq.background);
+    if (background) out.background = background;
+  }
+  if (!out.why_it_matters) {
+    const why = pick(fq.why);
+    const who = pick(fq.who);
+    const joined = [why, who].filter(Boolean).join(" ");
+    if (joined) out.why_it_matters = joined;
+  }
+  if (!out.looking_ahead) {
+    const looking = pick(fq.looking_ahead);
+    if (looking) out.looking_ahead = looking;
+  }
+
+  return Object.keys(out).length ? out : undefined;
+}
+
+function storyTypeFromDraft(draft: ModelDraft): StoryEditorResult["desk"]["storyType"] {
+  return resolveLocalNewsStoryType(draft.story_type);
+}
+
+function fieldAnswersForValidation(
+  draft: ModelDraft
+): import("./validators.ts").LocalNewsFieldAnswers | null {
+  return normalizeFieldAnswers(draft) ?? null;
+}
+
+function sourceHasDistinctDescription(intake: StoryEditorIntake): boolean {
+  return hasUsefulDescription({
+    title: intake.headline,
+    description: intake.sourceText,
+  });
+}
+
+function finalizeLocalNewsResult(
+  intake: StoryEditorIntake,
+  result: StoryEditorResult,
+  diagnosticInput: {
+    issues: ValidationIssue[];
+    modelExecutionSuccess: boolean;
+    selectedPath: StoryEditorSelectedPath;
+    draft?: {
+      storyType?: string | null;
+      fieldAnswers?: Record<string, string | undefined> | null;
+      paragraphs?: string[];
+    } | null;
+  }
+): StoryEditorResult {
+  if (intake.surfaceRole !== "local_news") return result;
+  const diagnostic = buildStoryEditorDiagnostic({
+    intake,
+    issues: diagnosticInput.issues,
+    draft: diagnosticInput.draft,
+    modelExecutionSuccess: diagnosticInput.modelExecutionSuccess,
+    selectedPath: diagnosticInput.selectedPath,
+    sourceHasDistinctDescription: sourceHasDistinctDescription(intake),
+  });
+  logStoryEditorDiagnostic(intake.surfaceRole, diagnostic);
+  return attachStoryEditorDiagnostic(result, diagnostic);
 }
 
 async function callStoryEditorModel(
@@ -170,9 +281,12 @@ function toResult(
   intake: StoryEditorIntake,
   draft: ModelDraft,
   passes: number,
-  path: "full" | "thin_honest"
+  path: "full" | "accepted_thin" | "thin_honest"
 ): StoryEditorResult {
-  const paragraphs = normalizeParagraphs(draft.paragraphs);
+  const paragraphs = normalizeParagraphs(
+    draft.paragraphs,
+    intake.surfaceRole
+  );
   const headline =
     (draft.headline ?? intake.headline).replace(/\s+/g, " ").trim() ||
     intake.headline;
@@ -183,6 +297,8 @@ function toResult(
   const scores = asScores(draft.scores);
   const lessons = asLessons(draft.lessons);
   const fq = draft.four_questions ?? {};
+  const fieldAnswers = normalizeFieldAnswers(draft);
+  const storyType = storyTypeFromDraft(draft);
 
   return {
     headline,
@@ -217,10 +333,14 @@ function toResult(
         why: (fq.why ?? "").trim(),
         who: (fq.who ?? "").trim(),
         remember: (fq.remember ?? "").trim(),
+        background: (fq.background ?? "").trim() || undefined,
+        looking_ahead: (fq.looking_ahead ?? "").trim() || undefined,
         limits: Array.isArray(fq.limits)
           ? fq.limits.filter((x) => typeof x === "string").slice(0, 6)
           : [],
       },
+      fieldAnswers,
+      storyType,
       editedAt: new Date().toISOString(),
     },
   };
@@ -248,48 +368,98 @@ export async function runStoryEditor(
   };
 
   if (isThinSource(intake.sourceText)) {
-    // Still attempt one editorial pass — thin path may improve opening/close —
-    // but fall back to honest thin if the model pads or fails gates.
     const thinAttempt = await callStoryEditorModel(working, [], apiKey);
     if (thinAttempt?.paragraphs?.length) {
       const scores = asScores(thinAttempt.scores);
-      const paragraphs = normalizeParagraphs(thinAttempt.paragraphs);
-      const issues = validateStoryDraft({
-        headline: thinAttempt.headline ?? intake.headline,
-        dek: thinAttempt.dek ?? null,
-        paragraphs,
-        sourceText,
-        scores,
-        voluntaryFinish: Boolean(thinAttempt.voluntary_finish),
-        memorableInsight: thinAttempt.memorable_insight ?? null,
-        requirePerfectScores: false,
-        surfaceRole: intake.surfaceRole,
-      });
-      const factIssues = issues.filter(
-        (i) =>
-          i.code === "unsupported_numbers" ||
-          i.code === "placeholder" ||
-          i.code === "sensational" ||
-          i.code === "press_release"
+      const paragraphs = normalizeParagraphs(
+        thinAttempt.paragraphs,
+        intake.surfaceRole
       );
-      if (!factIssues.length && paragraphs.length <= 5) {
-        const result = toResult(working, thinAttempt, 1, "thin_honest");
-        console.log("[storyEditor] thin path accepted", {
-          id: intake.id.slice(0, 48),
-          paras: paragraphs.length,
+      const fieldAnswers = fieldAnswersForValidation(thinAttempt);
+      const storyType = storyTypeFromDraft(thinAttempt);
+      const headline = thinAttempt.headline ?? intake.headline;
+      const dek =
+        typeof thinAttempt.dek === "string" && thinAttempt.dek.trim()
+          ? thinAttempt.dek.trim()
+          : null;
+
+      if (intake.surfaceRole === "local_news") {
+        const thinAcceptance = canAcceptLocalNewsThinDraft({
+          headline,
+          dek,
+          paragraphs,
+          sourceText,
+          scores,
+          voluntaryFinish: Boolean(thinAttempt.voluntary_finish),
+          memorableInsight: thinAttempt.memorable_insight ?? null,
+          fieldAnswers,
+          storyType,
         });
-        return result;
+        if (thinAcceptance.accepted && paragraphs.length <= 4) {
+          const result = toResult(working, thinAttempt, 1, "accepted_thin");
+          console.log("[storyEditor] thin path accepted", {
+            id: intake.id.slice(0, 48),
+            paras: paragraphs.length,
+          });
+          return finalizeLocalNewsResult(intake, result, {
+            issues: thinAcceptance.issues,
+            modelExecutionSuccess: true,
+            selectedPath: "accepted_thin",
+            draft: { storyType, fieldAnswers: fieldAnswers ?? undefined, paragraphs },
+          });
+        }
+      } else {
+        const issues = validateStoryDraft({
+          headline,
+          dek,
+          paragraphs,
+          sourceText,
+          scores,
+          voluntaryFinish: Boolean(thinAttempt.voluntary_finish),
+          memorableInsight: thinAttempt.memorable_insight ?? null,
+          requirePerfectScores: false,
+          surfaceRole: intake.surfaceRole,
+          fieldAnswers,
+          storyType,
+        });
+        const factIssues = issues.filter((i) => isFactIntegrityIssue(i.code));
+        if (!factIssues.length && paragraphs.length <= 5) {
+          const result = toResult(working, thinAttempt, 1, "thin_honest");
+          console.log("[storyEditor] thin path accepted", {
+            id: intake.id.slice(0, 48),
+            paras: paragraphs.length,
+          });
+          return result;
+        }
       }
     }
-    return intake.surfaceRole === "local_news"
-      ? composeLocalNewsThinHonest(
-          working,
-          "Thin source — published honest Local News briefing without invented depth."
-        )
-      : composeThinHonest(
-          working,
-          "Thin source — published honest briefing without invented depth."
-        );
+
+    const fallback =
+      intake.surfaceRole === "local_news"
+        ? composeLocalNewsThinHonest(
+            working,
+            "Thin source — published honest Local News briefing without invented depth."
+          )
+        : composeThinHonest(
+            working,
+            "Thin source — published honest briefing without invented depth."
+          );
+
+    if (intake.surfaceRole === "local_news") {
+      const selectedPath: StoryEditorSelectedPath =
+        fallback.desk.path === "unavailable" ? "unavailable" : "thin_honest";
+      return finalizeLocalNewsResult(intake, fallback, {
+        issues: [],
+        modelExecutionSuccess: Boolean(thinAttempt),
+        selectedPath,
+        draft: {
+          storyType: fallback.desk.storyType ?? null,
+          fieldAnswers: fallback.desk.fieldAnswers ?? undefined,
+          paragraphs: fallback.paragraphs,
+        },
+      });
+    }
+    return fallback;
   }
 
   let redPen: string[] = [];
@@ -317,7 +487,10 @@ export async function runStoryEditor(
       continue;
     }
 
-    const paragraphs = normalizeParagraphs(draft.paragraphs);
+    const paragraphs = normalizeParagraphs(
+      draft.paragraphs,
+      intake.surfaceRole
+    );
     const scores = asScores(draft.scores);
     const issues = validateStoryDraft({
       headline: draft.headline ?? intake.headline,
@@ -329,6 +502,8 @@ export async function runStoryEditor(
       memorableInsight: draft.memorable_insight ?? null,
       requirePerfectScores: true,
       surfaceRole: intake.surfaceRole,
+      fieldAnswers: fieldAnswersForValidation(draft),
+      storyType: storyTypeFromDraft(draft),
     });
 
     const candidate = toResult(working, draft, pass, "full");
@@ -346,6 +521,18 @@ export async function runStoryEditor(
     });
 
     if (issues.length === 0 && allScoresAreFive(scores)) {
+      if (intake.surfaceRole === "local_news") {
+        return finalizeLocalNewsResult(intake, candidate, {
+          issues,
+          modelExecutionSuccess: true,
+          selectedPath: "full",
+          draft: {
+            storyType: candidate.desk.storyType ?? null,
+            fieldAnswers: candidate.desk.fieldAnswers ?? undefined,
+            paragraphs: candidate.paragraphs,
+          },
+        });
+      }
       return candidate;
     }
 
@@ -355,8 +542,6 @@ export async function runStoryEditor(
     }
   }
 
-  // Infrastructure breaker: prefer best fact-safe full draft if scores are strong,
-  // else honest thin rather than shipping a failed “excellent” claim.
   if (best) {
     const softIssues = validateStoryDraft({
       headline: best.headline,
@@ -368,16 +553,14 @@ export async function runStoryEditor(
       memorableInsight: best.desk.memorableInsight,
       requirePerfectScores: false,
       surfaceRole: intake.surfaceRole,
+      fieldAnswers: best.desk.fieldAnswers ?? null,
+      storyType: best.desk.storyType ?? null,
     });
-    const fatal = softIssues.filter((i) =>
-      [
-        "unsupported_numbers",
-        "placeholder",
-        "sensational",
-        "press_release",
-        "empty_body",
-        "ai_tells",
-      ].includes(i.code)
+    const fatal = softIssues.filter(
+      (i) =>
+        isFactIntegrityIssue(i.code) ||
+        i.code === "empty_body" ||
+        i.code === "ai_tells"
     );
     if (!fatal.length && best.paragraphs.length >= 2) {
       console.log("[storyEditor] breaker — publishing best safe draft", {
@@ -385,14 +568,13 @@ export async function runStoryEditor(
         passes: best.desk.passes,
         remainingIssues: softIssues.map((i) => i.code),
       });
-      return {
+      const result = {
         ...best,
         desk: {
           ...best.desk,
-          path: "full",
+          path: "full" as const,
           constitutions: {
             ...best.desk.constitutions,
-            // Perfect score gate not met — still learning-ready via lessons.
             storyStandard: softIssues.every(
               (i) => i.code === "score_below_five" || i.code === "no_insight"
             )
@@ -401,21 +583,63 @@ export async function runStoryEditor(
           },
         },
       };
+      if (intake.surfaceRole === "local_news") {
+        return finalizeLocalNewsResult(intake, result, {
+          issues: softIssues,
+          modelExecutionSuccess: true,
+          selectedPath: "full",
+          draft: {
+            storyType: result.desk.storyType ?? null,
+            fieldAnswers: result.desk.fieldAnswers ?? undefined,
+            paragraphs: result.paragraphs,
+          },
+        });
+      }
+      return result;
     }
   }
 
   console.log("[storyEditor] breaker — thin honest", {
     id: intake.id.slice(0, 48),
   });
-  return intake.surfaceRole === "local_news"
-    ? composeLocalNewsThinHonest(
-        working,
-        "Story Editor could not clear excellence gates within the build budget; published honest Local News briefing."
-      )
-    : composeThinHonest(
-        working,
-        "Story Editor could not clear excellence gates within the build budget; published honest briefing."
-      );
+  const fallback =
+    intake.surfaceRole === "local_news"
+      ? composeLocalNewsThinHonest(
+          working,
+          "Story Editor could not clear excellence gates within the build budget; published honest Local News briefing."
+        )
+      : composeThinHonest(
+          working,
+          "Story Editor could not clear excellence gates within the build budget; published honest briefing."
+        );
+
+  if (intake.surfaceRole === "local_news") {
+    const selectedPath: StoryEditorSelectedPath =
+      fallback.desk.path === "unavailable" ? "unavailable" : "thin_honest";
+    return finalizeLocalNewsResult(intake, fallback, {
+      issues: best ? validateStoryDraft({
+        headline: best.headline,
+        dek: best.dek,
+        paragraphs: best.paragraphs,
+        sourceText,
+        scores: best.desk.scores,
+        voluntaryFinish: best.desk.voluntaryFinish,
+        memorableInsight: best.desk.memorableInsight,
+        requirePerfectScores: false,
+        surfaceRole: intake.surfaceRole,
+        fieldAnswers: best.desk.fieldAnswers ?? null,
+        storyType: best.desk.storyType ?? null,
+      }) : [],
+      modelExecutionSuccess: Boolean(best),
+      selectedPath,
+      draft: {
+        storyType: fallback.desk.storyType ?? null,
+        fieldAnswers: fallback.desk.fieldAnswers ?? undefined,
+        paragraphs: fallback.paragraphs,
+      },
+    });
+  }
+  return fallback;
 }
 
 /**
@@ -426,12 +650,28 @@ export async function runStoryEditorSafe(
   apiKey: string | null | undefined
 ): Promise<StoryEditorResult> {
   if (!apiKey) {
-    return intake.surfaceRole === "local_news"
-      ? composeLocalNewsThinHonest(
-          intake,
-          "Story Editor unavailable — honest Local News briefing."
-        )
-      : composeWireFallback(intake);
+    const fallback =
+      intake.surfaceRole === "local_news"
+        ? composeLocalNewsThinHonest(
+            intake,
+            "Story Editor unavailable — honest Local News briefing."
+          )
+        : composeWireFallback(intake);
+    if (intake.surfaceRole === "local_news") {
+      const selectedPath: StoryEditorSelectedPath =
+        fallback.desk.path === "unavailable" ? "unavailable" : "thin_honest";
+      return finalizeLocalNewsResult(intake, fallback, {
+        issues: [],
+        modelExecutionSuccess: false,
+        selectedPath,
+        draft: {
+          storyType: fallback.desk.storyType ?? null,
+          fieldAnswers: fallback.desk.fieldAnswers ?? undefined,
+          paragraphs: fallback.paragraphs,
+        },
+      });
+    }
+    return fallback;
   }
   try {
     return await runStoryEditor(intake, apiKey);
@@ -440,14 +680,30 @@ export async function runStoryEditorSafe(
       id: intake.id.slice(0, 48),
       error: err instanceof Error ? err.message : String(err),
     });
-    return intake.surfaceRole === "local_news"
-      ? composeLocalNewsThinHonest(
-          intake,
-          "Story Editor threw — honest Local News fallback published."
-        )
-      : composeThinHonest(
-          intake,
-          "Story Editor threw — honest fallback published."
-        );
+    const fallback =
+      intake.surfaceRole === "local_news"
+        ? composeLocalNewsThinHonest(
+            intake,
+            "Story Editor threw — honest Local News fallback published."
+          )
+        : composeThinHonest(
+            intake,
+            "Story Editor threw — honest fallback published."
+          );
+    if (intake.surfaceRole === "local_news") {
+      const selectedPath: StoryEditorSelectedPath =
+        fallback.desk.path === "unavailable" ? "unavailable" : "thin_honest";
+      return finalizeLocalNewsResult(intake, fallback, {
+        issues: [],
+        modelExecutionSuccess: false,
+        selectedPath,
+        draft: {
+          storyType: fallback.desk.storyType ?? null,
+          fieldAnswers: fallback.desk.fieldAnswers ?? undefined,
+          paragraphs: fallback.paragraphs,
+        },
+      });
+    }
+    return fallback;
   }
 }

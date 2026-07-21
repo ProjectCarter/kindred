@@ -51,7 +51,14 @@ export type EditorialSpreadConfig<T> = {
     item: T,
     categoryCounts: ReadonlyMap<string, number>
   ) => number;
+  /** Hard eligibility — e.g. max two bowling alleys on the homepage spread. */
+  isCategoryEligible?: (
+    item: T,
+    categoryCounts: ReadonlyMap<string, number>
+  ) => boolean;
   weights?: Partial<EditorialDiversityWeights>;
+  /** Prior picks counted toward caps — used when filling remaining homepage slots. */
+  seedSelected?: readonly T[];
 };
 
 export type EditorialSpreadResult<T> = {
@@ -187,8 +194,8 @@ export function selectEditorialSpread<T>(
     ...config.weights,
   };
 
-  const selected: T[] = [];
-  const selectedKeys = new Set<string>();
+  const selected: T[] = config.seedSelected ? [...config.seedSelected] : [];
+  const selectedKeys = new Set(selected.map((item) => config.getItemKey(item)));
   const categoryCounts = new Map<string, number>();
 
   const addCategoryCount = (item: T) => {
@@ -197,15 +204,23 @@ export function selectEditorialSpread<T>(
     categoryCounts.set(key, (categoryCounts.get(key) ?? 0) + 1);
   };
 
+  for (const item of selected) {
+    addCategoryCount(item);
+  }
+
   while (selected.length < config.maxSlots) {
     const unpicked = candidates.filter((item) => !selectedKeys.has(config.getItemKey(item)));
     if (!unpicked.length) break;
 
     const slotsRemaining = config.maxSlots - selected.length;
 
+    const passesCategoryCap = (candidate: T) =>
+      !config.isCategoryEligible || config.isCategoryEligible(candidate, categoryCounts);
+
     let pool = unpicked.filter(
       (candidate) =>
         !isNearDuplicateCandidate(candidate, selected, config.isNearDuplicate) &&
+        passesCategoryCap(candidate) &&
         isVenueEligibleForSpread(
           candidate,
           selected,
@@ -218,7 +233,9 @@ export function selectEditorialSpread<T>(
 
     if (!pool.length) {
       pool = unpicked.filter(
-        (candidate) => !isNearDuplicateCandidate(candidate, selected, config.isNearDuplicate)
+        (candidate) =>
+          !isNearDuplicateCandidate(candidate, selected, config.isNearDuplicate) &&
+          passesCategoryCap(candidate)
       );
     }
 

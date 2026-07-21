@@ -19,13 +19,17 @@ import {
 } from "./eventHorizon";
 import { selectEditorialHomepageLocalEvents } from "./localEventsHomepage";
 import {
-  authorizedEventImageUrl,
   parseEventImageRights,
+  authorizedEventImageUrl,
   type EventImageRights,
 } from "./eventImageRights";
 import { validateBanditNote, validateEditorialHeadline, sanitizeEventEditorialParagraphs } from "./eventEditorial";
 import { passesEventGoldenTest } from "./eventStorytelling";
 import { resolveEventCategoryIcon } from "./categoryIcon";
+import {
+  applyLocalEventPresentation,
+  resolveEventDisplayHeadline,
+} from "./localEventPresentation";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -56,23 +60,17 @@ export function eventCategoryLabel(category?: LocalEventCategory | null): string
   return EVENT_CATEGORY_LABEL[category] ?? null;
 }
 
-/**
- * Genre fallback art is disabled until listing photography is source-authorized.
- */
-/**
- * @deprecated Listing photography requires source authorization — use
- * `authorizedEventImageUrl` instead. Kept for legacy call sites during migration.
- */
-export function eventFallbackImage(
-  category?: LocalEventCategory | null,
-  id?: string | null
-): ImageSourcePropType | null {
-  void category;
-  void id;
-  return null;
-}
-
 export { authorizedEventImageUrl } from "./eventImageRights";
+export {
+  eventCategoryFallbackImage,
+  eventDisplayImageKind,
+  eventDisplayImageSource,
+  eventFallbackImage,
+  eventHasDisplayImage,
+  resolveEventDisplayImage,
+  type EventDisplayImageKind,
+  type ResolvedEventDisplayImage,
+} from "./eventDisplayImage";
 
 export type LocalEventCard = {
   name: string;
@@ -279,9 +277,12 @@ export function normalizeEditorialHeadline(
 }
 
 export function eventDisplayHeadline(
-  event: Pick<LocalEventCard, "name" | "editorialHeadline">
+  event: Pick<
+    LocalEventCard,
+    "name" | "editorialHeadline" | "venue" | "city" | "category"
+  >
 ): string {
-  return event.editorialHeadline?.trim() || event.name.trim();
+  return resolveEventDisplayHeadline(event);
 }
 
 function normalizeEditorialBody(value: unknown): string[] | undefined {
@@ -379,7 +380,7 @@ export function parseLocalEventsBody(
             category,
             banditNote,
           });
-        return {
+        return applyLocalEventPresentation({
           name,
           date: typeof e.date === "string" && e.date.trim() ? e.date.trim() : "Date TBA",
           time: typeof e.time === "string" && e.time.trim() ? e.time.trim() : "Time TBA",
@@ -405,7 +406,6 @@ export function parseLocalEventsBody(
           ...(editorialHeadline ? { editorialHeadline } : {}),
           ...(editorialBody ? { editorialBody } : {}),
           category,
-          categoryIcon: resolveEventCategoryIcon({ name, venue, category }),
           badges: badges.length ? badges : undefined,
           startDateIso:
             typeof e.startDateIso === "string" && e.startDateIso.trim()
@@ -443,8 +443,15 @@ export function parseLocalEventsBody(
                 )
                 .slice(0, 6)
             : null,
-        };
-      });
+        });
+      }).map((event) => ({
+        ...event,
+        categoryIcon: resolveEventCategoryIcon({
+          name: event.name,
+          venue: event.venue,
+          category: event.category,
+        }),
+      }));
 
     const { valid, dropped } = filterValidEvents(mapped);
     const owned = filterEventsForLocalEventsDesk(valid);

@@ -8,6 +8,7 @@
  */
 
 import { Linking, Platform } from "react-native";
+import { trackEvent } from "../analytics/trackEvent";
 import { isUsableStreetAddress } from "./verifiedLocation";
 
 export const GOOGLE_MAPS_ACTION_LABEL = "Open in Google Maps";
@@ -83,6 +84,7 @@ export async function openGoogleMapsDestination(
         const canOpen = await Linking.canOpenURL(appUrl);
         if (canOpen) {
           await Linking.openURL(appUrl);
+          trackEvent("maps_opened");
           return true;
         }
       } catch {
@@ -93,6 +95,7 @@ export async function openGoogleMapsDestination(
 
   try {
     await Linking.openURL(webUrl);
+    trackEvent("maps_opened");
     return true;
   } catch {
     return false;

@@ -12,6 +12,12 @@ import {
   hoursSincePublished,
   isPressReleaseWire,
 } from "./localNewsFreshness.ts";
+import {
+  assessLocalNewsGeographicEligibility,
+  geographicTierPriority,
+  hasMinimumLeadSourceMaterial,
+  type LocalNewsGeographicDiagnostic,
+} from "./localNewsGeographicEligibility.ts";
 
 /** True Local News leads — published within this window only. */
 export const LOCAL_NEWS_DESK_MAX_HOURS = 24;
@@ -184,6 +190,10 @@ function matchesHometownTeamText(
   return false;
 }
 
+export type { LocalNewsGeographicDiagnostic } from "./localNewsGeographicEligibility.ts";
+
+export { assessLocalNewsGeographicEligibility, hasMinimumLeadSourceMaterial };
+
 export function localNewsDeskBadge(
   contentType: LocalNewsContentType | null | undefined
 ): string {
@@ -193,6 +203,7 @@ export function localNewsDeskBadge(
 
 export function classifyLocalNewsContentType(
   input: {
+    id?: string;
     title?: string | null;
     description?: string | null;
     source?: string | null;
@@ -206,27 +217,33 @@ export function classifyLocalNewsContentType(
   }
 ): LocalNewsContentType {
   const hay = haystack(input);
-  const sportsMarketId = resolveDeskSportsMarketId(place);
+  const geo = assessLocalNewsGeographicEligibility({
+    id: input.id ?? input.title ?? "unknown",
+    title: input.title ?? "",
+    description: input.description,
+    source: input.source,
+    category: input.category,
+    place: place ?? {},
+  });
 
-  if (
-    matchesHometownTeamText(`${input.title ?? ""} ${input.description ?? ""}`, sportsMarketId) ||
-    includesAny(hay, SPORTS_GENERIC_HINTS) ||
-    input.category?.toLowerCase() === "sports"
-  ) {
-    return "sports";
+  if (!geo.eligible) {
+    return "local_news";
   }
 
-  if (includesAny(hay, WEATHER_HINTS) || input.category?.toLowerCase() === "weather") {
+  if (geo.geographicTier === "weather" || includesAny(hay, WEATHER_HINTS)) {
     return "weather";
   }
 
-  if (includesAny(hay, COMMUNITY_HINTS)) {
-    // Newspaper/TV reporting about civic affairs stays Local News.
+  if (geo.geographicTier === "community" || includesAny(hay, COMMUNITY_HINTS)) {
     const sourceHay = (input.source ?? "").toLowerCase();
     if (includesAny(sourceHay, LOCAL_OUTLET_HINTS)) {
       return "local_news";
     }
     return "community";
+  }
+
+  if (geo.geographicTier === "state_sports") {
+    return "sports";
   }
 
   return "local_news";
@@ -310,6 +327,43 @@ export function buildCommunityNewsQuery(input: {
   return `"${city}" AND (council OR "road closure" OR parks OR "school district" OR "public safety" OR infrastructure)`;
 }
 
+/** Phoenix metro / East Valley reporting for Gilbert readers. */
+export function buildMetroNewsQuery(input: {
+  city?: string | null;
+  state?: string | null;
+  region?: string | null;
+  metroKey?: string | null;
+}): string | null {
+  const marketId = resolveDeskSportsMarketId(input);
+  const aliases = marketId
+    ? (SPORTS_MARKET_CATALOG.find((m) => m.id === marketId)?.cityAliases ?? [])
+    : [];
+  const tokens = Array.from(
+    new Set(
+      [input.city?.trim(), ...aliases.map((a) => a.trim())].filter(Boolean) as string[]
+    )
+  ).slice(0, 6);
+  if (tokens.length === 0) return null;
+  return tokens.map((t) => `"${t}"`).join(" OR ");
+}
+
+/** Arizona statewide reporting with local relevance. */
+export function buildStatewideNewsQuery(input: {
+  state?: string | null;
+  region?: string | null;
+}): string | null {
+  const state = (input.state ?? input.region ?? "").trim();
+  if (!state || state.length < 2) return null;
+  const stateName =
+    state.length === 2
+      ? ({ AZ: "Arizona", CA: "California", TX: "Texas", WA: "Washington" } as Record<
+          string,
+          string
+        >)[state.toUpperCase()] ?? state
+      : state;
+  return `"${stateName}" AND (government OR community OR health OR education OR public OR statewide)`;
+}
+
 export type LocalNewsDeskSelectInput<T> = {
   now?: Date;
   recentStoryKeys?: string[];
@@ -349,10 +403,23 @@ export function selectLocalNewsDeskLead<
   const classified = candidates
     .filter((c) => c.score >= minScore)
     .filter((c) => !isPressReleaseBlockedAsLead(c, now))
-    .map((c) => ({
-      candidate: c,
-      contentType: classifyLocalNewsContentType(c, input.place),
-    }))
+    .map((c) => {
+      const geo = assessLocalNewsGeographicEligibility({
+        id: c.id,
+        title: c.title ?? "",
+        description: c.description,
+        source: c.source,
+        category: c.category,
+        score: c.score,
+        place: input.place ?? {},
+      });
+      return {
+        candidate: c,
+        contentType: classifyLocalNewsContentType(c, input.place),
+        geo,
+      };
+    })
+    .filter(({ geo }) => geo.eligible)
     .filter(({ candidate, contentType }) =>
       isEligibleLocalNewsDeskAge(candidate.publishedAt, contentType, now)
     )
@@ -362,6 +429,10 @@ export function selectLocalNewsDeskLead<
     a: (typeof classified)[number],
     b: (typeof classified)[number]
   ) => {
+    const tierDelta =
+      geographicTierPriority(b.geo.geographicTier) -
+      geographicTierPriority(a.geo.geographicTier);
+    if (tierDelta !== 0) return tierDelta;
     const press =
       Number(isPressReleaseWire(a.candidate)) -
       Number(isPressReleaseWire(b.candidate));

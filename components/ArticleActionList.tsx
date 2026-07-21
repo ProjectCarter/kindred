@@ -3,6 +3,7 @@ import { paper, press } from "../lib/edition/newspaperTheme";
 import type { ActionBarAction } from "../lib/edition/actionBar";
 import { openGoogleMapsDestination } from "../lib/edition/googleMaps";
 import type { MapsDestination } from "../lib/edition/googleMaps";
+import { trackActionBarExternalAction } from "../lib/analytics";
 
 type Props = {
   actions: ActionBarAction[];
@@ -22,6 +23,7 @@ function openPhone(phone: string) {
 
 function handlePress(action: ActionBarAction) {
   if (action.kind === "url" && action.url) {
+    trackActionBarExternalAction(action);
     openUrl(action.url);
     return;
   }

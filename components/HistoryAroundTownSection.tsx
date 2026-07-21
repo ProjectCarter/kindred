@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Image,
   Pressable,
@@ -8,6 +9,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import type { HistoryAroundTownCard } from "../lib/edition/historyAroundTown/types";
+import { trackSectionViewedOnce } from "../lib/analytics";
 import { paper, press, space } from "../lib/edition/newspaperTheme";
 
 type Props = {
@@ -27,6 +29,13 @@ export function HistoryAroundTownSection({
   seeAllTotal,
 }: Props) {
   const { width: screenW } = useWindowDimensions();
+
+  useEffect(() => {
+    if (cards.length > 0) {
+      trackSectionViewedOnce("history_around_town");
+    }
+  }, [cards.length]);
+
   if (!cards.length) return null;
 
   const folioGutter = space.folioGutter;

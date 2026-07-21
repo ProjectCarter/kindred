@@ -9,7 +9,9 @@ import {
 } from "../../../../lib/edition/localNewsFreshness.ts";
 import {
   buildCommunityNewsQuery,
+  buildMetroNewsQuery,
   buildStateSportsNewsQuery,
+  buildStatewideNewsQuery,
   buildWeatherNewsQuery,
 } from "../../../../lib/edition/localNewsDesk.ts";
 
@@ -271,8 +273,10 @@ export async function fetchLocalStoryCandidates(
   const sportsQuery = buildStateSportsNewsQuery(place);
   const weatherQuery = buildWeatherNewsQuery(place);
   const communityQuery = buildCommunityNewsQuery(place);
+  const metroQuery = buildMetroNewsQuery(place);
+  const statewideQuery = buildStatewideNewsQuery(place);
 
-  if (!localQuery && !sportsQuery && !weatherQuery && !communityQuery) {
+  if (!localQuery && !sportsQuery && !weatherQuery && !communityQuery && !metroQuery && !statewideQuery) {
     console.log("[stories] local candidate pool skipped — no city/state query");
     return [];
   }
@@ -298,6 +302,36 @@ export async function fetchLocalStoryCandidates(
         now,
       }).then((result) => ({
         label: `local:${localQuery}`,
+        category: null,
+        result,
+      }))
+    );
+  }
+  if (metroQuery && metroQuery !== localQuery) {
+    requests.push(
+      fetchLocalEverything({
+        apiKey,
+        query: metroQuery,
+        pageSize: 10,
+        from,
+        now,
+      }).then((result) => ({
+        label: `metro:${metroQuery.slice(0, 80)}`,
+        category: null,
+        result,
+      }))
+    );
+  }
+  if (statewideQuery) {
+    requests.push(
+      fetchLocalEverything({
+        apiKey,
+        query: statewideQuery,
+        pageSize: 10,
+        from,
+        now,
+      }).then((result) => ({
+        label: `statewide:${statewideQuery.slice(0, 80)}`,
         category: null,
         result,
       }))

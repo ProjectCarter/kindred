@@ -54,11 +54,14 @@ test("classifies weather and community desks", () => {
     "weather"
   );
   assert.equal(
-    classifyLocalNewsContentType({
-      title: "Gilbert road closures begin Monday",
-      description: "City announces construction detours.",
-      source: "Town of Gilbert",
-    }),
+    classifyLocalNewsContentType(
+      {
+        title: "Gilbert road closures begin Monday",
+        description: "City announces construction detours.",
+        source: "Town of Gilbert",
+      },
+      PLACE
+    ),
     "community"
   );
 });

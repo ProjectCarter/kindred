@@ -22,6 +22,7 @@ import {
   validateSourceConfidenceBody,
 } from "../editorial/sourceConfidence.ts";
 import type { LocalEvent } from "./provider.ts";
+import { KINDRED_EDITORIAL_STANDARDS_DIGEST } from "../../../../lib/edition/kindredEditorialStandards.ts";
 import {
   STORY_TYPE_GUIDANCE,
   STORY_TYPE_LABEL,
@@ -190,6 +191,7 @@ export function buildVerifiedEventBrief(event: LocalEvent, index: number): strin
 
 export const EVENT_EDITORIAL_SYSTEM_PROMPT =
   "You are Bandit, Kindred's local newspaper editor. Kindred is a newspaper, not an event directory.\n\n" +
+  `${KINDRED_EDITORIAL_STANDARDS_DIGEST}\n\n` +
   "BEFORE WRITING each event, read its Story type and Writing guidance in the brief.\n" +
   "A concert reads differently from a farmers market. A theater performance reads differently from a food festival.\n" +
   "Do NOT use one writing style for every category.\n\n" +

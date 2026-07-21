@@ -11,9 +11,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test("topStoriesFromEditorialContext parses body paragraphs", () => {
-  const source = readFileSync(path.join(__dirname, "./topStories.ts"), "utf8");
+  const source = readFileSync(
+    path.join(__dirname, "./topStoriesFromContext.ts"),
+    "utf8"
+  );
   assert.match(source, /body: Array\.isArray\(item\.body\)/);
   assert.match(source, /item\.dek\?\.trim\(\)/);
+  assert.match(source, /item\.desk/);
 });
 
 test("articleFromTopStory prefers edited body over card summary", () => {
@@ -50,7 +54,11 @@ test("EditionReader always mounts Local News folio", () => {
   );
   assert.match(source, /resolveLocalNewsHomePackage/);
   assert.match(source, /LOCAL_NEWS_EMPTY_PLACEHOLDER/);
-  assert.match(source, /\[LOCAL_NEWS_RENDER_PROOF\] section mounted/);
+  assert.match(source, /NewsArticleSection/);
+  assert.match(source, /localNewsArticleTeasers/);
+  assert.match(source, /National News/);
+  assert.match(source, /nationalNewsArticleTeasers/);
+  assert.match(source, /NATIONAL_NEWS_EMPTY_PLACEHOLDER/);
   assert.match(source, /FolioReveal index=\{folioCursor\+\+\} disabled/);
   assert.doesNotMatch(
     source,

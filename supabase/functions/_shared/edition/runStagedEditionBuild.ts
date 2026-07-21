@@ -26,6 +26,10 @@ import {
   parseEditionBuildStage,
 } from "./editionBuildStages.ts";
 import {
+  HOMEPAGE_INITIAL_RENDER_COUNT,
+  LOCAL_EVENTS_EDITION_SURFACED_MAX,
+} from "../editorial/publishing.ts";
+import {
   buildStageDiagnostic,
   logEditionBuildStageDiagnostic,
 } from "./stageDiagnostics.ts";
@@ -55,7 +59,7 @@ import { composeHeroWeatherTag } from "../weather/heroWeatherTag.ts";
 import { getLocalPlacesForEdition } from "../places/index.ts";
 import { allocateLocalEventsByHorizon } from "../localEvents/horizonAllocator.ts";
 import { assertEventsVerifiedForPublication } from "../localEvents/eventDateVerification.ts";
-import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "../editorial/publishing.ts";
+import { surfaceLocalEventsForEdition } from "../localEvents/surfaceLocalEventsForEdition.ts";
 import type { LocalEvent } from "../localEvents/provider.ts";
 import { resolveEventTimezone } from "../localEvents/eventTimezone.ts";
 import { runDiscoveryDecisions } from "../discovery/index.ts";
@@ -72,7 +76,6 @@ import { loadPersonalizationProfile } from "../personalization/index.ts";
 import { assessMinimumViableEdition } from "./minimumViableEdition.ts";
 import { triggerUserEditionJobWorker } from "./triggerUserEditionJobWorker.ts";
 import type { RunUserGenerationJobInput } from "./runUserGenerationJob.ts";
-import { eventHasPublishableEditorial } from "../localEvents/banditNotes.ts";
 import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.ts";
 import { filterEventsForLocalEventsDesk } from "./editionSectionOwnership.ts";
 import { allocateDiscoverySections } from "../discovery/sectionAllocation.ts";
@@ -432,17 +435,26 @@ async function runLocalEventsStage(
     readerLon: ctx.location.lon,
   });
 
+  const reservePool = owned.kept.filter(
+    (candidate) =>
+      !allocated.some(
+        (picked) =>
+          `${picked.name}|${picked.startDateTime}`.toLowerCase() ===
+          `${candidate.name}|${candidate.startDateTime}`.toLowerCase()
+      )
+  );
+
   let publishable: LocalEvent[] = [];
-  const enrichBatch = allocated.slice(0, 8);
-  if (enrichBatch.length > 0) {
-    const enriched = await enrichEventsWithBanditNotes(enrichBatch, {
+  if (allocated.length > 0) {
+    publishable = await surfaceLocalEventsForEdition(allocated, reservePool, {
       editionDate: ctx.editionDate,
-      maxGenerate: 4,
+      allowAiEnrichment: Boolean(Deno.env.get("ANTHROPIC_API_KEY")),
+      homepageMinimum: HOMEPAGE_INITIAL_RENDER_COUNT,
+      now: editionDateObj,
+      readerCity: ctx.location.city,
+      readerLat: ctx.location.lat,
+      readerLon: ctx.location.lon,
     });
-    for (const event of enriched) {
-      if (eventHasPublishableEditorial(event)) publishable.push(event);
-      if (publishable.length >= LOCAL_EVENTS_EDITION_SURFACED_MAX) break;
-    }
   }
 
   publishable = assertEventsVerifiedForPublication(publishable, {

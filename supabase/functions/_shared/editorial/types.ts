@@ -103,6 +103,7 @@ export type BuildEditorialContextInput = {
       dek?: string | null;
       /** Story Editor paragraphs when the desk has rewritten the story. */
       body?: string[];
+      desk?: Record<string, unknown> | null;
       url?: string | null;
       imageUrl?: string | null;
       role: string;

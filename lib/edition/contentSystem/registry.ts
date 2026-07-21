@@ -39,10 +39,9 @@ export const CONTENT_TEMPLATES: Record<ContentType, ContentTemplate> = {
       "Where to learn more locally",
     ],
     fields: [
-      { id: "where", label: "Where", answers: "Neighborhood, venue, or corridor" },
-      { id: "who_affected", label: "Who feels it", answers: "Residents, workers, students, visitors" },
-      { id: "what_next", label: "What to watch", answers: "Meetings, votes, openings, deadlines" },
-      { id: "how_to_help", label: "If you want to help", answers: "Practical next step when one exists" },
+      { id: "background", label: "BACKGROUND", answers: "Historical context and verified timeline" },
+      { id: "why_it_matters", label: "WHY IT MATTERS", answers: "Who is affected and why readers should care" },
+      { id: "looking_ahead", label: "LOOKING AHEAD", answers: "What to expect next — or that updates are expected" },
     ],
   }),
 

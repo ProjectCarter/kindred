@@ -1,4 +1,5 @@
 import type { LeadStory } from "./LeadStory";
+import { articleFromLocalNewsStory } from "./localNewsArticle";
 import {
   formatDiscoveryWhy,
   type DiscoveryItem,
@@ -93,6 +94,8 @@ export type KindredArticle = {
   closingBanditNote?: string | null;
   /** Publisher URL for "Read Original Article". */
   sourceUrl?: string | null;
+  /** Compact attribution / limits note — Local News footer only. */
+  briefingFooterNote?: string | null;
   estimatedReadMinutes?: number | null;
   /**
    * Universal Content System — which editorial desk template to use.
@@ -236,7 +239,27 @@ export function formatArticlePublishedAt(
  * Uses the edition lead payload — never substitutes demo/gold-standard copy.
  */
 export function articleFromLeadStory(lead: LeadStory): KindredArticle {
-  const section = lead.role === "local" ? "local_news" : "lead";
+  if (lead.role === "local") {
+    const bodyText =
+      lead.body?.length && lead.body.join("").trim()
+        ? lead.body
+        : [lead.summary];
+    return articleFromLocalNewsStory({
+      id: lead.id,
+      headline: lead.headline,
+      body: bodyText,
+      dek: lead.dek ?? lead.summary,
+      source: lead.source,
+      sourceUrl: lead.url,
+      publishedAt: lead.publishedAt,
+      imageUrl: lead.heroImage?.uri ?? null,
+      imageCaption: lead.heroImage?.alt ?? lead.headline,
+      role: lead.role,
+      desk: lead.desk,
+    });
+  }
+
+  const section = "lead";
   const bodyText =
     lead.body?.length && lead.body.join("").trim()
       ? lead.body.join("\n\n")
@@ -434,9 +457,13 @@ export function articleFromSectionItem(input: {
     body = [input.body.trim()];
   }
   if (!body.length) {
-    body = [
-      "The note on this one is short — the full report lives with the original source.",
-    ];
+    if (__DEV__) {
+      console.warn("[article] empty body after dedupe", {
+        id: input.id,
+        section: input.section,
+        hasDek: Boolean(dek),
+      });
+    }
   }
   const article: KindredArticle = {
     id: input.id,

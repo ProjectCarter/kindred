@@ -39,6 +39,9 @@ import {
 } from "./editorialVoice";
 import { containsGenericAiPhrase } from "./editorialIntelligence";
 import {
+  validateKindredArticleProse,
+} from "./kindredArticleProse";
+import {
   hasHumanDetailSignal,
   humanDetailObservationForCategory,
 } from "./humanDetails";
@@ -979,17 +982,39 @@ export function composePlaceDiscoveryArticle(input: {
     body,
   });
 
+  let finalBody = validated.valid
+    ? body
+    : sanitizeReaderParagraphs([
+        opening,
+        brief.who,
+        brief.howLong,
+        practicalTips,
+        closing,
+      ]);
+
+  const prose = validateKindredArticleProse({
+    headline: title,
+    dek: note || dek,
+    body: finalBody,
+    desk: "discovery",
+    subjectTokens: [title, city].filter(Boolean),
+  });
+
+  if (!prose.passes) {
+    finalBody = sanitizeReaderParagraphs(finalBody);
+    const safeClosing =
+      humanDetailObservationForCategory(typeLabel, city) ||
+      `Worth a visit when you want something local and specific${
+        city ? ` in ${city}` : ""
+      }.`;
+    if (finalBody.length > 0) {
+      finalBody = [...finalBody.slice(0, -1), safeClosing];
+    }
+  }
+
   return {
     dek,
-    body: validated.valid
-      ? body
-      : sanitizeReaderParagraphs([
-          opening,
-          brief.who,
-          brief.howLong,
-          practicalTips,
-          closing,
-        ]),
+    body: finalBody,
     fieldAnswers: safeFieldAnswers,
   };
 }

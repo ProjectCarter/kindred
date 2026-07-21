@@ -14,6 +14,7 @@ import { discoveryItemsForSurface } from "./discoveryPayload.ts";
 import { DISCOVERY_PUBLISH_MIN_SCORE } from "../editorial/publishing.ts";
 import { shouldPublishEditorialConfidence } from "../editorial/confidence.ts";
 import {
+  isActivityProShopParts,
   isParticipatoryActivityVenue,
   venueHayFromParts,
 } from "../editorial/venueQuality.ts";
@@ -78,6 +79,15 @@ function belongsInActivities(item: RankedDiscoveryItem): boolean {
   if (item.item.category === "hiking") return true;
 
   if (item.item.category === "activities") {
+    if (
+      isActivityProShopParts([
+        item.item.title,
+        item.item.dek,
+        ...(item.item.venueCategories ?? []),
+      ])
+    ) {
+      return false;
+    }
     const hay = venueHayFromParts([
       item.item.title,
       item.item.dek,

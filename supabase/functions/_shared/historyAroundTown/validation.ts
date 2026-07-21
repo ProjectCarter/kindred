@@ -1,4 +1,6 @@
 import type { HistoryPlaceRow, HistoryPlaceValidationStatus } from "./types.ts";
+import { validateKindredArticleProse } from "../../../../lib/edition/kindredArticleProse.ts";
+import { containsGenericAiPhrase } from "../editorial/editorialIntelligence.ts";
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -23,6 +25,17 @@ export function isApprovedHistoryPlace(row: HistoryPlaceRow): boolean {
   if (!Array.isArray(row.interesting_facts) || row.interesting_facts.length < 1) {
     return false;
   }
+  if (containsGenericAiPhrase(row.story_body) || containsGenericAiPhrase(row.closing_note)) {
+    return false;
+  }
+  const prose = validateKindredArticleProse({
+    headline: row.place_name,
+    dek: row.editorial_teaser,
+    body: row.story_body,
+    desk: "history_place",
+    subjectTokens: [row.place_name, row.city ?? ""].filter(Boolean),
+  });
+  if (!prose.passes) return false;
   return row.approval_status === "approved";
 }
 

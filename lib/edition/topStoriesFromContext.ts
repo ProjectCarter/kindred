@@ -21,6 +21,7 @@ export type TopStoryItem = {
   role?: string | null;
   contentType?: "local_news" | "sports" | "weather" | "community" | null;
   deskBadge?: string | null;
+  desk?: Record<string, unknown> | null;
 };
 
 /** Pull individual Top Stories from stored editorial_context. */
@@ -65,6 +66,10 @@ export function topStoriesFromEditorialContext(
       imageUrl: item.imageUrl ?? null,
       publishedAt: item.publishedAt ?? null,
       role: item.role ?? null,
+      desk:
+        item.desk && typeof item.desk === "object"
+          ? (item.desk as Record<string, unknown>)
+          : null,
     });
   }
   return out;

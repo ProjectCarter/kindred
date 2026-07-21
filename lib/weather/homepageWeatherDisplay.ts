@@ -14,6 +14,8 @@ export type HomepageWeatherDisplay = {
   current: string;
   highLow: string | null;
   condition: HomepageWeatherCondition;
+  /** One verified planning sentence tied to today's edition desks. */
+  planningNote?: string | null;
 };
 
 export type ResolveHomepageWeatherInput = {

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Text,
   View,
@@ -6,11 +7,13 @@ import {
   Linking,
   type ColorValue,
 } from "react-native";
+import { trackExternalUrlOpened, trackSectionViewedOnce } from "../lib/analytics";
 import { SymbolView } from "expo-symbols";
 import { Ionicons } from "@expo/vector-icons";
 import type { SFSymbol } from "expo-symbols";
 import {
   eventCategoryLabel,
+  eventDisplayHeadline,
   parseLocalEventsBody,
   type LocalEventCard,
 } from "../lib/edition/localEvents";
@@ -56,6 +59,7 @@ function openMaps(event: LocalEventCard) {
 
 function openEvent(event: LocalEventCard) {
   if (event.sourceUrl) {
+    trackExternalUrlOpened(event.sourceUrl, { surface: "local_events" });
     void Linking.openURL(event.sourceUrl).catch(() => {
       /* Ignore broken / blocked URLs. */
     });
@@ -150,6 +154,12 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
   const events = parseLocalEventsBody(body);
   const colors = useNewspaperColors();
 
+  useEffect(() => {
+    if (events?.length) {
+      trackSectionViewedOnce("local_events");
+    }
+  }, [events?.length]);
+
   if (!events) {
     return (
       <View>
@@ -176,6 +186,7 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
       </Text>
 
       {events.map((event, index) => {
+        const headlineText = eventDisplayHeadline(event);
         const venueLine = [event.venue, event.city].filter(Boolean).join(", ");
         const isLast = index === events.length - 1;
 
@@ -195,8 +206,8 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
               accessibilityRole={event.sourceUrl ? "link" : undefined}
               accessibilityLabel={
                 event.sourceUrl
-                  ? `Open event: ${event.name}`
-                  : event.name
+                  ? `Open event: ${headlineText}`
+                  : headlineText
               }
               hitSlop={{ top: 6, bottom: 4, left: 2, right: 2 }}
               style={({ pressed }) => [
@@ -216,7 +227,7 @@ export function LocalEventsSection({ headline, body, sourceNote }: Props) {
                 style={[styles.eventName, { color: colors.ink }]}
                 maxFontSizeMultiplier={1.4}
               >
-                {event.name}
+                {headlineText}
               </Text>
 
               <EventInfoBadgeRow

@@ -68,9 +68,11 @@ interchangeable. Readers should feel a real editor wrote each piece for them.
 Reader finishes thinking: *"I learned something I didn't know."*
 —not— *"That sounded just like the last article."*
 
-## Publication gates — all four tests
+## Publication gates
 
-Every article must pass:
+**Foundation:** `kindred-newspaper-editorial-standards.mdc` — every article, every desk.
+
+Every article must also pass:
 
 1. **Accuracy Test** — verified facts only
 2. **Swap Test** — no reusable conclusions (this rule)
