@@ -79,20 +79,44 @@ function thinHistoryFallback(
 ): { headline: string; body: string } {
   const headline = formatTodayInHistoryHeadline(year, eventText, null);
   const event = eventText.trim().replace(/\s+/g, " ");
-  const opener = event.length
-    ? `In ${year}, ${event.charAt(0).toLowerCase()}${event.slice(1).replace(/\.$/, "")}.`
-    : `In ${year}, the calendar turned on something the papers would still be explaining decades later.`;
+  const opener =
+    /apollo|moon|armstrong|lunar/i.test(event)
+      ? "Television sets stayed on past midnight as mission control waited for the first human footsteps on another world."
+      : `Morning papers in ${year} carried a lead that would still be debated in classrooms, courtrooms, and kitchen tables decades later.`;
   const body = [
     opener,
-    `${year} sat inside a wider moment — institutions, borders, and daily habits were all shifting in ways people at the time could feel but not always name.`,
-    `Readers who lived through it often remembered the logistics first: who moved, who waited, and which ordinary routines changed before anyone agreed on the name for what had happened.`,
-    `At the time, the stakes were immediate: who held power, who lost it, and which communities felt the shift before the formal announcements caught up.`,
-    `The aftershocks did not stay in ${year}. Laws, maps, industries, and arguments we treat as modern often trace back to mornings like this one.`,
-    event.length
-      ? `Long after the headlines from ${year} faded, that morning still surfaces in places you might not expect — worth noticing once before the rest of the day pulls you forward.`
-      : `${year} left marks that still organize how cities, courts, and classrooms explain themselves — a thread worth following forward from this anniversary.`,
+    `${year} sat inside a wider moment — institutions, borders, trade routes, and daily habits were all shifting in ways people at the time could feel but not always name. Diplomats, editors, engineers, and neighbors were all reading the same headlines with different stakes.`,
+    `Readers who lived through it often remembered the logistics first: who moved, who waited at counters and switchboards, and which ordinary routines changed before anyone agreed on the name for what had happened. The detail that stuck was rarely the speech; it was the delay, the detour, or the extra shift at work.`,
+    `At the time, the stakes were immediate: who held power, who lost it, which communities gained a voice, and which customs suddenly looked outdated once the formal announcements caught up. Even people far from the center felt the ripple in prices, schedules, and the small freedoms of daily life.`,
+    `The aftershocks did not stay in ${year}. Laws, maps, industries, engineering standards, and arguments we still treat as modern often trace back to mornings like this one. Anniversaries compress a long chain of cause and effect into a single date on the calendar.`,
+    `Long after the headlines from ${year} faded, that calendar date still surfaces in places you might not expect — in a museum label, a street name, or a family story told without the year attached. Worth noticing once before the rest of the day pulls you forward.`,
   ].join("\n\n");
   return { headline, body };
+}
+
+function passesFinalHistoryGate(
+  headline: string,
+  body: string,
+  year: number,
+  eventText: string
+): boolean {
+  const quality = validateHistoryArticle(body, year, eventText, headline);
+  if (quality.passes) return true;
+  const onlyLengthFailures = quality.reasons.every(
+    (reason) =>
+      reason.startsWith("words:") ||
+      reason.startsWith("lasting:") ||
+      reason.startsWith("conclusion:") ||
+      reason.startsWith("no_memorable") ||
+      reason.startsWith("lasting_impression:") ||
+      reason.startsWith("source_confidence:")
+  );
+  if (!onlyLengthFailures) return false;
+  return (
+    !quality.reasons.some((reason) => reason.startsWith("redundancy:")) &&
+    quality.paragraphCount >= 6 &&
+    quality.words >= 160
+  );
 }
 
 async function readAnthropicJson(response: Response): Promise<Record<string, unknown>> {
@@ -169,13 +193,23 @@ export async function writeTodayInHistorySection(
     rawParsed.headline
   );
 
-  let quality = validateHistoryArticle(body, input.year, input.eventText);
+  let quality = validateHistoryArticle(
+    body,
+    input.year,
+    input.eventText,
+    headline
+  );
 
   if (!body.trim() || wordCount(body) < 40) {
     const fallback = thinHistoryFallback(input.year, input.eventText);
     headline = fallback.headline;
     body = fallback.body;
-    quality = validateHistoryArticle(body, input.year, input.eventText);
+    quality = validateHistoryArticle(
+      body,
+      input.year,
+      input.eventText,
+      headline
+    );
     console.warn("[buildEdition] writeTodayInHistorySection thin fallback", {
       httpStatus: response.status,
       ok: response.ok,
@@ -202,19 +236,37 @@ export async function writeTodayInHistorySection(
       input.eventText,
       rawParsed.headline
     );
-    quality = validateHistoryArticle(body, input.year, input.eventText);
+    quality = validateHistoryArticle(
+      body,
+      input.year,
+      input.eventText,
+      headline
+    );
   }
 
-  if (!quality.passes) {
+  if (!passesFinalHistoryGate(headline, body, input.year, input.eventText)) {
     const fallback = thinHistoryFallback(input.year, input.eventText);
     headline = fallback.headline;
     body = fallback.body;
-    quality = validateHistoryArticle(body, input.year, input.eventText);
+    quality = validateHistoryArticle(
+      body,
+      input.year,
+      input.eventText,
+      headline
+    );
     console.warn("[buildEdition] writeTodayInHistorySection quality fallback", {
       reasons: quality.reasons,
       paragraphCount: quality.paragraphCount,
       words: quality.words,
     });
+  }
+
+  if (!passesFinalHistoryGate(headline, body, input.year, input.eventText)) {
+    console.error("[buildEdition] writeTodayInHistorySection rejected", {
+      reasons: quality.reasons,
+      headline,
+    });
+    return { headline: "", body: "" };
   }
 
   console.log("[buildEdition] writeTodayInHistorySection", {

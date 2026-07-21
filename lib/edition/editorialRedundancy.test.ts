@@ -33,6 +33,26 @@ test("detectDuplicateSentences flags repeated sentences across paragraphs", () =
   assert.equal(duplicates.length, 1);
 });
 
+test("detectEditorialRedundancy rejects Apollo headline and body repetition", () => {
+  const eventText =
+    "At 02:56 UTC, astronaut Neil Armstrong becomes the first person to walk on the Moon";
+  const headline = formatApolloHeadline(eventText);
+  const bodyOpener = `In 1969, ${eventText.charAt(0).toLowerCase()}${eventText.slice(1).replace(/\.$/, "")}.`;
+  const result = detectEditorialRedundancy({
+    headline,
+    paragraphs: [
+      bodyOpener,
+      "Mission control had spent years preparing for a moment that still felt improbable until the engines cut off.",
+    ],
+  });
+  assert.equal(result.passes, false);
+  assert.ok(result.reasons.some((r) => r.includes("repeats_headline")));
+});
+
+function formatApolloHeadline(eventText: string): string {
+  return `1969 — ${eventText}`;
+}
+
 test("detectEditorialRedundancy accepts distinct progression", () => {
   const result = detectEditorialRedundancy({
     headline: "1969 — One small step on the Moon",

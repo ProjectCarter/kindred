@@ -12,6 +12,7 @@ import { trackCacheCleared } from "../lib/analytics";
 import { friendlyCacheKeyLabel } from "../lib/storage/kindredAsyncStorageKeys";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
+import { supabase } from "../lib/supabase";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { paper, press } from "../lib/edition/newspaperTheme";
@@ -297,6 +298,25 @@ export default function LocationSettingsScreen() {
           </Text>
         </View>
 
+        <Pressable
+          style={({ pressed }) => [
+            styles.signOutLink,
+            pressed && styles.pressed,
+          ]}
+          onPress={async () => {
+            try {
+              await supabase.auth.signOut();
+            } catch {
+              /* Still leave the session UI even if network sign-out fails. */
+            }
+            router.replace("/login");
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+        >
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+
         {/* TEMP(Phase One perf): remove before release — simulates a true cold launch. */}
         {__DEV__ ? (
           <View style={styles.devBlock}>
@@ -499,6 +519,17 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
     marginTop: 14,
     lineHeight: 20,
+  },
+  signOutLink: {
+    marginTop: 36,
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+  },
+  signOutText: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    color: paper.inkFaint,
+    fontStyle: "italic",
   },
   devBlock: {
     marginTop: 36,

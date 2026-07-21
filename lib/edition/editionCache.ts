@@ -39,7 +39,7 @@ import {
 
 const CACHE_KEY_PREFIX = "@kindred/edition-cache:v2:";
 /** Bump when morning hero article sanitization changes — invalidates stale detail on disk. */
-export const EDITION_CACHE_ARTICLE_VERSION = 2;
+export const EDITION_CACHE_ARTICLE_VERSION = 3;
 
 export type CachedEditionBundle = {
   userId: string;

@@ -9,6 +9,10 @@ import {
   parseWeatherSummaryText,
   type ParsedWeatherSummary,
 } from "./parseWeatherSummary.ts";
+import {
+  EDITION_WEATHER_MAX_AGE_MS,
+  isWeatherStale,
+} from "./weatherFreshness.ts";
 
 export type HomepageWeatherDisplay = {
   current: string;
@@ -24,6 +28,11 @@ export type ResolveHomepageWeatherInput = {
   weatherSectionBody?: string | null;
   morningWeatherBeat?: string | null;
   weatherConditionCode?: number | null;
+  /** Fresh live observation — takes priority over edition snapshot. */
+  liveWeatherSummary?: string | null;
+  liveWeatherRetrievedAt?: string | null;
+  /** When the edition snapshot was captured — used to reject stale embedded weather. */
+  editionWeatherRetrievedAt?: string | null;
 };
 
 function mergeParsed(
@@ -43,32 +52,60 @@ function mergeParsed(
 function selectedWeatherSource(input: ResolveHomepageWeatherInput): {
   selectedSource: string;
   summary: string | null;
+  retrievedAt: string | null;
 } {
+  const live = input.liveWeatherSummary?.trim();
+  if (live) {
+    return {
+      selectedSource: "live_weather",
+      summary: live,
+      retrievedAt: input.liveWeatherRetrievedAt ?? null,
+    };
+  }
+
   const fromEditorial = extractWeatherSummaryFromEditorialContext(
     input.editorialContext
   );
   if (fromEditorial) {
-    return { selectedSource: "editorial_context.weatherSummary", summary: fromEditorial };
+    const retrievedAt = input.editionWeatherRetrievedAt ?? null;
+    if (
+      retrievedAt &&
+      isWeatherStale(retrievedAt, EDITION_WEATHER_MAX_AGE_MS)
+    ) {
+      return { selectedSource: "editorial_context.weatherSummary_stale", summary: null, retrievedAt };
+    }
+    return {
+      selectedSource: "editorial_context.weatherSummary",
+      summary: fromEditorial,
+      retrievedAt,
+    };
   }
   if (input.weatherSectionBody?.trim()) {
+    const retrievedAt = input.editionWeatherRetrievedAt ?? null;
+    if (retrievedAt && isWeatherStale(retrievedAt, EDITION_WEATHER_MAX_AGE_MS)) {
+      return { selectedSource: "weather_section.body_stale", summary: null, retrievedAt };
+    }
     return {
       selectedSource: "weather_section.body",
       summary: input.weatherSectionBody.trim(),
+      retrievedAt,
     };
   }
   if (input.weatherSectionHeadline?.trim()) {
     return {
       selectedSource: "weather_section.headline",
       summary: input.weatherSectionHeadline.trim(),
+      retrievedAt: input.editionWeatherRetrievedAt ?? null,
     };
   }
   if (input.morningWeatherBeat?.trim()) {
     return {
       selectedSource: "morning_edition.beats.weather",
       summary: input.morningWeatherBeat.trim(),
+      retrievedAt: input.editionWeatherRetrievedAt ?? null,
     };
   }
-  return { selectedSource: "none", summary: null };
+  return { selectedSource: "none", summary: null, retrievedAt: null };
 }
 
 function rejectionReason(input: {
@@ -87,20 +124,29 @@ function rejectionReason(input: {
 export function resolveHomepageWeatherDisplay(
   input: ResolveHomepageWeatherInput
 ): HomepageWeatherDisplay | null {
-  const { selectedSource, summary } = selectedWeatherSource(input);
+  const { selectedSource, summary, retrievedAt } = selectedWeatherSource(input);
 
   const fromSummary = parseWeatherSummaryText(summary);
-  const fromBeat = parseWeatherSummaryText(input.morningWeatherBeat);
-  const fromTag = parseHeroWeatherTag(
-    input.weatherSectionHeadline ?? input.weatherSectionBody
-  );
-
-  const parsed = mergeParsed(fromSummary, mergeParsed(fromBeat, fromTag));
-  const current = parsed?.currentLabel ?? parsed?.highLabel ?? null;
+  const fromBeat =
+    selectedSource === "morning_edition.beats.weather"
+      ? parseWeatherSummaryText(input.morningWeatherBeat)
+      : null;
+  const parsed = mergeParsed(fromSummary, fromBeat);
+  const heroTag =
+    selectedSource === "weather_section.headline" ||
+    selectedSource === "weather_section.body"
+      ? parseHeroWeatherTag(
+          input.weatherSectionHeadline ?? input.weatherSectionBody
+        )
+      : null;
+  const current = parsed?.currentLabel ?? null;
 
   const condition =
     homepageConditionFromPhrase(parsed?.conditionPhrase) ??
-    homepageConditionFromCode(input.weatherConditionCode ?? null);
+    homepageConditionFromCode(input.weatherConditionCode ?? null) ??
+    (heroTag?.conditionPhrase
+      ? homepageConditionFromPhrase(heroTag.conditionPhrase)
+      : null);
 
   const reason = rejectionReason({ summary, parsed, current, condition });
 
@@ -112,9 +158,13 @@ export function resolveHomepageWeatherDisplay(
         weatherSectionBody: input.weatherSectionBody ?? null,
         morningWeatherBeat: input.morningWeatherBeat ?? null,
         weatherConditionCode: input.weatherConditionCode ?? null,
+        liveWeatherSummary: input.liveWeatherSummary ?? null,
+        liveWeatherRetrievedAt: input.liveWeatherRetrievedAt ?? null,
+        editionWeatherRetrievedAt: input.editionWeatherRetrievedAt ?? null,
       },
       selectedSource,
       summary,
+      retrievedAt,
       parserResult: parsed,
       resolved: {
         current,

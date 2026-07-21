@@ -2,6 +2,8 @@
  * Today in History headline format — "1969 — Humanity Walks on the Moon".
  */
 
+import { proseNearDuplicate } from "../../../../lib/edition/editorialRedundancy.ts";
+
 const YEAR_HEADLINE_RE = /^(1[0-9]{3}|20[0-9]{2})\s*[-—–]\s*/i;
 
 const GENERIC_HEADLINE_RE =
@@ -42,10 +44,15 @@ export function formatTodayInHistoryHeadline(
   eventText: string,
   aiHeadline?: string | null
 ): string {
+  const editorial = `${year} — ${deriveEditorialHeadlineFromEvent(eventText)}`;
   const trimmed = aiHeadline?.trim();
   if (trimmed && YEAR_HEADLINE_RE.test(trimmed) && !GENERIC_HEADLINE_RE.test(trimmed)) {
-    return normalizeHeadlineSpacing(
-      trimmed.replace(/^(\d{4})\s*[-—–]\s*/i, "$1 — ")
+    return rejectEventEchoHeadline(
+      normalizeHeadlineSpacing(
+        trimmed.replace(/^(\d{4})\s*[-—–]\s*/i, "$1 — ")
+      ),
+      eventText,
+      editorial
     );
   }
 
@@ -54,11 +61,35 @@ export function formatTodayInHistoryHeadline(
       .replace(/^\s*(1[0-9]{3}|20[0-9]{2})\s*[-:—–]\s*/i, "")
       .trim();
     if (withoutYear.length > 6) {
-      return `${year} — ${normalizeHeadlineSpacing(withoutYear)}`;
+      return rejectEventEchoHeadline(
+        `${year} — ${normalizeHeadlineSpacing(withoutYear)}`,
+        eventText,
+        editorial
+      );
     }
   }
 
-  return `${year} — ${deriveEditorialHeadlineFromEvent(eventText)}`;
+  return editorial;
+}
+
+function rejectEventEchoHeadline(
+  headline: string,
+  eventText: string,
+  editorial: string
+): string {
+  const withoutYear = headline.replace(/^(\d{4})\s*[-—–]\s*/i, "").trim();
+  const normalizedEvent = eventText.replace(/\s+/g, " ").trim();
+  if (
+    proseNearDuplicate(withoutYear, normalizedEvent) ||
+    proseNearDuplicate(headline, normalizedEvent) ||
+    proseNearDuplicate(
+      withoutYear.replace(/^at\s+/i, ""),
+      normalizedEvent.replace(/^at\s+/i, "")
+    )
+  ) {
+    return editorial;
+  }
+  return headline;
 }
 
 function normalizeHeadlineSpacing(text: string): string {
@@ -111,7 +142,7 @@ function headlineFromKnownPatterns(text: string): string | null {
     return "Nadia Comăneci Records the First Perfect Ten";
   }
 
-  if (/apollo 11|walks on the moon|moon landing/i.test(text)) {
+  if (/apollo 11|walk(?:s)? on the moon|moon landing|neil armstrong|first person to walk on the moon/i.test(text)) {
     return "Apollo 11 Lands on the Moon";
   }
 

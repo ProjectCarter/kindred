@@ -1,5 +1,5 @@
-import { Text, View, Pressable, StyleSheet, Share } from "react-native";
-import { paper, press, space } from "../lib/edition/newspaperTheme";
+import { Text, View, StyleSheet } from "react-native";
+import { paper, space } from "../lib/edition/newspaperTheme";
 import {
   editionColophon,
   editionFarewell,
@@ -7,39 +7,13 @@ import {
 import { FolioReveal } from "./FolioReveal";
 
 type Props = {
-  editionDateLabel?: string | null;
-  onOpenClippings?: () => void;
-  onOpenArchive?: () => void;
-  /** Optional custom share; defaults to a calm Share sheet. */
-  onShareEdition?: () => void;
   folioIndex?: number;
 };
 
 /**
  * Satisfying close to today’s paper — not an abrupt scroll stop.
  */
-export function EditionClose({
-  editionDateLabel,
-  onOpenClippings,
-  onOpenArchive,
-  onShareEdition,
-  folioIndex = 12,
-}: Props) {
-  async function share() {
-    if (onShareEdition) {
-      onShareEdition();
-      return;
-    }
-    try {
-      const dateBit = editionDateLabel ? ` — ${editionDateLabel}` : "";
-      await Share.share({
-        message: `Today’s Kindred edition${dateBit}.`,
-      });
-    } catch {
-      /* reader cancelled */
-    }
-  }
-
+export function EditionClose({ folioIndex = 12 }: Props) {
   return (
     <FolioReveal index={folioIndex}>
       <View style={styles.wrap} accessibilityRole="summary">
@@ -47,37 +21,6 @@ export function EditionClose({
         <Text style={styles.colophon}>{editionColophon()}</Text>
         <Text style={styles.farewell}>{editionFarewell()}</Text>
         <Text style={styles.sign}>— Bandit</Text>
-
-        <View style={styles.actions}>
-          {onOpenClippings ? (
-            <Pressable
-              onPress={onOpenClippings}
-              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Your clippings"
-            >
-              <Text style={styles.actionText}>Your clippings</Text>
-            </Pressable>
-          ) : null}
-          {onOpenArchive ? (
-            <Pressable
-              onPress={onOpenArchive}
-              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Archive"
-            >
-              <Text style={styles.actionText}>Earlier editions</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => void share()}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Share today’s edition"
-          >
-            <Text style={styles.actionText}>Share today’s edition</Text>
-          </Pressable>
-        </View>
         <View style={styles.rule} />
       </View>
     </FolioReveal>
@@ -87,7 +30,7 @@ export function EditionClose({
 const styles = StyleSheet.create({
   wrap: {
     paddingTop: space.endPadding,
-    paddingBottom: 20,
+    paddingBottom: 12,
     alignItems: "center",
   },
   rule: {
@@ -121,27 +64,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.inkFaint,
     letterSpacing: 0.2,
-    marginBottom: 8,
-  },
-  actions: {
-    marginTop: 24,
-    alignItems: "center",
-    gap: 18,
-    marginBottom: 8,
-  },
-  action: {
-    paddingVertical: 8,
-    minHeight: 40,
-    justifyContent: "center",
-  },
-  actionText: {
-    fontFamily: "Georgia",
-    fontSize: 15,
-    color: paper.terracotta,
-    fontStyle: "italic",
-    letterSpacing: 0.15,
-  },
-  pressed: {
-    opacity: press.opacity,
+    marginBottom: 0,
   },
 });

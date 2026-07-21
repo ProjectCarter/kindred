@@ -16,10 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { type EditionSection } from "../lib/edition/types";
-import {
-  fetchAdjacentEditions,
-  type AdjacentEdition,
-} from "../lib/edition/adjacent";
 import { parseLeadStory, type LeadStory } from "../lib/edition/LeadStory";
 import { openKindredArticle } from "../lib/edition/openArticle";
 import { openKindredEvent } from "../lib/edition/openEvent";
@@ -153,7 +149,6 @@ import { metroKeyFromKindredPlace } from "../lib/location/metroKey";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
-import { EditionAdjacentNav } from "../components/EditionAdjacentNav";
 import {
   KindredFullMasthead,
   KindredStickyMasthead,
@@ -258,6 +253,10 @@ import {
   resolveWeatherSummary,
 } from "../lib/edition/resolveWeatherSummary";
 import {
+  refreshLiveWeather,
+  type LiveWeatherSnapshot,
+} from "../lib/weather/liveWeatherRefresh";
+import {
   needsNetworkDiscoveryMerge,
   sectionsNeedNetworkBodyMerge,
 } from "../lib/edition/resolveDiscoverySync";
@@ -300,6 +299,7 @@ export default function HomeScreen() {
   const [preparingStep, setPreparingStep] = useState(0);
   const [sections, setSections] = useState<EditionSection[]>([]);
   const [editionDate, setEditionDate] = useState<string | null>(null);
+  const [liveWeather, setLiveWeather] = useState<LiveWeatherSnapshot | null>(null);
   const [editionId, setEditionId] = useState<string | null>(null);
   const [leadStory, setLeadStory] = useState<LeadStory | null>(null);
   const [topStories, setTopStories] = useState<TopStoryItem[]>([]);
@@ -313,7 +313,6 @@ export default function HomeScreen() {
     useState<UsNationalDailyRecord | null>(null);
   const [clippedIds, setClippedIds] = useState<Set<string>>(new Set());
   const [clipPendingId, setClipPendingId] = useState<string | null>(null);
-  const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clipError, setClipError] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<ActiveLocation | null>(
@@ -1723,7 +1722,7 @@ export default function HomeScreen() {
       }
       setLoading(false);
       setRefreshing(false);
-      return { kind: "not_ready" as const, user, adjacent: { older: null, newer: null }, jobResult: { data: null, error: null }, editionError: null, edition: null };
+      return { kind: "not_ready" as const, user, jobResult: { data: null, error: null }, editionError: null, edition: null };
     }
 
     // Overlap cache read with the editions network query on cold start.
@@ -2130,18 +2129,14 @@ export default function HomeScreen() {
           message: editionError?.message ?? null,
         });
       }
-      const [adjacent, jobResult] = await Promise.all([
-        fetchAdjacentEditions(user.id, todayStr, scopedMetroKey),
-        fetchGenerationJobForEdition(supabase, {
-          userId: user.id,
-          editionDate: todayStr,
-          metroKey: scopedMetroKey,
-        }),
-      ]);
+      const jobResult = await fetchGenerationJobForEdition(supabase, {
+        userId: user.id,
+        editionDate: todayStr,
+        metroKey: scopedMetroKey,
+      });
       return {
         kind: "not_ready" as const,
         user,
-        adjacent,
         jobResult,
         editionError,
         edition: edition ?? null,
@@ -2174,7 +2169,7 @@ export default function HomeScreen() {
       setIntelligence(null);
       setLoading(false);
       setRefreshing(false);
-      return { kind: "not_ready" as const, user, adjacent: { older: null, newer: null }, jobResult: { data: null, error: null }, editionError: null, edition };
+      return { kind: "not_ready" as const, user, jobResult: { data: null, error: null }, editionError: null, edition };
     }
 
     const canUsePrefetchedSections =
@@ -2230,18 +2225,14 @@ export default function HomeScreen() {
       rowStatus === "processing" &&
       !isProcessingEditionPaintable(rowStatus, loaded)
     ) {
-      const [adjacent, jobResult] = await Promise.all([
-        fetchAdjacentEditions(user.id, todayStr, scopedMetroKey),
-        fetchGenerationJobForEdition(supabase, {
-          userId: user.id,
-          editionDate: todayStr,
-          metroKey: scopedMetroKey,
-        }),
-      ]);
+      const jobResult = await fetchGenerationJobForEdition(supabase, {
+        userId: user.id,
+        editionDate: todayStr,
+        metroKey: scopedMetroKey,
+      });
       return {
         kind: "not_ready" as const,
         user,
-        adjacent,
         jobResult,
         editionError: null,
         edition,
@@ -2481,7 +2472,6 @@ export default function HomeScreen() {
         setIntelligence(null);
         setClippedIds(new Set());
       }
-      setOlder(payload.adjacent.older);
       setBackgroundJob(
         payload.jobResult.data
           ? { status: payload.jobResult.data.status, lastError: payload.jobResult.data.last_error }
@@ -2591,17 +2581,6 @@ export default function HomeScreen() {
       setLocationMismatch(builtCity ?? "another city");
       setLoading(false);
       setRefreshing(false);
-
-      void fetchAdjacentEditions(
-        user.id,
-        edition.edition_date,
-        (edition as { metro_key?: string | null }).metro_key ??
-          editionCacheMetroKey(active.place)
-      ).then((adjacent) => {
-        if (mountedRef.current && gen === loadGen.current) {
-          setOlder(adjacent.older);
-        }
-      });
 
       const regenKey = `${edition.id}:${activeCity}:${active.mode}`;
       if (autoRegenKey.current !== regenKey) {
@@ -3089,17 +3068,6 @@ export default function HomeScreen() {
         }
       }
 
-      void fetchAdjacentEditions(
-        user.id,
-        edition.edition_date,
-        (edition as { metro_key?: string | null }).metro_key ??
-          editionCacheMetroKey(active.place)
-      ).then((adjacent) => {
-        if (mountedRef.current && gen === loadGen.current) {
-          setOlder(adjacent.older);
-        }
-      });
-
       const syncIdentity = await resolveEditionLoadIdentity({
         handoff: "background-sync",
         traceId,
@@ -3262,6 +3230,7 @@ export default function HomeScreen() {
             }
           },
         });
+        void refreshHomeWeather(syncIdentity.place);
       }
 
       pipelineStageEnd("background_sync");
@@ -3571,6 +3540,14 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [backgroundJob, pollBackgroundJobProgress]);
 
+  const refreshHomeWeather = useCallback(async (place: ActiveLocation["place"] | null) => {
+    if (!place) return;
+    const snapshot = await refreshLiveWeather(place);
+    if (snapshot && mountedRef.current) {
+      setLiveWeather(snapshot);
+    }
+  }, []);
+
   // Resume: quietly refresh paper + stale GPS when mode is current.
   useEffect(() => {
     const lastActive = { at: Date.now() };
@@ -3587,13 +3564,22 @@ export default function HomeScreen() {
         if (mountedRef.current) {
           applyActiveLocation(active);
           focusedLocationKeyRef.current = activeLocationKey(active);
+          void refreshHomeWeather(active.place);
         }
         void loadEdition({ quiet: true });
       })();
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => sub.remove();
-  }, [loadEdition]);
+  }, [loadEdition, refreshHomeWeather]);
+
+  useEffect(() => {
+    void refreshHomeWeather(activeLocation?.place ?? null);
+  }, [
+    activeLocation?.place?.lat,
+    activeLocation?.place?.lon,
+    refreshHomeWeather,
+  ]);
 
   function handleHomeRefresh() {
     logHomeScrollDebug("refresh_start", {
@@ -4543,9 +4529,9 @@ export default function HomeScreen() {
         subtitle={readerDisplayCity()}
         trailing={
           <MastheadLink
-            label="Library"
-            onPress={() => router.push("/library")}
-            accessibilityLabel="Open library"
+            label="Location"
+            onPress={() => router.push("/location")}
+            accessibilityLabel="Open location settings"
           />
         }
       />
@@ -4598,9 +4584,9 @@ export default function HomeScreen() {
             dateLabel={today}
             trailing={
               <MastheadLink
-                label="Library"
-                onPress={() => router.push("/library")}
-                accessibilityLabel="Open library"
+                label="Location"
+                onPress={() => router.push("/location")}
+                accessibilityLabel="Open location settings"
               />
             }
             scrollY={mastheadScrollY}
@@ -4741,18 +4727,6 @@ export default function HomeScreen() {
                 <Text style={styles.previousLinkText}>Location settings</Text>
               </Pressable>
             ) : null}
-            {older ? (
-              <Pressable
-                style={styles.previousLink}
-                onPress={() => router.push(`/edition/${older.id}`)}
-                accessibilityRole="button"
-                accessibilityLabel={waitingCopy.previous}
-              >
-                <Text style={styles.previousLinkText}>
-                  {waitingCopy.previous}
-                </Text>
-              </Pressable>
-            ) : null}
           </View>
         ) : (
           <>
@@ -4792,9 +4766,9 @@ export default function HomeScreen() {
               mastheadScrollY={mastheadScrollY}
               mastheadTrailing={
                 <MastheadLink
-                  label="Library"
-                  onPress={() => router.push("/library")}
-                  accessibilityLabel="Open library"
+                  label="Location"
+                  onPress={() => router.push("/location")}
+                  accessibilityLabel="Open location settings"
                 />
               }
               locationCity={readerDisplayCity() ?? null}
@@ -4898,8 +4872,15 @@ export default function HomeScreen() {
                 router.push("/recommendations");
               }}
               historyAroundTown={intelligence?.historyAroundTown}
-              weatherSummary={intelligence?.weatherSummary ?? null}
+              weatherSummary={liveWeather?.weatherSummary ?? intelligence?.weatherSummary ?? null}
               morningWeatherBeat={intelligence?.morning?.beats?.weather ?? null}
+              liveWeatherSummary={liveWeather?.weatherSummary ?? null}
+              liveWeatherRetrievedAt={liveWeather?.retrievedAt ?? null}
+              editionWeatherRetrievedAt={
+                cachedBundleRef.current?.cachedAt
+                  ? new Date(cachedBundleRef.current.cachedAt).toISOString()
+                  : null
+              }
               onSeeAllHistoryAroundTown={() => {
                 persistHomeScrollNow();
                 stashTodaysHistoryPlaces(
@@ -4913,22 +4894,6 @@ export default function HomeScreen() {
               clippedSectionIds={clippedIds}
               onToggleClip={handleToggleClip}
               clipPendingId={clipPendingId}
-              onOpenClippings={() => {
-                persistHomeScrollNow();
-                router.push("/clippings");
-              }}
-              onOpenArchive={() => {
-                persistHomeScrollNow();
-                router.push("/library");
-              }}
-            />
-            <EditionAdjacentNav
-              older={older}
-              newer={null}
-              onOpen={(edition) => {
-                persistHomeScrollNow();
-                router.push(`/edition/${edition.id}`);
-              }}
             />
           </>
         )}

@@ -33,7 +33,6 @@ export const waitingCopy = {
     "When you’re ready, we’ll set today’s edition. It usually takes about a minute.",
   openAction: "Open today’s paper",
   preparing: "Setting the type…",
-  previous: "Earlier editions",
   // Shown instead of the manual-build CTA when the overnight job already
   // has this edition in progress — no need to ask the reader to wait on it.
   backgroundTitle: "Tonight’s edition is on the press.",

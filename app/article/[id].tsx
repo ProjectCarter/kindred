@@ -96,11 +96,6 @@ export default function ArticleScreen() {
       router.back();
       return;
     }
-    const eid = session?.editionId ?? routeEditionId;
-    if (eid) {
-      router.replace(`/edition/${eid}`);
-      return;
-    }
     router.replace("/home");
   }
 

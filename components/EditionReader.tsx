@@ -176,10 +176,7 @@ type Props = {
   clippedSectionIds?: Set<string>;
   onToggleClip?: (section: EditionSection) => void;
   clipPendingId?: string | null;
-  onOpenClippings?: () => void;
-  onOpenArchive?: () => void;
-  onShareEdition?: () => void;
-  /** Collapsing masthead — trailing action while expanded (e.g. Library). */
+  /** Collapsing masthead — trailing action while expanded (e.g. Location). */
   mastheadTrailing?: ReactNode;
   mastheadLeading?: ReactNode;
   mastheadScrollY?: Animated.Value;
@@ -191,6 +188,10 @@ type Props = {
   weatherSummary?: string | null;
   /** Morning edition weather beat — naturalized summary fallback. */
   morningWeatherBeat?: string | null;
+  /** Live observation refreshed independently from edition build. */
+  liveWeatherSummary?: string | null;
+  liveWeatherRetrievedAt?: string | null;
+  editionWeatherRetrievedAt?: string | null;
 };
 
 /**
@@ -252,9 +253,6 @@ function EditionReaderInner({
   clippedSectionIds,
   onToggleClip,
   clipPendingId,
-  onOpenClippings,
-  onOpenArchive,
-  onShareEdition,
   mastheadTrailing,
   mastheadLeading,
   mastheadScrollY,
@@ -263,6 +261,9 @@ function EditionReaderInner({
   onSeeAllHistoryAroundTown,
   weatherSummary = null,
   morningWeatherBeat = null,
+  liveWeatherSummary = null,
+  liveWeatherRetrievedAt = null,
+  editionWeatherRetrievedAt = null,
 }: Props) {
   const [fetchedNationalDaily, setFetchedNationalDaily] =
     useState<UsNationalDailyRecord | null>(null);
@@ -303,12 +304,18 @@ function EditionReaderInner({
         weatherSectionHeadline: weather?.headline ?? null,
         weatherSectionBody: weather?.body ?? null,
         morningWeatherBeat,
+        liveWeatherSummary,
+        liveWeatherRetrievedAt,
+        editionWeatherRetrievedAt,
       }),
     [
       weather?.headline,
       weather?.body,
       weatherSummary,
       morningWeatherBeat,
+      liveWeatherSummary,
+      liveWeatherRetrievedAt,
+      editionWeatherRetrievedAt,
     ]
   );
   const localEvents = sections.find((s) => s.section_type === "local_events");
@@ -1227,13 +1234,7 @@ function EditionReaderInner({
         />
       </FolioReveal>
 
-      <EditionClose
-        folioIndex={folioCursor + 2}
-        editionDateLabel={dateLabel}
-        onOpenClippings={onOpenClippings}
-        onOpenArchive={onOpenArchive}
-        onShareEdition={onShareEdition}
-      />
+      <EditionClose folioIndex={folioCursor + 2} />
     </View>
   );
 }
@@ -1259,7 +1260,12 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
     prev.readerLocation === next.readerLocation &&
     prev.topStories === next.topStories &&
     prev.nationalNews === next.nationalNews &&
-    prev.heroImageUri === next.heroImageUri
+    prev.heroImageUri === next.heroImageUri &&
+    prev.weatherSummary === next.weatherSummary &&
+    prev.morningWeatherBeat === next.morningWeatherBeat &&
+    prev.liveWeatherSummary === next.liveWeatherSummary &&
+    prev.liveWeatherRetrievedAt === next.liveWeatherRetrievedAt &&
+    prev.editionWeatherRetrievedAt === next.editionWeatherRetrievedAt
   );
 }
 

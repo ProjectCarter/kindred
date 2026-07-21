@@ -18,7 +18,6 @@ export const LIST_SCROLL_KEYS = {
   recommendations: "recommendations",
   events: "events",
   historyAroundTown: "history-around-town",
-  edition: (editionId: string) => `edition:${editionId}`,
 } as const;
 
 export function updateListScroll(sessionKey: string, scrollY: number): void {

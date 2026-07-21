@@ -63,12 +63,15 @@ export type HistoryArticleQuality = {
 export function validateHistoryArticle(
   body: string,
   year: number,
-  eventText: string
+  eventText: string,
+  headline?: string | null
 ): HistoryArticleQuality {
   const paragraphs = splitBodyParagraphs(body);
   const words = wordCount(body);
   const reasons: string[] = [];
   const subjectTokens = subjectTokensFromHistory(year, eventText);
+  const resolvedHeadline =
+    headline?.trim() || `${year} — ${eventText.trim()}`;
 
   if (paragraphs.length < 6) {
     reasons.push(`paragraphs:${paragraphs.length}<6`);
@@ -100,7 +103,7 @@ export function validateHistoryArticle(
   }
 
   const redundancy = detectEditorialRedundancy({
-    headline: `${year} — ${eventText.trim()}`,
+    headline: resolvedHeadline,
     paragraphs,
   });
   for (const reason of redundancy.reasons) {

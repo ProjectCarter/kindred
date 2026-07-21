@@ -3,6 +3,8 @@
  */
 
 import type { EditionSection } from "../types";
+import { detectEditorialRedundancy } from "../editorialRedundancy.ts";
+import { resolveTodayInHistoryDisplayHeadline } from "./headline.ts";
 
 const YEAR_HEADLINE_RE = /^(1[0-9]{3}|20[0-9]{2})\s*[\u2014\u2013-]\s*/;
 const GENERIC_HEADLINE_RE =
@@ -36,6 +38,16 @@ export function isStaleTodayInHistorySection(
 
   const paragraphs = body.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
   if (paragraphs.length < 2) return true;
+
+  const displayHeadline = resolveTodayInHistoryDisplayHeadline({
+    headline,
+    body,
+  });
+  const redundancy = detectEditorialRedundancy({
+    headline: displayHeadline,
+    paragraphs,
+  });
+  if (!redundancy.passes) return true;
 
   return false;
 }

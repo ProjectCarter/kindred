@@ -43,18 +43,21 @@ export function isOpenWeatherConfigured(): boolean {
 export async function fetchWeatherForecast(
   lat: number,
   lon: number,
-  admin?: SupabaseClient | null
+  admin?: SupabaseClient | null,
+  options?: { skipCache?: boolean }
 ): Promise<NormalizedWeatherForecast | null> {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
-  const cached = admin ? await getCachedWeatherForecast(admin, lat, lon) : null;
-  if (cached) {
-    console.log("[weather] cache hit", {
-      provider: cached.provider,
-      lat: lat.toFixed(2),
-      lon: lon.toFixed(2),
-    });
-    return cached;
+  if (!options?.skipCache && admin) {
+    const cached = await getCachedWeatherForecast(admin, lat, lon);
+    if (cached) {
+      console.log("[weather] cache hit", {
+        provider: cached.provider,
+        lat: lat.toFixed(2),
+        lon: lon.toFixed(2),
+      });
+      return cached;
+    }
   }
 
   for (const provider of getWeatherProviders()) {

@@ -7,7 +7,9 @@ import {
 } from "./discovery";
 import type { KnowledgeFacet, KnowledgePayload } from "./knowledge";
 import { resolveTodayInHistoryImage } from "./todayInHistoryImage";
-import { resolveTodayInHistoryDisplayHeadline } from "./history/headline";
+import {
+  resolveTodayInHistoryDisplayHeadline,
+} from "./history/headline";
 import {
   isStoryOfSection,
   parseStoryOfSourceNote,
@@ -444,6 +446,10 @@ export function articleFromSectionItem(input: {
   const source = input.source?.trim() || "Kindred";
   const dek = input.dek?.trim() || null;
   let body = dedupeProse(splitIntoParagraphs(input.body));
+  const headline = input.headline?.trim() || "";
+  if (headline) {
+    body = body.filter((p) => !isNearDuplicateProse(p, headline));
+  }
   // Never repeat the dek verbatim (or near-verbatim) as body content —
   // it already renders once as the opening summary.
   if (dek) {
@@ -524,10 +530,17 @@ export function articleFromEditionSection(
   const storyNote = isStoryOfSection(section.section_type)
     ? parseStoryOfSourceNote(section.source_note)
     : null;
+  const headline =
+    section.section_type === "today_in_history"
+      ? resolveTodayInHistoryDisplayHeadline({
+          headline: section.headline,
+          body: section.body,
+        })
+      : section.headline;
   const article = articleFromSectionItem({
     id: section.id,
     section: section.section_type,
-    headline: section.headline,
+    headline,
     body: section.body,
     dek: options?.dek ?? storyNote?.subtitle ?? null,
     source: storyNote ? "Kindred Editorial" : section.source_note?.trim() || "Kindred",
