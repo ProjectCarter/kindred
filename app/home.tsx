@@ -248,6 +248,10 @@ import {
   needsNetworkWeatherSummaryMerge,
   resolveWeatherSummary,
 } from "../lib/edition/resolveWeatherSummary";
+import {
+  needsNetworkDiscoveryMerge,
+  sectionsNeedNetworkBodyMerge,
+} from "../lib/edition/resolveDiscoverySync";
 import { parseHistoryAroundTownPayload } from "../lib/edition/historyAroundTown/types";
 import {
   masterpieceTraceAsync,
@@ -2501,33 +2505,80 @@ export default function HomeScreen() {
       );
       setSections(nextSections);
     } else if (syncAfterCache && cacheMatchesNetwork) {
-      nextSections = cachedBundleRef.current?.sections ?? loaded;
+      const cachedSections = cachedBundleRef.current?.sections ?? loaded;
+      nextSections = mergeFrozenSections(cachedSections, loaded);
+      const shouldMergeSectionBodies = sectionsNeedNetworkBodyMerge(
+        cachedSections,
+        loaded
+      );
       const shouldMergeMorningHero = needsNetworkMorningHeroMerge({
         networkIntelligence: intel,
         onScreenIntelligence: cachedBundleRef.current?.intelligence ?? null,
         cachedBundle: cachedBundleRef.current,
       });
-      if (shouldMergeMorningHero) {
-        const networkHero = resolveMorningHero({ intelligence: intel });
-        setIntelligence(intel);
-        if (networkHero && cachedBundleRef.current) {
-          const nextBundle = mergeMorningHeroIntoCachedBundle({
-            ...cachedBundleRef.current,
-            intelligence: intel,
-            morningHero: networkHero,
-          });
-          cachedBundleRef.current = nextBundle;
-          void saveCachedEdition(nextBundle);
-          preloadMorningHeroImage(networkHero);
-        }
+      const shouldMergeDiscovery = needsNetworkDiscoveryMerge({
+        networkIntelligence: intel,
+        onScreenIntelligence: cachedBundleRef.current?.intelligence ?? null,
+        cachedBundle: cachedBundleRef.current,
+        discoveryRaw: (edition as { discovery?: unknown }).discovery,
+      });
+      const shouldRefreshIntelligence =
+        shouldMergeMorningHero || shouldMergeDiscovery;
+
+      if (shouldMergeSectionBodies) {
+        setSections(nextSections);
+        setLocalEventsStatus(
+          countValidEventsInSections(nextSections) > 0 ? "ready" : "loading"
+        );
         if (__DEV__) {
           console.log(
-            "[home] loadEdition: merged network morningHero during cache sync",
-            { artworkId: networkHero?.artworkId ?? null }
+            "[home] loadEdition: merged network section bodies during cache sync",
+            {
+              localEvents: countValidEventsInSections(nextSections),
+            }
           );
         }
-      } else if (__DEV__) {
+      }
+
+      if (shouldRefreshIntelligence) {
+        setIntelligence(intel);
+        freezeEdition({
+          editionId: edition.id,
+          editionDate: edition.edition_date,
+          discovery: intel.discovery ?? null,
+          discoveryItems: intel.discoveryItems ?? null,
+          heroImageId: cachedBundleRef.current?.heroImageId ?? null,
+        });
+        if (shouldMergeMorningHero) {
+          preloadMorningHeroImage(resolveMorningHero({ intelligence: intel }));
+        }
+        if (__DEV__) {
+          console.log("[home] loadEdition: merged network intelligence during cache sync", {
+            morningHero: shouldMergeMorningHero,
+            discovery: shouldMergeDiscovery,
+            discoverySurfaces: intel.discovery?.surfaces
+              ? Object.keys(intel.discovery.surfaces).length
+              : 0,
+          });
+        }
+      } else if (!shouldMergeSectionBodies && __DEV__) {
         console.log("[home] loadEdition: network verified cache — no UI churn");
+      }
+
+      if (
+        cachedBundleRef.current &&
+        (shouldMergeSectionBodies || shouldRefreshIntelligence)
+      ) {
+        const nextBundle: CachedEditionBundle = {
+          ...cachedBundleRef.current,
+          sections: nextSections,
+          intelligence: shouldRefreshIntelligence
+            ? intel
+            : cachedBundleRef.current.intelligence,
+          cachedAt: Date.now(),
+        };
+        cachedBundleRef.current = mergeMorningHeroIntoCachedBundle(nextBundle);
+        scheduleCachedEditionSave(cachedBundleRef.current);
       }
       const syncedDesks = resolveEditionNewsDesks(
         edition as { national_news?: unknown; editorial_context?: unknown },
