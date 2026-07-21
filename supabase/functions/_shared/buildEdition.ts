@@ -108,6 +108,10 @@ import {
 } from "./markets/editionSectionAudit.ts";
 import { getCatalogBootstrapState } from "./catalog/catalogBootstrap.ts";
 import { catalogMetroKeyForMarket } from "../../../lib/markets/resolveEditionMarket.ts";
+import {
+  logDiscoveryGeography,
+  resolveDiscoveryGeographySnapshot,
+} from "../editorial/discoveryGeography.ts";
 import { editionsConflictTarget } from "./markets/editionIdentity.ts";
 import { publishMinimumViableEditionCheckpoint } from "./edition/earlyEditionPublish.ts";
 import {
@@ -569,6 +573,11 @@ export async function buildEditionForUser(
   });
 
   const catalogMetroKey = catalogMetroKeyForMarket(editionMarket);
+  logDiscoveryGeography(
+    "buildEdition",
+    resolveDiscoveryGeographySnapshot({ city, market: editionMarket }),
+    { traceId: options.editionTraceId ?? null, catalogMetroKey }
+  );
   const marketAnchor = {
     lat: location.lat,
     lon: location.lon,
@@ -746,7 +755,9 @@ export async function buildEditionForUser(
     // Shared per-metro cache (see places/cache.ts) — this call almost
     // never actually hits Foursquare; it hits the cache row for this city.
     timer.timed("Food & Drink - Places", () =>
-      getLocalPlacesForEdition(supabaseAdmin, eventsLocation)
+      getLocalPlacesForEdition(supabaseAdmin, eventsLocation, {
+        catalogMetroKey,
+      })
     ),
     timer.timed("News - Local Editorial Decisions", () =>
       runLocalEditorialDecisions({

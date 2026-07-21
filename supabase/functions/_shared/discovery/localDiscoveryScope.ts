@@ -1,8 +1,11 @@
 /**
- * Local discovery scope — 25-mile radius for Food & Drink and Activities.
+ * Local discovery scope — section-specific radii from discoveryGeography.
  */
 
-import { KINDRED_LOCAL_RADIUS_KM } from "../editorial/editorialStandard.ts";
+import {
+  DISCOVERY_ACTIVITY_RADIUS_KM,
+  DISCOVERY_FOOD_RADIUS_KM,
+} from "../editorial/discoveryGeography.ts";
 import { haversineKm } from "./geo.ts";
 import type { DiscoveryCategory, DiscoveryItem, RankedDiscoveryItem } from "./types.ts";
 import type { DiscoveryRankingContext } from "./types.ts";
@@ -18,10 +21,10 @@ export {
   RECOMMENDATION_CATEGORIES,
 };
 
-/** @deprecated Use KINDRED_LOCAL_RADIUS_KM from editorialStandard.ts */
+/** @deprecated Use DISCOVERY_FOOD_RADIUS_KM / DISCOVERY_ACTIVITY_RADIUS_KM */
 export const RECOMMENDATIONS_RADIUS_MILES = 25;
-/** @deprecated Use KINDRED_LOCAL_RADIUS_KM */
-export const RECOMMENDATIONS_RADIUS_KM = KINDRED_LOCAL_RADIUS_KM;
+/** @deprecated Use DISCOVERY_FOOD_RADIUS_KM */
+export const RECOMMENDATIONS_RADIUS_KM = DISCOVERY_FOOD_RADIUS_KM;
 
 export const ACTIVITY_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "activities",
@@ -70,6 +73,15 @@ export function isStatewideAttraction(item: DiscoveryItem): boolean {
   return item.tags.includes("nps_park") || item.tags.includes("national_park");
 }
 
+export function discoveryRadiusKmForCategory(
+  category: DiscoveryCategory | string
+): number {
+  if (FOOD_DRINK_CATEGORIES.has(category as DiscoveryCategory)) {
+    return DISCOVERY_FOOD_RADIUS_KM;
+  }
+  return DISCOVERY_ACTIVITY_RADIUS_KM;
+}
+
 export function distanceKmFromReader(
   item: Pick<DiscoveryItem, "lat" | "lon">,
   ctx: Pick<DiscoveryRankingContext, "readerLat" | "readerLon">
@@ -98,7 +110,7 @@ export function passesLocalDiscoveryRadius(
   if (isStatewideAttraction(item)) return false;
   const km = distanceKmFromReader(item, ctx);
   if (km == null) return true;
-  return km <= KINDRED_LOCAL_RADIUS_KM;
+  return km <= discoveryRadiusKmForCategory(item.category);
 }
 
 /** @deprecated Use passesLocalDiscoveryRadius */
@@ -111,7 +123,7 @@ export function surfaceUsesLocalDiscoveryRadius(surface: string): boolean {
 /** @deprecated Use surfaceUsesLocalDiscoveryRadius */
 export const surfaceUsesRecommendationRadius = surfaceUsesLocalDiscoveryRadius;
 
-/** Every item in the Activities section stays within the local newspaper radius. */
+/** Every item in the Activities section stays within the activity discovery radius. */
 export function passesActivitiesSectionRadius(
   ranked: RankedDiscoveryItem,
   ctx: Pick<DiscoveryRankingContext, "readerLat" | "readerLon">
@@ -120,5 +132,5 @@ export function passesActivitiesSectionRadius(
   if (isStatewideAttraction(item)) return false;
   const km = distanceKmFromReader(item, ctx);
   if (km == null) return true;
-  return km <= KINDRED_LOCAL_RADIUS_KM;
+  return km <= DISCOVERY_ACTIVITY_RADIUS_KM;
 }

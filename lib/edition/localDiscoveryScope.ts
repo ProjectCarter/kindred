@@ -1,10 +1,13 @@
 /**
- * Local discovery scope — 25-mile radius for Food & Drink and Activities.
+ * Local discovery scope — section-specific radii from discoveryGeography.
  */
 
 import type { DiscoveryCategory, RankedDiscoveryItem } from "./discovery.ts";
 import { distanceKm } from "../location/locationKey.ts";
-import { KINDRED_LOCAL_RADIUS_KM } from "./editorialStandard.ts";
+import {
+  DISCOVERY_ACTIVITY_RADIUS_KM,
+  DISCOVERY_FOOD_RADIUS_KM,
+} from "./discoveryGeography.ts";
 import {
   DESTINATION_ACTIVITY_CATEGORIES,
   FOOD_DRINK_CATEGORIES,
@@ -17,10 +20,10 @@ export {
   RECOMMENDATION_CATEGORIES,
 };
 
-/** @deprecated Use KINDRED_LOCAL_RADIUS_KM */
+/** @deprecated Use DISCOVERY_FOOD_RADIUS_KM / DISCOVERY_ACTIVITY_RADIUS_KM */
 export const RECOMMENDATIONS_RADIUS_MILES = 25;
-/** @deprecated Use KINDRED_LOCAL_RADIUS_KM */
-export const RECOMMENDATIONS_RADIUS_KM = KINDRED_LOCAL_RADIUS_KM;
+/** @deprecated Use DISCOVERY_FOOD_RADIUS_KM */
+export const RECOMMENDATIONS_RADIUS_KM = DISCOVERY_FOOD_RADIUS_KM;
 
 export const ACTIVITY_CATEGORIES: ReadonlySet<DiscoveryCategory> = new Set([
   "activities",
@@ -80,6 +83,27 @@ export function isStatewideAttraction(item: RankedDiscoveryItem["item"]): boolea
   );
 }
 
+export function discoveryRadiusKmForCategory(
+  category: DiscoveryCategory | string
+): number {
+  if (FOOD_DRINK_CATEGORIES.has(category as DiscoveryCategory)) {
+    return DISCOVERY_FOOD_RADIUS_KM;
+  }
+  return DISCOVERY_ACTIVITY_RADIUS_KM;
+}
+
+export function isWithinFoodDiscoveryRadius(
+  item: RankedDiscoveryItem,
+  reader: ReaderLocation | null | undefined
+): boolean {
+  if (!FOOD_DRINK_CATEGORIES.has(item.item.category)) return false;
+  if (isStatewideAttraction(item.item)) return false;
+  if (!reader) return true;
+  const km = distanceKmFromReader(item.item, reader);
+  if (km == null) return true;
+  return km <= DISCOVERY_FOOD_RADIUS_KM;
+}
+
 export function isWithinLocalDiscoveryRadius(
   item: RankedDiscoveryItem,
   reader: ReaderLocation | null | undefined
@@ -90,7 +114,7 @@ export function isWithinLocalDiscoveryRadius(
   const km = distanceKmFromReader(item.item, reader);
   // No verified coordinates — keep edition-curated items; enforce radius when present.
   if (km == null) return true;
-  return km <= KINDRED_LOCAL_RADIUS_KM;
+  return km <= discoveryRadiusKmForCategory(item.item.category);
 }
 
 /** @deprecated Use isWithinLocalDiscoveryRadius */
@@ -147,7 +171,7 @@ export function isWithinActivitiesSectionRadius(
   if (!reader) return true;
   const km = distanceKmFromReader(item.item, reader);
   if (km == null) return true;
-  return km <= KINDRED_LOCAL_RADIUS_KM;
+  return km <= DISCOVERY_ACTIVITY_RADIUS_KM;
 }
 
 /** @deprecated Use compareByLocalProximity */

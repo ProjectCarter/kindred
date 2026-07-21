@@ -13,7 +13,7 @@ import {
   recordApiCalls,
   type CatalogSyncMode,
 } from "../editorial/catalogSyncBudget.ts";
-import { SERPAPI_CANDIDATE_CAP } from "../editorial/publishing.ts";
+import { SERPAPI_CANDIDATE_CAP, EDITION_EVENTS_CATALOG_READ_LIMIT } from "../editorial/publishing.ts";
 import { mergeEventsFromSources } from "./merge.ts";
 import { normalizeEvents } from "./normalize.ts";
 import { applyEventImageRightsBatch } from "./sourceRights.ts";
@@ -450,7 +450,7 @@ export async function loadEventsCatalogForEdition(
     .eq("metro_key", metroKey)
     .in("lifecycle", ["verified", "upcoming", "today"])
     .order("start_at", { ascending: true })
-    .limit(60);
+    .limit(EDITION_EVENTS_CATALOG_READ_LIMIT);
 
   if (error || !data) {
     console.error("[events:catalog] read failure", { metroKey, error });

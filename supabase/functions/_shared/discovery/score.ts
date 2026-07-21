@@ -1,6 +1,11 @@
 import { sourceQualityPrior } from "./sources.ts";
 import { haversineKm } from "./geo.ts";
-import { KINDRED_LOCAL_RADIUS_KM, PLANNING_VALUE_PATTERN } from "../editorial/editorialStandard.ts";
+import { PLANNING_VALUE_PATTERN } from "../editorial/editorialStandard.ts";
+import {
+  DISCOVERY_ACTIVITY_RADIUS_KM,
+  DISCOVERY_FOOD_RADIUS_KM,
+} from "../editorial/discoveryGeography.ts";
+import { FOOD_DRINK_CATEGORIES } from "./foodDrinkDesk.ts";
 import {
   LOCAL_DISCOVERY_CATEGORIES,
   passesLocalDiscoveryRadius,
@@ -198,8 +203,11 @@ export function scoreDiscoveryItem(
   ) {
     const km = haversineKm(ctx.readerLat, ctx.readerLon, item.lat, item.lon);
     const isLocalDesk = LOCAL_DISCOVERY_CATEGORIES.has(item.category);
+    const localRadiusKm = FOOD_DRINK_CATEGORIES.has(item.category)
+      ? DISCOVERY_FOOD_RADIUS_KM
+      : DISCOVERY_ACTIVITY_RADIUS_KM;
 
-    if (km <= KINDRED_LOCAL_RADIUS_KM) {
+    if (km <= localRadiusKm) {
       score += 12;
       reasons.push({
         code: "proximity_near",

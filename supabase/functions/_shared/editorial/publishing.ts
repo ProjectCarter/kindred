@@ -32,6 +32,9 @@ export const LOCAL_EVENTS_EDITION_SURFACED_MAX = 20;
 /** See All destination cap — curated exploration, not a directory dump. */
 export const SEE_ALL_MAX_ITEMS = 20;
 
+/** Edition-time events catalog read — metro pool before editorial rank (not UI cap). */
+export const EDITION_EVENTS_CATALOG_READ_LIMIT = 200;
+
 /** Edition-time catalog read caps — discovery scoring pool, not full metro dump. */
 export const EDITION_ACTIVITIES_READ_LIMIT = 250;
 export const EDITION_FOOD_DRINK_READ_LIMIT = 150;

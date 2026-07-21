@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { libraryMetroKeysForLocation } from "../../../../lib/markets/libraryMetroKeys.ts";
+import {
+  DISCOVERY_HISTORICAL_PLACES_RADIUS_KM,
+  DISCOVERY_HISTORICAL_PLACES_RADIUS_MILES,
+} from "../../../../lib/edition/discoveryGeography.ts";
+import { haversineKm } from "../discovery/geo.ts";
 import { metroKeyFromLocation } from "../storyOf/metroKey.ts";
 import {
   computeHistoryPlaceValidationStatus,
@@ -87,6 +92,33 @@ function diversifyCarousel(rows: HistoryPlaceRow[]): HistoryPlaceRow[] {
   return picked;
 }
 
+function filterHistoryPlacesWithinRadius(
+  rows: HistoryPlaceRow[],
+  location: { lat?: number; lon?: number }
+): HistoryPlaceRow[] {
+  const readerLat = location.lat;
+  const readerLon = location.lon;
+  if (
+    typeof readerLat !== "number" ||
+    !Number.isFinite(readerLat) ||
+    typeof readerLon !== "number" ||
+    !Number.isFinite(readerLon)
+  ) {
+    return rows;
+  }
+
+  const withinRadius = rows.filter((row) => {
+    if (row.lat == null || row.lon == null) return false;
+    return (
+      haversineKm(readerLat, readerLon, row.lat, row.lon) <=
+      DISCOVERY_HISTORICAL_PLACES_RADIUS_KM
+    );
+  });
+
+  if (withinRadius.length) return withinRadius;
+  return rows;
+}
+
 export async function buildHistoryAroundTownForEdition(
   admin: SupabaseClient,
   location: {
@@ -122,6 +154,15 @@ export async function buildHistoryAroundTownForEdition(
 
   if (!rows.length) {
     console.warn("[historyAroundTown] no approved places", { metroKeys });
+    return null;
+  }
+
+  rows = filterHistoryPlacesWithinRadius(rows, location);
+  if (!rows.length) {
+    console.warn("[historyAroundTown] no places within discovery radius", {
+      metroKeys,
+      radiusMiles: DISCOVERY_HISTORICAL_PLACES_RADIUS_MILES,
+    });
     return null;
   }
 

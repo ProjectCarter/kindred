@@ -7,7 +7,8 @@
  */
 
 import type { WeatherIntelligence } from "../weather/providers/types.ts";
-import { KINDRED_LOCAL_RADIUS_KM, KINDRED_LOCAL_RADIUS_MILES } from "../editorial/editorialStandard.ts";
+import { KINDRED_LOCAL_RADIUS_KM } from "../editorial/editorialStandard.ts";
+import { DISCOVERY_EVENTS_METRO_ISOLATION_KM } from "../editorial/discoveryGeography.ts";
 import { haversineKm } from "../discovery/geo.ts";
 import {
   isGenericEventTitle,
@@ -158,12 +159,19 @@ function localRelevancePoints(
     });
   } else if (event.lat != null && event.lon != null && readerLat != null && readerLon != null) {
     const km = haversineKm(readerLat, readerLon, event.lat, event.lon);
-    if (km > KINDRED_LOCAL_RADIUS_KM) {
+    if (km > DISCOVERY_EVENTS_METRO_ISOLATION_KM) {
       score -= 28;
       reasons.push({
-        code: "outside_radius",
-        label: `Outside the ${KINDRED_LOCAL_RADIUS_MILES}-mile local paper`,
+        code: "outside_metro",
+        label: "Outside the Phoenix Metro event area",
         weight: -28,
+      });
+    } else if (km > KINDRED_LOCAL_RADIUS_KM) {
+      score += 8;
+      reasons.push({
+        code: "metro_event",
+        label: "Phoenix Metro event within driving distance",
+        weight: 8,
       });
     } else if (km > 20) {
       score += 4;
