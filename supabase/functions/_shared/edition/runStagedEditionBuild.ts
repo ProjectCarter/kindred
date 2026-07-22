@@ -83,7 +83,11 @@ import { buildHistoryAroundTownForEdition } from "../historyAroundTown/library.t
 import { isEditionEarlyPaintEnabled } from "./earlyPaintFeature.ts";
 import {
   buildValidationStageDiagnostic,
+  buildSectionRepairDiagnostic,
   persistValidationReport,
+  persistRepairPlan,
+  persistUnresolvedRepair,
+  appendJobStageDiagnostic,
   recordOptionalStageFailure,
 } from "./editionValidationPersistence.ts";
 import { runPublishEditionStage, readLatestValidationReport } from "./publishEdition.ts";
@@ -94,7 +98,13 @@ import {
 } from "./technicalValidation.ts";
 import {
   mergeValidationIntoBuildState,
+  readValidationFromBuildState,
 } from "./editionValidationTypes.ts";
+import { isBanditsPicksEnabled } from "../bandit/banditsPicksFeature.ts";
+import {
+  planSectionRepairs,
+  isPublicationEligibleForRepairFlow,
+} from "./sectionRepair.ts";
 
 export type StagedBuildJobRow = {
   id: string;
@@ -964,13 +974,88 @@ async function runValidateTechnicalStage(
     report,
   });
 
-  if (report.overallStatus === "FAIL") {
-    throw new Error(
-      `validate_technical failed: ${report.blockingFailures.join(", ") || report.overallStatus}`
-    );
+  return { report, buildState: mergedBuildState };
+}
+
+async function attemptSectionRepair(
+  admin: SupabaseClient,
+  ctx: StageContext,
+  buildState: BuildState,
+  report: TechnicalValidationReport,
+  workerInput: RunUserGenerationJobInput & { jobId: string }
+): Promise<
+  | { outcome: "requeued"; buildState: Record<string, unknown>; plan: ReturnType<typeof planSectionRepairs> }
+  | { outcome: "unresolved"; buildState: Record<string, unknown>; error: string; plan: ReturnType<typeof planSectionRepairs> }
+> {
+  const validationState = readValidationFromBuildState(buildState as Record<string, unknown>);
+  const plan = planSectionRepairs(report, validationState, {
+    banditsPickEnabled: isBanditsPicksEnabled(),
+  });
+
+  if (!plan.allowed || plan.stages.length === 0) {
+    const merged = await persistUnresolvedRepair(admin, {
+      jobId: ctx.jobId,
+      buildState: buildState as Record<string, unknown>,
+      plan,
+      report,
+    });
+    await appendJobStageDiagnostic(admin, {
+      jobId: ctx.jobId,
+      diagnostic: buildSectionRepairDiagnostic({
+        traceId: ctx.traceId,
+        plan,
+        report,
+        requeued: false,
+      }),
+    });
+    return {
+      outcome: "unresolved",
+      buildState: merged,
+      plan,
+      error: `validate_technical failed: ${report.blockingFailures.join(", ") || report.overallStatus} — ${plan.unresolvedReason ?? "repair_not_allowed"}`,
+    };
   }
 
-  return { report, buildState: mergedBuildState };
+  const merged = await persistRepairPlan(admin, {
+    jobId: ctx.jobId,
+    buildState: buildState as Record<string, unknown>,
+    plan,
+    report,
+  });
+
+  const { error: requeueError } = await admin.rpc("requeue_edition_build_stages", {
+    p_job_id: ctx.jobId,
+    p_stages: plan.stages,
+  });
+  if (requeueError) {
+    throw new Error(`requeue_edition_build_stages failed: ${requeueError.message}`);
+  }
+
+  await appendJobStageDiagnostic(admin, {
+    jobId: ctx.jobId,
+    diagnostic: buildSectionRepairDiagnostic({
+      traceId: ctx.traceId,
+      plan,
+      report,
+      requeued: true,
+    }),
+  });
+
+  console.log(
+    JSON.stringify({
+      kind: "edition_section_repair_requeued",
+      editionId: ctx.editionId,
+      metroKey: ctx.metroKey,
+      traceId: ctx.traceId,
+      stages: plan.stages,
+      stageReasons: plan.stageReasons,
+      repairAttempts: readValidationFromBuildState(merged)?.repairAttempts ?? {},
+    })
+  );
+
+  triggerUserEditionJobWorker(workerInput);
+
+  return { outcome: "requeued", buildState: merged, plan };
 }
 
 async function runPublishEditionStageWrapper(
@@ -1251,9 +1336,47 @@ export async function runEditionBuildStage(
         const r = await runValidateTechnicalStage(admin, ctx!, buildState);
         Object.assign(buildState, r.buildState);
         lastValidationReport = r.report;
-        itemCount = r.report.deskReports.length;
-        payloadBytes = null;
-        break;
+
+        if (isPublicationEligibleForRepairFlow(r.report)) {
+          itemCount = r.report.deskReports.length;
+          payloadBytes = null;
+          break;
+        }
+
+        const repair = await attemptSectionRepair(
+          admin,
+          ctx!,
+          buildState,
+          r.report,
+          input
+        );
+        Object.assign(buildState, repair.buildState);
+
+        if (repair.outcome === "requeued") {
+          const diagnostic = buildStageDiagnostic({
+            traceId: input.editionTraceId ?? null,
+            stage,
+            elapsedMs: Math.round(performance.now() - started),
+            itemCount: r.report.deskReports.length,
+            payloadBytes: null,
+            success: true,
+            retryCount: job.attempts ?? 0,
+          });
+          logEditionBuildStageDiagnostic({
+            ...diagnostic,
+            sectionRepairRequeued: true,
+            repairStages: repair.plan.stages,
+          });
+          return {
+            ok: true,
+            editionId: ctx!.editionId,
+            stage,
+            done: false,
+            triggeredNext: true,
+          };
+        }
+
+        throw new Error(repair.error);
       }
       case "publish_edition": {
         lastValidationReport =
@@ -1272,7 +1395,7 @@ export async function runEditionBuildStage(
         ? buildValidationStageDiagnostic({
             traceId: input.editionTraceId ?? null,
             report: lastValidationReport,
-            publicationAllowed: false,
+            publicationAllowed: isPublicationEligibleForRepairFlow(lastValidationReport),
           })
         : stage === "publish_edition" && lastValidationReport
           ? buildValidationStageDiagnostic({

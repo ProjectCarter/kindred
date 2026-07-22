@@ -74,6 +74,25 @@ export type OptionalStageFailureRecord = {
   at: string;
 };
 
+export type SectionRepairPlan = {
+  allowed: boolean;
+  stages: string[];
+  stageReasons: Record<string, string>;
+  desksTargeted: EditionValidationDesk[];
+  skippedStages: Array<{ stage: string; reason: string }>;
+  unresolvedReason?: string;
+};
+
+export type SectionRepairRecord = {
+  plannedAt: string;
+  completedAt: string | null;
+  stages: string[];
+  stageReasons: Record<string, string>;
+  triggeredByValidationAt: string;
+  unresolved: boolean;
+  unresolvedReason: string | null;
+};
+
 export type EditionBuildValidationState = {
   version: typeof EDITION_VALIDATION_VERSION;
   earlyPaintEnabled: boolean;
@@ -87,6 +106,8 @@ export type EditionBuildValidationState = {
     reason: string | null;
   };
   optionalStageFailures: OptionalStageFailureRecord[];
+  repairHistory: SectionRepairRecord[];
+  latestRepair: SectionRepairRecord | null;
 };
 
 export function emptyEditionBuildValidationState(
@@ -105,6 +126,8 @@ export function emptyEditionBuildValidationState(
       reason: null,
     },
     optionalStageFailures: [],
+    repairHistory: [],
+    latestRepair: null,
   };
 }
 
