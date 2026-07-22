@@ -16,6 +16,7 @@
     "validate:edition-pipeline-v2-phase4": "node scripts/run-edition-pipeline-v2-phase4.mjs",
     "test:edition-pipeline-health": "node --test lib/edition/editionPipelineHealth.test.ts",
     "test:edition-pipeline-phase6": "node --test lib/edition/pipelineV2Phase6.test.ts",
+    "test:edition-quality-engine": "node --test lib/edition/editionQualityEngine.test.ts",
     "validate:edition-pipeline-v2-phase6": "node scripts/run-edition-pipeline-v2-phase6.mjs",
     "test:nationwide-audit": "node --test lib/edition/nationwideAudit.test.ts lib/edition/nationalNews.test.ts lib/edition/nationalDailyValidation.test.ts lib/edition/usNationalDaily.test.ts",
     "audit:nationwide": "npx --yes tsx scripts/nationwide-editorial-audit.ts",

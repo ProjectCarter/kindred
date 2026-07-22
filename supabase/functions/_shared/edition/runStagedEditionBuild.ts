@@ -106,6 +106,7 @@ import {
   isPublicationEligibleForRepairFlow,
 } from "./sectionRepair.ts";
 import { recordEditionPipelineHealth } from "./editionHealthPersistence.ts";
+import { recordEditionQuality } from "./editionQualityPersistence.ts";
 import { recordPipelineStageTiming } from "./editionPipelineHealth.ts";
 
 export type StagedBuildJobRow = {
@@ -1077,6 +1078,30 @@ async function runPublishEditionStageWrapper(
   const validationReport = readLatestValidationReport(buildState as Record<string, unknown>);
   if (!validationReport) {
     throw new Error("publish_edition blocked: missing validation report");
+  }
+
+  try {
+    const qualityBuildState = await recordEditionQuality(admin, {
+      jobId: ctx.jobId,
+      buildState: buildState as Record<string, unknown>,
+      editionId: ctx.editionId,
+      userId: ctx.userId,
+      editionDate: ctx.editionDate,
+      metroKey: ctx.metroKey,
+      traceId: ctx.traceId,
+      location: ctx.location,
+      catalogMetroKey: ctx.catalogMetroKey,
+    });
+    Object.assign(buildState, qualityBuildState);
+  } catch (qualityError) {
+    console.warn(
+      JSON.stringify({
+        kind: "edition_quality_record_failed",
+        editionId: ctx.editionId,
+        metroKey: ctx.metroKey,
+        error: qualityError instanceof Error ? qualityError.message : String(qualityError),
+      })
+    );
   }
 
   const result = await runPublishEditionStage(admin, {
