@@ -81,7 +81,7 @@ export async function runPublishEditionStage(
   await admin
     .from("generation_jobs")
     .update({
-      build_state: mergeValidationIntoBuildState({}, preservedValidation),
+      build_state: mergeValidationIntoBuildState(input.buildState, preservedValidation),
       build_stage: null,
     })
     .eq("id", input.jobId);

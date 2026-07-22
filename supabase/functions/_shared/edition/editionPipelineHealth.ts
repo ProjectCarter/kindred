@@ -1,0 +1,20 @@
+/** Server re-export — lib/edition/editionPipelineHealth.ts */
+export {
+  EDITION_PIPELINE_HEALTH_VERSION,
+  appendEditionPipelineHealthReport,
+  buildEditionPipelineHealthDiagnostic,
+  buildEditionPipelineHealthReport,
+  computeEditionHealthScore,
+  emptyEditionPipelineHealthState,
+  extractTimingFromStageTimings,
+  formatEditionPipelineHealthReport,
+  mergePipelineHealthIntoBuildState,
+  readPipelineHealthFromBuildState,
+  readPipelineStageTimings,
+  recordPipelineStageTiming,
+  type EditionPipelineHealthPublicationStatus,
+  type EditionPipelineHealthReport,
+  type EditionPipelineHealthSectionStatus,
+  type EditionPipelineHealthState,
+  type EditionPipelineHealthTiming,
+} from "../../../../lib/edition/editionPipelineHealth.ts";

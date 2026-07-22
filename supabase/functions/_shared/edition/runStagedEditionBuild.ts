@@ -105,6 +105,8 @@ import {
   planSectionRepairs,
   isPublicationEligibleForRepairFlow,
 } from "./sectionRepair.ts";
+import { recordEditionPipelineHealth } from "./editionHealthPersistence.ts";
+import { recordPipelineStageTiming } from "./editionPipelineHealth.ts";
 
 export type StagedBuildJobRow = {
   id: string;
@@ -1008,9 +1010,18 @@ async function attemptSectionRepair(
         requeued: false,
       }),
     });
+    const healthBuildState = await recordEditionPipelineHealth(admin, {
+      jobId: ctx.jobId,
+      buildState: merged,
+      editionId: ctx.editionId,
+      metroKey: ctx.metroKey,
+      editionDate: ctx.editionDate,
+      traceId: ctx.traceId,
+      publicationStatus: "unresolved_repair",
+    });
     return {
       outcome: "unresolved",
-      buildState: merged,
+      buildState: healthBuildState,
       plan,
       error: `validate_technical failed: ${report.blockingFailures.join(", ") || report.overallStatus} — ${plan.unresolvedReason ?? "repair_not_allowed"}`,
     };
@@ -1085,7 +1096,10 @@ async function runPublishEditionStageWrapper(
 
   return {
     itemCount: validationReport.deskReports.length,
-    buildState: mergeValidationIntoBuildState({}, result.preservedValidation),
+    buildState: mergeValidationIntoBuildState(
+      buildState as Record<string, unknown>,
+      result.preservedValidation
+    ),
   };
 }
 
@@ -1353,10 +1367,24 @@ export async function runEditionBuildStage(
         Object.assign(buildState, repair.buildState);
 
         if (repair.outcome === "requeued") {
+          const elapsedMs = Math.round(performance.now() - started);
+          Object.assign(
+            buildState,
+            recordPipelineStageTiming(
+              buildState as Record<string, unknown>,
+              stage,
+              elapsedMs
+            )
+          );
+          await admin
+            .from("generation_jobs")
+            .update({ build_state: buildState })
+            .eq("id", input.jobId);
+
           const diagnostic = buildStageDiagnostic({
             traceId: input.editionTraceId ?? null,
             stage,
-            elapsedMs: Math.round(performance.now() - started),
+            elapsedMs,
             itemCount: r.report.deskReports.length,
             payloadBytes: null,
             success: true,
@@ -1390,6 +1418,12 @@ export async function runEditionBuildStage(
         throw new Error(`Unknown stage: ${stage}`);
     }
 
+    const elapsedMs = Math.round(performance.now() - started);
+    Object.assign(
+      buildState,
+      recordPipelineStageTiming(buildState as Record<string, unknown>, stage, elapsedMs)
+    );
+
     const validationExtra =
       stage === "validate_technical" && lastValidationReport
         ? buildValidationStageDiagnostic({
@@ -1414,7 +1448,7 @@ export async function runEditionBuildStage(
     const diagnostic = buildStageDiagnostic({
       traceId: input.editionTraceId ?? null,
       stage,
-      elapsedMs: Math.round(performance.now() - started),
+      elapsedMs,
       itemCount,
       payloadBytes,
       success: true,
@@ -1423,6 +1457,17 @@ export async function runEditionBuildStage(
     logEditionBuildStageDiagnostic(diagnostic);
 
     if (stage === "publish_edition") {
+      const healthBuildState = await recordEditionPipelineHealth(admin, {
+        jobId: input.jobId,
+        buildState: buildState as Record<string, unknown>,
+        editionId,
+        metroKey: ctx!.metroKey,
+        editionDate: ctx!.editionDate,
+        traceId: input.editionTraceId ?? null,
+        publicationStatus: "published",
+      });
+      Object.assign(buildState, healthBuildState);
+
       await completeStage(admin, {
         jobId: input.jobId,
         completedStage: stage,
