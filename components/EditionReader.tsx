@@ -99,8 +99,6 @@ import { EditorialCardGrid } from "./EditorialCardGrid";
 import { NewsArticleSection } from "./NewsArticleSection";
 import { banditsPickToListingCards } from "../lib/edition/homepageListingCards";
 import {
-  LOCAL_NEWS_EMPTY_PLACEHOLDER,
-  NATIONAL_NEWS_EMPTY_PLACEHOLDER,
   localNewsPackageToArticleTeasers,
   resolveNationalNewsArticleTeasers,
 } from "../lib/edition/homepageNewsTeasers";
@@ -871,11 +869,11 @@ function EditionReaderInner({
       storyOfWillRender ? "story_of" : null,
       history ? "today_in_history" : null,
       isBanditsPicksEnabled() && banditsPick ? "bandits_pick" : null,
-      "local_news",
-      "national_news",
+      localNewsArticleTeasers.length > 0 ? "local_news" : null,
+      nationalNewsArticleTeasers.length > 0 ? "national_news" : null,
+      historyCarouselCards.length > 0 ? "history_around_town" : null,
       lookingAhead ? "community" : null,
       ...otherSections.map((s) => s.section_type),
-      historyCarouselCards.length > 0 ? "history_around_town" : null,
       "edition_close",
     ].filter(Boolean);
     console.log("[home:sections:render]", {
@@ -980,6 +978,10 @@ function EditionReaderInner({
   }
 
   function renderSection(section: EditionSection, folioIndex: number) {
+    if (!section.headline?.trim() && !section.body?.trim()) {
+      return null;
+    }
+
     const clipped = clippedSectionIds?.has(section.id) ?? false;
     const pending = clipPendingId === section.id;
     const opensReader =
@@ -1052,6 +1054,23 @@ function EditionReaderInner({
     );
   }
 
+  function revealFolio(
+    index: number,
+    content: ReactNode | null | false | undefined,
+    options?: { disabled?: boolean; key?: string }
+  ) {
+    if (content == null || content === false) return null;
+    return (
+      <FolioReveal
+        key={options?.key}
+        index={index}
+        disabled={options?.disabled}
+      >
+        {content}
+      </FolioReveal>
+    );
+  }
+
   // Props retained for API stability with home/edition screens.
   void heroImageUri;
   void banditAside;
@@ -1093,7 +1112,8 @@ function EditionReaderInner({
         }}
       />
 
-      <FolioReveal index={folioCursor++}>
+      {revealFolio(
+        folioCursor++,
         <LocalEventsGrid
           events={events}
           homepageOrder={curatedLocalEvents}
@@ -1102,191 +1122,203 @@ function EditionReaderInner({
           onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
           loadStatus={localEventsStatus}
         />
-      </FolioReveal>
+      )}
 
-      {curatedFullAllocation.activities.length > 0 ? (
-        <FolioReveal index={folioCursor++}>
-          <ActivitiesSection
-            items={curatedFullAllocation.activities}
-            locationCity={locationCity}
-            readerLocation={resolvedReaderLocation}
-            onOpenItem={
-              onOpenArticle
-                ? (item) => {
-                    const article = activityArticlesById.get(item.item.id);
-                    if (article) onOpenArticle(article);
-                  }
-                : undefined
-            }
-            onSeeAll={onSeeAllActivities}
-          />
-        </FolioReveal>
-      ) : null}
-
-      {curatedFullAllocation.recommendations.length > 0 ? (
-        <FolioReveal index={folioCursor++}>
-          <RecommendationsSection
-            items={curatedFullAllocation.recommendations}
-            locationCity={locationCity}
-            readerLocation={resolvedReaderLocation}
-            onOpenItem={
-              onOpenArticle
-                ? (item) => {
-                    const article = recommendationArticlesById.get(item.item.id);
-                    if (article) onOpenArticle(article);
-                  }
-                : undefined
-            }
-            onSeeAll={
-              onSeeAllRecommendations
-                ? (pool) => onSeeAllRecommendations(pool)
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
-
-      {storyOf && storyOfWillRender ? (
-        <FolioReveal index={folioCursor++}>
-          <StoryOfSection
-            section={storyOf}
-            cityName={locationCity}
-            image={storyOfImage}
-            subtitle={storyOfSubtitle}
-            onOpen={
-              onOpenArticle
-                ? () => onOpenArticle(articleForSection(storyOf))
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
-
-      {history ? (
-        <FolioReveal index={folioCursor++}>
-          <TodayInHistorySection
-            section={history}
-            historicalYear={historyYear}
-            image={renderHistoryImage ? historyImage : null}
-            onOpen={
-              onOpenArticle
-                ? () => onOpenArticle(articleForSection(history))
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
-
-      {isBanditsPicksEnabled() && banditsPick ? (
-        <FolioReveal index={folioCursor++}>
-          {banditsPick.intro?.trim() ? (
-            <View
-              style={styles.banditPickNoteRow}
-              accessible
-              accessibilityLabel={`Bandit says: ${banditsPick.intro.trim()}`}
-            >
-              <BanditCharacter
-                pose="head-portrait"
-                size={40}
-                style={styles.banditPickAvatar}
-                decorative
-              />
-              <Text style={styles.banditPickNote} maxFontSizeMultiplier={1.3}>
-                {banditsPick.intro.trim()}
-              </Text>
-            </View>
-          ) : null}
-          <EditorialCardGrid
-            kicker="Bandit’s Pick"
-            cards={banditsPickListingCards}
-            analyticsSectionType="bandits_pick"
-            onOpenCard={
-              onOpenArticle
-                ? (card) => {
-                    if (card.id === banditsPick.story.id) {
-                      if (banditsPickArticle) onOpenArticle(banditsPickArticle);
-                      return;
+      {curatedFullAllocation.activities.length > 0
+        ? revealFolio(
+            folioCursor++,
+            <ActivitiesSection
+              items={curatedFullAllocation.activities}
+              locationCity={locationCity}
+              readerLocation={resolvedReaderLocation}
+              onOpenItem={
+                onOpenArticle
+                  ? (item) => {
+                      const article = activityArticlesById.get(item.item.id);
+                      if (article) onOpenArticle(article);
                     }
-                    const article = localBizArticlesById.get(card.id);
-                    if (article) onOpenArticle(article);
-                  }
-                : undefined
-            }
-          />
-        </FolioReveal>
-      ) : null}
+                  : undefined
+              }
+              onSeeAll={onSeeAllActivities}
+            />
+          )
+        : null}
 
-      {/* Local News — always mounts; National News follows immediately after. */}
-      <FolioReveal index={folioCursor++} disabled>
+      {curatedFullAllocation.recommendations.length > 0
+        ? revealFolio(
+            folioCursor++,
+            <RecommendationsSection
+              items={curatedFullAllocation.recommendations}
+              locationCity={locationCity}
+              readerLocation={resolvedReaderLocation}
+              onOpenItem={
+                onOpenArticle
+                  ? (item) => {
+                      const article = recommendationArticlesById.get(item.item.id);
+                      if (article) onOpenArticle(article);
+                    }
+                  : undefined
+              }
+              onSeeAll={
+                onSeeAllRecommendations
+                  ? (pool) => onSeeAllRecommendations(pool)
+                  : undefined
+              }
+            />
+          )
+        : null}
+
+      {storyOf && storyOfWillRender
+        ? revealFolio(
+            folioCursor++,
+            <StoryOfSection
+              section={storyOf}
+              cityName={locationCity}
+              image={storyOfImage}
+              subtitle={storyOfSubtitle}
+              onOpen={
+                onOpenArticle
+                  ? () => onOpenArticle(articleForSection(storyOf))
+                  : undefined
+              }
+            />
+          )
+        : null}
+
+      {history
+        ? revealFolio(
+            folioCursor++,
+            <TodayInHistorySection
+              section={history}
+              historicalYear={historyYear}
+              image={renderHistoryImage ? historyImage : null}
+              onOpen={
+                onOpenArticle
+                  ? () => onOpenArticle(articleForSection(history))
+                  : undefined
+              }
+            />
+          )
+        : null}
+
+      {isBanditsPicksEnabled() && banditsPick
+        ? revealFolio(
+            folioCursor++,
+            <>
+              {banditsPick.intro?.trim() ? (
+                <View
+                  style={styles.banditPickNoteRow}
+                  accessible
+                  accessibilityLabel={`Bandit says: ${banditsPick.intro.trim()}`}
+                >
+                  <BanditCharacter
+                    pose="head-portrait"
+                    size={40}
+                    style={styles.banditPickAvatar}
+                    decorative
+                  />
+                  <Text style={styles.banditPickNote} maxFontSizeMultiplier={1.3}>
+                    {banditsPick.intro.trim()}
+                  </Text>
+                </View>
+              ) : null}
+              <EditorialCardGrid
+                kicker="Bandit’s Pick"
+                cards={banditsPickListingCards}
+                analyticsSectionType="bandits_pick"
+                onOpenCard={
+                  onOpenArticle
+                    ? (card) => {
+                        if (card.id === banditsPick.story.id) {
+                          if (banditsPickArticle) onOpenArticle(banditsPickArticle);
+                          return;
+                        }
+                        const article = localBizArticlesById.get(card.id);
+                        if (article) onOpenArticle(article);
+                      }
+                    : undefined
+                }
+              />
+            </>
+          )
+        : null}
+
+      {localNewsArticleTeasers.length > 0 ? (
         <NewsArticleSection
           sectionLabel="Local News"
           articles={localNewsArticleTeasers}
-          emptyCopy={LOCAL_NEWS_EMPTY_PLACEHOLDER}
           analyticsSectionType="local_news"
           onOpenArticle={onOpenArticle ? openLocalNewsArticle : undefined}
         />
-      </FolioReveal>
+      ) : null}
 
-      <FolioReveal index={folioCursor++} disabled>
+      {nationalNewsArticleTeasers.length > 0 ? (
         <NewsArticleSection
           sectionLabel="National News"
           articles={nationalNewsArticleTeasers}
-          emptyCopy={NATIONAL_NEWS_EMPTY_PLACEHOLDER}
           analyticsSectionType="national_news"
           onOpenArticle={onOpenArticle ? openNationalNewsArticle : undefined}
         />
-      </FolioReveal>
+      ) : null}
 
-      {lookingAhead ? (
-        <FolioReveal index={folioCursor++}>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>Community</Text>
-              <View style={styles.sectionRule} />
-            </View>
-            <Text style={styles.sectionIntro}>
-              Notes from the neighborhood desk.
-            </Text>
-            <Pressable
-              onPress={
+      {historyCarouselCards.length > 0
+        ? revealFolio(
+            folioCursor++,
+            <HistoryAroundTownSection
+              cards={historyCarouselCards}
+              subtitle={historyAroundTown?.subtitle}
+              onOpenPlace={
                 onOpenArticle
-                  ? () =>
-                      onOpenArticle(articleFromEditionSection(lookingAhead))
+                  ? (card) => onOpenArticle(articleFromHistoryPlace(card.place))
                   : undefined
               }
-              style={({ pressed }) => [pressed && styles.tapPressed]}
-            >
-              <Text style={styles.cardKicker}>Looking ahead</Text>
-              <Text style={styles.sectionHeadline}>
-                {lookingAhead.headline}
+              onSeeAll={onSeeAllHistoryAroundTown}
+              seeAllTotal={historyAroundTown?.places.length}
+            />
+          )
+        : null}
+
+      {lookingAhead
+        ? revealFolio(
+            folioCursor++,
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionLabelRow}>
+                <Text style={styles.sectionLabel}>Community</Text>
+                <View style={styles.sectionRule} />
+              </View>
+              <Text style={styles.sectionIntro}>
+                Notes from the neighborhood desk.
               </Text>
-              <Text style={styles.sectionDek} numberOfLines={3}>
-                {folioTeaser(lookingAhead.body).dek}
-              </Text>
-            </Pressable>
-          </View>
-        </FolioReveal>
-      ) : null}
+              <Pressable
+                onPress={
+                  onOpenArticle
+                    ? () =>
+                        onOpenArticle(articleFromEditionSection(lookingAhead))
+                    : undefined
+                }
+                style={({ pressed }) => [pressed && styles.tapPressed]}
+              >
+                <Text style={styles.cardKicker}>Looking ahead</Text>
+                <Text style={styles.sectionHeadline}>
+                  {lookingAhead.headline}
+                </Text>
+                <Text style={styles.sectionDek} numberOfLines={3}>
+                  {folioTeaser(lookingAhead.body).dek}
+                </Text>
+              </Pressable>
+            </View>
+          )
+        : null}
 
-      {otherSections.map((section) => renderSection(section, folioCursor++))}
+      {otherSections.map((section) => {
+        const rendered = renderSection(section, folioCursor);
+        if (rendered) {
+          folioCursor += 1;
+        }
+        return rendered;
+      })}
 
-      {historyCarouselCards.length > 0 ? (
-        <FolioReveal index={folioCursor++}>
-          <HistoryAroundTownSection
-            cards={historyCarouselCards}
-            subtitle={historyAroundTown?.subtitle}
-            onOpenPlace={
-              onOpenArticle
-                ? (card) => onOpenArticle(articleFromHistoryPlace(card.place))
-                : undefined
-            }
-            onSeeAll={onSeeAllHistoryAroundTown}
-            seeAllTotal={historyAroundTown?.places.length}
-          />
-        </FolioReveal>
-      ) : null}
-
-      <EditionClose folioIndex={folioCursor} />
+      <EditionClose />
     </View>
   );
 }
@@ -1326,7 +1358,7 @@ export const EditionReader = memo(EditionReaderInner, editionReaderPropsAreEqual
 
 const styles = StyleSheet.create({
   folio: {
-    paddingBottom: space.endPadding,
+    paddingBottom: 0,
   },
   banditPickNoteRow: {
     flexDirection: "row",

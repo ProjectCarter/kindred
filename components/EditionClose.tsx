@@ -1,36 +1,29 @@
 import { Text, View, StyleSheet } from "react-native";
-import { paper, space } from "../lib/edition/newspaperTheme";
+import { paper } from "../lib/edition/newspaperTheme";
 import {
   editionColophon,
   editionFarewell,
 } from "../lib/edition/morningRitual";
-import { FolioReveal } from "./FolioReveal";
-
-type Props = {
-  folioIndex?: number;
-};
 
 /**
  * Satisfying close to today’s paper — not an abrupt scroll stop.
  */
-export function EditionClose({ folioIndex = 12 }: Props) {
+export function EditionClose() {
   return (
-    <FolioReveal index={folioIndex}>
-      <View style={styles.wrap} accessibilityRole="summary">
-        <View style={styles.rule} />
-        <Text style={styles.colophon}>{editionColophon()}</Text>
-        <Text style={styles.farewell}>{editionFarewell()}</Text>
-        <Text style={styles.sign}>— Bandit</Text>
-        <View style={styles.rule} />
-      </View>
-    </FolioReveal>
+    <View style={styles.wrap} accessibilityRole="summary">
+      <View style={styles.rule} />
+      <Text style={styles.colophon}>{editionColophon()}</Text>
+      <Text style={styles.farewell}>{editionFarewell()}</Text>
+      <Text style={styles.sign}>— Bandit</Text>
+      <View style={styles.rule} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingTop: space.endPadding,
-    paddingBottom: 12,
+    paddingTop: 8,
+    paddingBottom: 0,
     alignItems: "center",
   },
   rule: {

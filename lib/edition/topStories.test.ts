@@ -53,13 +53,17 @@ test("EditionReader always mounts Local News folio", () => {
     "utf8"
   );
   assert.match(source, /resolveLocalNewsHomePackage/);
-  assert.match(source, /LOCAL_NEWS_EMPTY_PLACEHOLDER/);
   assert.match(source, /NewsArticleSection/);
-  assert.match(source, /localNewsArticleTeasers/);
-  assert.match(source, /National News/);
-  assert.match(source, /nationalNewsArticleTeasers/);
-  assert.match(source, /NATIONAL_NEWS_EMPTY_PLACEHOLDER/);
-  assert.match(source, /FolioReveal index=\{folioCursor\+\+\} disabled/);
+  assert.match(source, /localNewsArticleTeasers\.length > 0/);
+  assert.match(source, /nationalNewsArticleTeasers\.length > 0/);
+  assert.match(
+    source,
+    /localNewsArticleTeasers\.length > 0[\s\S]*<NewsArticleSection[\s\S]*sectionLabel="Local News"/
+  );
+  assert.match(
+    source,
+    /nationalNewsArticleTeasers\.length > 0[\s\S]*<NewsArticleSection[\s\S]*sectionLabel="National News"/
+  );
   assert.doesNotMatch(
     source,
     /leadStory && \/local\/i\.test\(leadStory\.role \?\? ""\)\s*\?\s*\(\s*\n\s*<TimeStylePackage/

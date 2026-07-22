@@ -259,10 +259,7 @@ import {
 } from "../lib/weather/liveWeatherRefresh";
 import {
   getLastWeatherRefreshDiagnostic,
-  type WeatherDisplayDiagnostic,
 } from "../lib/weather/weatherDiagnostics";
-import { WeatherDiagnosticPanel } from "../components/WeatherDiagnosticPanel";
-import { resolveHomepageWeatherDisplay } from "../lib/weather/homepageWeatherDisplay";
 import {
   needsNetworkDiscoveryMerge,
   sectionsNeedNetworkBodyMerge,
@@ -3594,46 +3591,6 @@ export default function HomeScreen() {
     []
   );
 
-  const weatherDisplayDiagnostic = useMemo((): WeatherDisplayDiagnostic | null => {
-    if (!__DEV__) return null;
-    const lastRefresh = getLastWeatherRefreshDiagnostic();
-    const editionWeatherSummary = intelligence?.weatherSummary ?? null;
-    const resolved = resolveHomepageWeatherDisplay({
-      editorialContext: editionWeatherSummary
-        ? { weatherSummary: editionWeatherSummary }
-        : null,
-      liveWeatherSummary: liveWeather?.weatherSummary ?? null,
-      liveWeatherRetrievedAt: liveWeather?.retrievedAt ?? null,
-      weatherConditionCode: liveWeather?.conditionCode ?? null,
-      editionWeatherRetrievedAt: null,
-    });
-    return {
-      selectedSource: liveWeather?.weatherSummary
-        ? "live_weather"
-        : editionWeatherSummary
-          ? "edition_snapshot"
-          : "none",
-      liveRequestStatus: lastRefresh.status,
-      coordinates: lastRefresh.coordinates ?? {
-        lat: activeLocation?.place?.lat ?? 0,
-        lon: activeLocation?.place?.lon ?? 0,
-        city: activeLocation?.place?.city ?? null,
-      },
-      fetchedAt: liveWeather?.retrievedAt ?? null,
-      cacheAgeMs: liveWeather?.cacheAgeMs ?? null,
-      current: resolved?.current ?? null,
-      highLow: resolved?.highLow ?? null,
-      condition: resolved?.condition ?? null,
-      fallbackReason:
-        lastRefresh.fallbackReason ??
-        (!liveWeather?.weatherSummary && editionWeatherSummary
-          ? "edition_snapshot_after_live_miss"
-          : null),
-      lastRefresh,
-      liveSnapshot: liveWeather,
-    };
-  }, [activeLocation?.place, intelligence?.weatherSummary, liveWeather]);
-
   // Resume: quietly refresh paper + stale GPS when mode is current.
   useEffect(() => {
     const lastActive = { at: Date.now() };
@@ -4689,10 +4646,6 @@ export default function HomeScreen() {
           </Text>
         ) : null}
 
-        {__DEV__ ? (
-          <WeatherDiagnosticPanel diagnostic={weatherDisplayDiagnostic} />
-        ) : null}
-
         {activeLocation?.isTravel && activeLocation.place ? (
           <View style={styles.travelBanner}>
             <Text style={styles.travelText}>
@@ -5004,7 +4957,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 28,
     paddingTop: 22,
-    paddingBottom: 96,
+    paddingBottom: 0,
   },
   travelBanner: {
     flexDirection: "row",

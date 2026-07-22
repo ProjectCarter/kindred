@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  isValidElement,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -17,6 +24,13 @@ type Props = {
   disabled?: boolean;
 };
 
+function hasVisibleChildren(children: ReactNode): boolean {
+  return Children.toArray(children).some((child) => {
+    if (child == null || child === false) return false;
+    return isValidElement(child) || typeof child === "string" || typeof child === "number";
+  });
+}
+
 /**
  * Soft folio entrance — opacity + gentle rise.
  * Honors Reduce Motion: content simply appears, still in place.
@@ -27,6 +41,9 @@ export function FolioReveal({
   style,
   disabled,
 }: Props) {
+  if (!hasVisibleChildren(children)) {
+    return null;
+  }
   const [reduceMotion, setReduceMotion] = useState(false);
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;

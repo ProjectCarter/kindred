@@ -31,6 +31,10 @@ export function NewsArticleSection({
     trackSectionViewedOnce(analyticsSectionType);
   }, [analyticsSectionType, articles.length]);
 
+  if (articles.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.section} accessibilityRole="summary">
       <View style={styles.labelRow}>
@@ -38,60 +42,56 @@ export function NewsArticleSection({
         <View style={styles.labelRule} />
       </View>
 
-      {articles.length === 0 ? (
-        <Text style={styles.empty}>{emptyCopy}</Text>
-      ) : (
-        articles.map((article, index) => {
-          const open = onOpenArticle ? () => onOpenArticle(article.id) : undefined;
+      {articles.map((article, index) => {
+        const open = onOpenArticle ? () => onOpenArticle(article.id) : undefined;
 
-          return (
-            <Pressable
-              key={article.id}
-              onPress={open}
-              disabled={!open}
-              accessibilityRole={open ? "button" : "text"}
-              accessibilityLabel={[
-                article.headline,
-                article.attribution,
-                article.teaser,
-                open ? "Read story" : null,
-              ]
-                .filter(Boolean)
-                .join(". ")}
-              style={({ pressed }) => [
-                styles.article,
-                index < articles.length - 1 && styles.articleRule,
-                open && pressed && { opacity: press.opacity },
-              ]}
-            >
-              <EditorialTitle
-                icon={NEWS_DESK_ICON}
-                title={article.headline}
-                style={styles.headline}
-                maxFontSizeMultiplier={1.2}
-              />
+        return (
+          <Pressable
+            key={article.id}
+            onPress={open}
+            disabled={!open}
+            accessibilityRole={open ? "button" : "text"}
+            accessibilityLabel={[
+              article.headline,
+              article.attribution,
+              article.teaser,
+              open ? "Read story" : null,
+            ]
+              .filter(Boolean)
+              .join(". ")}
+            style={({ pressed }) => [
+              styles.article,
+              index < articles.length - 1 && styles.articleRule,
+              open && pressed && { opacity: press.opacity },
+            ]}
+          >
+            <EditorialTitle
+              icon={NEWS_DESK_ICON}
+              title={article.headline}
+              style={styles.headline}
+              maxFontSizeMultiplier={1.2}
+            />
 
-              {article.attribution ? (
-                <Text style={styles.attribution} maxFontSizeMultiplier={1.1}>
-                  {article.attribution}
-                </Text>
-              ) : null}
+            {article.attribution ? (
+              <Text style={styles.attribution} maxFontSizeMultiplier={1.1}>
+                {article.attribution}
+              </Text>
+            ) : null}
 
-              {article.teaser ? (
-                <Text style={styles.teaser} maxFontSizeMultiplier={1.15}>
-                  {article.teaser}
-                </Text>
-              ) : null}
+            {article.teaser ? (
+              <Text style={styles.teaser} maxFontSizeMultiplier={1.15}>
+                {article.teaser}
+              </Text>
+            ) : null}
 
-              {open ? (
-                <Text style={styles.readCue} maxFontSizeMultiplier={1.15}>
-                  Read Story →
-                </Text>
-              ) : null}
-            </Pressable>
-          );
-        })
-      )}
+            {open ? (
+              <Text style={styles.readCue} maxFontSizeMultiplier={1.15}>
+                Read Story →
+              </Text>
+            ) : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
