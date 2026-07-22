@@ -254,6 +254,7 @@ import {
   resolveWeatherSummary,
 } from "../lib/edition/resolveWeatherSummary";
 import {
+  loadCachedLiveWeather,
   refreshLiveWeather,
   type LiveWeatherSnapshot,
 } from "../lib/weather/liveWeatherRefresh";
@@ -304,7 +305,6 @@ export default function HomeScreen() {
   const [sections, setSections] = useState<EditionSection[]>([]);
   const [editionDate, setEditionDate] = useState<string | null>(null);
   const [liveWeather, setLiveWeather] = useState<LiveWeatherSnapshot | null>(null);
-  const weatherForceOnceRef = useRef(true);
   const [editionId, setEditionId] = useState<string | null>(null);
   const [leadStory, setLeadStory] = useState<LeadStory | null>(null);
   const [topStories, setTopStories] = useState<TopStoryItem[]>([]);
@@ -742,6 +742,10 @@ export default function HomeScreen() {
       await hydrateDeveloperPreviewContext();
       const active = await resolveEffectivePlace({ refreshIfStale: false });
       if (!cancelled && mountedRef.current) {
+        const cachedLive = await loadCachedLiveWeather(active.place);
+        if (cachedLive) {
+          setLiveWeather(cachedLive);
+        }
         applyActiveLocation(active);
         focusedLocationKeyRef.current = activeLocationKey(active);
       }
@@ -994,6 +998,12 @@ export default function HomeScreen() {
         handoff: "layout-cache",
         preferPreview: true,
       });
+      if (identity.place) {
+        const cachedLive = await loadCachedLiveWeather(identity.place);
+        if (cachedLive && mountedRef.current) {
+          setLiveWeather(cachedLive);
+        }
+      }
       const todayStr = resolveEffectiveEditionDateSync();
       const metroKey = identity.metroKey;
       if (!metroKey) {
@@ -3558,8 +3568,7 @@ export default function HomeScreen() {
         }
         return;
       }
-      const force = Boolean(options?.force || weatherForceOnceRef.current);
-      weatherForceOnceRef.current = false;
+      const force = Boolean(options?.force);
       if (__DEV__) {
         console.log("[home:weather:request] start", {
           city: place.city,
@@ -3617,9 +3626,18 @@ export default function HomeScreen() {
   }, [loadEdition, refreshHomeWeather]);
 
   useEffect(() => {
-    setLiveWeather(null);
-    weatherForceOnceRef.current = true;
-    void refreshHomeWeather(activeLocation?.place ?? null, { force: true });
+    void (async () => {
+      const place = activeLocation?.place ?? null;
+      if (!place) {
+        setLiveWeather(null);
+        return;
+      }
+      const cached = await loadCachedLiveWeather(place);
+      if (mountedRef.current) {
+        setLiveWeather(cached);
+      }
+      void refreshHomeWeather(place, { force: !cached });
+    })();
   }, [
     activeLocation?.place?.lat,
     activeLocation?.place?.lon,

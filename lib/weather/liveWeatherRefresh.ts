@@ -3,8 +3,11 @@ import { supabase } from "../supabase";
 import { locationPayload, type KindredPlace } from "../location/deviceLocation";
 import {
   LIVE_WEATHER_REFRESH_INTERVAL_MS,
-  type WeatherFreshnessMetadata,
 } from "./weatherFreshness.ts";
+import {
+  isValidLiveWeatherSnapshot,
+  type LiveWeatherSnapshot,
+} from "./liveWeatherSnapshot.ts";
 import {
   emptyWeatherRefreshDiagnostic,
   recordWeatherRefreshDiagnostic,
@@ -12,23 +15,63 @@ import {
 } from "./weatherDiagnostics.ts";
 
 const THROTTLE_KEY = "@kindred/live-weather/last-at";
-
-export type LiveWeatherSnapshot = WeatherFreshnessMetadata & {
-  weatherSummary: string;
-  conditionCode: number | null;
-  currentC: number | null;
-  highC: number | null;
-  lowC: number | null;
-};
+const SNAPSHOT_KEY = "@kindred/live-weather/snapshot";
 
 const memoryLastAt = new Map<string, number>();
+const memorySnapshots = new Map<string, LiveWeatherSnapshot>();
 
-function throttleKey(lat: number, lon: number): string {
+function locationKey(lat: number, lon: number): string {
   return `${lat.toFixed(2)},${lon.toFixed(2)}`;
 }
 
+async function readCachedLiveWeather(
+  lat: number,
+  lon: number
+): Promise<LiveWeatherSnapshot | null> {
+  const key = locationKey(lat, lon);
+  const inMemory = memorySnapshots.get(key);
+  if (inMemory && isValidLiveWeatherSnapshot(inMemory)) {
+    return inMemory;
+  }
+
+  try {
+    const raw = await AsyncStorage.getItem(`${SNAPSHOT_KEY}:${key}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isValidLiveWeatherSnapshot(parsed)) return null;
+    memorySnapshots.set(key, parsed);
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedLiveWeather(
+  lat: number,
+  lon: number,
+  snapshot: LiveWeatherSnapshot
+): Promise<void> {
+  const key = locationKey(lat, lon);
+  memorySnapshots.set(key, snapshot);
+  try {
+    await AsyncStorage.setItem(`${SNAPSHOT_KEY}:${key}`, JSON.stringify(snapshot));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/** Hydrate the last successful live observation for this location. */
+export async function loadCachedLiveWeather(
+  place: KindredPlace | null
+): Promise<LiveWeatherSnapshot | null> {
+  if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) {
+    return null;
+  }
+  return readCachedLiveWeather(place.lat, place.lon);
+}
+
 async function shouldRefresh(lat: number, lon: number): Promise<boolean> {
-  const key = throttleKey(lat, lon);
+  const key = locationKey(lat, lon);
   const now = Date.now();
   const inMemory = memoryLastAt.get(key);
   if (inMemory && now - inMemory < LIVE_WEATHER_REFRESH_INTERVAL_MS) {
@@ -50,7 +93,7 @@ async function shouldRefresh(lat: number, lon: number): Promise<boolean> {
 }
 
 async function markRefreshed(lat: number, lon: number): Promise<void> {
-  const key = throttleKey(lat, lon);
+  const key = locationKey(lat, lon);
   const now = Date.now();
   memoryLastAt.set(key, now);
   try {
@@ -91,13 +134,23 @@ export async function refreshLiveWeather(
   }
 
   if (!options.force && !(await shouldRefresh(place.lat, place.lon))) {
+    const cached = await readCachedLiveWeather(place.lat, place.lon);
     recordWeatherRefreshDiagnostic({
       ...baseDiagnostic,
-      status: "throttled",
+      status: cached ? "success" : "throttled",
       finishedAt: new Date().toISOString(),
-      fallbackReason: "throttled",
+      fallbackReason: cached ? "cached_live_weather" : "throttled",
+      provider: cached?.provider ?? null,
+      retrievedAt: cached?.retrievedAt ?? null,
+      fetchTimestamp: cached?.fetchTimestamp ?? null,
+      cacheAgeMs: cached?.cacheAgeMs ?? null,
+      currentC: cached?.currentC ?? null,
+      highC: cached?.highC ?? null,
+      lowC: cached?.lowC ?? null,
+      conditionCode: cached?.conditionCode ?? null,
+      weatherSummary: cached?.weatherSummary ?? null,
     });
-    return null;
+    return cached;
   }
 
   recordWeatherRefreshDiagnostic(baseDiagnostic);
@@ -176,6 +229,8 @@ export async function refreshLiveWeather(
       cacheAgeMs: body.cacheAgeMs ?? null,
     };
 
+    await writeCachedLiveWeather(place.lat, place.lon, snapshot);
+
     recordWeatherRefreshDiagnostic({
       ...baseDiagnostic,
       status: "success",
@@ -208,3 +263,5 @@ export async function refreshLiveWeather(
     return null;
   }
 }
+
+export type { LiveWeatherSnapshot } from "./liveWeatherSnapshot.ts";

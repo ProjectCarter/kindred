@@ -8,6 +8,9 @@ export const EDITION_WEATHER_MAX_AGE_MS = 60 * 60 * 1000;
 /** Minimum interval between live weather refresh calls. */
 export const LIVE_WEATHER_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
+/** Max age for a persisted live observation shown on cold launch. */
+export const LIVE_WEATHER_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
 export type WeatherFreshnessMetadata = {
   /** ISO timestamp when the provider observation was retrieved/normalized. */
   retrievedAt: string;
