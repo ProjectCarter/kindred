@@ -9,8 +9,10 @@ description: Verifies Kindred National News desk content for national importance
 
 - [`docs/KINDRED_CONSTITUTION.md`](../../../docs/KINDRED_CONSTITUTION.md) §6–§7 National vs Local model
 - [`CLAUDE.md`](../../../CLAUDE.md) — editorial guardrails, verification rules
-- [`lib/edition/nationalNewsTypes.ts`](../../../lib/edition/nationalNewsTypes.ts) — package schema
-- [`supabase/functions/_shared/nationalDaily/selectNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/selectNationalNews.ts) — selection law
+- [`lib/edition/nationalNewsTypes.ts`](../../../lib/edition/nationalNewsTypes.ts) — package schema + `resolveNationalNewsForRender`
+- [`supabase/functions/_shared/nationalDaily/selectNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/selectNationalNews.ts) — candidate selection + `buildNationalNewsStoryPayload` (images)
+- [`supabase/functions/_shared/nationalDaily/resolveNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/resolveNationalNews.ts) — daily package build, Story Editor enrich, `claim_us_national_news_write`
+- [`lib/edition/nationalDailyValidation.ts`](../../../lib/edition/nationalDailyValidation.ts) — attach validation
 - [`lib/edition/kindredArticleProse.ts`](../../../lib/edition/kindredArticleProse.ts) — prose gate (`desk: "national_news"`)
 - [`.cursor/rules/kindred-editorial-constitution.mdc`](../../../.cursor/rules/kindred-editorial-constitution.mdc)
 - [`.cursor/rules/kindred-newspaper-editorial-standards.mdc`](../../../.cursor/rules/kindred-newspaper-editorial-standards.mdc)
@@ -33,8 +35,9 @@ Verify National News is **genuinely national**, **fresh**, **family-safe**, **no
 | Input | Required | Notes |
 |-------|----------|-------|
 | `edition_date` | Yes | Shared national package date |
-| `editions.national_news` column | For live check | Primary source — not `top_stories` |
-| `us_national_daily_id` | Optional | Links edition to national daily row |
+| `editions.national_news` column | For live check | City edition copy of shared package |
+| `kindred_us_national_daily.national_news` | For live check | Canonical daily package (one per calendar date) |
+| `us_national_daily_id` | Optional | Links city edition to national daily row |
 | Local News story IDs/headlines | For dedupe | From same edition row |
 | Second city edition (optional) | For parity | Gilbert + Seattle should share package |
 
@@ -52,14 +55,13 @@ Progress:
 - [ ] 8. Run unit tests
 ```
 
-**Step 1 — Primary source:**
+**Step 1 — Primary source (two-layer model):**
 
-```typescript
-// resolveNationalNewsFromEditionColumn(edition) — NOT top_stories primary path
-// lib/edition/nationalNewsTypes.ts
-```
+1. **Build:** `resolveUsNationalNews()` selects 3–5 stories, optional Story Editor enrich, writes to `kindred_us_national_daily` via RPC `claim_us_national_news_write`.
+2. **Attach:** City editions copy package into `editions.national_news` + `us_national_daily_id`.
+3. **Hydrate:** `resolveNationalNewsForRender({ columnOnly: true })` reads `editions.national_news` only — does **not** fall back to `top_stories` during cache/network desk sync (`homepageNewsHydration.ts`).
 
-Persisted field: `editions.national_news` → `NationalNewsPackage` with 3–5 ranked stories.
+Homepage teasers may still use legacy non-local lead/top stories when the package is empty (`resolveNationalNewsArticleTeasers` in `homepageNewsTeasers.ts`).
 
 **Step 2 — National importance** (`selectNationalNews.ts`):
 
@@ -80,7 +82,7 @@ Persisted field: `editions.national_news` → `NationalNewsPackage` with 3–5 r
 
 National must **never** use Local News fallback chain (`localNewsDesk.ts` is Local-only).
 
-**Step 5 — Image:** Each `story.image` — authorized wire/source attribution; subject plausibly matches headline; no AI-generated imagery per design rules.
+**Step 5 — Image:** Set at selection via `buildNationalNewsStoryPayload` from NewsAPI `imageUrl` — wire attribution + license note. Subject must plausibly match headline; no AI-generated imagery per design rules.
 
 **Step 6 — Prose gate:**
 
@@ -93,9 +95,9 @@ validateKindredArticleProse({
 
 **Step 7 — Detail consistency:**
 
-- Homepage: `resolveNationalNewsArticleTeasers()` → `NewsArticleSection`
-- Tap: `openNationalNewsArticle()` → `articleFromNationalNewsStory(story)`
-- Same `story.id`, headline, summary, `image.url` on reader path
+- Homepage: `resolveNationalNewsArticleTeasers()` → `NewsArticleSection` (max 3 rows from package)
+- Tap: `EditionReader.openNationalNewsArticle()` → `articleFromNationalNewsStory(story)` when package hit; legacy path uses `articleFromLeadStory` / `articleFromTopStory`
+- Same `story.id`, headline, and summary source on reader path; image via `story.image.url` on national adapter
 
 **Step 8 — Tests:**
 

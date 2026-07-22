@@ -11,10 +11,15 @@ Orchestrates **Local News + National News** end-to-end. Use with `/local-news-ve
 
 - [`docs/KINDRED_CONSTITUTION.md`](../../../docs/KINDRED_CONSTITUTION.md) §5–§7
 - [`CLAUDE.md`](../../../CLAUDE.md)
-- [`components/EditionReader.tsx`](../../../components/EditionReader.tsx) — render order
+- [`components/EditionReader.tsx`](../../../components/EditionReader.tsx) — render order, teaser + open handlers
+- [`app/home.tsx`](../../../app/home.tsx) — cache/network hydration orchestration
 - [`lib/edition/homepageNewsTeasers.ts`](../../../lib/edition/homepageNewsTeasers.ts)
-- [`lib/edition/localNewsDesk.ts`](../../../lib/edition/localNewsDesk.ts) — local fallback only
-- [`lib/edition/nationalNewsHydration.ts`](../../../lib/edition/nationalNewsHydration.ts)
+- [`lib/edition/localNewsHome.ts`](../../../lib/edition/localNewsHome.ts) + [`localNewsDesk.ts`](../../../lib/edition/localNewsDesk.ts)
+- [`lib/edition/topStoriesFromContext.ts`](../../../lib/edition/topStoriesFromContext.ts) — `editorial_context` slate
+- [`lib/edition/homepageNewsHydration.ts`](../../../lib/edition/homepageNewsHydration.ts) — cache bundle desk sync (`mergeNationalNewsState`, `withSyncedNewsDesksInCache`)
+- [`lib/edition/nationalNewsHydration.ts`](../../../lib/edition/nationalNewsHydration.ts) — runtime merge diagnostics (`mergeNationalNewsHydration`)
+- [`supabase/functions/_shared/leadStory/selectLeadStory.ts`](../../../supabase/functions/_shared/leadStory/selectLeadStory.ts) — local lead + desk fallback at build
+- [`supabase/functions/_shared/nationalDaily/resolveNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/resolveNationalNews.ts) — shared daily package
 - Related skills: `/local-news-verification`, `/national-news-verification`, `/homepage-audit`
 
 ## Purpose
@@ -70,7 +75,10 @@ Inspect `local_news` and `national_news` section audits in output.
 node scripts/simulate-homepage-news-hydration.mjs
 ```
 
-Confirms cold/warm/refresh merge behavior; `mergeNationalNewsHydration` must not null-overwrite valid package.
+Trace in code:
+- `app/home.tsx` — `setNationalNewsHydrated`, `mergeNationalNewsHydration`, cache backfill
+- `homepageNewsHydration.ts` — `resolveEditionNewsDesks` (`columnOnly: true`), `withSyncedNewsDesksInCache`
+- Must not null-overwrite valid national package during warm merge
 
 **Step 4 — Local verification:** Follow `/local-news-verification` checklist.
 
@@ -82,17 +90,19 @@ Confirms cold/warm/refresh merge behavior; `mergeNationalNewsHydration` must not
 
 | Desk | Allowed fallbacks | Forbidden |
 |------|-------------------|-----------|
-| Local | local_news → sports → weather → community | Using national package as local |
-| National | `national_news` package → legacy non-local lead/top stories adapter | localNewsDesk chain |
+| Local | `localNewsDesk.ts` chain at build: local_news → sports → weather → community; homepage via `resolveLocalNewsHomePackage` | Using national package as local |
+| National | `editions.national_news` package; EditionReader legacy non-local lead/top stories when package empty | `localNewsDesk` chain; `top_stories` during `columnOnly` desk sync |
 
 **Step 8 — Tests:**
 
 ```bash
 node --test lib/edition/localNewsDesk.test.ts
 node --test lib/edition/localNewsHome.test.ts
+node --test lib/edition/localNewsPipeline.test.ts
 node --test lib/edition/homepageNewsHydration.test.ts
+node --test lib/edition/homepageNewsTeasers.test.ts
 node --test lib/edition/nationalNews.test.ts
-node --test lib/edition/homepageNewsTeasers.test.ts 2>/dev/null || node --test lib/edition/topStories.test.ts
+node --test lib/edition/nationalDailyValidation.test.ts
 npm run test:nationwide-audit
 ```
 
@@ -128,15 +138,15 @@ node scripts/audit-gilbert-homepage-today.mjs [date]
 
 ### Homepage ↔ detail
 - [ ] Same story `id` opens same headline in reader
-- [ ] Teaser text derived from same summary source (`formatNewsArticleTeaser`)
-- [ ] National tap uses `articleFromNationalNewsStory`
-- [ ] Local tap uses `openLocalNewsArticle` path
+- [ ] Teaser from `formatNewsArticleTeaser` on homepage summary/dek
+- [ ] National tap: `openNationalNewsArticle` → `articleFromNationalNewsStory` (package path)
+- [ ] Local tap: `openLocalNewsArticle` → `openLead` / `articleFromTopStory` → `articleFromLocalNewsStory` when role is local
 
 ### Cache & regeneration
 - [ ] Cached edition shows same news desks as Supabase row
-- [ ] Warm hydration does not wipe `nationalNews` (`mergeNationalNewsHydration`)
-- [ ] Local-only regen does not corrupt national package
-- [ ] `withSyncedNewsDesksInCache` keeps desks paired in cache bundle
+- [ ] Warm hydration: `mergeNationalNewsHydration` + `mergeNationalNewsState` do not wipe package
+- [ ] Local-only regen (`regenerate-local-news-gilbert.mjs`) does not corrupt national package
+- [ ] `withSyncedNewsDesksInCache` keeps Local slate + national package paired in bundle
 
 ### Empty states
 - [ ] Local: `No major local updates today.`
