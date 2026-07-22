@@ -22,12 +22,7 @@ import {
 import {
   resolveArticleContextActions,
 } from "../lib/edition/actionBar";
-import {
-  resolveClipTarget,
-  checkClipped,
-  saveClipping,
-  removeClipping,
-} from "../lib/edition/clippings";
+import { resolveSaveTarget } from "../lib/edition/saveTarget";
 import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
 import { supabase } from "../lib/supabase";
 import { trackArticleShared } from "../lib/analytics";
@@ -74,11 +69,8 @@ export function HistoryPlaceReader({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const readingWidth = Math.min(windowWidth - reader.gutter * 2, reader.measure);
-  const [clipped, setClipped] = useState(false);
   const [liked, setLiked] = useState(false);
-  const [clipPending, setClipPending] = useState(false);
   const [likePending, setLikePending] = useState(false);
-  const [clipError, setClipError] = useState<string | null>(null);
   const [heroFailed, setHeroFailed] = useState(false);
 
   const snapshot = useMemo(
@@ -86,8 +78,8 @@ export function HistoryPlaceReader({
     [place]
   );
 
-  const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
-  const canClip = Boolean(clipTarget);
+  const saveTarget = useMemo(() => resolveSaveTarget(article), [article]);
+  const canSave = Boolean(saveTarget);
   const practicalActions = useMemo(
     () => resolveArticleContextActions(article),
     [article]
@@ -104,23 +96,7 @@ export function HistoryPlaceReader({
   });
 
   useEffect(() => {
-    if (!clipTarget) {
-      setClipped(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      setClipped(await checkClipped(user.id, clipTarget.clipKey));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [clipTarget]);
-
-  useEffect(() => {
-    if (!clipTarget) {
+    if (!saveTarget) {
       setLiked(false);
       return;
     }
@@ -128,56 +104,30 @@ export function HistoryPlaceReader({
     void (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || cancelled) return;
-      setLiked(await checkLiked(user.id, clipTarget.clipKey));
+      setLiked(await checkLiked(user.id, saveTarget.clipKey));
     })();
     return () => {
       cancelled = true;
     };
-  }, [clipTarget]);
-
-  const toggleClip = useCallback(async () => {
-    if (!clipTarget || clipPending) return;
-    setClipPending(true);
-    setClipError(null);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setClipError("Sign in to pin stories to Today's Board.");
-        return;
-      }
-      if (clipped) {
-        await removeClipping(user.id, clipTarget.clipKey);
-        setClipped(false);
-      } else {
-        const result = await saveClipping(user.id, clipTarget, article);
-        if (!result.ok) {
-          setClipError(result.error ?? "Could not save to Today's Board.");
-          return;
-        }
-        setClipped(true);
-      }
-    } finally {
-      setClipPending(false);
-    }
-  }, [article, clipPending, clipTarget, clipped]);
+  }, [saveTarget]);
 
   const toggleLike = useCallback(async () => {
-    if (!clipTarget || likePending) return;
+    if (!saveTarget || likePending) return;
     setLikePending(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       if (liked) {
-        await removeLike(user.id, clipTarget.clipKey);
+        await removeLike(user.id, saveTarget.clipKey);
         setLiked(false);
       } else {
-        await saveLike(user.id, clipTarget, article);
+        await saveLike(user.id, saveTarget, article);
         setLiked(true);
       }
     } finally {
       setLikePending(false);
     }
-  }, [article, clipTarget, likePending, liked]);
+  }, [article, saveTarget, likePending, liked]);
 
   const handleShare = useCallback(async () => {
     const lines = [
@@ -262,26 +212,13 @@ export function HistoryPlaceReader({
           ) : null}
 
           <View style={styles.heroActions}>
-            {canClip ? (
-              <Pressable
-                onPress={() => void toggleClip()}
-                disabled={clipPending}
-                style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel={clipped ? "Unpin from Today's Board" : "Pin to Today's Board"}
-              >
-                <Text style={styles.heroActionText}>
-                  {clipped ? "📌 Pinned" : "📌 Pin"}
-                </Text>
-              </Pressable>
-            ) : null}
-            {canClip ? (
+            {canSave ? (
               <Pressable
                 onPress={() => void toggleLike()}
                 disabled={likePending}
                 style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}
                 accessibilityRole="button"
-                accessibilityLabel={liked ? "Unlike" : "Save"}
+                accessibilityLabel={liked ? "Saved. Tap to remove." : "Save"}
               >
                 <Text style={styles.heroActionText}>
                   {liked ? "❤️ Saved" : "🤍 Save"}
@@ -297,12 +234,6 @@ export function HistoryPlaceReader({
               <Text style={styles.heroActionText}>📤 Share</Text>
             </Pressable>
           </View>
-
-          {clipError ? (
-            <Text style={styles.clipError} accessibilityRole="alert">
-              {clipError}
-            </Text>
-          ) : null}
 
           {practicalActions.length > 0 ? (
             <ArticleActionList actions={practicalActions} />
@@ -541,11 +472,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: press.opacity,
-  },
-  clipError: {
-    color: paper.terracotta,
-    fontSize: 13,
-    marginBottom: 12,
   },
   section: {
     marginTop: 28,

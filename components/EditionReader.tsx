@@ -178,11 +178,6 @@ type Props = {
   topStories?: TopStoryItem[];
   /** Shared U.S. national news package — identical in every city on this date. */
   nationalNews?: NationalNewsPackage | null;
-  clippedSectionIds?: Set<string>;
-  onToggleClip?: (section: EditionSection) => void;
-  clipPendingId?: string | null;
-  onOpenClippings?: () => void;
-  onOpenArchive?: () => void;
   onShareEdition?: () => void;
   /** Collapsing masthead — trailing action while expanded (e.g. Library). */
   mastheadTrailing?: ReactNode;
@@ -254,11 +249,6 @@ function EditionReaderInner({
   banditsPick,
   topStories = [],
   nationalNews = null,
-  clippedSectionIds,
-  onToggleClip,
-  clipPendingId,
-  onOpenClippings,
-  onOpenArchive,
   onShareEdition,
   mastheadTrailing,
   mastheadLeading,
@@ -933,8 +923,6 @@ function EditionReaderInner({
   }
 
   function renderSection(section: EditionSection, folioIndex: number) {
-    const clipped = clippedSectionIds?.has(section.id) ?? false;
-    const pending = clipPendingId === section.id;
     const opensReader =
       Boolean(onOpenArticle) && sectionOpensArticleReader(section.section_type);
     const intro = sectionIntro(section.section_type);
@@ -978,28 +966,6 @@ function EditionReaderInner({
               <Text style={styles.continueCue}>Continue reading</Text>
             ) : null}
           </Pressable>
-
-          {onToggleClip ? (
-            <Pressable
-              style={({ pressed }) => [
-                styles.clipLink,
-                pressed && styles.clipPressed,
-              ]}
-              onPress={() => onToggleClip(section)}
-              disabled={pending}
-              accessibilityRole="button"
-              accessibilityLabel={clipped ? "Saved" : "Save for later"}
-            >
-              <Text
-                style={[
-                  styles.clipLinkText,
-                  clipped && styles.clipLinkTextSaved,
-                ]}
-              >
-                {pending ? "Saving…" : clipped ? "Saved" : "Save for later"}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       </FolioReveal>
     );
@@ -1238,8 +1204,6 @@ function EditionReaderInner({
       <EditionClose
         folioIndex={folioCursor + 2}
         editionDateLabel={dateLabel}
-        onOpenClippings={onOpenClippings}
-        onOpenArchive={onOpenArchive}
         onShareEdition={onShareEdition}
       />
     </View>
@@ -1263,7 +1227,6 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
     prev.historyAroundTown === next.historyAroundTown &&
     prev.nationalDaily === next.nationalDaily &&
     prev.pairedNationalDaily === next.pairedNationalDaily &&
-    prev.clippedSectionIds === next.clippedSectionIds &&
     prev.readerLocation === next.readerLocation &&
     prev.topStories === next.topStories &&
     prev.nationalNews === next.nationalNews &&
@@ -1390,25 +1353,5 @@ const styles = StyleSheet.create({
   },
   tapPressed: {
     opacity: press.opacity,
-  },
-  clipLink: {
-    alignSelf: "flex-start",
-    marginTop: 16,
-    paddingVertical: 8,
-    minHeight: 40,
-    justifyContent: "center",
-  },
-  clipPressed: {
-    opacity: press.opacity,
-  },
-  clipLinkText: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    letterSpacing: 0.2,
-    color: paper.inkMuted,
-    fontStyle: "italic",
-  },
-  clipLinkTextSaved: {
-    color: paper.inkFaint,
   },
 });

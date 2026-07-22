@@ -46,19 +46,7 @@ export default function LibraryScreen() {
           accessibilityRole="button"
           accessibilityLabel="Open location settings"
         >
-          <Text style={styles.clippingsLinkText}>Location</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.clippingsLink,
-            pressed && styles.pressed,
-          ]}
-          onPress={() => router.push("/clippings")}
-          accessibilityRole="button"
-          accessibilityLabel="Open your clippings"
-        >
-          <Text style={styles.clippingsLinkText}>Your clippings</Text>
+          <Text style={styles.utilityLinkText}>Location</Text>
         </Pressable>
 
         <Pressable
@@ -113,20 +101,13 @@ const styles = StyleSheet.create({
     color: paper.ink,
     marginBottom: 32,
   },
-  clippingsLink: {
-    marginTop: 40,
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: paper.terracotta,
-  },
   utilityLink: {
     alignSelf: "flex-start",
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.terracotta,
   },
-  clippingsLinkText: {
+  utilityLinkText: {
     fontFamily: "Georgia",
     fontSize: 15,
     color: paper.terracotta,

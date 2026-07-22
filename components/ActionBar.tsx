@@ -117,9 +117,7 @@ export function ActionBar({
     >
       {visible.map((action, index) => {
         const label =
-          action.kind === "save" && clipped
-            ? "Saved to Today's Board"
-            : action.label;
+          action.kind === "save" && clipped ? "Saved" : action.label;
 
         return (
           <View key={`${action.id}-${index}`} style={styles.itemWrap}>

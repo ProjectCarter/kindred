@@ -25,8 +25,6 @@ import { openKindredArticle } from "../lib/edition/openArticle";
 import { openKindredEvent } from "../lib/edition/openEvent";
 import { openMasterpiece } from "../lib/edition/openMasterpiece";
 import { setActiveEditionId } from "../lib/edition/editionContext";
-import { articleFromEditionSectionWithKnowledge } from "../lib/edition/article";
-import { saveClipping, removeClipping } from "../lib/edition/clippings";
 import { resolveArticleForStoryKey } from "../lib/edition/relatedArticle";
 import { stashArticle } from "../lib/edition/articleStore";
 import { parseLocalEventsBody } from "../lib/edition/localEvents";
@@ -75,10 +73,6 @@ import {
   resolveNationalNewsPackageForEdition,
   type NationalNewsHydrationSource,
 } from "../lib/edition/nationalNewsHydration";
-import {
-  inferTopicFromSection,
-  trackReadingSignal,
-} from "../lib/personalization";
 import {
   morningSalutation,
   waitingCopy,
@@ -153,7 +147,6 @@ import { metroKeyFromKindredPlace } from "../lib/location/metroKey";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { PaperLoading } from "../components/PaperLoading";
 import { EditionReader } from "../components/EditionReader";
-import { EditionAdjacentNav } from "../components/EditionAdjacentNav";
 import {
   KindredFullMasthead,
   KindredStickyMasthead,
@@ -311,11 +304,8 @@ export default function HomeScreen() {
     useState<UsNationalDailyRecord | null>(null);
   const [pairedNationalDaily, setPairedNationalDaily] =
     useState<UsNationalDailyRecord | null>(null);
-  const [clippedIds, setClippedIds] = useState<Set<string>>(new Set());
-  const [clipPendingId, setClipPendingId] = useState<string | null>(null);
   const [older, setOlder] = useState<AdjacentEdition | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [clipError, setClipError] = useState<string | null>(null);
   const [activeLocation, setActiveLocation] = useState<ActiveLocation | null>(
     null
   );
@@ -1577,7 +1567,6 @@ export default function HomeScreen() {
       clearNationalNewsHydration("load_edition_reset_scroll");
       setBandit(null);
       setIntelligence(null);
-      setClippedIds(new Set());
       setLocationMismatch(null);
     }
 
@@ -2479,7 +2468,6 @@ export default function HomeScreen() {
         clearNationalNewsHydration("not_ready_no_cache");
         setBandit(null);
         setIntelligence(null);
-        setClippedIds(new Set());
       }
       setOlder(payload.adjacent.older);
       setBackgroundJob(
@@ -2586,7 +2574,6 @@ export default function HomeScreen() {
       clearNationalNewsHydration("load_edition_reset_scroll");
       setBandit(null);
       setIntelligence(null);
-      setClippedIds(new Set());
       setBackgroundJob(null);
       setLocationMismatch(builtCity ?? "another city");
       setLoading(false);
@@ -3169,32 +3156,6 @@ export default function HomeScreen() {
         setSections(storySections);
         bgSections = storySections;
         persistSectionsToCache(storySections);
-      }
-
-      if (loaded.length > 0) {
-        const sectionIdsForClips = loaded.map((s) => s.id);
-        const { data: clips, error: clipsError } = await supabase
-          .from("clippings")
-          .select("section_id")
-          .eq("user_id", user.id)
-          .in("section_id", sectionIdsForClips);
-
-        if (clipsError && __DEV__) {
-          console.error("[home] loadEdition: clippings query error", {
-            message: clipsError.message,
-            code: clipsError.code,
-          });
-        }
-
-        if (mountedRef.current && gen === loadGen.current && !patchEventsOnly) {
-          setClippedIds(new Set((clips ?? []).map((c) => c.section_id)));
-        }
-      } else if (
-        mountedRef.current &&
-        gen === loadGen.current &&
-        !patchEventsOnly
-      ) {
-        setClippedIds(new Set());
       }
 
       if (!patchEventsOnly && !syncAfterCache) {
@@ -3943,7 +3904,6 @@ export default function HomeScreen() {
         clearNationalNewsHydration("dev_generate_cache_clear");
         setBandit(null);
         setIntelligence(null);
-        setClippedIds(new Set());
         setLocationMismatch(null);
       }
 
@@ -4411,92 +4371,6 @@ export default function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCityRegen, generating, loading, backgroundJob]);
 
-  async function handleToggleClip(section: EditionSection) {
-    if (clipPendingId) return;
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const user = session?.user ?? null;
-    if (!user) {
-      setClipError("Sign in again to save passages from your paper.");
-      return;
-    }
-
-    setClipPendingId(section.id);
-    setClipError(null);
-    const alreadyClipped = clippedIds.has(section.id);
-    const topic = inferTopicFromSection(section.section_type, section.headline);
-    const storyKey = `${section.section_type}:${section.headline}`.slice(0, 240);
-    const clipKey = `article:${section.id}`;
-
-    try {
-      if (alreadyClipped) {
-        const result = await removeClipping(user.id, clipKey);
-        if (result.ok) {
-          setClippedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(section.id);
-            return next;
-          });
-          void trackReadingSignal({
-            signalType: "unclip",
-            storyKey,
-            sectionType: section.section_type,
-            editionId,
-            sectionId: section.id,
-            source: section.source_note,
-            topic,
-          });
-        } else {
-          if (__DEV__) {
-            console.error("[home] unclip failed", result.error);
-          }
-          setClipError("Couldn’t remove that clipping. Please try again.");
-        }
-      } else {
-        const result = await saveClipping(
-          user.id,
-          { contentType: "article", clipKey, sectionId: section.id },
-          articleFromEditionSectionWithKnowledge(section, intelligence?.knowledge, {
-            nationalDaily,
-            pairedNationalDaily,
-          })
-        );
-
-        if (result.ok) {
-          setClippedIds((prev) => new Set(prev).add(section.id));
-          if (!result.duplicate) {
-            void trackReadingSignal({
-              signalType: "clip",
-              storyKey,
-              sectionType: section.section_type,
-              editionId,
-              sectionId: section.id,
-              source: section.source_note,
-              topic,
-              payload: { headline: section.headline.slice(0, 160) },
-            });
-          }
-        } else {
-          if (__DEV__) {
-            console.error("[home] clip failed", result.error);
-          }
-          setClipError("Couldn’t save that for later. Please try again.");
-        }
-      }
-    } catch (err) {
-      if (__DEV__) {
-        console.error(
-          "[home] clip threw",
-          err instanceof Error ? err.message : String(err)
-        );
-      }
-      setClipError("Couldn’t save that for later. Please try again.");
-    } finally {
-      setClipPendingId(null);
-    }
-  }
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -4605,12 +4479,6 @@ export default function HomeScreen() {
             }
             scrollY={mastheadScrollY}
           />
-        ) : null}
-
-        {clipError ? (
-          <Text style={styles.error} accessibilityRole="alert">
-            {clipError}
-          </Text>
         ) : null}
 
         {activeLocation?.isTravel && activeLocation.place ? (
@@ -4739,18 +4607,6 @@ export default function HomeScreen() {
                 accessibilityLabel="Location settings"
               >
                 <Text style={styles.previousLinkText}>Location settings</Text>
-              </Pressable>
-            ) : null}
-            {older ? (
-              <Pressable
-                style={styles.previousLink}
-                onPress={() => router.push(`/edition/${older.id}`)}
-                accessibilityRole="button"
-                accessibilityLabel={waitingCopy.previous}
-              >
-                <Text style={styles.previousLinkText}>
-                  {waitingCopy.previous}
-                </Text>
               </Pressable>
             ) : null}
           </View>
@@ -4910,25 +4766,6 @@ export default function HomeScreen() {
               knowledge={intelligence?.knowledge}
               nationalDaily={nationalDaily}
               pairedNationalDaily={pairedNationalDaily}
-              clippedSectionIds={clippedIds}
-              onToggleClip={handleToggleClip}
-              clipPendingId={clipPendingId}
-              onOpenClippings={() => {
-                persistHomeScrollNow();
-                router.push("/clippings");
-              }}
-              onOpenArchive={() => {
-                persistHomeScrollNow();
-                router.push("/library");
-              }}
-            />
-            <EditionAdjacentNav
-              older={older}
-              newer={null}
-              onOpen={(edition) => {
-                persistHomeScrollNow();
-                router.push(`/edition/${edition.id}`);
-              }}
             />
           </>
         )}

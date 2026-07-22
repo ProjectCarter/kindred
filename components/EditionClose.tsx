@@ -8,8 +8,6 @@ import { FolioReveal } from "./FolioReveal";
 
 type Props = {
   editionDateLabel?: string | null;
-  onOpenClippings?: () => void;
-  onOpenArchive?: () => void;
   /** Optional custom share; defaults to a calm Share sheet. */
   onShareEdition?: () => void;
   folioIndex?: number;
@@ -20,8 +18,6 @@ type Props = {
  */
 export function EditionClose({
   editionDateLabel,
-  onOpenClippings,
-  onOpenArchive,
   onShareEdition,
   folioIndex = 12,
 }: Props) {
@@ -48,37 +44,14 @@ export function EditionClose({
         <Text style={styles.farewell}>{editionFarewell()}</Text>
         <Text style={styles.sign}>— Bandit</Text>
 
-        <View style={styles.actions}>
-          {onOpenClippings ? (
-            <Pressable
-              onPress={onOpenClippings}
-              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Your clippings"
-            >
-              <Text style={styles.actionText}>Your clippings</Text>
-            </Pressable>
-          ) : null}
-          {onOpenArchive ? (
-            <Pressable
-              onPress={onOpenArchive}
-              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Archive"
-            >
-              <Text style={styles.actionText}>Earlier editions</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => void share()}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Share today’s edition"
-          >
-            <Text style={styles.actionText}>Share today’s edition</Text>
-          </Pressable>
-        </View>
-        <View style={styles.rule} />
+        <Pressable
+          onPress={() => void share()}
+          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Share today’s edition"
+        >
+          <Text style={styles.actionText}>Share today’s edition</Text>
+        </Pressable>
       </View>
     </FolioReveal>
   );
@@ -87,7 +60,7 @@ export function EditionClose({
 const styles = StyleSheet.create({
   wrap: {
     paddingTop: space.endPadding,
-    paddingBottom: 20,
+    paddingBottom: 8,
     alignItems: "center",
   },
   rule: {
@@ -95,7 +68,7 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: paper.inkMuted,
     opacity: 0.35,
-    marginVertical: 26,
+    marginBottom: 26,
   },
   colophon: {
     fontFamily: "Georgia",
@@ -121,13 +94,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.inkFaint,
     letterSpacing: 0.2,
-    marginBottom: 8,
-  },
-  actions: {
-    marginTop: 24,
-    alignItems: "center",
-    gap: 18,
-    marginBottom: 8,
+    marginBottom: 24,
   },
   action: {
     paddingVertical: 8,

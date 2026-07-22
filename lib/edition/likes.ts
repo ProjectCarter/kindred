@@ -1,18 +1,13 @@
 import { supabase } from "../supabase";
 import type { KindredArticle } from "./article";
-import type { ClipTarget } from "./clippings";
+import type { SaveTarget } from "./saveTarget";
 
 /**
- * A private "show me more like this" signal — completely separate from
- * Clippings (Pin). No counts, no profiles, no feed: the only reader of a
- * like is this same person's own future editions, via the reading-signal
- * personalization pipeline (see `trackReadingSignal` calls at the call
- * site, aggregated server-side in
+ * A private "show me more like this" signal — no counts, no profiles, no
+ * feed: the only reader of a like is this same person's own future editions,
+ * via the reading-signal personalization pipeline (see `trackReadingSignal`
+ * calls at the call site, aggregated server-side in
  * supabase/functions/_shared/personalization/aggregate.ts).
- *
- * Reuses the same `ClipTarget` shape as Clippings (same eligibility, same
- * key format) — liking never requires pinning, and vice versa; they're
- * tracked in entirely separate tables.
  */
 
 export async function checkLiked(
@@ -36,7 +31,7 @@ export type SaveLikeResult = {
 
 export async function saveLike(
   userId: string,
-  target: ClipTarget,
+  target: SaveTarget,
   article: KindredArticle
 ): Promise<SaveLikeResult> {
   const { error } = await supabase.from("likes").insert({

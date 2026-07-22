@@ -310,8 +310,8 @@ function websiteAction(
 function saveAction(): ActionBarAction {
   return {
     id: "save",
-    label: "Save to Today's Board",
-    icon: "📌",
+    label: "Save",
+    icon: "❤️",
     kind: "save",
   };
 }

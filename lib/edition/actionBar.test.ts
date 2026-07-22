@@ -251,7 +251,7 @@ describe("Universal Action Bar", () => {
   it("legacy resolveActionsForLocalEvent with includeSave adds save and share", () => {
     const actions = resolveActionsForLocalEvent(paidEvent());
     expect(actions.some((a) => a.label === "Share")).toBe(true);
-    expect(actions.some((a) => a.label === "Save to Today's Board")).toBe(true);
+    expect(actions.some((a) => a.label === "Save")).toBe(true);
   });
 
   it("article context actions omit save and share", () => {

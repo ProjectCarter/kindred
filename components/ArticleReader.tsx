@@ -52,12 +52,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { resolveArticleHero, supportingFiguresForArticle } from "../lib/edition/articleHero";
 import { isWireNewsSection } from "../lib/edition/articleIntegrity";
-import {
-  resolveClipTarget,
-  checkClipped,
-  saveClipping,
-  removeClipping,
-} from "../lib/edition/clippings";
+import { resolveSaveTarget } from "../lib/edition/saveTarget";
 import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
 import {
   MastheadLink,
@@ -132,9 +127,6 @@ export function ArticleReader({
     caption: string;
     credit: string;
   } | null>(null);
-  const [clipped, setClipped] = useState(false);
-  const [clipPending, setClipPending] = useState(false);
-  const [clipError, setClipError] = useState<string | null>(null);
   const [liked, setLiked] = useState(false);
   const [likePending, setLikePending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -187,8 +179,8 @@ export function ArticleReader({
     )
   ).current;
 
-  const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
-  const canClip = Boolean(clipTarget);
+  const saveTarget = useMemo(() => resolveSaveTarget(article), [article]);
+  const canSave = Boolean(saveTarget);
   const articleContextActions = useMemo(
     () => resolveArticleContextActions(article),
     [article]
@@ -373,28 +365,7 @@ export function ArticleReader({
   }, [article, companion, editionId, backLabel]);
 
   useEffect(() => {
-    if (!clipTarget) {
-      setClipped(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      const isClipped = await checkClipped(user.id, clipTarget.clipKey);
-      if (!cancelled) setClipped(isClipped);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [clipTarget]);
-
-  // Liking shares the same eligibility (and key) as pinning — both live on
-  // the same four content types — but is tracked independently.
-  useEffect(() => {
-    if (!clipTarget) {
+    if (!saveTarget) {
       setLiked(false);
       return;
     }
@@ -404,13 +375,13 @@ export function ArticleReader({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user || cancelled) return;
-      const isLiked = await checkLiked(user.id, clipTarget.clipKey);
+      const isLiked = await checkLiked(user.id, saveTarget.clipKey);
       if (!cancelled) setLiked(isLiked);
     })();
     return () => {
       cancelled = true;
     };
-  }, [clipTarget]);
+  }, [saveTarget]);
 
   const published = formatArticlePublishedAt(article.publishedAt);
   const readLabel = formatReadTime(article.estimatedReadMinutes);
@@ -521,83 +492,8 @@ export function ArticleReader({
     }
   }, [contentHeight, viewportHeight, progressAnim]);
 
-  async function handleToggleClip() {
-    if (!clipTarget || clipPending) return;
-    setClipPending(true);
-    setClipError(null);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setClipError("Sign in again to save passages from your paper.");
-        return;
-      }
-
-      const storyKey = `${article.section}:${article.headline}`.slice(0, 240);
-      const topic = inferTopicFromSection(article.section, article.headline);
-
-      if (clipped) {
-        const result = await removeClipping(user.id, clipTarget.clipKey);
-        if (result.ok) {
-          setClipped(false);
-          void trackReadingSignal({
-            signalType: "unclip",
-            storyKey,
-            sectionType: article.section,
-            editionId,
-            sectionId: clipTarget.sectionId,
-            source: article.source,
-            topic,
-          });
-        } else {
-          if (__DEV__) {
-            console.error("[ArticleReader] unclip failed", result.error);
-          }
-          setClipError("Couldn’t remove that clipping. Please try again.");
-        }
-      } else {
-        const result = await saveClipping(user.id, clipTarget, article);
-        if (result.ok) {
-          setClipped(true);
-          if (!result.duplicate) {
-            void trackReadingSignal({
-              signalType: "clip",
-              storyKey,
-              sectionType: article.section,
-              editionId,
-              sectionId: clipTarget.sectionId,
-              source: article.source,
-              topic,
-              payload: { headline: article.headline.slice(0, 160) },
-            });
-          }
-        } else {
-          if (__DEV__) {
-            console.error("[ArticleReader] clip failed", result.error);
-          }
-          setClipError("Couldn’t save that for later. Please try again.");
-        }
-      }
-    } catch (err) {
-      if (__DEV__) {
-        console.error(
-          "[ArticleReader] clip threw",
-          err instanceof Error ? err.message : String(err)
-        );
-      }
-      setClipError("Couldn’t save that for later. Please try again.");
-    } finally {
-      setClipPending(false);
-    }
-  }
-
-  // The Like heart is a private "show me more like this" signal — no
-  // counts, no confirmation, nothing shown outside this reader's own
-  // future editions. Optimistic and quiet: on failure it simply reverts,
-  // no error banner, since a missed like is low-stakes.
   async function handleToggleLike() {
-    if (!clipTarget || likePending) return;
+    if (!saveTarget || likePending) return;
     const nextLiked = !liked;
     setLiked(nextLiked);
     setLikePending(true);
@@ -615,7 +511,7 @@ export function ArticleReader({
         article.contentType ?? inferTopicFromSection(article.section, article.headline);
 
       if (nextLiked) {
-        const result = await saveLike(user.id, clipTarget, article);
+        const result = await saveLike(user.id, saveTarget, article);
         if (!result.ok) {
           setLiked(false);
           return;
@@ -626,14 +522,14 @@ export function ArticleReader({
             storyKey,
             sectionType: article.section,
             editionId,
-            sectionId: clipTarget.sectionId,
+            sectionId: saveTarget.sectionId,
             source: article.source,
             topic,
             payload: { headline: article.headline.slice(0, 160) },
           });
         }
       } else {
-        const result = await removeLike(user.id, clipTarget.clipKey);
+        const result = await removeLike(user.id, saveTarget.clipKey);
         if (!result.ok) {
           setLiked(true);
           return;
@@ -643,7 +539,7 @@ export function ArticleReader({
           storyKey,
           sectionType: article.section,
           editionId,
-          sectionId: clipTarget.sectionId,
+          sectionId: saveTarget.sectionId,
           source: article.source,
           topic,
         });
@@ -771,42 +667,9 @@ export function ArticleReader({
           )}
 
           <View style={[styles.column, { width: readingWidth }]}>
-            {/* 1b. Pin (save) + Like (private taste signal) + Share — first interaction under the hero */}
+            {/* Save + Share — first interaction under the hero */}
             <View style={styles.heroActionsRow}>
-              {canClip ? (
-                <Pressable
-                  onPress={() => void handleToggleClip()}
-                  disabled={clipPending}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    clipped
-                      ? "Saved to Clippings. Tap to remove."
-                      : "Save to Clippings"
-                  }
-                  style={({ pressed }) => [
-                    styles.heroActionButton,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <SymbolView
-                    name={clipped ? "pin.fill" : "pin"}
-                    size={20}
-                    weight="regular"
-                    tintColor={clipped ? paper.terracotta : paper.inkMuted}
-                    accessibilityElementsHidden
-                    importantForAccessibility="no"
-                    fallback={
-                      <Ionicons
-                        name={clipped ? "pin" : "pin-outline"}
-                        size={20}
-                        color={clipped ? paper.terracotta : paper.inkMuted}
-                      />
-                    }
-                  />
-                </Pressable>
-              ) : null}
-              {canClip ? (
+              {canSave ? (
                 <Pressable
                   onPress={() => void handleToggleLike()}
                   disabled={likePending}
@@ -814,8 +677,8 @@ export function ArticleReader({
                   accessibilityRole="button"
                   accessibilityLabel={
                     liked
-                      ? "Liked. Tap to remove — this only shapes your own future editions."
-                      : "Like — show me more like this"
+                      ? "Saved. Tap to remove."
+                      : "Save"
                   }
                   style={({ pressed }) => [
                     styles.heroActionButton,
@@ -866,11 +729,6 @@ export function ArticleReader({
                 />
               </Pressable>
             </View>
-            {clipError ? (
-              <Text style={styles.clipError} accessibilityRole="alert">
-                {clipError}
-              </Text>
-            ) : null}
 
             {!textOnlyListing &&
             articleContextActions.length > 0 &&
@@ -1798,14 +1656,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: paper.terracotta,
     letterSpacing: 0.2,
-  },
-  clipError: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    lineHeight: 22,
-    fontStyle: "italic",
-    color: paper.terracotta,
-    marginBottom: 12,
   },
   actionRow: {
     alignSelf: "flex-start",
