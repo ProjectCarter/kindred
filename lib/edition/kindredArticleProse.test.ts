@@ -30,9 +30,10 @@ test("validateKindredArticleProse accepts a clean local news briefing", () => {
     headline: "Council approves budget",
     dek: "The vote sets spending priorities for the year ahead.",
     body: [
-      "Gilbert leaders approved the budget after a long hearing Tuesday night.",
-      "The plan keeps parks funding steady while delaying a road project until next spring.",
-      "Residents who spoke at the meeting focused on drainage repairs in older Gilbert neighborhoods this week.",
+      "Gilbert leaders approved the budget after a long hearing Tuesday night, keeping parks funding steady while delaying a road project until next spring.",
+      "Residents who spoke at the meeting focused on drainage repairs in older Gilbert neighborhoods and asked the council to prioritize flood-prone streets.",
+      "Officials said bid packages for the delayed road work would return next spring, giving staff time to compare contractor estimates and neighborhood feedback.",
+      "The approved plan also preserves funding for two new playground projects that had been debated since last fall.",
     ],
     desk: "local_news",
     subjectTokens: ["Gilbert", "budget", "Council"],

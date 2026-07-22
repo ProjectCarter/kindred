@@ -15,6 +15,8 @@ export type NationalNewsStoryPayload = {
   rank: number;
   headline: string;
   summary: string;
+  body?: string[];
+  dek?: string | null;
   sourceName: string;
   sourceUrl: string | null;
   publishedAt: string | null;

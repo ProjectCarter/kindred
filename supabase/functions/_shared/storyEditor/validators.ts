@@ -15,6 +15,12 @@ import {
   detectEditorialRedundancy,
   proseNearDuplicate,
 } from "../../../../lib/edition/editorialRedundancy.ts";
+import {
+  isRichNewsSource,
+  localNewsBriefingMinWords,
+  nationalNewsBriefingMinWords,
+  newsBriefingWordCount,
+} from "../../../../lib/edition/newsBriefingQuality.ts";
 export { proseNearDuplicate } from "../../../../lib/edition/editorialRedundancy.ts";
 import type { StoryEditorScores, StorySurfaceRole } from "./types.ts";
 import { STORY_EDITOR_SCORE_KEYS } from "./types.ts";
@@ -145,7 +151,7 @@ export function isThinSource(sourceText: string): boolean {
 
 /** Rich wire notes can support a full Local News briefing. */
 export function isRichLocalNewsSource(sourceText: string): boolean {
-  return wordCount(sourceText) >= 80;
+  return isRichNewsSource(sourceText);
 }
 
 export type LocalNewsFieldAnswers = {
@@ -411,11 +417,85 @@ export function validateStoryDraft(input: {
         message: "Thin wire repeated without adding verified context.",
       });
     }
+
+    const combinedWords = newsBriefingWordCount([
+      body,
+      ...Object.values(input.fieldAnswers ?? {}),
+    ]);
+    if (
+      isRichLocalNewsSource(input.sourceText) &&
+      combinedWords < localNewsBriefingMinWords(input.sourceText)
+    ) {
+      issues.push({
+        code: "too_thin_for_source",
+        message:
+          "Rich source supported a fuller Local News briefing than this draft delivers.",
+      });
+    }
+  }
+
+  if (input.surfaceRole === "national_news") {
+    if (input.paragraphs.some((p) => LOCAL_NEWS_DISCLAIMER_IN_BODY.test(p))) {
+      issues.push({
+        code: "disclaimer_in_body",
+        message:
+          "Attribution or disclaimer language belongs in four_questions.limits, not the body.",
+      });
+    }
+
+    if (open && headline && proseNearDuplicate(open, headline)) {
+      issues.push({
+        code: "headline_repeats_in_open",
+        message:
+          "Opening paragraph repeats the headline — lead with the news instead.",
+      });
+    }
+
+    if (!input.dek?.trim()) {
+      issues.push({
+        code: "missing_dek",
+        message: "National News briefing requires a distinct dek.",
+      });
+    }
+
+    if (
+      isRichNewsSource(input.sourceText) &&
+      input.paragraphs.length < 3
+    ) {
+      issues.push({
+        code: "briefing_too_short",
+        message:
+          "Rich national source should support at least three briefing paragraphs.",
+      });
+    }
+
+    const briefingWords = wordCount(body);
+    if (briefingWords < nationalNewsBriefingMinWords(input.sourceText)) {
+      issues.push({
+        code: "too_thin_for_source",
+        message:
+          "Source supported a fuller national briefing than this draft delivers.",
+      });
+    }
+
+    if (
+      isThinSource(input.sourceText) &&
+      open &&
+      proseNearDuplicate(open, input.sourceText)
+    ) {
+      issues.push({
+        code: "wire_repeated_in_open",
+        message:
+          "Thin wire paraphrased in the opening — summarize with editorial polish instead of repeating the note.",
+      });
+    }
   }
 
   // Headline surplus: body should not be a near-clone of the wire description alone
   // when source was rich — checked softly via length when not thin.
   if (
+    input.surfaceRole !== "local_news" &&
+    input.surfaceRole !== "national_news" &&
     !isThinSource(input.sourceText) &&
     input.paragraphs.length === 1 &&
     wordCount(body) < 60

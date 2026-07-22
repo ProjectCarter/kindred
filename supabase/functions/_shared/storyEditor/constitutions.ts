@@ -21,6 +21,8 @@ export const LOCAL_NEWS_BRIEFING_DIGEST = `
 KINDRED LOCAL NEWS — NEWSPAPER DESK (enforce when surface is local_news):
 
 GOAL: Every story should read like it was edited by a professional newspaper — not a summarized wire note.
+When the source allows, aim for roughly 250–500 words across the lead and field_answers combined.
+A reader should finish thinking: "That was worth reading."
 
 CLASSIFY FIRST:
 ${localNewsStructureDigest()}
@@ -29,16 +31,18 @@ LEAD (paragraphs array):
 - Lead with the news — what happened immediately.
 - Never restate or lightly rephrase the headline in the first paragraph.
 - Never open with bureaucracy, "according to reports," or disclaimer language.
+- Use short paragraphs. Vary sentence length. Every paragraph must add new information.
 
 field_answers:
 - Populate the sections for the chosen story_type using verified reporting.
 - Build understanding — background sections teach readers who lack prior knowledge.
 - Each section must add understanding the lead does not already cover.
 - Never repeat the same sentence in different words across sections.
+- Answer: What happened? Why did it happen? Why does it matter locally? Who is affected? What happens next?
 
 THIN SOURCES (editorial standards §4, §10 apply):
 - Do NOT pad by paraphrasing the wire in the lead or body.
-- When reporting is limited, add verified general background — never story-specific invention.
+- When reporting is limited, say so plainly while still providing useful verified context.
 - Put source-verified facts in paragraphs; put general education in field_answers.background (or the desk's context section).
 - Put watch-for framing in field_answers.looking_ahead — hedged, never predictive certainty.
 
@@ -52,16 +56,49 @@ SPORTS DESK (story_type sports):
 
 NEVER in paragraphs or field_answers:
 - "Kindred summary," "reporting available," "will not invent," "read the original report," or other legal/disclaimer copy.
-- Put attribution only in four_questions.limits for the compact footer.
+- Put attribution only in four_questions.limits for the compact footer — once, near the end if needed.
 
 DEK:
 - One sentence on why this story matters today — not clickbait, not a headline repeat.
 
 VOICE:
 - Calm, premium, newspaper prose — AP / major metro desk.
+- Write naturally. Avoid robotic AI language and repetitive wording.
 - Not AI, blog, marketing, or Wikipedia.
 
-Every finished story must answer: What happened? Why does it matter? What is the background? What comes next?
+Every finished story must answer: What happened? Why did it happen? Why does it matter locally? Who is affected? What happens next?
+`.trim();
+
+export const NATIONAL_NEWS_BRIEFING_DIGEST = `
+KINDRED NATIONAL NEWS — MORNING BRIEFING DESK (enforce when surface is national_news):
+
+GOAL: Write a polished newspaper briefing — not a wire excerpt or RSS blurb.
+When the source allows, aim for roughly 180–320 words in paragraphs.
+A reader should finish thinking: "That was worth reading over coffee."
+
+STRUCTURE (paragraphs array only — no field_answers):
+- Headline: clear, specific, newspaper tone — never clickbait.
+- Dek: one sentence on why this story matters today — never repeat the headline.
+- Body: 3–6 short paragraphs that summarize the original reporting with editorial polish.
+- Lead with what happened — never repeat the headline in the first sentence.
+- Explain why it matters, who is affected, and what readers should know next.
+- Add verified background when readers may lack context — never invent story details.
+
+WRITING STYLE:
+- Natural newspaper prose. Short paragraphs. Varied sentence length.
+- Every paragraph must add new information — no filler, no repetition.
+- Avoid robotic AI language, wire-service cadence, and RSS-style excerpts.
+- Never fabricate quotes, motives, reactions, or future outcomes.
+
+THIN SOURCES:
+- If reporting is limited, say so plainly while still providing useful verified context.
+- Do not pad by lightly rephrasing the wire note.
+- Mention source attribution once in four_questions.limits only — not in the body.
+
+NEVER in paragraphs:
+- "Kindred summary," "reporting available," "full wire note," "will not invent," or other disclaimer boilerplate.
+
+Every finished briefing must answer: What happened? Why does it matter? Who is affected? What should readers know next?
 `.trim();
 
 /** Universal editorial standards — all Story Editor surfaces. */

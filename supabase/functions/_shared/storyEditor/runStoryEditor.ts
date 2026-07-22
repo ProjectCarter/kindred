@@ -146,7 +146,12 @@ function normalizeParagraphs(
   surfaceRole?: StorySurfaceRole
 ): string[] {
   if (!Array.isArray(paragraphs)) return [];
-  const max = surfaceRole === "local_news" ? 4 : 12;
+  const max =
+    surfaceRole === "local_news"
+      ? 4
+      : surfaceRole === "national_news"
+        ? 6
+        : 12;
   return paragraphs
     .map((p) => p.replace(/\s+/g, " ").replace(/!+/g, ".").trim())
     .filter(Boolean)

@@ -5,9 +5,7 @@
 import type { StoryEditorIntake, StoryEditorResult, StoryEditorScores } from "./types.ts";
 import { proseNearDuplicate, wordCount } from "./validators.ts";
 import {
-  newspaperBriefWireNote,
   newspaperSourceAttribution,
-  newspaperThinWireAttribution,
 } from "../../../../lib/edition/newspaperAttribution.ts";
 
 const ZERO_SCORES: StoryEditorScores = {
@@ -22,6 +20,33 @@ const ZERO_SCORES: StoryEditorScores = {
 
 function cleanHeadline(title: string): string {
   return title.replace(/\s+[—–|-]\s+[^—–|-]+$/, "").trim();
+}
+
+function splitVerifiedBriefParagraphs(text: string, max = 3): string[] {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+  const sentences =
+    cleaned
+      .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
+      ?.map((part) => part.trim())
+      .filter(Boolean) ?? [cleaned];
+  if (sentences.length <= 1) return [cleaned];
+
+  const paragraphs: string[] = [];
+  let chunk: string[] = [];
+  for (const sentence of sentences) {
+    chunk.push(sentence);
+    const words = chunk.join(" ").split(/\s+/).filter(Boolean).length;
+    if (words >= 28 || chunk.length >= 2) {
+      paragraphs.push(chunk.join(" "));
+      chunk = [];
+    }
+    if (paragraphs.length >= max) break;
+  }
+  if (chunk.length && paragraphs.length < max) {
+    paragraphs.push(chunk.join(" "));
+  }
+  return paragraphs.length ? paragraphs : [cleaned];
 }
 
 function verifiedSourceBody(intake: StoryEditorIntake): string {
@@ -170,16 +195,11 @@ export function composeThinHonest(
   const source = verifiedSourceBody(intake) || headline;
   const paragraphs: string[] = [];
 
-  if (source && source !== headline) {
-    const first = source.length > 280 ? `${source.slice(0, 277).trim()}…` : source;
-    paragraphs.push(first);
+  if (source && source !== headline && !proseNearDuplicate(source, headline)) {
+    paragraphs.push(...splitVerifiedBriefParagraphs(source, 3));
   } else {
-    paragraphs.push(
-      `${headline} — ${newspaperBriefWireNote(intake.source)}`
-    );
+    paragraphs.push(headline);
   }
-
-  paragraphs.push(newspaperThinWireAttribution(intake.source));
 
   const bodyText = paragraphs.join("\n\n");
   const modest: StoryEditorScores = {
@@ -226,7 +246,7 @@ export function composeThinHonest(
         why: "",
         who: "",
         remember: "",
-        limits: [newspaperThinWireAttribution(intake.source)],
+        limits: [newspaperSourceAttribution(intake.source)],
       },
       editedAt: new Date().toISOString(),
     },

@@ -22,13 +22,18 @@ export {
 import type { KindredArticle } from "./article";
 import { articleFromSectionItem } from "./article";
 import type { NationalNewsStory } from "./nationalNewsTypes.ts";
+import { newspaperSourceAttribution } from "./newspaperAttribution.ts";
 
 export function articleFromNationalNewsStory(story: NationalNewsStory): KindredArticle {
-  return articleFromSectionItem({
+  const bodyText = story.body?.length
+    ? story.body.join("\n\n")
+    : story.summary;
+  const article = articleFromSectionItem({
     id: story.id,
     section: "national_news",
     headline: story.headline,
-    body: story.summary,
+    body: bodyText,
+    dek: story.dek ?? null,
     source: story.sourceName,
     sourceUrl: story.sourceUrl,
     publishedAt: story.publishedAt,
@@ -36,4 +41,9 @@ export function articleFromNationalNewsStory(story: NationalNewsStory): KindredA
     role: story.category,
     tags: story.category ? [story.category] : undefined,
   });
+
+  return {
+    ...article,
+    briefingFooterNote: newspaperSourceAttribution(story.sourceName),
+  };
 }

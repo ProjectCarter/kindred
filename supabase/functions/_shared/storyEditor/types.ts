@@ -7,6 +7,7 @@
 export type StorySurfaceRole =
   | "lead"
   | "local_news"
+  | "national_news"
   | "top_story"
   | "top_stories_section"
   | "bandits_pick"

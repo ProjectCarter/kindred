@@ -7,6 +7,7 @@ import {
   KINDRED_EDITORIAL_STANDARDS_DIGEST,
   LEARNING_ENGINE_DIGEST,
   LOCAL_NEWS_BRIEFING_DIGEST,
+  NATIONAL_NEWS_BRIEFING_DIGEST,
   MEMORABILITY_DIGEST,
   STORY_EDITOR_QUESTIONS,
 } from "./constitutions.ts";
@@ -19,6 +20,10 @@ export function storyEditorSystemPrompt(
   const localNewsBlock =
     surfaceRole === "local_news"
       ? `\n\n${LOCAL_NEWS_BRIEFING_DIGEST}\n`
+      : "";
+  const nationalNewsBlock =
+    surfaceRole === "national_news"
+      ? `\n\n${NATIONAL_NEWS_BRIEFING_DIGEST}\n`
       : "";
   return (
     "You are Kindred’s Story Editor — an experienced newspaper editor whose only job is " +
@@ -34,6 +39,7 @@ export function storyEditorSystemPrompt(
     "\n\n" +
     LEARNING_ENGINE_DIGEST +
     localNewsBlock +
+    nationalNewsBlock +
     "\n\n" +
     "Before approving, answer NO to continue rewriting:\n" +
     STORY_EDITOR_QUESTIONS.map((q) => `• ${q}`).join("\n") +
@@ -51,6 +57,7 @@ export function storyEditorSystemPrompt(
     '"lessons":[{"changeType":"opening"|"delete_para"|"reorder"|"ending"|"curiosity"|"human_focus"|"insight"|"clarity"|"other",' +
     '"rationale":string,"principleIds":string[]}],"notes":string[]}\n' +
     "For local_news: classify with story_type first. paragraphs = lead only (source-verified facts). field_answers = that desk's sections: background = general verified education; why_it_matters = source facts or their significance; looking_ahead = watch-for framing only (hedged). Omit empty keys. No disclaimers in body or field_answers. Never repeat the same fact or sentence across paragraphs — each paragraph must add new information. For sports, expand roster and injury alerts into why it matters, background, and what to watch next when the wire supports it.\n" +
+    "For national_news: paragraphs = the full briefing (3–6 short paragraphs). No field_answers. Lead with what happened, never the headline. Explain why it matters, who is affected, and what readers should know next. Write like a morning newspaper briefing — not an RSS excerpt.\n" +
     "No markdown fences. No preamble."
   );
 }
@@ -116,8 +123,10 @@ export function storyEditorUserPrompt(
     red +
     "\nRewrite until an experienced newspaper editor would proudly publish this in tomorrow’s Kindred edition. " +
     (intake.surfaceRole === "local_news"
-      ? "Classify the story, then write: verified headline, one-sentence dek, a lead that tells what happened (never repeats the headline), and field_answers that build understanding. On thin wires, add verified general background — never invent story-specific details. "
-      : "Lead with the news. Build understanding. Every paragraph earns its place. ") +
+      ? "Classify the story, then write: verified headline, one-sentence dek, a lead that tells what happened (never repeats the headline), and field_answers that build understanding. When the source allows, aim for roughly 250–500 words combined. On thin wires, add verified general background — never invent story-specific details. "
+      : intake.surfaceRole === "national_news"
+        ? "Write a polished national briefing: verified headline, one-sentence dek, and 3–6 short paragraphs that summarize the reporting with editorial polish — never an RSS excerpt. When the source allows, aim for roughly 180–320 words. Lead with what happened, explain why it matters, who is affected, and what readers should know next. "
+        : "Lead with the news. Build understanding. Every paragraph earns its place. ") +
     "If the source is thin, write a short honest briefing or add only widely verified background — never pad with fiction."
   );
 }

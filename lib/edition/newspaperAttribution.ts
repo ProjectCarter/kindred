@@ -18,5 +18,5 @@ export function newspaperBriefWireNote(
   publisher: string | null | undefined
 ): string {
   const name = publisher?.trim() || "the original publication";
-  return `This summary reflects the reporting available from ${name}.`;
+  return `Reported by ${name}.`;
 }

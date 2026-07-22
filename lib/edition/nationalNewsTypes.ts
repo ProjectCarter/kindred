@@ -19,6 +19,10 @@ export type NationalNewsStory = {
   rank: number;
   headline: string;
   summary: string;
+  /** Full edited briefing paragraphs when Story Editor succeeded. */
+  body?: string[];
+  /** Standfirst under the headline in the reader. */
+  dek?: string | null;
   sourceName: string;
   sourceUrl: string | null;
   publishedAt: string | null;

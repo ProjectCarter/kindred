@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { runStoryEditorSafe } from "../storyEditor/index.ts";
 import type { StoryEditorResult } from "../storyEditor/types.ts";
+import { isRichNewsSource } from "../../../../lib/edition/newsBriefingQuality.ts";
 import { validateKindredArticleProse } from "../../../../lib/edition/kindredArticleProse.ts";
 import {
   buildNationalNewsStoryPayload,
@@ -19,33 +20,48 @@ import { US_NATIONAL_COUNTRY_CODE } from "./resolveUsNationalDaily.ts";
 function nationalStoryCopyFromEdit(
   ranked: Awaited<ReturnType<typeof selectNationalNewsStories>>["selected"][number],
   result: StoryEditorResult | null | undefined
-): { headline: string; summary: string } {
+): {
+  headline: string;
+  summary: string;
+  dek: string | null;
+  body: string[];
+} {
   const wireHeadline = ranked.story.title.trim();
   const wireSummary = (ranked.story.description || ranked.story.title).trim();
+  const wireFallback = {
+    headline: wireHeadline,
+    summary: wireSummary,
+    dek: null,
+    body: [] as string[],
+  };
 
   if (!result?.ok || !result.paragraphs.length) {
-    return { headline: wireHeadline, summary: wireSummary };
+    return wireFallback;
   }
+
+  const body = result.paragraphs
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const dek = result.dek?.trim() || null;
+  const sourceText = ranked.story.description || ranked.story.title;
 
   const prose = validateKindredArticleProse({
     headline: result.headline,
-    dek: result.dek,
-    body: result.paragraphs,
+    dek,
+    body,
     desk: "national_news",
     subjectTokens: [result.headline, ranked.story.source].filter(Boolean),
+    minParagraphs: isRichNewsSource(sourceText) ? 3 : 2,
   });
 
   if (!prose.passes) {
-    return { headline: wireHeadline, summary: wireSummary };
+    return wireFallback;
   }
 
   const headline = result.headline.trim() || wireHeadline;
-  const summary =
-    result.dek?.trim() ||
-    result.paragraphs[0]?.trim() ||
-    wireSummary;
+  const summary = dek || body[0]?.trim() || wireSummary;
 
-  return { headline, summary };
+  return { headline, summary, dek, body };
 }
 
 function parseNationalNewsPayload(raw: unknown): UsNationalNewsPackagePayload | null {
@@ -213,7 +229,7 @@ export async function resolveUsNationalNews(
                 source: ranked.story.source,
                 url: ranked.story.url,
                 publishedAt: ranked.story.publishedAt,
-                surfaceRole: "top_story",
+                surfaceRole: "national_news",
                 locale: "en",
                 selectionWhy: ranked.reasons.map((r) => r.label).slice(0, 3),
               },
@@ -228,6 +244,8 @@ export async function resolveUsNationalNews(
           ranked,
           headline: ranked.story.title,
           summary: ranked.story.description || ranked.story.title,
+          dek: null,
+          body: [] as string[],
         }));
 
     const nationalDailyId = row?.id ?? input.nationalDailyId ?? crypto.randomUUID();
@@ -235,12 +253,14 @@ export async function resolveUsNationalNews(
       packageId: nationalDailyId,
       editionDate,
       generatedAt: new Date().toISOString(),
-      stories: edited.map(({ ranked, headline, summary }, index) => {
+      stories: edited.map(({ ranked, headline, summary, dek, body }, index) => {
         const base = buildNationalNewsStoryPayload(ranked, index + 1);
         return {
           ...base,
           headline: headline.replace(/\s+[—–|-]\s+[^—–|-]+$/, "").trim(),
           summary,
+          dek,
+          ...(body.length ? { body } : {}),
         };
       }),
     };

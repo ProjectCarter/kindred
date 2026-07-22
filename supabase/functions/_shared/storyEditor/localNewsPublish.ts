@@ -9,6 +9,10 @@ import {
   hasMinimumLeadSourceMaterial,
 } from "../../../../lib/edition/localNewsGeographicEligibility.ts";
 import { validateKindredArticleProse } from "../../../../lib/edition/kindredArticleProse.ts";
+import {
+  localNewsBriefingMinWords,
+  newsBriefingWordCount,
+} from "../../../../lib/edition/newsBriefingQuality.ts";
 
 export function isPublishableLocalNewsStory(
   edited: StoryEditorResult,
@@ -17,6 +21,18 @@ export function isPublishableLocalNewsStory(
   if (edited.desk.path === "unavailable") return false;
   if (!edited.ok && edited.paragraphs.length === 0) return false;
   if (!edited.paragraphs.length) return false;
+  const sourceText = source
+    ? `${source.title}\n${source.description ?? ""}`.trim()
+    : edited.paragraphs.join("\n\n");
+  const combinedWords = newsBriefingWordCount([
+    ...edited.paragraphs,
+    ...Object.values(edited.desk.fieldAnswers ?? {}),
+  ]);
+  const minCombined =
+    edited.desk.path === "thin_honest"
+      ? 20
+      : localNewsBriefingMinWords(sourceText);
+  if (combinedWords < minCombined) return false;
   if (
     edited.paragraphs.length < 2 &&
     source &&

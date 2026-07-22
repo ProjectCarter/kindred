@@ -235,6 +235,30 @@ test("second city cache hit reuses package without regenerating story ids", () =
   assert.deepEqual(nationalNewsStoryIds(first), nationalNewsStoryIds(second));
 });
 
+test("parseNationalNewsPackage preserves optional edited briefing fields", () => {
+  const parsed = parseNationalNewsPackage({
+    ...SAMPLE_PACKAGE,
+    stories: [
+      {
+        ...SAMPLE_PACKAGE.stories[0],
+        dek: "The decision keeps borrowing costs unchanged for now.",
+        body: [
+          "Federal Reserve officials left interest rates unchanged at their latest meeting.",
+          "The move reflects growing confidence that inflation is easing without a sharp slowdown in hiring.",
+          "Borrowers should expect mortgage and credit-card rates to stay elevated in the near term.",
+        ],
+      },
+      ...SAMPLE_PACKAGE.stories.slice(1),
+    ],
+  });
+
+  assert.equal(parsed?.stories[0]?.body?.length, 3);
+  assert.equal(
+    parsed?.stories[0]?.dek,
+    "The decision keeps borrowing costs unchanged for now."
+  );
+});
+
 test("resolveNationalNewsForRender keeps national_news when local top stories exist", () => {
   const resolved = resolveNationalNewsForRender({
     edition: { national_news: SAMPLE_PACKAGE },

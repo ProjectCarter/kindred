@@ -92,8 +92,9 @@ function deskDefaults(desk?: KindredArticleDesk): {
 } {
   switch (desk) {
     case "local_news":
+      return { minParagraphs: 2, minWords: 80, requireDek: true };
     case "national_news":
-      return { minParagraphs: 2, minWords: 40, requireDek: true };
+      return { minParagraphs: 2, minWords: 80, requireDek: true };
     case "history":
     case "masterpiece":
       return { minParagraphs: 6, minWords: 380, requireDek: false };

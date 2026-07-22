@@ -936,11 +936,9 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {briefing && !isLocalNewsArticle ? (
+            {briefing && !isLocalNewsArticle && article.section !== "national_news" ? (
               <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
-                {article.body.length <= 1
-                  ? "This summary reflects the reporting available from the original publication."
-                  : "This report is presented as published by the original source."}
+                This summary reflects reporting published by the original publication.
               </Text>
             ) : null}
 
@@ -1027,7 +1025,8 @@ export function ArticleReader({
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
-            {isLocalNewsArticle && article.briefingFooterNote ? (
+            {(isLocalNewsArticle || article.section === "national_news") &&
+            article.briefingFooterNote ? (
               <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
                 {article.briefingFooterNote}
               </Text>
