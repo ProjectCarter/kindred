@@ -15,6 +15,7 @@ import type { HistoricalImageAsset } from "../history/types.ts";
 import { historicalImageMatchesEvent } from "../history/imageEventMatch.ts";
 import { getFrozenHeroArtworkSelection } from "../heroArtwork/library.ts";
 import { resolveUsNationalNews } from "./resolveNationalNews.ts";
+import { isNewsSectionsEnabled } from "../edition/newsSectionsFeature.ts";
 import type { UsNationalNewsPackagePayload } from "./types.ts";
 import {
   calendarMonthDayFromEditionDate,
@@ -401,7 +402,7 @@ export async function probeUsNationalDailyCache(
     !row ||
     !parseMasterpiecePayload(row.today_masterpiece) ||
     !parseHistoryPayload(row.today_in_history) ||
-    !parseNationalNewsPayload(row.national_news)
+    (isNewsSectionsEnabled() && !parseNationalNewsPayload(row.national_news))
   ) {
     return false;
   }
@@ -424,7 +425,13 @@ export async function loadUsNationalDailyForCityAttach(
   const history = parseHistoryPayload(row?.today_in_history);
   const nationalNews = parseNationalNewsPayload(row?.national_news);
 
-  if (!row?.id || !masterpiece || !history || !nationalNews || !historyImageVerified(history)) {
+  if (
+    !row?.id ||
+    !masterpiece ||
+    !history ||
+    (isNewsSectionsEnabled() && !nationalNews) ||
+    !historyImageVerified(history)
+  ) {
     console.warn("[usNationalDaily] city attach cache miss — refusing generation", {
       traceId: editionTraceId ?? null,
       editionDate,
@@ -487,8 +494,8 @@ export async function resolveUsNationalDailyEditorial(
     row &&
     masterpiece &&
     history &&
-    nationalNews &&
-    historyImageVerified(history)
+    historyImageVerified(history) &&
+    (!isNewsSectionsEnabled() || nationalNews)
   ) {
     const cacheIssues = await validateStoredNationalDaily(
       admin,
@@ -590,13 +597,19 @@ export async function resolveUsNationalDailyEditorial(
           nationalDailyId: row?.id ?? null,
           diagnostic: "national_news_cache_hit" as const,
         })
-      : resolveUsNationalNews(admin, {
-          editionDate,
-          editionTraceId: input.editionTraceId,
-          newsApiKey: input.newsApiKey,
-          anthropicApiKey: input.anthropicApiKey,
-          nationalDailyId: row?.id ?? null,
-        }),
+      : isNewsSectionsEnabled()
+        ? resolveUsNationalNews(admin, {
+            editionDate,
+            editionTraceId: input.editionTraceId,
+            newsApiKey: input.newsApiKey,
+            anthropicApiKey: input.anthropicApiKey,
+            nationalDailyId: row?.id ?? null,
+          })
+        : Promise.resolve({
+            package: null,
+            nationalDailyId: row?.id ?? null,
+            diagnostic: "national_news_skipped_v1" as const,
+          }),
   ]);
 
   let createdAny = false;

@@ -41,6 +41,52 @@ export type EditorialDecisionsResult = {
   decisions: EditorialDecisionSummary;
 };
 
+/** Empty local-news slate when `ENABLE_NEWS_SECTIONS` is false — no News API fetch. */
+export function skippedLocalNewsEditorialDecisions(
+  editionDate: string
+): EditorialDecisionsResult {
+  const now = new Date();
+  const { calendar, policy } = policyForEditionDate(editionDate, now, 4);
+  const frontPage: FrontPageSelection = {
+    stories: [],
+    groundingData: "",
+    scoredCandidates: [],
+    selectionMeta: {
+      selectedAt: now.toISOString(),
+      profile: {
+        interests: [],
+        followedTopics: [],
+        city: null,
+        region: null,
+        state: null,
+        metroKey: null,
+      },
+      stories: [],
+    },
+  };
+  const decisions: EditorialDecisionSummary = {
+    version: 1,
+    calendar,
+    policy: {
+      mode: policy.mode,
+      modeLabel: calendar.modeLabel,
+      requireEmotionalBalance: policy.requireEmotionalBalance,
+      maxHeavyStories: policy.maxHeavyStories,
+      preferLeisureTone: policy.preferLeisureTone,
+    },
+    lead: null,
+    slate: [],
+    editorNotes: ["Local News desk skipped — ENABLE_NEWS_SECTIONS is false"],
+  };
+  return {
+    frontPage,
+    leadStory: null,
+    calendar,
+    policy,
+    decisions,
+  };
+}
+
 /**
  * Newspaper Editor AI — assemble today’s paper intentionally.
  * Fetch → score with editorial policy → lead judgment → balanced slate.

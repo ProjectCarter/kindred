@@ -969,7 +969,7 @@ export function buildEditionHealthReport(input: {
   const cacheStatus = diagnostics.cacheStatus;
   const globalWarnings: EditionHealthWarning[] = [];
 
-  const sections: EditionHealthSectionReport[] = [
+  const rawSections: EditionHealthSectionReport[] = [
     analyzeMasterpiece(bundle, cacheStatus, apiErrors, editorNotes),
     analyzeLocalEvents(bundle, place, cacheStatus, apiErrors, editorNotes),
     analyzeActivities(bundle, place, cacheStatus, apiErrors, editorNotes),
@@ -980,6 +980,10 @@ export function buildEditionHealthReport(input: {
     analyzeLocalNews(bundle, cacheStatus, editorNotes),
     analyzeHistoricalCarousel(bundle, cacheStatus),
   ];
+  const sections = rawSections.map((section) => ({
+    ...section,
+    warnings: dedupeSectionWarnings(section.id, section.warnings),
+  }));
 
   const stats = buildGenerationStats(
     bundle,
@@ -1006,6 +1010,21 @@ export function buildEditionHealthReport(input: {
     warnings,
     stats,
   };
+}
+
+function dedupeSectionWarnings(
+  sectionId: string,
+  warnings: EditionHealthWarning[]
+): EditionHealthWarning[] {
+  const seen = new Set<string>();
+  const out: EditionHealthWarning[] = [];
+  for (const w of warnings) {
+    const key = `${sectionId}:${w.id}:${w.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(w);
+  }
+  return out;
 }
 
 function dedupeWarnings(warnings: EditionHealthWarning[]): EditionHealthWarning[] {

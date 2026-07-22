@@ -16,6 +16,7 @@ import {
   validateNationalDailyForAttach,
   type NationalDailyValidationSnapshot,
 } from "./nationalDailyValidation.ts";
+import { isNewsSectionsEnabled } from "../edition/newsSectionsFeature.ts";
 import {
   resolveUsNationalDailyEditorial,
   US_NATIONAL_COUNTRY_CODE,
@@ -126,7 +127,10 @@ export async function generateUsNationalDailyForEditionDate(
     allowIdenticalFromPriorDay: input.allowIdenticalFromPriorDay ?? false,
   });
 
-  if (!editorial?.todayMasterpiece || !editorial.todayInHistory || !editorial.nationalNews) {
+  if (!editorial?.todayMasterpiece || !editorial.todayInHistory) {
+    throw new Error(`National daily generation incomplete for ${editionDate}`);
+  }
+  if (isNewsSectionsEnabled() && !editorial.nationalNews) {
     throw new Error(`National daily generation incomplete for ${editionDate}`);
   }
 

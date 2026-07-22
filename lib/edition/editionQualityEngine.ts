@@ -12,6 +12,7 @@ import {
   type NationalFingerprint,
 } from "./nationwideAudit.ts";
 import { localLeadAgeBand } from "./localNewsFreshness.ts";
+import { isNewsSectionsEnabled } from "./newsSectionsFeature.ts";
 import type { EditionSection } from "./types.ts";
 import type { LeadStory } from "./LeadStory.ts";
 import type { NationalNewsPackage } from "./nationalNewsTypes.ts";
@@ -360,6 +361,12 @@ function checkEditorialCompleteness(input: EditionQualityInput): QualityFinding[
 
   for (const required of HOMEPAGE_SECTIONS) {
     if (required === "story_of" && input.expectStoryOf === false) continue;
+    if (
+      !isNewsSectionsEnabled() &&
+      (required === "local_news" || required === "national_news")
+    ) {
+      continue;
+    }
     if (!sectionTypes.has(required)) {
       findings.push(
         qf(cat, "high", "missing_section", `Missing section: ${required}`, required)
@@ -367,14 +374,16 @@ function checkEditorialCompleteness(input: EditionQualityInput): QualityFinding[
     }
   }
 
-  if (!input.leadStory?.headline?.trim()) {
-    findings.push(qf(cat, "high", "missing_lead_headline", "Local News lead missing headline", "local_news"));
-  } else if (!hasSubstance(input.leadStory.summary ?? input.leadStory.dek, 20)) {
-    findings.push(qf(cat, "medium", "thin_local_news", "Local News summary lacks depth", "local_news"));
-  }
+  if (isNewsSectionsEnabled()) {
+    if (!input.leadStory?.headline?.trim()) {
+      findings.push(qf(cat, "high", "missing_lead_headline", "Local News lead missing headline", "local_news"));
+    } else if (!hasSubstance(input.leadStory.summary ?? input.leadStory.dek, 20)) {
+      findings.push(qf(cat, "medium", "thin_local_news", "Local News summary lacks depth", "local_news"));
+    }
 
-  if (!input.nationalNews?.stories?.length) {
-    findings.push(qf(cat, "high", "missing_national_news", "National News package empty", "national_news"));
+    if (!input.nationalNews?.stories?.length) {
+      findings.push(qf(cat, "high", "missing_national_news", "National News package empty", "national_news"));
+    }
   }
 
   const activities = discoveryItemsForPattern(input.discovery, ACTIVITY_SURFACE_KEYS);
@@ -461,7 +470,7 @@ function checkLocalRelevance(input: EditionQualityInput): QualityFinding[] {
   const { location } = input;
   const radiusKm = milesToKm(KINDRED_LOCAL_RADIUS_MILES);
 
-  if (input.leadStory?.headline && input.location.state) {
+  if (isNewsSectionsEnabled() && input.leadStory?.headline && input.location.state) {
     const statePattern = new RegExp(`\\b${input.location.state.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
     const leadText = `${input.leadStory.headline} ${input.leadStory.summary ?? ""}`;
     if (!statePattern.test(leadText) && !citiesMatch(leadText, input.location.city)) {
@@ -517,7 +526,7 @@ function checkNationalConsistency(input: EditionQualityInput): QualityFinding[] 
   const cat = "national_consistency" as const;
 
   if (!input.usNationalDailyId?.trim()) {
-    findings.push(qf(cat, "high", "missing_national_daily_id", "Missing us_national_daily_id", "national_news"));
+    findings.push(qf(cat, "high", "missing_national_daily_id", "Missing us_national_daily_id", "masterpiece"));
   }
 
   if (!input.morningHero?.artworkId?.trim()) {
@@ -554,6 +563,7 @@ function checkNationalConsistency(input: EditionQualityInput): QualityFinding[] 
       findings.push(qf(cat, "high", "history_mismatch", "Today in History differs from national reference", "today_in_history"));
     }
     if (
+      isNewsSectionsEnabled() &&
       ref.nationalNewsStoryIds.length &&
       local.nationalNewsStoryIds.join("|") !== ref.nationalNewsStoryIds.join("|")
     ) {
@@ -580,11 +590,13 @@ function checkFreshness(input: EditionQualityInput): QualityFinding[] {
     }
   }
 
-  const leadAge = localLeadAgeBand(input.leadStory?.publishedAt ?? null, now);
-  if (leadAge === "stale") {
-    findings.push(qf(cat, "high", "stale_local_news", "Local News lead is older than freshness window", "local_news"));
-  } else if (leadAge === "unknown") {
-    findings.push(qf(cat, "low", "unknown_news_age", "Local News publish date unknown", "local_news"));
+  if (isNewsSectionsEnabled()) {
+    const leadAge = localLeadAgeBand(input.leadStory?.publishedAt ?? null, now);
+    if (leadAge === "stale") {
+      findings.push(qf(cat, "high", "stale_local_news", "Local News lead is older than freshness window", "local_news"));
+    } else if (leadAge === "unknown") {
+      findings.push(qf(cat, "low", "unknown_news_age", "Local News publish date unknown", "local_news"));
+    }
   }
 
   const weather = input.sections.find((s) => s.section_type === "weather");

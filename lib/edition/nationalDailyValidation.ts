@@ -3,6 +3,8 @@
  * hero freeze, and consecutive-day clone detection.
  */
 
+import { isNewsSectionsEnabled } from "./newsSectionsFeature.ts";
+
 export type NationalDailyValidationSnapshot = {
   editionDate: string;
   todayMasterpiece: unknown;
@@ -84,7 +86,7 @@ export function validateNationalDailyForAttach(
   if (!row.todayInHistory) {
     issues.push({ code: "missing_history", message: "today_in_history is missing" });
   }
-  if (!row.nationalNews) {
+  if (isNewsSectionsEnabled() && !row.nationalNews) {
     issues.push({ code: "missing_national_news", message: "national_news is missing" });
   }
 
@@ -97,7 +99,11 @@ export function validateNationalDailyForAttach(
   }
 
   const nationalNewsEditionDate = readNationalNewsEditionDate(row.nationalNews);
-  if (row.nationalNews && nationalNewsEditionDate !== editionDate) {
+  if (
+    isNewsSectionsEnabled() &&
+    row.nationalNews &&
+    nationalNewsEditionDate !== editionDate
+  ) {
     issues.push({
       code: "stale_national_news_edition_date",
       message: `national_news.editionDate must be ${editionDate}, got ${nationalNewsEditionDate ?? "null"}`,
@@ -152,6 +158,7 @@ export function validateNationalDailyForAttach(
       });
     }
     if (
+      isNewsSectionsEnabled() &&
       row.nationalNews &&
       priorDay.nationalNews &&
       stableJsonFingerprint(row.nationalNews) === stableJsonFingerprint(priorDay.nationalNews)

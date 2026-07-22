@@ -46,6 +46,7 @@ import {
   type BanditPayload,
 } from "../lib/edition/bandit";
 import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
+import { isNewsSectionsEnabled } from "../lib/edition/newsSectionsFeature";
 import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
 import {
   companionForArticle,
@@ -874,6 +875,7 @@ export default function HomeScreen() {
   }
 
   function clearNationalNewsHydration(reason: string): void {
+    if (!isNewsSectionsEnabled()) return;
     nationalNewsHydrationRef.current = null;
     setNationalNews(null);
     if (__DEV__) {
@@ -895,6 +897,7 @@ export default function HomeScreen() {
       networkHasNationalNews?: boolean;
     }
   ): boolean {
+    if (!isNewsSectionsEnabled()) return true;
     const merged = mergeNationalNewsHydration(
       nationalNewsHydrationRef.current,
       incoming
@@ -938,6 +941,7 @@ export default function HomeScreen() {
     },
     source: NationalNewsHydrationSource
   ): boolean {
+    if (!isNewsSectionsEnabled()) return true;
     const pkg = resolveNationalNewsPackageForEdition(edition);
     return setNationalNewsHydrated(source, pkg, {
       editionId: edition.id ?? editionIdRef.current,
@@ -955,6 +959,7 @@ export default function HomeScreen() {
     },
     source: NationalNewsHydrationSource
   ): Promise<boolean> {
+    if (!isNewsSectionsEnabled()) return true;
     if (hydrateNationalNewsFromEditionRow(edition, source)) {
       if (cachedBundleRef.current && nationalNewsHydrationRef.current) {
         cachedBundleRef.current = withSyncedNewsDesksInCache(
@@ -982,6 +987,7 @@ export default function HomeScreen() {
     editionDateValue: string,
     source: NationalNewsHydrationSource = "network_backfill"
   ): Promise<void> {
+    if (!isNewsSectionsEnabled()) return;
     if (!isSupabaseConfigured) return;
     const { data, error } = await supabase
       .from("editions")
@@ -1022,6 +1028,11 @@ export default function HomeScreen() {
     editionDateValue: string,
     source: NationalNewsHydrationSource = "network"
   ): TopStoryItem[] {
+    if (!isNewsSectionsEnabled()) {
+      setTopStories([]);
+      setNationalNews(null);
+      return [];
+    }
     const desks = resolveEditionNewsDesks(edition, editionDateValue);
     setTopStories(desks.topStories);
     setNationalNewsHydrated(source, desks.nationalNews, {

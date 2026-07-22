@@ -98,6 +98,7 @@ import {
   readValidationFromBuildState,
 } from "./editionValidationTypes.ts";
 import { isBanditsPicksEnabled } from "../bandit/banditsPicksFeature.ts";
+import { isNewsSectionsEnabled } from "./newsSectionsFeature.ts";
 import {
   planSectionRepairs,
   isPublicationEligibleForRepairFlow,
@@ -243,7 +244,7 @@ async function runGenerateNationalStage(
   if (!anthropicApiKey) {
     throw new Error("ANTHROPIC_API_KEY missing — cannot generate national daily");
   }
-  if (!newsApiKey) {
+  if (isNewsSectionsEnabled() && !newsApiKey) {
     throw new Error("NEWS_API_KEY missing — cannot generate national daily");
   }
 
@@ -281,7 +282,9 @@ async function runAttachNationalStage(
   const morningHero = national.todayMasterpiece?.presentation ?? null;
   const patch: Record<string, unknown> = {
     us_national_daily_id: national.id,
-    national_news: national.nationalNews,
+    ...(isNewsSectionsEnabled()
+      ? { national_news: national.nationalNews }
+      : { national_news: null }),
     morning_edition: morningHero
       ? {
           morningHero,
@@ -853,6 +856,11 @@ async function runLocalNewsStage(
   ctx: StageContext,
   buildState: BuildState
 ): Promise<{ itemCount: number; payloadBytes: number }> {
+  if (!isNewsSectionsEnabled()) {
+    console.log("[localNewsDesk] stage skipped — ENABLE_NEWS_SECTIONS is false");
+    return { itemCount: 0, payloadBytes: 0 };
+  }
+
   const newsApiKey = Deno.env.get("NEWS_API_KEY");
   if (!newsApiKey) {
     // Optional stage will record this failure — never silently "succeed" empty.

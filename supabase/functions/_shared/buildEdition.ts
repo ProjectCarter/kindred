@@ -3,7 +3,7 @@
 // strictly from that data. Never invents a fact that wasn't retrieved.
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { primaryNewsCategory } from "./stories/sources.ts";
+import { isNewsSectionsEnabled } from "./edition/newsSectionsFeature.ts";
 import { buildEditionEditorialContext, buildLookingAheadGrounding } from "./editorial/index.ts";
 import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
@@ -16,7 +16,7 @@ import {
   selectBanditsPick,
 } from "./bandit/selectPick.ts";
 import type { BanditsPick } from "./bandit/types.ts";
-import { runLocalEditorialDecisions } from "./editor/index.ts";
+import { runLocalEditorialDecisions, skippedLocalNewsEditorialDecisions } from "./editor/index.ts";
 import { runDiscoveryDecisions } from "./discovery/index.ts";
 import type { DiscoveryPayload, DiscoveryRankingContext } from "./discovery/types.ts";
 import { runKnowledgeDecisions } from "./knowledge/index.ts";
@@ -526,8 +526,11 @@ export async function buildEditionForUser(
     TICKETMASTER_API_KEY: isTicketmasterConfigured(),
   });
 
-  if (!newsApiKey || !anthropicApiKey) {
-    return { ok: false, error: "Missing NEWS_API_KEY or ANTHROPIC_API_KEY" };
+  if (!anthropicApiKey) {
+    return { ok: false, error: "Missing ANTHROPIC_API_KEY" };
+  }
+  if (isNewsSectionsEnabled() && !newsApiKey) {
+    return { ok: false, error: "Missing NEWS_API_KEY" };
   }
 
   const location = await timer.timed("Location Resolution (DB)", () =>
@@ -761,9 +764,10 @@ export async function buildEditionForUser(
       })
     ),
     timer.timed("News - Local Editorial Decisions", () =>
-      runLocalEditorialDecisions({
+      isNewsSectionsEnabled()
+        ? runLocalEditorialDecisions({
         editionDate,
-        newsApiKey,
+        newsApiKey: newsApiKey!,
         ranking: {
           interests: personalization.interests.length
             ? personalization.interests
@@ -786,6 +790,7 @@ export async function buildEditionForUser(
           },
         },
       })
+        : Promise.resolve(skippedLocalNewsEditorialDecisions(editionDate))
     ),
   ]);
 
@@ -831,7 +836,8 @@ export async function buildEditionForUser(
 
   const frontPage = editorial.frontPage;
   const topStories = frontPage.stories;
-  let leadStory: LeadStory | null = promoteLocalLeadFromFrontPage(editorial, {
+  let leadStory: LeadStory | null = isNewsSectionsEnabled()
+    ? promoteLocalLeadFromFrontPage(editorial, {
     recentStoryKeys: blendedRecentKeys,
     place: {
       city: location.city,
@@ -839,7 +845,8 @@ export async function buildEditionForUser(
       state: location.state,
       metroKey: editionMetroKey,
     },
-  });
+  })
+    : null;
 
   // Computed early (was previously derived just before the real Discovery
   // Engine call) — Bandit's Pick needs it too, and every input here
@@ -1073,7 +1080,7 @@ export async function buildEditionForUser(
       "AI Summaries - Story Editor (Front Page + Bandit's Pick)",
       () =>
         Promise.all([
-          leadStory && anthropicApiKey
+          isNewsSectionsEnabled() && leadStory && anthropicApiKey
             ? runStoryEditorSafe(
                 {
                   id: leadStory.id,
@@ -1113,7 +1120,8 @@ export async function buildEditionForUser(
                 anthropicApiKey
               )
             : Promise.resolve(null),
-          ...topStories.map((ranked) =>
+          ...(isNewsSectionsEnabled()
+            ? topStories.map((ranked) =>
             runStoryEditorSafe(
               {
                 id: ranked.story.id,
@@ -1133,7 +1141,8 @@ export async function buildEditionForUser(
               },
               anthropicApiKey
             )
-          ),
+          )
+            : []),
         ])
     ),
   ]);
@@ -2226,8 +2235,10 @@ export async function buildEditionForUser(
 
   const editionUpsertFields: Record<string, unknown> = {
     editorial_context: editorialContextWithMorning,
-    lead_story: leadStory,
-    national_news: usNationalDaily?.nationalNews ?? null,
+    lead_story: isNewsSectionsEnabled() ? leadStory : null,
+    national_news: isNewsSectionsEnabled()
+      ? (usNationalDaily?.nationalNews ?? null)
+      : null,
     bandit,
     discovery: JSON.parse(JSON.stringify(discoveryWithImages)),
     knowledge: JSON.parse(JSON.stringify(knowledgeWithGrounding)),

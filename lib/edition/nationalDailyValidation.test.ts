@@ -8,6 +8,7 @@ import {
   snapshotFromNationalDailyRow,
   validateNationalDailyForAttach,
 } from "./nationalDailyValidation.ts";
+import { ENABLE_NEWS_SECTIONS } from "./newsSectionsFeature.ts";
 
 const MASTERPIECE = (editionDate: string) => ({
   artworkId: "art-001",
@@ -135,9 +136,11 @@ test("validateNationalDailyForAttach — rejects stale embedded editionDate (Jul
   assert.ok(
     issues.some((issue) => issue.code === "stale_masterpiece_edition_date")
   );
-  assert.ok(
-    issues.some((issue) => issue.code === "stale_national_news_edition_date")
-  );
+  if (ENABLE_NEWS_SECTIONS) {
+    assert.ok(
+      issues.some((issue) => issue.code === "stale_national_news_edition_date")
+    );
+  }
   assert.ok(
     issues.some((issue) => issue.code === "history_calendar_month_day_mismatch")
   );
@@ -148,9 +151,11 @@ test("validateNationalDailyForAttach — rejects stale embedded editionDate (Jul
   assert.ok(
     issues.some((issue) => issue.code === "identical_history_from_prior_day")
   );
-  assert.ok(
-    issues.some((issue) => issue.code === "identical_national_news_from_prior_day")
-  );
+  if (ENABLE_NEWS_SECTIONS) {
+    assert.ok(
+      issues.some((issue) => issue.code === "identical_national_news_from_prior_day")
+    );
+  }
 });
 
 test("validateNationalDailyForAttach — consecutive days with distinct payloads pass", () => {

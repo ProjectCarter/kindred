@@ -43,8 +43,8 @@ function SectionCard({ section }: { section: EditionHealthSectionReport }) {
       </View>
       {section.warnings.length > 0 ? (
         <View style={styles.warningList}>
-          {section.warnings.map((w) => (
-            <Text key={`${section.id}-${w.id}`} style={styles.warningLine}>
+          {section.warnings.map((w, index) => (
+            <Text key={`${section.id}-${w.id}-${index}`} style={styles.warningLine}>
               {warningIcon(w.severity)} {w.message}
             </Text>
           ))}

@@ -22,6 +22,7 @@ import {
   gateLocalEventsForPublication,
 } from "./finalPublicationGate.ts";
 import { isBanditsPicksEnabled } from "../bandit/banditsPicksFeature.ts";
+import { isNewsSectionsEnabled } from "./newsSectionsFeature.ts";
 import { eventHasPublishableEditorial } from "../localEvents/banditNotes.ts";
 import { filterVerifiedEventsForEdition } from "../localEvents/eventDateVerification.ts";
 import type { LocalEvent } from "../localEvents/provider.ts";
@@ -573,44 +574,56 @@ export async function runTechnicalValidationOnSnapshot(input: {
   );
 
   // Local News — warning desk (fallback-aware, never blocks publish)
-  const localNewsReport = validateLocalNewsDesk(snapshot.leadStory);
-  const localNewsStatus = recordDeskPublicationOutcome({
-    desk: "local_news",
-    status: localNewsReport.status,
-    reasons: localNewsReport.reasons,
-    blockingFailures,
-    warnings,
-  });
-  deskReports.push({ ...localNewsReport, status: localNewsStatus });
+  if (isNewsSectionsEnabled()) {
+    const localNewsReport = validateLocalNewsDesk(snapshot.leadStory);
+    const localNewsStatus = recordDeskPublicationOutcome({
+      desk: "local_news",
+      status: localNewsReport.status,
+      reasons: localNewsReport.reasons,
+      blockingFailures,
+      warnings,
+    });
+    deskReports.push({ ...localNewsReport, status: localNewsStatus });
+  } else {
+    deskReports.push(
+      deskReport("local_news", "SKIPPED", [], [], ["local_news"])
+    );
+  }
 
   // National News — warning desk
-  const nationalChecks: DeskValidationCheck[] = [];
-  const nationalReasons: string[] = [];
-  if (!snapshot.usNationalDailyId) {
-    nationalChecks.push({ id: "national_daily_attach", status: "WARNING" });
-    nationalReasons.push("missing_us_national_daily_id");
+  if (isNewsSectionsEnabled()) {
+    const nationalChecks: DeskValidationCheck[] = [];
+    const nationalReasons: string[] = [];
+    if (!snapshot.usNationalDailyId) {
+      nationalChecks.push({ id: "national_daily_attach", status: "WARNING" });
+      nationalReasons.push("missing_us_national_daily_id");
+    } else {
+      nationalChecks.push({ id: "national_daily_attach", status: "PASS" });
+    }
+    const nationalPackage = snapshot.nationalNews as { stories?: unknown[] } | null;
+    if (!nationalPackage?.stories?.length) {
+      nationalChecks.push({ id: "national_news_payload", status: "WARNING" });
+      nationalReasons.push("empty_national_news");
+    } else {
+      nationalChecks.push({ id: "national_news_payload", status: "PASS" });
+    }
+    const nationalStatus = recordDeskPublicationOutcome({
+      desk: "national_news",
+      status: deskStatusForPublicationIssues("national_news", nationalReasons.length > 0),
+      reasons: nationalReasons,
+      blockingFailures,
+      warnings,
+    });
+    deskReports.push(
+      deskReport("national_news", nationalStatus, nationalChecks, nationalReasons, [
+        "attach_national_daily",
+      ])
+    );
   } else {
-    nationalChecks.push({ id: "national_daily_attach", status: "PASS" });
+    deskReports.push(
+      deskReport("national_news", "SKIPPED", [], [], ["attach_national_daily"])
+    );
   }
-  const nationalPackage = snapshot.nationalNews as { stories?: unknown[] } | null;
-  if (!nationalPackage?.stories?.length) {
-    nationalChecks.push({ id: "national_news_payload", status: "WARNING" });
-    nationalReasons.push("empty_national_news");
-  } else {
-    nationalChecks.push({ id: "national_news_payload", status: "PASS" });
-  }
-  const nationalStatus = recordDeskPublicationOutcome({
-    desk: "national_news",
-    status: deskStatusForPublicationIssues("national_news", nationalReasons.length > 0),
-    reasons: nationalReasons,
-    blockingFailures,
-    warnings,
-  });
-  deskReports.push(
-    deskReport("national_news", nationalStatus, nationalChecks, nationalReasons, [
-      "attach_national_daily",
-    ])
-  );
 
   const tihSection = snapshot.sections.find((s) => s.section_type === "today_in_history");
   const tihChecks: DeskValidationCheck[] = [];

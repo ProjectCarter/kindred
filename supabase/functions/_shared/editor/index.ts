@@ -31,6 +31,7 @@ export {
 export {
   runEditorialDecisions,
   runLocalEditorialDecisions,
+  skippedLocalNewsEditorialDecisions,
   type EditorialDecisionsResult,
   type RunEditorialDecisionsInput,
 } from "./decide.ts";

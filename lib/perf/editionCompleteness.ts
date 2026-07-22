@@ -10,6 +10,7 @@ import type { LeadStory } from "../edition/LeadStory";
 import type { BanditPayload } from "../edition/bandit";
 import { banditsPick } from "../edition/bandit";
 import { isBanditsPicksEnabled } from "../edition/banditsPicksFeature";
+import { isNewsSectionsEnabled } from "../edition/newsSectionsFeature";
 import type { EditionIntelligence } from "../edition/surfaceIntelligence";
 import { allocateDiscoverySections } from "../edition/sectionAllocator";
 import type { ReaderLocation } from "../edition/localDiscoveryScope";
@@ -81,7 +82,7 @@ export function assessEditionCompleteness(input: {
     missing.push("recommendations");
   }
   if (isBanditsPicksEnabled() && !hasBanditsPick) missing.push("bandits_pick");
-  if (!hasLeadStory) missing.push("lead_story");
+  if (isNewsSectionsEnabled() && !hasLeadStory) missing.push("lead_story");
   if (!hasMorningHero) missing.push("morning_hero");
   if (input.expectStoryOf && !hasStoryOf) missing.push("story_of");
 

@@ -3,6 +3,7 @@ import {
   type ResolvedEditionMarket,
   type EditionMarketAnchor,
 } from "./editionMarket.ts";
+import { isNewsSectionsEnabled } from "../edition/newsSectionsFeature.ts";
 
 export type EditionSectionWriteRow = {
   edition_id: string;
@@ -257,11 +258,14 @@ export function buildEditionDeskGapReport(input: {
 
   return {
     localNews: {
-      present: input.leadStoryPresent || input.topStoriesCount > 0,
-      reason:
-        input.leadStoryPresent || input.topStoriesCount > 0
+      present: isNewsSectionsEnabled()
+        ? input.leadStoryPresent || input.topStoriesCount > 0
+        : true,
+      reason: isNewsSectionsEnabled()
+        ? input.leadStoryPresent || input.topStoriesCount > 0
           ? undefined
-          : "newsapi_returned_no_front_page_stories",
+          : "newsapi_returned_no_front_page_stories"
+        : "news_sections_disabled_v1",
     },
     banditsPick: {
       present: input.banditsPickPresent,

@@ -18,6 +18,7 @@ import type { RankedDiscoveryItem, DiscoveryPayload } from "../lib/edition/disco
 import type { KindredArticle } from "../lib/edition/article";
 import type { BanditsPick as BanditsPickData } from "../lib/edition/bandit";
 import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
+import { isNewsSectionsEnabled } from "../lib/edition/newsSectionsFeature";
 import {
   articleFromBanditsPick,
   articleFromDiscoveryItem,
@@ -1169,26 +1170,42 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {/* Local News — always mounts; National News follows immediately after. */}
-      <FolioReveal index={folioCursor++} disabled>
-        <NewsArticleSection
-          sectionLabel="Local News"
-          articles={localNewsArticleTeasers}
-          emptyCopy={LOCAL_NEWS_EMPTY_PLACEHOLDER}
-          analyticsSectionType="local_news"
-          onOpenArticle={onOpenArticle ? openLocalNewsArticle : undefined}
-        />
-      </FolioReveal>
+      {/* Local News + National News (V2+) or Local Deals placeholder (V1). */}
+      {isNewsSectionsEnabled() ? (
+        <>
+          <FolioReveal index={folioCursor++} disabled>
+            <NewsArticleSection
+              sectionLabel="Local News"
+              articles={localNewsArticleTeasers}
+              emptyCopy={LOCAL_NEWS_EMPTY_PLACEHOLDER}
+              analyticsSectionType="local_news"
+              onOpenArticle={onOpenArticle ? openLocalNewsArticle : undefined}
+            />
+          </FolioReveal>
 
-      <FolioReveal index={folioCursor++}>
-        <NewsArticleSection
-          sectionLabel="National News"
-          articles={nationalNewsArticleTeasers}
-          emptyCopy={NATIONAL_NEWS_EMPTY_PLACEHOLDER}
-          analyticsSectionType="national_news"
-          onOpenArticle={onOpenArticle ? openNationalNewsArticle : undefined}
-        />
-      </FolioReveal>
+          <FolioReveal index={folioCursor++}>
+            <NewsArticleSection
+              sectionLabel="National News"
+              articles={nationalNewsArticleTeasers}
+              emptyCopy={NATIONAL_NEWS_EMPTY_PLACEHOLDER}
+              analyticsSectionType="national_news"
+              onOpenArticle={onOpenArticle ? openNationalNewsArticle : undefined}
+            />
+          </FolioReveal>
+        </>
+      ) : (
+        <FolioReveal index={folioCursor++}>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>💰 Local Deals</Text>
+              <View style={styles.sectionRule} />
+            </View>
+            <Text style={styles.sectionIntro}>
+              Coupons, discounts, and local savings are coming soon.
+            </Text>
+          </View>
+        </FolioReveal>
+      )}
 
       {lookingAhead ? (
         <FolioReveal index={folioCursor++}>

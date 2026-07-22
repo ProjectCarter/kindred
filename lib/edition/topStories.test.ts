@@ -47,21 +47,14 @@ test("localNewsBriefing stage wires enrichLocalNewsEditorial", () => {
   );
 });
 
-test("EditionReader always mounts Local News folio", () => {
+test("EditionReader gates news folios behind ENABLE_NEWS_SECTIONS", () => {
   const source = readFileSync(
     path.join(__dirname, "../../components/EditionReader.tsx"),
     "utf8"
   );
+  assert.match(source, /isNewsSectionsEnabled/);
   assert.match(source, /resolveLocalNewsHomePackage/);
-  assert.match(source, /LOCAL_NEWS_EMPTY_PLACEHOLDER/);
   assert.match(source, /NewsArticleSection/);
-  assert.match(source, /localNewsArticleTeasers/);
-  assert.match(source, /National News/);
-  assert.match(source, /nationalNewsArticleTeasers/);
-  assert.match(source, /NATIONAL_NEWS_EMPTY_PLACEHOLDER/);
-  assert.match(source, /FolioReveal index=\{folioCursor\+\+\} disabled/);
-  assert.doesNotMatch(
-    source,
-    /leadStory && \/local\/i\.test\(leadStory\.role \?\? ""\)\s*\?\s*\(\s*\n\s*<TimeStylePackage/
-  );
+  assert.match(source, /Local Deals/);
+  assert.match(source, /Coupons, discounts, and local savings are coming soon/);
 });

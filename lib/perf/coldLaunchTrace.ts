@@ -10,6 +10,7 @@ import type { LeadStory } from "../edition/LeadStory";
 import type { BanditPayload } from "../edition/bandit";
 import { banditsPick } from "../edition/bandit";
 import { isBanditsPicksEnabled } from "../edition/banditsPicksFeature";
+import { isNewsSectionsEnabled } from "../edition/newsSectionsFeature";
 import { parseDiscoveryPayload } from "../edition/discovery";
 import type { EditionIntelligence } from "../edition/surfaceIntelligence";
 import { allocateDiscoverySections } from "../edition/sectionAllocator";
@@ -130,8 +131,15 @@ export function traceSupabaseEditionRow(edition: {
     {
       desk: "local_news",
       stage: "supabase_editions_row",
-      present: Boolean(lead?.headline?.trim()),
-      detail: { role: lead?.role ?? null },
+      present: isNewsSectionsEnabled()
+        ? Boolean(lead?.headline?.trim())
+        : true,
+      detail: {
+        role: lead?.role ?? null,
+        ...(isNewsSectionsEnabled()
+          ? {}
+          : { note: "news_sections_disabled_v1" }),
+      },
     },
     {
       desk: "morning_hero",
@@ -218,8 +226,12 @@ export function traceSupabaseEditionSections(
     {
       desk: "local_news",
       stage: "supabase_edition_sections",
-      present: types.includes("top_stories"),
-      detail: { note: "lead also comes from editions.lead_story" },
+      present: isNewsSectionsEnabled() ? types.includes("top_stories") : true,
+      detail: {
+        note: isNewsSectionsEnabled()
+          ? "lead also comes from editions.lead_story"
+          : "news_sections_disabled_v1",
+      },
     },
     {
       desk: "morning_hero",
@@ -276,8 +288,15 @@ export function traceParsedIntelligence(
     {
       desk: "local_news",
       stage: "parse_intelligence",
-      present: Boolean(leadStory?.headline?.trim()),
-      detail: { role: leadStory?.role ?? null },
+      present: isNewsSectionsEnabled()
+        ? Boolean(leadStory?.headline?.trim())
+        : true,
+      detail: {
+        role: leadStory?.role ?? null,
+        ...(isNewsSectionsEnabled()
+          ? {}
+          : { note: "news_sections_disabled_v1" }),
+      },
     },
     {
       desk: "morning_hero",
@@ -349,7 +368,9 @@ export function traceReactState(input: {
     {
       desk: "local_news",
       stage: "react_state",
-      present: Boolean(input.leadStory?.headline?.trim()),
+      present: isNewsSectionsEnabled()
+        ? Boolean(input.leadStory?.headline?.trim())
+        : true,
     },
     {
       desk: "morning_hero",
@@ -466,8 +487,13 @@ export function traceEditionReaderRender(input: {
       detail: {
         skipReason: localNewsRender
           ? null
-          : "Local News folio should always render (stories or placeholder)",
+          : isNewsSectionsEnabled()
+            ? "Local News folio should always render (stories or placeholder)"
+            : "Local Deals placeholder should render when news disabled",
         leadRole: input.leadStory?.role ?? null,
+        ...(isNewsSectionsEnabled()
+          ? {}
+          : { note: "news_sections_disabled_v1_local_deals" }),
       },
     },
     {
