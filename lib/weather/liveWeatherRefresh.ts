@@ -5,6 +5,11 @@ import {
   LIVE_WEATHER_REFRESH_INTERVAL_MS,
   type WeatherFreshnessMetadata,
 } from "./weatherFreshness.ts";
+import {
+  emptyWeatherRefreshDiagnostic,
+  recordWeatherRefreshDiagnostic,
+  type WeatherRefreshDiagnostic,
+} from "./weatherDiagnostics.ts";
 
 const THROTTLE_KEY = "@kindred/live-weather/last-at";
 
@@ -44,35 +49,79 @@ async function shouldRefresh(lat: number, lon: number): Promise<boolean> {
   return true;
 }
 
-function markRefreshed(lat: number, lon: number): void {
+async function markRefreshed(lat: number, lon: number): Promise<void> {
   const key = throttleKey(lat, lon);
   const now = Date.now();
   memoryLastAt.set(key, now);
-  void AsyncStorage.setItem(`${THROTTLE_KEY}:${key}`, String(now)).catch(
-    () => {}
-  );
+  try {
+    await AsyncStorage.setItem(`${THROTTLE_KEY}:${key}`, String(now));
+  } catch {
+    /* non-fatal */
+  }
 }
 
+export type RefreshLiveWeatherOptions = {
+  force?: boolean;
+};
+
 export async function refreshLiveWeather(
-  place: KindredPlace | null
+  place: KindredPlace | null,
+  options: RefreshLiveWeatherOptions = {}
 ): Promise<LiveWeatherSnapshot | null> {
+  const startedAt = new Date().toISOString();
+  const baseDiagnostic: WeatherRefreshDiagnostic = {
+    ...emptyWeatherRefreshDiagnostic(),
+    status: "started",
+    startedAt,
+    force: Boolean(options.force),
+    coordinates: place
+      ? { lat: place.lat, lon: place.lon, city: place.city ?? null }
+      : null,
+  };
+
   if (!place || !Number.isFinite(place.lat) || !Number.isFinite(place.lon)) {
+    recordWeatherRefreshDiagnostic({
+      ...baseDiagnostic,
+      status: "empty_response",
+      finishedAt: new Date().toISOString(),
+      fallbackReason: "missing_coordinates",
+      error: "location_required",
+    });
     return null;
   }
-  if (!(await shouldRefresh(place.lat, place.lon))) {
+
+  if (!options.force && !(await shouldRefresh(place.lat, place.lon))) {
+    recordWeatherRefreshDiagnostic({
+      ...baseDiagnostic,
+      status: "throttled",
+      finishedAt: new Date().toISOString(),
+      fallbackReason: "throttled",
+    });
     return null;
   }
-  markRefreshed(place.lat, place.lon);
+
+  recordWeatherRefreshDiagnostic(baseDiagnostic);
 
   try {
     const { data, error } = await supabase.functions.invoke("refresh-weather", {
       body: { location: locationPayload(place) },
     });
+
     if (error) {
-      if (__DEV__) console.warn("[liveWeather] invoke error", error.message);
+      recordWeatherRefreshDiagnostic({
+        ...baseDiagnostic,
+        status: "invoke_error",
+        finishedAt: new Date().toISOString(),
+        httpStatus: (error as { status?: number }).status ?? null,
+        error: error.message,
+        fallbackReason: "invoke_error",
+      });
       return null;
     }
+
     const body = data as {
+      ok?: boolean;
+      error?: string;
       weatherSummary?: string;
       retrievedAt?: string;
       fetchTimestamp?: string;
@@ -85,8 +134,32 @@ export async function refreshLiveWeather(
       lowC?: number | null;
       cacheAgeMs?: number | null;
     } | null;
+
+    if (body?.error) {
+      recordWeatherRefreshDiagnostic({
+        ...baseDiagnostic,
+        status: "invoke_error",
+        finishedAt: new Date().toISOString(),
+        error: body.error,
+        fallbackReason: "edge_function_error",
+      });
+      return null;
+    }
+
     const summary = body?.weatherSummary?.trim();
-    if (!summary || !body?.retrievedAt) return null;
+    if (!summary || !body?.retrievedAt) {
+      recordWeatherRefreshDiagnostic({
+        ...baseDiagnostic,
+        status: "empty_response",
+        finishedAt: new Date().toISOString(),
+        provider: body?.provider ?? null,
+        error: "missing_weather_summary",
+        fallbackReason: "empty_response",
+      });
+      return null;
+    }
+
+    await markRefreshed(place.lat, place.lon);
 
     const snapshot: LiveWeatherSnapshot = {
       weatherSummary: summary,
@@ -103,29 +176,35 @@ export async function refreshLiveWeather(
       cacheAgeMs: body.cacheAgeMs ?? null,
     };
 
-    if (__DEV__) {
-      console.log("[liveWeather:debug]", {
-        provider: snapshot.provider,
-        retrievedAt: snapshot.retrievedAt,
-        fetchTimestamp: snapshot.fetchTimestamp,
-        coordinates: { lat: snapshot.lat, lon: snapshot.lon },
-        cacheAgeMs: snapshot.cacheAgeMs,
-        currentC: snapshot.currentC,
-        highC: snapshot.highC,
-        lowC: snapshot.lowC,
-        conditionCode: snapshot.conditionCode,
-        weatherSummary: snapshot.weatherSummary,
-      });
-    }
+    recordWeatherRefreshDiagnostic({
+      ...baseDiagnostic,
+      status: "success",
+      finishedAt: new Date().toISOString(),
+      provider: snapshot.provider,
+      retrievedAt: snapshot.retrievedAt,
+      fetchTimestamp: snapshot.fetchTimestamp,
+      cacheAgeMs: snapshot.cacheAgeMs ?? null,
+      currentC: snapshot.currentC,
+      highC: snapshot.highC,
+      lowC: snapshot.lowC,
+      conditionCode: snapshot.conditionCode,
+      weatherSummary: snapshot.weatherSummary,
+      coordinates: {
+        lat: snapshot.lat,
+        lon: snapshot.lon,
+        city: place.city ?? null,
+      },
+    });
 
     return snapshot;
   } catch (err) {
-    if (__DEV__) {
-      console.warn(
-        "[liveWeather] threw",
-        err instanceof Error ? err.message : String(err)
-      );
-    }
+    recordWeatherRefreshDiagnostic({
+      ...baseDiagnostic,
+      status: "exception",
+      finishedAt: new Date().toISOString(),
+      error: err instanceof Error ? err.message : String(err),
+      fallbackReason: "exception",
+    });
     return null;
   }
 }

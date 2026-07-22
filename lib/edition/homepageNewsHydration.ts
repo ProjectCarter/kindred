@@ -1,6 +1,7 @@
 import type { CachedEditionBundle } from "./editionCache.ts";
 import {
   nationalNewsFromEdition,
+  nationalNewsFromLegacyTopStories,
   resolveNationalNewsForRender,
   type NationalNewsPackage,
 } from "./nationalNewsTypes.ts";
@@ -29,12 +30,22 @@ export function resolveEditionNewsDesks(
   editionDate: string
 ): { topStories: TopStoryItem[]; nationalNews: NationalNewsPackage | null } {
   const topStories = topStoriesFromEditorialContext(edition.editorial_context);
-  const nationalNews = resolveNationalNewsForRender({
+  let nationalNews = resolveNationalNewsForRender({
     edition,
     topStories,
     editionDate,
     columnOnly: true,
   });
+  if (!nationalNews && topStories.length > 0) {
+    nationalNews = nationalNewsFromLegacyTopStories(topStories, editionDate);
+    if (nationalNews && typeof __DEV__ !== "undefined" && __DEV__) {
+      console.log("[home:nationalNews:hydration] legacy_top_stories_fallback", {
+        editionDate,
+        storyCount: nationalNews.stories.length,
+        packageId: nationalNews.packageId,
+      });
+    }
+  }
   return { topStories, nationalNews };
 }
 

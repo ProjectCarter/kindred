@@ -191,6 +191,7 @@ type Props = {
   /** Live observation refreshed independently from edition build. */
   liveWeatherSummary?: string | null;
   liveWeatherRetrievedAt?: string | null;
+  liveWeatherConditionCode?: number | null;
   editionWeatherRetrievedAt?: string | null;
 };
 
@@ -263,6 +264,7 @@ function EditionReaderInner({
   morningWeatherBeat = null,
   liveWeatherSummary = null,
   liveWeatherRetrievedAt = null,
+  liveWeatherConditionCode = null,
   editionWeatherRetrievedAt = null,
 }: Props) {
   const [fetchedNationalDaily, setFetchedNationalDaily] =
@@ -304,6 +306,7 @@ function EditionReaderInner({
         weatherSectionHeadline: weather?.headline ?? null,
         weatherSectionBody: weather?.body ?? null,
         morningWeatherBeat,
+        weatherConditionCode: liveWeatherConditionCode,
         liveWeatherSummary,
         liveWeatherRetrievedAt,
         editionWeatherRetrievedAt,
@@ -315,6 +318,7 @@ function EditionReaderInner({
       morningWeatherBeat,
       liveWeatherSummary,
       liveWeatherRetrievedAt,
+      liveWeatherConditionCode,
       editionWeatherRetrievedAt,
     ]
   );
@@ -857,6 +861,57 @@ function EditionReaderInner({
     [nationalNewsStories, leadStory, nationalTopStories]
   );
 
+  useEffect(() => {
+    if (!__DEV__) return;
+    const sectionOrder = [
+      "morning_arrival",
+      "local_events",
+      curatedFullAllocation.activities.length > 0 ? "activities" : null,
+      curatedFullAllocation.recommendations.length > 0 ? "food_drinks" : null,
+      storyOfWillRender ? "story_of" : null,
+      history ? "today_in_history" : null,
+      isBanditsPicksEnabled() && banditsPick ? "bandits_pick" : null,
+      "local_news",
+      "national_news",
+      lookingAhead ? "community" : null,
+      ...otherSections.map((s) => s.section_type),
+      historyCarouselCards.length > 0 ? "history_around_town" : null,
+      "edition_close",
+    ].filter(Boolean);
+    console.log("[home:sections:render]", {
+      editionId,
+      sectionOrder,
+      localNewsCount: localNewsArticleTeasers.length,
+      nationalNewsCount: nationalNewsArticleTeasers.length,
+      nationalNewsPackageStories: nationalNewsStories.length,
+      nationalNewsOmitReason:
+        nationalNewsArticleTeasers.length === 0
+          ? nationalNewsStories.length === 0 &&
+            nationalTopStories.length === 0 &&
+            (!leadStory || /local/i.test(leadStory.role ?? ""))
+            ? "no_national_package_or_fallback_stories"
+            : "teaser_resolution_empty"
+          : null,
+      localNewsOmitReason:
+        localNewsArticleTeasers.length === 0 ? "no_local_teasers" : null,
+    });
+  }, [
+    editionId,
+    curatedFullAllocation.activities.length,
+    curatedFullAllocation.recommendations.length,
+    storyOfWillRender,
+    history,
+    banditsPick,
+    lookingAhead,
+    otherSections,
+    historyCarouselCards.length,
+    localNewsArticleTeasers.length,
+    nationalNewsArticleTeasers.length,
+    nationalNewsStories.length,
+    nationalTopStories.length,
+    leadStory,
+  ]);
+
   const banditsPickListingCards = useMemo(() => {
     if (!banditsPick) return [];
     const sideIcons = new Map<string, string | null | undefined>();
@@ -1049,51 +1104,50 @@ function EditionReaderInner({
         />
       </FolioReveal>
 
-      <FolioReveal index={folioCursor++}>
-        <ActivitiesSection
-          items={curatedFullAllocation.activities}
-          locationCity={locationCity}
-          readerLocation={resolvedReaderLocation}
-          onOpenItem={
-            onOpenArticle
-              ? (item) => {
-                  const article = activityArticlesById.get(item.item.id);
-                  if (article) onOpenArticle(article);
-                }
-              : undefined
-          }
-          onSeeAll={
-            curatedFullAllocation.activities.length > 0
-              ? onSeeAllActivities
-              : undefined
-          }
-        />
-      </FolioReveal>
+      {curatedFullAllocation.activities.length > 0 ? (
+        <FolioReveal index={folioCursor++}>
+          <ActivitiesSection
+            items={curatedFullAllocation.activities}
+            locationCity={locationCity}
+            readerLocation={resolvedReaderLocation}
+            onOpenItem={
+              onOpenArticle
+                ? (item) => {
+                    const article = activityArticlesById.get(item.item.id);
+                    if (article) onOpenArticle(article);
+                  }
+                : undefined
+            }
+            onSeeAll={onSeeAllActivities}
+          />
+        </FolioReveal>
+      ) : null}
 
-      <FolioReveal index={folioCursor++}>
-        <RecommendationsSection
-          items={curatedFullAllocation.recommendations}
-          locationCity={locationCity}
-          readerLocation={resolvedReaderLocation}
-          onOpenItem={
-            onOpenArticle
-              ? (item) => {
-                  const article = recommendationArticlesById.get(item.item.id);
-                  if (article) onOpenArticle(article);
-                }
-              : undefined
-          }
-          onSeeAll={
-            curatedFullAllocation.recommendations.length > 0 &&
-            onSeeAllRecommendations
-              ? (pool) => onSeeAllRecommendations(pool)
-              : undefined
-          }
-        />
-      </FolioReveal>
+      {curatedFullAllocation.recommendations.length > 0 ? (
+        <FolioReveal index={folioCursor++}>
+          <RecommendationsSection
+            items={curatedFullAllocation.recommendations}
+            locationCity={locationCity}
+            readerLocation={resolvedReaderLocation}
+            onOpenItem={
+              onOpenArticle
+                ? (item) => {
+                    const article = recommendationArticlesById.get(item.item.id);
+                    if (article) onOpenArticle(article);
+                  }
+                : undefined
+            }
+            onSeeAll={
+              onSeeAllRecommendations
+                ? (pool) => onSeeAllRecommendations(pool)
+                : undefined
+            }
+          />
+        </FolioReveal>
+      ) : null}
 
-      <FolioReveal index={folioCursor++}>
-        {storyOf && storyOfWillRender ? (
+      {storyOf && storyOfWillRender ? (
+        <FolioReveal index={folioCursor++}>
           <StoryOfSection
             section={storyOf}
             cityName={locationCity}
@@ -1105,8 +1159,8 @@ function EditionReaderInner({
                 : undefined
             }
           />
-        ) : null}
-      </FolioReveal>
+        </FolioReveal>
+      ) : null}
 
       {history ? (
         <FolioReveal index={folioCursor++}>
@@ -1173,7 +1227,7 @@ function EditionReaderInner({
         />
       </FolioReveal>
 
-      <FolioReveal index={folioCursor++}>
+      <FolioReveal index={folioCursor++} disabled>
         <NewsArticleSection
           sectionLabel="National News"
           articles={nationalNewsArticleTeasers}
@@ -1216,25 +1270,23 @@ function EditionReaderInner({
 
       {otherSections.map((section) => renderSection(section, folioCursor++))}
 
-      <FolioReveal index={folioCursor++}>
-        <HistoryAroundTownSection
-          cards={historyCarouselCards}
-          subtitle={historyAroundTown?.subtitle}
-          onOpenPlace={
-            onOpenArticle
-              ? (card) => onOpenArticle(articleFromHistoryPlace(card.place))
-              : undefined
-          }
-          onSeeAll={
-            historyAroundTown && historyAroundTown.places.length > 0
-              ? onSeeAllHistoryAroundTown
-              : undefined
-          }
-          seeAllTotal={historyAroundTown?.places.length}
-        />
-      </FolioReveal>
+      {historyCarouselCards.length > 0 ? (
+        <FolioReveal index={folioCursor++}>
+          <HistoryAroundTownSection
+            cards={historyCarouselCards}
+            subtitle={historyAroundTown?.subtitle}
+            onOpenPlace={
+              onOpenArticle
+                ? (card) => onOpenArticle(articleFromHistoryPlace(card.place))
+                : undefined
+            }
+            onSeeAll={onSeeAllHistoryAroundTown}
+            seeAllTotal={historyAroundTown?.places.length}
+          />
+        </FolioReveal>
+      ) : null}
 
-      <EditionClose folioIndex={folioCursor + 2} />
+      <EditionClose folioIndex={folioCursor} />
     </View>
   );
 }
@@ -1265,6 +1317,7 @@ function editionReaderPropsAreEqual(prev: Props, next: Props): boolean {
     prev.morningWeatherBeat === next.morningWeatherBeat &&
     prev.liveWeatherSummary === next.liveWeatherSummary &&
     prev.liveWeatherRetrievedAt === next.liveWeatherRetrievedAt &&
+    prev.liveWeatherConditionCode === next.liveWeatherConditionCode &&
     prev.editionWeatherRetrievedAt === next.editionWeatherRetrievedAt
   );
 }

@@ -53,12 +53,17 @@ editor or via `supabase db push`.
 No new Vault secret needed — this reuses the `CRON_SECRET` already created
 for Phase 2.
 
-### 2. Deploy the two new Edge Functions
+### 2. Deploy the Edge Functions
 
 ```
 supabase functions deploy refresh-live-data
 supabase functions deploy sweep-live-refresh
+supabase functions deploy refresh-weather
 ```
+
+(`refresh-weather` powers live homepage current conditions — independent of
+edition build. Requires the same authenticated client session as
+`refresh-live-data`.)
 
 (Nothing else changed this round — no redeploy needed for `generate-edition`
 or `process-edition-jobs`.)

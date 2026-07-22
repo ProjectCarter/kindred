@@ -5,9 +5,11 @@
 import type { NationalNewsPackage } from "./nationalNewsTypes.ts";
 import {
   nationalNewsFromEdition,
+  nationalNewsFromLegacyTopStories,
   parseNationalNewsPackage,
   resolveNationalNewsFromEditionColumn,
 } from "./nationalNewsTypes.ts";
+import { topStoriesFromEditorialContext } from "./topStoriesFromContext.ts";
 
 export type NationalNewsHydrationSource =
   | "cache"
@@ -75,7 +77,17 @@ export function isValidNationalNewsPackage(
 }
 
 export function resolveNationalNewsPackageForEdition(
-  edition: { national_news?: unknown; edition_date?: string | null } | null | undefined
+  edition: {
+    national_news?: unknown;
+    editorial_context?: unknown;
+    edition_date?: string | null;
+  } | null | undefined
 ): NationalNewsPackage | null {
-  return resolveNationalNewsFromEditionColumn(edition ?? null);
+  const fromColumn = resolveNationalNewsFromEditionColumn(edition ?? null);
+  if (fromColumn) return fromColumn;
+  const editionDate = edition?.edition_date?.trim();
+  if (!editionDate) return null;
+  const topStories = topStoriesFromEditorialContext(edition?.editorial_context);
+  if (topStories.length === 0) return null;
+  return nationalNewsFromLegacyTopStories(topStories, editionDate);
 }

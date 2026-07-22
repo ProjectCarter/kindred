@@ -258,6 +258,12 @@ import {
   type LiveWeatherSnapshot,
 } from "../lib/weather/liveWeatherRefresh";
 import {
+  getLastWeatherRefreshDiagnostic,
+  type WeatherDisplayDiagnostic,
+} from "../lib/weather/weatherDiagnostics";
+import { WeatherDiagnosticPanel } from "../components/WeatherDiagnosticPanel";
+import { resolveHomepageWeatherDisplay } from "../lib/weather/homepageWeatherDisplay";
+import {
   needsNetworkDiscoveryMerge,
   sectionsNeedNetworkBodyMerge,
 } from "../lib/edition/resolveDiscoverySync";
@@ -301,6 +307,7 @@ export default function HomeScreen() {
   const [sections, setSections] = useState<EditionSection[]>([]);
   const [editionDate, setEditionDate] = useState<string | null>(null);
   const [liveWeather, setLiveWeather] = useState<LiveWeatherSnapshot | null>(null);
+  const weatherForceOnceRef = useRef(true);
   const [editionId, setEditionId] = useState<string | null>(null);
   const [leadStory, setLeadStory] = useState<LeadStory | null>(null);
   const [topStories, setTopStories] = useState<TopStoryItem[]>([]);
@@ -3541,13 +3548,91 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [backgroundJob, pollBackgroundJobProgress]);
 
-  const refreshHomeWeather = useCallback(async (place: ActiveLocation["place"] | null) => {
-    if (!place) return;
-    const snapshot = await refreshLiveWeather(place);
-    if (snapshot && mountedRef.current) {
-      setLiveWeather(snapshot);
-    }
-  }, []);
+  const refreshHomeWeather = useCallback(
+    async (
+      place: ActiveLocation["place"] | null,
+      options?: { force?: boolean }
+    ) => {
+      if (!place) {
+        if (__DEV__) {
+          console.warn("[home:weather:request] skipped", {
+            reason: "missing_place",
+          });
+        }
+        return;
+      }
+      const force = Boolean(options?.force || weatherForceOnceRef.current);
+      weatherForceOnceRef.current = false;
+      if (__DEV__) {
+        console.log("[home:weather:request] start", {
+          city: place.city,
+          lat: place.lat,
+          lon: place.lon,
+          force,
+        });
+      }
+      const snapshot = await refreshLiveWeather(place, { force });
+      if (!mountedRef.current) return;
+      if (snapshot) {
+        setLiveWeather(snapshot);
+        if (__DEV__) {
+          console.log("[home:weather:request] success", {
+            provider: snapshot.provider,
+            retrievedAt: snapshot.retrievedAt,
+            currentC: snapshot.currentC,
+            highC: snapshot.highC,
+            lowC: snapshot.lowC,
+            conditionCode: snapshot.conditionCode,
+            weatherSummary: snapshot.weatherSummary,
+          });
+        }
+      } else if (__DEV__) {
+        const diagnostic = getLastWeatherRefreshDiagnostic();
+        console.warn("[home:weather:request] failed", diagnostic);
+      }
+    },
+    []
+  );
+
+  const weatherDisplayDiagnostic = useMemo((): WeatherDisplayDiagnostic | null => {
+    if (!__DEV__) return null;
+    const lastRefresh = getLastWeatherRefreshDiagnostic();
+    const editionWeatherSummary = intelligence?.weatherSummary ?? null;
+    const resolved = resolveHomepageWeatherDisplay({
+      editorialContext: editionWeatherSummary
+        ? { weatherSummary: editionWeatherSummary }
+        : null,
+      liveWeatherSummary: liveWeather?.weatherSummary ?? null,
+      liveWeatherRetrievedAt: liveWeather?.retrievedAt ?? null,
+      weatherConditionCode: liveWeather?.conditionCode ?? null,
+      editionWeatherRetrievedAt: null,
+    });
+    return {
+      selectedSource: liveWeather?.weatherSummary
+        ? "live_weather"
+        : editionWeatherSummary
+          ? "edition_snapshot"
+          : "none",
+      liveRequestStatus: lastRefresh.status,
+      coordinates: lastRefresh.coordinates ?? {
+        lat: activeLocation?.place?.lat ?? 0,
+        lon: activeLocation?.place?.lon ?? 0,
+        city: activeLocation?.place?.city ?? null,
+      },
+      fetchedAt: liveWeather?.retrievedAt ?? null,
+      cacheAgeMs: liveWeather?.cacheAgeMs ?? null,
+      current: resolved?.current ?? null,
+      highLow: resolved?.highLow ?? null,
+      condition: resolved?.condition ?? null,
+      fallbackReason:
+        lastRefresh.fallbackReason ??
+        (!liveWeather?.weatherSummary && editionWeatherSummary
+          ? "edition_snapshot_after_live_miss"
+          : null),
+      lastRefresh,
+      liveSnapshot: liveWeather,
+    };
+  }, [activeLocation?.place, intelligence?.weatherSummary, liveWeather]);
 
   // Resume: quietly refresh paper + stale GPS when mode is current.
   useEffect(() => {
@@ -3575,7 +3660,9 @@ export default function HomeScreen() {
   }, [loadEdition, refreshHomeWeather]);
 
   useEffect(() => {
-    void refreshHomeWeather(activeLocation?.place ?? null);
+    setLiveWeather(null);
+    weatherForceOnceRef.current = true;
+    void refreshHomeWeather(activeLocation?.place ?? null, { force: true });
   }, [
     activeLocation?.place?.lat,
     activeLocation?.place?.lon,
@@ -3587,6 +3674,7 @@ export default function HomeScreen() {
       currentY: homeScrollYRef.current,
       editionId: editionIdRef.current,
     });
+    void refreshHomeWeather(activeLocation?.place ?? null, { force: true });
     // Keep the printed paper visible — sync quietly under the refresh spinner.
     if (editionIdRef.current && sections.length > 0) {
       setRefreshing(true);
@@ -4601,6 +4689,10 @@ export default function HomeScreen() {
           </Text>
         ) : null}
 
+        {__DEV__ ? (
+          <WeatherDiagnosticPanel diagnostic={weatherDisplayDiagnostic} />
+        ) : null}
+
         {activeLocation?.isTravel && activeLocation.place ? (
           <View style={styles.travelBanner}>
             <Text style={styles.travelText}>
@@ -4874,15 +4966,12 @@ export default function HomeScreen() {
                 router.push("/recommendations");
               }}
               historyAroundTown={intelligence?.historyAroundTown}
-              weatherSummary={liveWeather?.weatherSummary ?? intelligence?.weatherSummary ?? null}
+              weatherSummary={intelligence?.weatherSummary ?? null}
               morningWeatherBeat={intelligence?.morning?.beats?.weather ?? null}
               liveWeatherSummary={liveWeather?.weatherSummary ?? null}
               liveWeatherRetrievedAt={liveWeather?.retrievedAt ?? null}
-              editionWeatherRetrievedAt={
-                cachedBundleRef.current?.cachedAt
-                  ? new Date(cachedBundleRef.current.cachedAt).toISOString()
-                  : null
-              }
+              liveWeatherConditionCode={liveWeather?.conditionCode ?? null}
+              editionWeatherRetrievedAt={null}
               onSeeAllHistoryAroundTown={() => {
                 persistHomeScrollNow();
                 stashTodaysHistoryPlaces(

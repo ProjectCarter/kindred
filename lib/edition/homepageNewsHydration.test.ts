@@ -17,6 +17,7 @@ import {
 } from "./nationalNewsTypes.ts";
 import {
   mergeNationalNewsState,
+  resolveEditionNewsDesks,
   resolveNationalNewsForCachedBundle,
   withSyncedNewsDesksInCache,
 } from "./homepageNewsHydration.ts";
@@ -137,6 +138,38 @@ test("legacy warm cache without nationalNews column resolves from network sync",
   });
 
   assert.equal(nationalNews?.stories[0]?.headline, SAMPLE_NATIONAL_NEWS.stories[0].headline);
+});
+
+test("resolveEditionNewsDesks falls back to legacy national top stories", () => {
+  const desks = resolveEditionNewsDesks(
+    { national_news: null, editorial_context: null },
+    "2026-07-19"
+  );
+  assert.equal(desks.nationalNews, null);
+
+  const withNational = resolveEditionNewsDesks(
+    {
+      national_news: null,
+      editorial_context: {
+        sections: [
+          {
+            sectionType: "top_stories",
+            items: [
+              {
+                id: "nat-1",
+                title: "Congress passes budget",
+                summary: "Lawmakers reached a deal overnight.",
+                source: "AP",
+                role: "national",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "2026-07-19"
+  );
+  assert.equal(withNational.nationalNews?.stories[0]?.headline, "Congress passes budget");
 });
 
 test("National News collapses when no data exists", () => {
