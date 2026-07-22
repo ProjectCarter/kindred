@@ -36,7 +36,12 @@ import {
   parseStoryOfSourceNote,
   storyOfImageFromSourceNote,
 } from "../lib/edition/storyOf";
-import { discoveryArticlesById } from "../lib/edition/discoveryArticleCache";
+import {
+  composeDiscoveryArticleOnTap,
+  discoveryItemsById,
+  discoveryRankedItemCategoryIcon,
+} from "../lib/edition/discoveryArticleCache";
+import { resolveBanditsPickCategoryIcon } from "../lib/edition/categoryIcon";
 import {
   articleFromTopStory,
   type TopStoryItem,
@@ -648,21 +653,6 @@ function EditionReaderInner({
     storyOf,
   ]);
 
-  const activityArticlesById = useMemo(
-    () => discoveryArticlesById(curatedFullAllocation.activities, "activity", editionDate),
-    [curatedFullAllocation.activities, editionDate]
-  );
-
-  const recommendationArticlesById = useMemo(
-    () =>
-      discoveryArticlesById(
-        curatedFullAllocation.recommendations,
-        "recommendation",
-        editionDate
-      ),
-    [curatedFullAllocation.recommendations, editionDate]
-  );
-
   const historyCarouselCards = useMemo(
     () => selectHistoryAroundTownCarousel(historyAroundTown),
     [historyAroundTown]
@@ -803,32 +793,10 @@ function EditionReaderInner({
     ["coffee", "restaurants"].includes(d.item.category)
   );
   const banditPickSides = localBiz.slice(0, 2);
-  const localBizArticlesById = useMemo(
-    () => discoveryArticlesById(localBiz, undefined, editionDate),
-    [localBiz, editionDate]
+  const localBizById = useMemo(
+    () => discoveryItemsById(localBiz),
+    [localBiz]
   );
-
-  const banditsPickArticle = useMemo(() => {
-    if (!isBanditsPicksEnabled() || !banditsPick) return null;
-    if (banditsPick.kind !== "article" && banditsPick.story.discoveryItem) {
-      return articleFromDiscoveryItem(
-        {
-          item: banditsPick.story.discoveryItem,
-          score: 0,
-          reasons: [],
-          surfaces: [],
-        },
-        { editionDate }
-      );
-    }
-    return articleFromBanditsPick(
-      {
-        ...banditsPick.story,
-        discoveryItem: banditsPick.story.discoveryItem ?? null,
-      },
-      { kind: banditsPick.kind }
-    );
-  }, [banditsPick, editionDate]);
 
   const nationalTopStories = topStories.filter(
     (s) => !/local/i.test(s.role ?? "")
@@ -856,16 +824,63 @@ function EditionReaderInner({
     for (const side of banditPickSides) {
       sideIcons.set(
         side.item.id,
-        localBizArticlesById.get(side.item.id)?.categoryIcon ?? null
+        discoveryRankedItemCategoryIcon(side, "recommendation")
       );
     }
     return banditsPickToListingCards({
       pick: banditsPick,
-      mainCategoryIcon: banditsPickArticle?.categoryIcon ?? null,
+      mainCategoryIcon: resolveBanditsPickCategoryIcon({
+        kind: banditsPick.kind,
+        headline: banditsPick.story.headline,
+        summary: banditsPick.story.summary,
+        category: banditsPick.story.discoveryItem?.category ?? null,
+        discoveryItem: banditsPick.story.discoveryItem ?? null,
+      }),
       sides: banditPickSides,
       sideCategoryIconsById: sideIcons,
     });
-  }, [banditsPick, banditPickSides, banditsPickArticle, localBizArticlesById]);
+  }, [banditsPick, banditPickSides]);
+
+  function openRankedDiscoveryItem(
+    item: RankedDiscoveryItem,
+    savedContentType?: "activity" | "recommendation"
+  ) {
+    if (!onOpenArticle) return;
+    onOpenArticle(
+      composeDiscoveryArticleOnTap(item, {
+        savedContentType,
+        editionDate,
+      })
+    );
+  }
+
+  function openBanditsPickCard(cardId: string) {
+    if (!onOpenArticle || !banditsPick) return;
+    if (cardId === banditsPick.story.id) {
+      const article =
+        banditsPick.kind !== "article" && banditsPick.story.discoveryItem
+          ? articleFromDiscoveryItem(
+              {
+                item: banditsPick.story.discoveryItem,
+                score: 0,
+                reasons: [],
+                surfaces: [],
+              },
+              { editionDate }
+            )
+          : articleFromBanditsPick(
+              {
+                ...banditsPick.story,
+                discoveryItem: banditsPick.story.discoveryItem ?? null,
+              },
+              { kind: banditsPick.kind }
+            );
+      onOpenArticle(article);
+      return;
+    }
+    const side = localBizById.get(cardId);
+    if (side) openRankedDiscoveryItem(side);
+  }
 
   let folioCursor = 0;
 
@@ -1050,8 +1065,7 @@ function EditionReaderInner({
           onOpenItem={
             onOpenArticle
               ? (item) => {
-                  const article = activityArticlesById.get(item.item.id);
-                  if (article) onOpenArticle(article);
+                  openRankedDiscoveryItem(item, "activity");
                 }
               : undefined
           }
@@ -1071,8 +1085,7 @@ function EditionReaderInner({
           onOpenItem={
             onOpenArticle
               ? (item) => {
-                  const article = recommendationArticlesById.get(item.item.id);
-                  if (article) onOpenArticle(article);
+                  openRankedDiscoveryItem(item, "recommendation");
                 }
               : undefined
           }
@@ -1142,12 +1155,7 @@ function EditionReaderInner({
             onOpenCard={
               onOpenArticle
                 ? (card) => {
-                    if (card.id === banditsPick.story.id) {
-                      if (banditsPickArticle) onOpenArticle(banditsPickArticle);
-                      return;
-                    }
-                    const article = localBizArticlesById.get(card.id);
-                    if (article) onOpenArticle(article);
+                    openBanditsPickCard(card.id);
                   }
                 : undefined
             }
