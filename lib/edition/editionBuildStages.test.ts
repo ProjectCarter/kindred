@@ -9,12 +9,13 @@ import {
   stageIndex,
 } from "./editionBuildStages.ts";
 
-test("EDITION_BUILD_STAGES — eleven ordered stages ending in finalize", () => {
-  assert.equal(EDITION_BUILD_STAGES.length, 11);
+test("EDITION_BUILD_STAGES — twelve ordered stages ending in publish_edition", () => {
+  assert.equal(EDITION_BUILD_STAGES.length, 12);
   assert.equal(EDITION_BUILD_STAGES[0], "initialize_edition");
   assert.equal(EDITION_BUILD_STAGES[1], "generate_national_daily");
   assert.equal(EDITION_BUILD_STAGES[2], "attach_national_daily");
-  assert.equal(EDITION_BUILD_STAGES.at(-1), "finalize_edition");
+  assert.equal(EDITION_BUILD_STAGES.at(-2), "validate_technical");
+  assert.equal(EDITION_BUILD_STAGES.at(-1), "publish_edition");
 });
 
 test("nextEditionBuildStage — walks pipeline then returns null", () => {
@@ -22,7 +23,9 @@ test("nextEditionBuildStage — walks pipeline then returns null", () => {
   assert.equal(nextEditionBuildStage("initialize_edition"), "generate_national_daily");
   assert.equal(nextEditionBuildStage("generate_national_daily"), "attach_national_daily");
   assert.equal(nextEditionBuildStage("local_news"), "bandits_pick");
-  assert.equal(nextEditionBuildStage("finalize_edition"), null);
+  assert.equal(nextEditionBuildStage("bandits_pick"), "validate_technical");
+  assert.equal(nextEditionBuildStage("validate_technical"), "publish_edition");
+  assert.equal(nextEditionBuildStage("publish_edition"), null);
 });
 
 test("local_news runs before bandits_pick for editorial dependency", () => {
@@ -33,7 +36,8 @@ test("OPTIONAL_EDITION_BUILD_STAGES — optional desks only", () => {
   for (const stage of OPTIONAL_EDITION_BUILD_STAGES) {
     assert.notEqual(stage, "initialize_edition");
     assert.notEqual(stage, "generate_national_daily");
-    assert.notEqual(stage, "finalize_edition");
+    assert.notEqual(stage, "validate_technical");
+    assert.notEqual(stage, "publish_edition");
     assert.notEqual(stage, "attach_national_daily");
     assert.notEqual(stage, "weather");
     assert.notEqual(stage, "local_events");

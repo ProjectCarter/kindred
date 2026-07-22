@@ -14,8 +14,12 @@ export const EDITION_BUILD_STAGES = [
   "story_of",
   "local_news",
   "bandits_pick",
-  "finalize_edition",
+  "validate_technical",
+  "publish_edition",
 ] as const;
+
+/** @deprecated Use publish_edition — retained for migration scripts reading old job rows. */
+export const LEGACY_FINALIZE_EDITION_STAGE = "finalize_edition" as const;
 
 export type EditionBuildStage = (typeof EDITION_BUILD_STAGES)[number];
 

@@ -80,6 +80,21 @@ import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.
 import { filterEventsForLocalEventsDesk } from "./editionSectionOwnership.ts";
 import { allocateDiscoverySections } from "../discovery/sectionAllocation.ts";
 import { buildHistoryAroundTownForEdition } from "../historyAroundTown/library.ts";
+import { isEditionEarlyPaintEnabled } from "./earlyPaintFeature.ts";
+import {
+  buildValidationStageDiagnostic,
+  persistValidationReport,
+  recordOptionalStageFailure,
+} from "./editionValidationPersistence.ts";
+import { runPublishEditionStage, readLatestValidationReport } from "./publishEdition.ts";
+import {
+  logTechnicalValidationReport,
+  runTechnicalValidation,
+  type TechnicalValidationReport,
+} from "./technicalValidation.ts";
+import {
+  mergeValidationIntoBuildState,
+} from "./editionValidationTypes.ts";
 
 export type StagedBuildJobRow = {
   id: string;
@@ -129,13 +144,16 @@ function resolveStage(job: StagedBuildJobRow): EditionBuildStage {
   for (const stage of EDITION_BUILD_STAGES) {
     if (!isStageComplete(job.completed_stages, stage)) return stage;
   }
-  return "finalize_edition";
+  return "publish_edition";
 }
 
 async function maybeMarkEditionPaintable(
   admin: SupabaseClient,
   editionId: string
 ): Promise<boolean> {
+  if (!isEditionEarlyPaintEnabled()) {
+    return false;
+  }
   const { data: edition } = await admin
     .from("editions")
     .select("status")
@@ -919,31 +937,71 @@ async function runLocalNewsStage(
   };
 }
 
-async function runFinalizeStage(
+async function runValidateTechnicalStage(
   admin: SupabaseClient,
-  ctx: StageContext
-): Promise<{ itemCount: number }> {
-  const { data: sections } = await admin
-    .from("edition_sections")
-    .select("section_type")
-    .eq("edition_id", ctx.editionId);
+  ctx: StageContext,
+  buildState: BuildState
+): Promise<{ report: Awaited<ReturnType<typeof runTechnicalValidation>>; buildState: Record<string, unknown> }> {
+  const report = await runTechnicalValidation(admin, {
+    editionId: ctx.editionId,
+    editionDate: ctx.editionDate,
+    metroKey: ctx.metroKey,
+    userId: ctx.userId,
+    enforcing: true,
+  });
 
-  const mvp = assessMinimumViableEdition(sections ?? []);
-  if (!mvp.paintable) {
-    throw new Error(`finalize blocked: ${mvp.reasons.join(", ")}`);
+  logTechnicalValidationReport({
+    ...report,
+    editionId: ctx.editionId,
+    metroKey: ctx.metroKey,
+    traceId: ctx.traceId,
+    mode: "enforcing",
+  });
+
+  const mergedBuildState = await persistValidationReport(admin, {
+    jobId: ctx.jobId,
+    buildState: buildState as Record<string, unknown>,
+    report,
+  });
+
+  if (report.overallStatus === "FAIL") {
+    throw new Error(
+      `validate_technical failed: ${report.blockingFailures.join(", ") || report.overallStatus}`
+    );
   }
 
-  await admin
-    .from("editions")
-    .update({ status: "ready" })
-    .eq("id", ctx.editionId);
+  return { report, buildState: mergedBuildState };
+}
 
-  await admin
-    .from("generation_jobs")
-    .update({ build_state: {}, build_stage: null })
-    .eq("id", ctx.jobId);
+async function runPublishEditionStageWrapper(
+  admin: SupabaseClient,
+  ctx: StageContext,
+  buildState: BuildState
+): Promise<{ itemCount: number; buildState: Record<string, unknown> }> {
+  const validationReport = readLatestValidationReport(buildState as Record<string, unknown>);
+  if (!validationReport) {
+    throw new Error("publish_edition blocked: missing validation report");
+  }
 
-  return { itemCount: sections?.length ?? 0 };
+  const result = await runPublishEditionStage(admin, {
+    jobId: ctx.jobId,
+    editionId: ctx.editionId,
+    userId: ctx.userId,
+    editionDate: ctx.editionDate,
+    metroKey: ctx.metroKey,
+    traceId: ctx.traceId,
+    buildState: buildState as Record<string, unknown>,
+    validationReport,
+  });
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  return {
+    itemCount: validationReport.deskReports.length,
+    buildState: mergeValidationIntoBuildState({}, result.preservedValidation),
+  };
 }
 
 type StageContext = {
@@ -1067,6 +1125,7 @@ export async function runEditionBuildStage(
     let itemCount = 0;
     let payloadBytes = 0;
     let editionId = job.edition_id ?? ctx?.editionId ?? "";
+    let lastValidationReport: TechnicalValidationReport | null = null;
 
     switch (stage) {
       case "initialize_edition": {
@@ -1163,16 +1222,71 @@ export async function runEditionBuildStage(
         const r = await runBanditsPickStage(admin, ctx!, buildState);
         itemCount = r.itemCount;
         payloadBytes = r.payloadBytes;
+        if (ctx && Deno.env.get("EDITION_VALIDATION_DRY_RUN_AT_GENERATION_END") === "true") {
+          const dryReport = await runTechnicalValidation(admin, {
+            editionId: ctx.editionId,
+            editionDate: ctx.editionDate,
+            metroKey: ctx.metroKey,
+            userId: ctx.userId,
+            enforcing: false,
+            skipExternalChecks: true,
+          });
+          logTechnicalValidationReport({
+            ...dryReport,
+            editionId: ctx.editionId,
+            metroKey: ctx.metroKey,
+            traceId: ctx.traceId,
+            mode: "dry_run",
+          });
+          const mergedDry = await persistValidationReport(admin, {
+            jobId: ctx.jobId,
+            buildState: buildState as Record<string, unknown>,
+            report: { ...dryReport, enforcing: false },
+          });
+          Object.assign(buildState, mergedDry);
+        }
         break;
       }
-      case "finalize_edition": {
-        const r = await runFinalizeStage(admin, ctx!);
+      case "validate_technical": {
+        const r = await runValidateTechnicalStage(admin, ctx!, buildState);
+        Object.assign(buildState, r.buildState);
+        lastValidationReport = r.report;
+        itemCount = r.report.deskReports.length;
+        payloadBytes = null;
+        break;
+      }
+      case "publish_edition": {
+        lastValidationReport =
+          readLatestValidationReport(buildState as Record<string, unknown>) ?? null;
+        const r = await runPublishEditionStageWrapper(admin, ctx!, buildState);
+        Object.assign(buildState, r.buildState);
         itemCount = r.itemCount;
         break;
       }
       default:
         throw new Error(`Unknown stage: ${stage}`);
     }
+
+    const validationExtra =
+      stage === "validate_technical" && lastValidationReport
+        ? buildValidationStageDiagnostic({
+            traceId: input.editionTraceId ?? null,
+            report: lastValidationReport,
+            publicationAllowed: false,
+          })
+        : stage === "publish_edition" && lastValidationReport
+          ? buildValidationStageDiagnostic({
+              traceId: input.editionTraceId ?? null,
+              report: lastValidationReport,
+              publicationAllowed: true,
+            })
+          : stage === "publish_edition"
+            ? buildValidationStageDiagnostic({
+                traceId: input.editionTraceId ?? null,
+                report: readLatestValidationReport(buildState as Record<string, unknown>)!,
+                publicationAllowed: true,
+              })
+            : null;
 
     const diagnostic = buildStageDiagnostic({
       traceId: input.editionTraceId ?? null,
@@ -1185,13 +1299,15 @@ export async function runEditionBuildStage(
     });
     logEditionBuildStageDiagnostic(diagnostic);
 
-    if (stage === "finalize_edition") {
+    if (stage === "publish_edition") {
       await completeStage(admin, {
         jobId: input.jobId,
         completedStage: stage,
         editionId,
-        diagnostic,
-        buildState: {},
+        diagnostic: validationExtra
+          ? { ...diagnostic, ...(validationExtra as Record<string, unknown>) }
+          : diagnostic,
+        buildState: buildState as Record<string, unknown>,
       });
       return {
         ok: true,
@@ -1206,7 +1322,9 @@ export async function runEditionBuildStage(
       jobId: input.jobId,
       completedStage: stage,
       editionId,
-      diagnostic,
+      diagnostic: validationExtra
+        ? { ...diagnostic, ...(validationExtra as Record<string, unknown>) }
+        : diagnostic,
       buildState: buildState as Record<string, unknown>,
     });
 
@@ -1234,13 +1352,38 @@ export async function runEditionBuildStage(
     logEditionBuildStageDiagnostic(diagnostic);
 
     if (optional) {
+      const failureBuildState = await recordOptionalStageFailure(admin, {
+        jobId: input.jobId,
+        buildState: {
+          ...(job.build_state as Record<string, unknown> | null),
+          ...(buildState as Record<string, unknown>),
+        },
+        record: {
+          stage,
+          failureType: "optional_stage_error",
+          errorSummary: message.slice(0, 500),
+          attemptNumber: job.attempts ?? 0,
+          markedComplete: true,
+          eligibleForValidation: true,
+          at: new Date().toISOString(),
+        },
+      });
+      const optionalDiagnostic = {
+        ...diagnostic,
+        optionalStageFailure: true,
+        optionalStageEligibleForValidation: true,
+      };
       await admin.rpc("complete_edition_build_stage", {
         p_job_id: input.jobId,
         p_completed_stage: stage,
         p_next_stage: nextEditionBuildStage(stage),
         p_edition_id: job.edition_id,
-        p_diagnostic: diagnostic,
+        p_diagnostic: optionalDiagnostic,
       });
+      await admin
+        .from("generation_jobs")
+        .update({ build_state: failureBuildState })
+        .eq("id", input.jobId);
       triggerUserEditionJobWorker(input);
       return {
         ok: true,

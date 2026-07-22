@@ -1,6 +1,6 @@
 /**
  * Staged edition build completion — early MVP publish marks editions ready
- * before middle desks finish; workers must keep running until finalize_edition.
+ * before middle desks finish; workers must keep running until publish_edition.
  */
 
 import { isStageComplete } from "./editionBuildStages.ts";
@@ -8,7 +8,9 @@ import { isStageComplete } from "./editionBuildStages.ts";
 export function isStagedEditionBuildComplete(
   completedStages: readonly string[] | null | undefined
 ): boolean {
-  return isStageComplete(completedStages, "finalize_edition");
+  if (isStageComplete(completedStages, "publish_edition")) return true;
+  // Legacy jobs completed before Pipeline V2.
+  return (completedStages ?? []).includes("finalize_edition");
 }
 
 /** True when the edition row is paintable but staged desks may still be running. */
