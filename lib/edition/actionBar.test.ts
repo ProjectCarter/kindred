@@ -248,10 +248,10 @@ describe("Universal Action Bar", () => {
     );
   });
 
-  it("legacy resolveActionsForLocalEvent with includeSave adds save and share", () => {
+  it("legacy resolveActionsForLocalEvent omits save when clippings disabled (V1)", () => {
     const actions = resolveActionsForLocalEvent(paidEvent());
     expect(actions.some((a) => a.label === "Share")).toBe(true);
-    expect(actions.some((a) => a.label === "Save to Today's Board")).toBe(true);
+    expect(actions.some((a) => a.label === "Save to Today's Board")).toBe(false);
   });
 
   it("article context actions omit save and share", () => {

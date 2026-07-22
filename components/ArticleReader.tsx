@@ -52,6 +52,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { resolveArticleHero, supportingFiguresForArticle } from "../lib/edition/articleHero";
 import { isWireNewsSection } from "../lib/edition/articleIntegrity";
+import { isPersonalLibraryEnabled } from "../lib/edition/clippingsFeature";
 import {
   resolveClipTarget,
   checkClipped,
@@ -189,6 +190,8 @@ export function ArticleReader({
 
   const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
   const canClip = Boolean(clipTarget);
+  const showSaveClipping = isPersonalLibraryEnabled() && canClip;
+  const showLike = isPersonalLibraryEnabled() && canClip;
   const articleContextActions = useMemo(
     () => resolveArticleContextActions(article),
     [article]
@@ -373,7 +376,7 @@ export function ArticleReader({
   }, [article, companion, editionId, backLabel]);
 
   useEffect(() => {
-    if (!clipTarget) {
+    if (!showSaveClipping || !clipTarget) {
       setClipped(false);
       return;
     }
@@ -389,12 +392,12 @@ export function ArticleReader({
     return () => {
       cancelled = true;
     };
-  }, [clipTarget]);
+  }, [clipTarget, showSaveClipping]);
 
   // Liking shares the same eligibility (and key) as pinning — both live on
   // the same four content types — but is tracked independently.
   useEffect(() => {
-    if (!clipTarget) {
+    if (!showLike || !clipTarget) {
       setLiked(false);
       return;
     }
@@ -410,7 +413,7 @@ export function ArticleReader({
     return () => {
       cancelled = true;
     };
-  }, [clipTarget]);
+  }, [clipTarget, showLike]);
 
   const published = formatArticlePublishedAt(article.publishedAt);
   const readLabel = formatReadTime(article.estimatedReadMinutes);
@@ -522,7 +525,7 @@ export function ArticleReader({
   }, [contentHeight, viewportHeight, progressAnim]);
 
   async function handleToggleClip() {
-    if (!clipTarget || clipPending) return;
+    if (!isPersonalLibraryEnabled() || !clipTarget || clipPending) return;
     setClipPending(true);
     setClipError(null);
     try {
@@ -597,7 +600,7 @@ export function ArticleReader({
   // future editions. Optimistic and quiet: on failure it simply reverts,
   // no error banner, since a missed like is low-stakes.
   async function handleToggleLike() {
-    if (!clipTarget || likePending) return;
+    if (!isPersonalLibraryEnabled() || !clipTarget || likePending) return;
     const nextLiked = !liked;
     setLiked(nextLiked);
     setLikePending(true);
@@ -773,7 +776,7 @@ export function ArticleReader({
           <View style={[styles.column, { width: readingWidth }]}>
             {/* 1b. Pin (save) + Like (private taste signal) + Share — first interaction under the hero */}
             <View style={styles.heroActionsRow}>
-              {canClip ? (
+              {showSaveClipping ? (
                 <Pressable
                   onPress={() => void handleToggleClip()}
                   disabled={clipPending}
@@ -806,7 +809,7 @@ export function ArticleReader({
                   />
                 </Pressable>
               ) : null}
-              {canClip ? (
+              {showLike ? (
                 <Pressable
                   onPress={() => void handleToggleLike()}
                   disabled={likePending}
@@ -866,7 +869,7 @@ export function ArticleReader({
                 />
               </Pressable>
             </View>
-            {clipError ? (
+            {showSaveClipping && clipError ? (
               <Text style={styles.clipError} accessibilityRole="alert">
                 {clipError}
               </Text>

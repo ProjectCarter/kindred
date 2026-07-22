@@ -1,5 +1,9 @@
 import { supabase } from "../supabase";
 import type { ReadingSignalInput } from "./types";
+import {
+  isPersonalLibraryEnabled,
+  isPersonalLibrarySignalType,
+} from "../edition/clippingsFeature";
 
 /**
  * Fire-and-forget signal write. Never blocks reading UX.
@@ -8,6 +12,12 @@ import type { ReadingSignalInput } from "./types";
 export async function trackReadingSignal(
   input: ReadingSignalInput
 ): Promise<void> {
+  if (
+    !isPersonalLibraryEnabled() &&
+    isPersonalLibrarySignalType(input.signalType)
+  ) {
+    return;
+  }
   try {
     const {
       data: { user },

@@ -24,6 +24,7 @@ import {
   sanitizeAddressForDisplay,
   verifiedMapsDestination,
 } from "./verifiedLocation";
+import { isPersonalLibraryEnabled } from "./clippingsFeature";
 
 export type { MapsDestination } from "./googleMaps";
 export { GOOGLE_MAPS_ACTION_LABEL, buildGoogleMapsSearchUrl, resolveMapsSearchQuery } from "./googleMaps";
@@ -257,7 +258,9 @@ export function resolveActionsForLocalEvent(
   }
   const out = resolveEventArticleActions(event);
   const seen = new Set(out.map((a) => a.id));
-  pushUniqueUrl(out, saveAction(), seen);
+  if (includeSaveAction(options?.includeSave)) {
+    pushUniqueUrl(out, saveAction(), seen);
+  }
   pushUniqueUrl(out, shareAction(), seen);
   return out;
 }
@@ -316,6 +319,10 @@ function saveAction(): ActionBarAction {
   };
 }
 
+function includeSaveAction(includeSave?: boolean): boolean {
+  return isPersonalLibraryEnabled() && includeSave !== false;
+}
+
 function shareAction(): ActionBarAction {
   return {
     id: "share",
@@ -367,7 +374,9 @@ export function resolveActionsForActivity(
   const site = websiteAction(discoveryWebsiteUrl(item), "Official Website");
   if (site) pushUniqueUrl(out, site, seen);
 
-  if (options?.includeSave !== false) pushUniqueUrl(out, saveAction(), seen);
+  if (includeSaveAction(options?.includeSave)) {
+    pushUniqueUrl(out, saveAction(), seen);
+  }
   pushUniqueUrl(out, shareAction(), seen);
 
   return out;
@@ -435,7 +444,7 @@ export function resolveActionsForRecommendation(
     );
   }
 
-  if (category !== "parks" && category !== "hiking" && options?.includeSave !== false) {
+  if (category !== "parks" && category !== "hiking" && includeSaveAction(options?.includeSave)) {
     pushUniqueUrl(out, saveAction(), seen);
   }
   pushUniqueUrl(out, shareAction(), seen);
@@ -616,7 +625,7 @@ export function resolveActionsForArticle(
       "Official Website"
     );
     if (site) pushUniqueUrl(out, site, seen);
-    pushUniqueUrl(out, saveAction(), seen);
+    if (includeSaveAction()) pushUniqueUrl(out, saveAction(), seen);
     pushUniqueUrl(out, shareAction(), seen);
     return out;
   }
@@ -628,7 +637,7 @@ export function resolveActionsForArticle(
   if (ctx.surface === "activity") {
     return resolveActionsForActivity(
       discoveryItemFromContext(article, ctx),
-      { fallbackCity: options?.fallbackCity, includeSave: true }
+      { fallbackCity: options?.fallbackCity, includeSave: includeSaveAction(true) }
     );
   }
 
@@ -639,7 +648,7 @@ export function resolveActionsForArticle(
       mapsDestination:
         ctx.mapsDestination ??
         mapsDestinationFromSavedLocation(article.savedLocation),
-      includeSave: true,
+      includeSave: includeSaveAction(true),
     });
   }
 
@@ -653,14 +662,14 @@ export function resolveActionsForArticle(
       googleMapsUrl: article.historyPlaceSnapshot?.googleMapsUrl ?? null,
     });
     const seen = new Set(out.map((a) => a.id));
-    pushUniqueUrl(out, saveAction(), seen);
+    if (includeSaveAction()) pushUniqueUrl(out, saveAction(), seen);
     pushUniqueUrl(out, shareAction(), seen);
     return out;
   }
 
   return resolveActionsForRecommendation(
     discoveryItemFromContext(article, ctx),
-    { fallbackCity: options?.fallbackCity, includeSave: true }
+    { fallbackCity: options?.fallbackCity, includeSave: includeSaveAction(true) }
   );
 }
 

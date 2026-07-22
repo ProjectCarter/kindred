@@ -1,5 +1,9 @@
+import { isPersonalLibraryEnabled } from "./clippingsFeature";
+
 /**
  * Saved & Clippings — unified persistence for everything a reader can save:
+ *
+ * Version 2 feature — gated by `isPersonalLibraryEnabled()` in `clippingsFeature.ts`.
  * Articles, Local Events, Activities, and Recommendations.
  *
  * Articles backed by a real `edition_sections` row are still linked by
@@ -82,6 +86,7 @@ export async function checkClipped(
   userId: string,
   clipKey: string
 ): Promise<boolean> {
+  if (!isPersonalLibraryEnabled()) return false;
   const { data } = await supabase
     .from("clippings")
     .select("id")
@@ -102,6 +107,9 @@ export async function saveClipping(
   target: ClipTarget,
   article: KindredArticle
 ): Promise<SaveClippingResult> {
+  if (!isPersonalLibraryEnabled()) {
+    return { ok: false, error: "clippings_disabled" };
+  }
   const { error } = await supabase.from("clippings").insert({
     user_id: userId,
     section_id: target.sectionId,
@@ -137,6 +145,9 @@ export async function removeClipping(
   userId: string,
   clipKey: string
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!isPersonalLibraryEnabled()) {
+    return { ok: false, error: "clippings_disabled" };
+  }
   const { error } = await supabase
     .from("clippings")
     .delete()
@@ -183,6 +194,7 @@ type ClippingDbRow = {
 export async function listClippings(
   userId: string
 ): Promise<ClippingListRow[]> {
+  if (!isPersonalLibraryEnabled()) return [];
   const { data, error } = await supabase
     .from("clippings")
     .select(
@@ -230,6 +242,7 @@ export async function listClippings(
 export async function sweepExpiredEventClippings(
   userId: string
 ): Promise<number> {
+  if (!isPersonalLibraryEnabled()) return 0;
   const { data, error } = await supabase
     .from("clippings")
     .select("id, event_time, event_ends_at, payload")

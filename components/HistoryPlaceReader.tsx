@@ -22,6 +22,7 @@ import {
 import {
   resolveArticleContextActions,
 } from "../lib/edition/actionBar";
+import { isPersonalLibraryEnabled } from "../lib/edition/clippingsFeature";
 import {
   resolveClipTarget,
   checkClipped,
@@ -88,6 +89,8 @@ export function HistoryPlaceReader({
 
   const clipTarget = useMemo(() => resolveClipTarget(article), [article]);
   const canClip = Boolean(clipTarget);
+  const showSaveClipping = isPersonalLibraryEnabled() && canClip;
+  const showLike = isPersonalLibraryEnabled() && canClip;
   const practicalActions = useMemo(
     () => resolveArticleContextActions(article),
     [article]
@@ -104,7 +107,7 @@ export function HistoryPlaceReader({
   });
 
   useEffect(() => {
-    if (!clipTarget) {
+    if (!showSaveClipping || !clipTarget) {
       setClipped(false);
       return;
     }
@@ -117,10 +120,10 @@ export function HistoryPlaceReader({
     return () => {
       cancelled = true;
     };
-  }, [clipTarget]);
+  }, [clipTarget, showSaveClipping]);
 
   useEffect(() => {
-    if (!clipTarget) {
+    if (!showLike || !clipTarget) {
       setLiked(false);
       return;
     }
@@ -133,10 +136,10 @@ export function HistoryPlaceReader({
     return () => {
       cancelled = true;
     };
-  }, [clipTarget]);
+  }, [clipTarget, showLike]);
 
   const toggleClip = useCallback(async () => {
-    if (!clipTarget || clipPending) return;
+    if (!isPersonalLibraryEnabled() || !clipTarget || clipPending) return;
     setClipPending(true);
     setClipError(null);
     try {
@@ -162,7 +165,7 @@ export function HistoryPlaceReader({
   }, [article, clipPending, clipTarget, clipped]);
 
   const toggleLike = useCallback(async () => {
-    if (!clipTarget || likePending) return;
+    if (!isPersonalLibraryEnabled() || !clipTarget || likePending) return;
     setLikePending(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -262,7 +265,7 @@ export function HistoryPlaceReader({
           ) : null}
 
           <View style={styles.heroActions}>
-            {canClip ? (
+            {showSaveClipping ? (
               <Pressable
                 onPress={() => void toggleClip()}
                 disabled={clipPending}
@@ -275,16 +278,16 @@ export function HistoryPlaceReader({
                 </Text>
               </Pressable>
             ) : null}
-            {canClip ? (
+            {showLike ? (
               <Pressable
                 onPress={() => void toggleLike()}
                 disabled={likePending}
                 style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}
                 accessibilityRole="button"
-                accessibilityLabel={liked ? "Unlike" : "Save"}
+                accessibilityLabel={liked ? "Unlike" : "Like"}
               >
                 <Text style={styles.heroActionText}>
-                  {liked ? "❤️ Saved" : "🤍 Save"}
+                  {liked ? "❤️ Liked" : "🤍 Like"}
                 </Text>
               </Pressable>
             ) : null}
@@ -298,7 +301,7 @@ export function HistoryPlaceReader({
             </Pressable>
           </View>
 
-          {clipError ? (
+          {showSaveClipping && clipError ? (
             <Text style={styles.clipError} accessibilityRole="alert">
               {clipError}
             </Text>

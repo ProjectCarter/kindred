@@ -1,6 +1,7 @@
 import { supabase } from "../supabase";
 import type { KindredArticle } from "./article";
 import type { ClipTarget } from "./clippings";
+import { isPersonalLibraryEnabled } from "./clippingsFeature";
 
 /**
  * A private "show me more like this" signal — completely separate from
@@ -10,15 +11,15 @@ import type { ClipTarget } from "./clippings";
  * site, aggregated server-side in
  * supabase/functions/_shared/personalization/aggregate.ts).
  *
- * Reuses the same `ClipTarget` shape as Clippings (same eligibility, same
- * key format) — liking never requires pinning, and vice versa; they're
- * tracked in entirely separate tables.
+ * Version 2 feature — gated by `isPersonalLibraryEnabled()` in
+ * `clippingsFeature.ts`. Reuses the same `ClipTarget` shape as Clippings.
  */
 
 export async function checkLiked(
   userId: string,
   likeKey: string
 ): Promise<boolean> {
+  if (!isPersonalLibraryEnabled()) return false;
   const { data } = await supabase
     .from("likes")
     .select("id")
@@ -39,6 +40,9 @@ export async function saveLike(
   target: ClipTarget,
   article: KindredArticle
 ): Promise<SaveLikeResult> {
+  if (!isPersonalLibraryEnabled()) {
+    return { ok: false, error: "personal_library_disabled" };
+  }
   const { error } = await supabase.from("likes").insert({
     user_id: userId,
     content_type: target.contentType,
@@ -61,6 +65,9 @@ export async function removeLike(
   userId: string,
   likeKey: string
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!isPersonalLibraryEnabled()) {
+    return { ok: false, error: "personal_library_disabled" };
+  }
   const { error } = await supabase
     .from("likes")
     .delete()

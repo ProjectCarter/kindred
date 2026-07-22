@@ -9,6 +9,7 @@ import {
 } from "./identity";
 import { sanitizeEventProperties, sanitizeForDevLog } from "./sanitize";
 import type { AnalyticsEventName, AnalyticsEventProperties } from "./types";
+import { isPersonalLibraryEnabled } from "../edition/clippingsFeature";
 
 type TrackOptions = {
   /** When set, skip if this key was already emitted this session. */
@@ -141,6 +142,7 @@ export function trackArticleSaved(input: {
   contentTitle?: string | null;
   sectionType?: string | null;
 }): void {
+  if (!isPersonalLibraryEnabled()) return;
   trackEvent("article_saved", {
     content_id: input.contentId,
     content_title: input.contentTitle ?? null,

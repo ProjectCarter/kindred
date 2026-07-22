@@ -44,6 +44,7 @@ import {
   type BanditPayload,
 } from "../lib/edition/bandit";
 import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
+import { isPersonalLibraryEnabled } from "../lib/edition/clippingsFeature";
 import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
 import {
   companionForArticle,
@@ -3139,7 +3140,7 @@ export default function HomeScreen() {
         persistSectionsToCache(storySections);
       }
 
-      if (loaded.length > 0) {
+      if (isPersonalLibraryEnabled() && loaded.length > 0) {
         const sectionIdsForClips = loaded.map((s) => s.id);
         const { data: clips, error: clipsError } = await supabase
           .from("clippings")
@@ -4398,6 +4399,7 @@ export default function HomeScreen() {
   }, [pendingCityRegen, generating, loading, backgroundJob]);
 
   async function handleToggleClip(section: EditionSection) {
+    if (!isPersonalLibraryEnabled()) return;
     if (clipPendingId) return;
     const {
       data: { session },
@@ -4593,7 +4595,7 @@ export default function HomeScreen() {
           />
         ) : null}
 
-        {clipError ? (
+        {isPersonalLibraryEnabled() && clipError ? (
           <Text style={styles.error} accessibilityRole="alert">
             {clipError}
           </Text>
@@ -4891,9 +4893,9 @@ export default function HomeScreen() {
               knowledge={intelligence?.knowledge}
               nationalDaily={nationalDaily}
               pairedNationalDaily={pairedNationalDaily}
-              clippedSectionIds={clippedIds}
-              onToggleClip={handleToggleClip}
-              clipPendingId={clipPendingId}
+              clippedSectionIds={isPersonalLibraryEnabled() ? clippedIds : undefined}
+              onToggleClip={isPersonalLibraryEnabled() ? handleToggleClip : undefined}
+              clipPendingId={isPersonalLibraryEnabled() ? clipPendingId : undefined}
             />
           </>
         )}
