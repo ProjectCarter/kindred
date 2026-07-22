@@ -297,6 +297,7 @@ Contradictions must be **reported**, not silently resolved.
 | Document | Role |
 |----------|------|
 | [`../CLAUDE.md`](../CLAUDE.md) | Claude Code entry point and workflow |
+| [`.claude/README.md`](../.claude/README.md) | Claude Code infrastructure index (skills, subagents, hooks) |
 | `.cursor/rules/*.mdc` | 24 Cursor rules — detailed permanent law |
 | `docs/editorial/` | Desk-specific editorial constitutions |
 | [`../THE_PRESSES_NEVER_STOP.md`](../THE_PRESSES_NEVER_STOP.md) | Edition prebuild, cron, cache reliability |
