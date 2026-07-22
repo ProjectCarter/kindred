@@ -4,7 +4,8 @@ export function openWeatherIdToWmo(id: number): number {
   if (id === 800) return 0;
   if (id === 801) return 1;
   if (id === 802) return 2;
-  if (id === 803 || id === 804) return 3;
+  if (id === 803) return 2;
+  if (id === 804) return 3;
   if (id >= 200 && id <= 232) return 95;
   if (id >= 300 && id <= 321) return 53;
   if (id >= 500 && id <= 504) return 61;

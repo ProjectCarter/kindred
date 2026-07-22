@@ -315,6 +315,7 @@ export function buildPhase4FixtureEdition(spec: Phase4CitySpec): Phase4EditionIn
       banditsPick: null,
       historyAroundTown: null,
       weatherSummary: null,
+      weatherSnapshot: null,
     },
     morningHero: SHARED_MASTERPIECE,
     usNationalDailyId: SHARED_NATIONAL_ID,

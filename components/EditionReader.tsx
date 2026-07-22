@@ -118,11 +118,11 @@ import { FolioReveal } from "./FolioReveal";
 import { EditionClose } from "./EditionClose";
 import { traceEditionReaderRender } from "../lib/perf/coldLaunchTrace";
 import { BanditCharacter } from "./BanditCharacter";
-import { resolveHomepageWeatherDisplay } from "../lib/weather/homepageWeatherDisplay";
-import {
-  analyzeEditionDeskAvailability,
-  resolveWeatherPlanningNote,
-} from "../lib/weather/weatherPlanningNote";
+import { resolveHomepageWeatherDisplay, isHomepageWeatherVisible } from "../lib/weather/homepageWeatherDisplay";
+import { logHomepageWeatherDiagnostics } from "../lib/weather/liveWeatherClient";
+import type { LiveWeatherDisplaySource, LiveWeatherResponse } from "../lib/weather/liveWeatherTypes";
+import { resolveWeatherPlanningNote } from "../lib/weather/weatherPlanningNote";
+import type { KindredWeatherSnapshot } from "../lib/weather/weatherSnapshot";
 
 type Props = {
   sections: EditionSection[];
@@ -189,6 +189,20 @@ type Props = {
   onSeeAllHistoryAroundTown?: () => void;
   /** Deterministic forecast summary from edition editorial_context when present. */
   weatherSummary?: string | null;
+  /** Structured weather observation — current temp, alerts, guidance. */
+  weatherSnapshot?: KindredWeatherSnapshot | null;
+  /** Live homepage weather — preferred over edition snapshot. */
+  liveWeather?: LiveWeatherResponse | null;
+  liveWeatherSource?: LiveWeatherDisplaySource | null;
+  /** Dev diagnostics for live weather hydration. */
+  weatherLocationMeta?: {
+    activeMetro: string | null;
+    coordinates: { lat: number; lon: number } | null;
+    devOverrideActive: boolean;
+    endpointInvoked: boolean;
+    httpStatus: number | null;
+    liveFetchError: string | null;
+  } | null;
   /** Morning edition weather beat — naturalized summary fallback. */
   morningWeatherBeat?: string | null;
 };
@@ -257,6 +271,10 @@ function EditionReaderInner({
   historyAroundTown,
   onSeeAllHistoryAroundTown,
   weatherSummary = null,
+  weatherSnapshot = null,
+  liveWeather = null,
+  liveWeatherSource = null,
+  weatherLocationMeta = null,
   morningWeatherBeat = null,
 }: Props) {
   const [fetchedNationalDaily, setFetchedNationalDaily] =
@@ -289,23 +307,6 @@ function EditionReaderInner({
     nationalDailyProp !== undefined ? nationalDailyProp : fetchedNationalDaily;
 
   const weather = sections.find((s) => s.section_type === "weather");
-  const homepageWeatherBase = useMemo(
-    () =>
-      resolveHomepageWeatherDisplay({
-        editorialContext: weatherSummary
-          ? { weatherSummary }
-          : null,
-        weatherSectionHeadline: weather?.headline ?? null,
-        weatherSectionBody: weather?.body ?? null,
-        morningWeatherBeat,
-      }),
-    [
-      weather?.headline,
-      weather?.body,
-      weatherSummary,
-      morningWeatherBeat,
-    ]
-  );
   const localEvents = sections.find((s) => s.section_type === "local_events");
   const greetingSection = sections.find((s) => s.section_type === "greeting");
   const events =
@@ -564,32 +565,71 @@ function EditionReaderInner({
   const curatedFullAllocation = curatedEdition.allocation;
 
   const homepageWeather = useMemo(() => {
-    if (!homepageWeatherBase) return null;
-    const planningNote = resolveWeatherPlanningNote({
-      weatherSummary,
+    const display = resolveHomepageWeatherDisplay({
+      editorialContext: weatherSummary
+        ? { weatherSummary, weatherSnapshot }
+        : weatherSnapshot
+          ? { weatherSnapshot }
+          : null,
       weatherSectionHeadline: weather?.headline ?? null,
       weatherSectionBody: weather?.body ?? null,
       morningWeatherBeat,
-      condition: homepageWeatherBase.condition,
-      editionDesks: analyzeEditionDeskAvailability({
-        activities: fullAllocationWithFoodDrinks.activities,
-        foodDrinks: foodDrinksItems,
-        localEventsCount: events.length,
-      }),
+      weatherSnapshot,
+      liveWeather,
+      liveWeatherSource,
     });
-    return {
-      ...homepageWeatherBase,
+    const planningNote = display.isUnavailable
+      ? null
+      : resolveWeatherPlanningNote({
+          weatherSummary,
+          weatherSectionHeadline: weather?.headline ?? null,
+          weatherSectionBody: weather?.body ?? null,
+          morningWeatherBeat,
+          condition: display.condition,
+          weatherSnapshot,
+          liveWeather,
+        });
+    const resolved = {
+      ...display,
       planningNote,
     };
+    logHomepageWeatherDiagnostics({
+      activeMetro: weatherLocationMeta?.activeMetro ?? liveWeather?.metroKey ?? null,
+      coordinates:
+        weatherLocationMeta?.coordinates ??
+        (liveWeather
+          ? { lat: liveWeather.latitude, lon: liveWeather.longitude }
+          : null),
+      devOverrideActive: weatherLocationMeta?.devOverrideActive ?? false,
+      endpointInvoked: weatherLocationMeta?.endpointInvoked ?? false,
+      httpStatus: weatherLocationMeta?.httpStatus ?? null,
+      source: resolved.dataSource ?? liveWeatherSource,
+      liveWeather,
+      editionSnapshotTemp: weatherSnapshot
+        ? `${Math.round(
+            weatherSnapshot.unit === "fahrenheit"
+              ? (weatherSnapshot.currentTempC * 9) / 5 + 32
+              : weatherSnapshot.currentTempC
+          )}°`
+        : null,
+      editionSnapshotRetrievedAt: weatherSnapshot?.retrievedAt ?? null,
+      resolvedCurrent: resolved.current || null,
+      resolvedCondition: resolved.condition.label,
+      resolvedEmoji: resolved.condition.emoji,
+      fallbackReason: resolved.fallbackReason ?? null,
+      weatherVisible: isHomepageWeatherVisible(resolved),
+      liveFetchError: weatherLocationMeta?.liveFetchError ?? null,
+    });
+    return resolved;
   }, [
-    homepageWeatherBase,
     weather?.headline,
     weather?.body,
     weatherSummary,
+    weatherSnapshot,
+    liveWeather,
+    liveWeatherSource,
+    weatherLocationMeta,
     morningWeatherBeat,
-    fullAllocationWithFoodDrinks.activities,
-    foodDrinksItems,
-    events.length,
   ]);
 
   const curatedSectionAllocation = useMemo(

@@ -71,6 +71,11 @@ export const KINDRED_ASYNC_STORAGE_KEYS: KindredStorageEntry[] = [
     source: "lib/edition/liveRefresh.ts — `{editionId}`",
   },
   {
+    label: "live_weather_cache",
+    keyOrPrefix: "@kindred/live-weather/v1:",
+    source: "lib/weather/liveWeatherClient.ts — `{metroKey}:{lat},{lon}`",
+  },
+  {
     label: "dev_edition_override",
     keyOrPrefix: "@kindred/dev/edition-override-v1",
     preserve: true,

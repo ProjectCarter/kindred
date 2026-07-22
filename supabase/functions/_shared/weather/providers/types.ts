@@ -53,6 +53,23 @@ export type WeatherCurrentConditions = {
   windSpeedMs: number | null;
   windGustMs: number | null;
   precipitationProbability: number | null;
+  /** Canonical Kindred condition resolved at the provider boundary. */
+  canonicalCondition?: string | null;
+  providerConditionId?: number | null;
+  providerMain?: string | null;
+  providerDescription?: string | null;
+  cloudPercentage?: number | null;
+  isDaytime?: boolean;
+  conditionEmoji?: string | null;
+  conditionMappingSource?: string | null;
+  observedAtUnix?: number | null;
+  visibilityMeters?: number | null;
+  /** Which OpenWeather endpoint supplied condition id/description. */
+  conditionSourceEndpoint?: string | null;
+  providerIcon?: string | null;
+  oneCallConditionId?: number | null;
+  oneCallDescription?: string | null;
+  oneCallClouds?: number | null;
 };
 
 export type NormalizedWeatherForecast = {

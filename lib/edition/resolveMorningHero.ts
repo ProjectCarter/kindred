@@ -55,6 +55,7 @@ export function mergeMorningHeroIntoIntelligence(
       banditsPick: null,
       historyAroundTown: null,
       weatherSummary: null,
+      weatherSnapshot: null,
     };
   }
   if (!morningHero || intelligence.morningHero) return intelligence;

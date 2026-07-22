@@ -39,7 +39,7 @@ import type { MemoryPayload, MemoryStoryInput } from "./memory/types.ts";
 import { runMorningEditionDecisions } from "./morningEdition/index.ts";
 import type { MorningEditionPayload } from "./morningEdition/types.ts";
 import { composeHeroOpening } from "./morningEdition/heroOpening.ts";
-import { composeHeroWeatherTag } from "./weather/heroWeatherTag.ts";
+import { buildWeatherEditionPayload } from "./weather/buildWeatherEditionPayload.ts";
 import { fetchApprovedCityArticle } from "./storyOf/library.ts";
 import { cityArticleSourceNote } from "./storyOf/sourceNote.ts";
 import { buildHistoryAroundTownForEdition } from "./historyAroundTown/library.ts";
@@ -48,11 +48,9 @@ import type { MorningHeroExperience } from "./heroArtwork/presentation.ts";
 import { listReadyHeroArtworkLibrary } from "./heroArtwork/library.ts";
 import { getSeason, parseEditionDate } from "./heroArtwork/select.ts";
 import {
-  buildWeatherIntelligence,
   fetchWeatherForecast,
   isOpenWeatherConfigured,
   toLegacyWeatherPayload,
-  weatherSourceAttribution,
 } from "./weather/providers/index.ts";
 import {
   getNpsParksForEdition,
@@ -62,7 +60,6 @@ import {
 import { isTicketmasterConfigured } from "./localEvents/sources/ticketmasterSearch.ts";
 import {
   formatTempC,
-  formatWeatherSummary,
   resolveTemperatureUnit,
   unitInstruction,
   type TemperatureUnit,
@@ -848,18 +845,20 @@ export async function buildEditionForUser(
   // Engine call) — Bandit's Pick needs it too, and every input here
   // (weather, city, tempUnit) is already resolved by this point.
   const weather = toLegacyWeatherPayload(weatherForecast);
+  const weatherPayload = buildWeatherEditionPayload({
+    forecast: weatherForecast,
+    city: city ?? location.city,
+    unit: tempUnit,
+    editionDate,
+    userId,
+  });
+  const weatherSummary = weatherPayload.summary;
+  const weatherIntel = weatherPayload.intel;
+  const weatherSnapshot = weatherPayload.snapshot;
+  const weatherAttribution = weatherPayload.attribution;
+  const heroWeatherTag = weatherPayload.tag;
   const weatherConditionCode =
     weather?.current?.weather_code ?? weather?.daily?.weather_code?.[0] ?? null;
-  const weatherSummary = formatWeatherSummary({
-    city: city ?? location.city,
-    currentC: weather?.current?.temperature_2m ?? null,
-    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
-    lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
-    unit: tempUnit,
-    conditionCode: weatherConditionCode,
-  });
-  const weatherIntel = buildWeatherIntelligence(weatherForecast, weatherSummary);
-  const weatherAttribution = weatherSourceAttribution(weatherForecast);
 
   let historySelection: TodayInHistorySelection | null = null;
   let npsParks: Awaited<ReturnType<typeof getNpsParksForEdition>> = [];
@@ -1494,22 +1493,9 @@ export async function buildEditionForUser(
       "Write a short welcoming message for the morning edition (one or two calm sentences). Do not start with Good morning. Do not restate the full calendar date. No exclamation points.",
   });
 
-  // Deliberately NOT an AI section — see heroWeatherTag.ts. The AI weather
-  // sentence kept naming the city inside its own sentence even though the
-  // client already prefixes the city label, producing double-city lines
-  // like "Gilbert · Gilbert sits at 103°F...". A short deterministic tag
-  // (5-8 words, never mentions the city) is appended directly to `rows`
+  // Deliberately NOT an AI section — see heroWeatherTag.ts. A short deterministic
+  // tag (5-8 words, never mentions the city) is appended directly to `rows`
   // below, the same way `local_events` skips the AI pass entirely.
-  const heroWeatherTag = weather?.current
-    ? composeHeroWeatherTag({
-        editionDate,
-        userId,
-        highC: weather.daily?.temperature_2m_max?.[0] ?? null,
-        currentC: weather.current.temperature_2m ?? null,
-        conditionCode: weatherConditionCode,
-        unit: tempUnit,
-      })
-    : null;
 
   if (topStories.length > 0) {
     sections.push({
@@ -1867,12 +1853,12 @@ export async function buildEditionForUser(
       });
     }
 
-    if (heroWeatherTag) {
+    if (heroWeatherTag && weatherSummary) {
       mvpRows.push({
         section_type: "weather",
         position: 1,
         headline: heroWeatherTag,
-        body: heroWeatherTag,
+        body: weatherSummary,
         source_note: weatherAttribution,
       });
     }
@@ -2150,7 +2136,8 @@ export async function buildEditionForUser(
   }
 
   // Rebuild editorial context with Morning Edition notes for storage.
-  const editorialContextWithMorning = buildEditionEditorialContext({
+  const editorialContextWithMorning = {
+    ...buildEditionEditorialContext({
     editionDate,
     location: {
       city,
@@ -2206,7 +2193,11 @@ export async function buildEditionForUser(
       editorNotes: morningEdition.selectionMeta.editorNotes,
     },
     now: new Date(),
-  });
+  }),
+    ...(weatherSummary ? { weatherSummary } : {}),
+    ...(weatherIntel ? { weatherIntel } : {}),
+    ...(weatherSnapshot ? { weatherSnapshot } : {}),
+  };
 
   const catalogBootstrap = editionMarket
     ? await getCatalogBootstrapState(supabaseAdmin, catalogMetroKey)
@@ -2655,13 +2646,13 @@ export async function buildEditionForUser(
     }
   }
 
-  if (heroWeatherTag) {
+  if (heroWeatherTag && weatherSummary) {
     rows.push({
       edition_id: edition.id,
       section_type: "weather",
       position: 1,
       headline: heroWeatherTag,
-      body: heroWeatherTag,
+      body: weatherSummary,
       source_note: weatherAttribution,
     });
   }

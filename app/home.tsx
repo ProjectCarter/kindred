@@ -198,7 +198,18 @@ import {
 import { locationKey } from "../lib/location/locationKey";
 import {
   getTemperatureUnitPreference,
+  resolveTemperatureUnit,
 } from "../lib/weather/units";
+import {
+  hydrateLiveWeather,
+  liveWeatherCacheGeneration,
+  liveWeatherRequestKey,
+  shouldRefreshLiveWeather,
+} from "../lib/weather/liveWeatherClient";
+import type {
+  LiveWeatherDisplaySource,
+  LiveWeatherResponse,
+} from "../lib/weather/liveWeatherTypes";
 import {
   resolveEditionBuiltCity,
   cityFromEditionSections,
@@ -309,6 +320,20 @@ export default function HomeScreen() {
   const [activeLocation, setActiveLocation] = useState<ActiveLocation | null>(
     null
   );
+  const [liveWeather, setLiveWeather] = useState<LiveWeatherResponse | null>(
+    null
+  );
+  const [liveWeatherSource, setLiveWeatherSource] =
+    useState<LiveWeatherDisplaySource | null>(null);
+  const [liveWeatherFetchMeta, setLiveWeatherFetchMeta] = useState<{
+    endpointInvoked: boolean;
+    httpStatus: number | null;
+    liveFetchError: string | null;
+  }>({
+    endpointInvoked: false,
+    httpStatus: null,
+    liveFetchError: null,
+  });
   const [showFirstRun, setShowFirstRun] = useState(false);
   const [locationMismatch, setLocationMismatch] = useState<string | null>(null);
   const [pendingCityRegen, setPendingCityRegen] = useState(false);
@@ -347,6 +372,10 @@ export default function HomeScreen() {
 
   /** Tracks location when home last focused — reload edition if it changes. */
   const focusedLocationKeyRef = useRef<string | null>(null);
+  const liveWeatherRef = useRef<LiveWeatherResponse | null>(null);
+  const liveWeatherRequestKeyRef = useRef<string | null>(null);
+  const liveWeatherCacheGenRef = useRef(0);
+  liveWeatherRef.current = liveWeather;
   /** Homepage scroll — preserve exact offset when returning from detail screens. */
   const scrollRef = useRef<ScrollView>(null);
   const homeScrollYRef = useRef(0);
@@ -381,6 +410,64 @@ export default function HomeScreen() {
     activeLocationRef.current = next;
     setActiveLocation(next);
   }
+
+  const refreshLiveWeather = useCallback(async (options?: { force?: boolean }) => {
+    const place = activeLocationRef.current?.place;
+    if (
+      !place ||
+      typeof place.lat !== "number" ||
+      typeof place.lon !== "number" ||
+      !place.city?.trim()
+    ) {
+      return;
+    }
+
+    const metroKey = metroKeyFromKindredPlace(place);
+    const requestKey = liveWeatherRequestKey(metroKey, place.lat, place.lon);
+
+    if (
+      liveWeatherRequestKeyRef.current &&
+      liveWeatherRequestKeyRef.current !== requestKey
+    ) {
+      setLiveWeather(null);
+      setLiveWeatherSource(null);
+    }
+    liveWeatherRequestKeyRef.current = requestKey;
+
+    const cached = liveWeatherRef.current;
+    if (
+      !options?.force &&
+      cached &&
+      !shouldRefreshLiveWeather(cached) &&
+      liveWeatherRequestKey(metroKey, cached.latitude, cached.longitude) ===
+        requestKey
+    ) {
+      return;
+    }
+
+    const pref = await getTemperatureUnitPreference();
+    const unit = resolveTemperatureUnit(pref, place);
+    const result = await hydrateLiveWeather({
+      place,
+      metroKey,
+      unit,
+      force: options?.force,
+    });
+
+    if (!mountedRef.current) return;
+    if (liveWeatherRequestKeyRef.current !== requestKey) return;
+
+    setLiveWeatherFetchMeta({
+      endpointInvoked: result.endpointInvoked,
+      httpStatus: result.httpStatus,
+      liveFetchError: result.errorMessage,
+    });
+
+    if (result.weather) {
+      setLiveWeather(result.weather);
+      setLiveWeatherSource(result.source);
+    }
+  }, []);
 
   function readerDisplayCity(): string | undefined {
     const preview = getDeveloperPreviewContextSync();
@@ -736,6 +823,25 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Live weather hydrates independently from the prebuilt edition snapshot.
+  useEffect(() => {
+    const place = activeLocation?.place;
+    if (
+      !place ||
+      typeof place.lat !== "number" ||
+      typeof place.lon !== "number"
+    ) {
+      return;
+    }
+    void refreshLiveWeather();
+  }, [
+    activeLocation?.place?.city,
+    activeLocation?.place?.state,
+    activeLocation?.place?.lat,
+    activeLocation?.place?.lon,
+    refreshLiveWeather,
+  ]);
 
   useEffect(() => {
     if (firstRunPending) setShowFirstRun(true);
@@ -3352,6 +3458,16 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const gen = liveWeatherCacheGeneration();
+      if (gen !== liveWeatherCacheGenRef.current) {
+        liveWeatherCacheGenRef.current = gen;
+        void refreshLiveWeather({ force: true });
+      }
+    }, [refreshLiveWeather])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
       if (!initialFocusLocationHandledRef.current) {
         initialFocusLocationHandledRef.current = true;
         return;
@@ -3370,10 +3486,11 @@ export default function HomeScreen() {
         // focus) with a different city/mode — never leave a stale folio up.
         if (prevKey !== null && prevKey !== nextKey) {
           markHomeScrollForReset();
+          void refreshLiveWeather({ force: true });
           void loadEdition(true);
         }
       })();
-    }, [loadEdition])
+    }, [loadEdition, refreshLiveWeather])
   );
 
   useFocusEffect(
@@ -3549,12 +3666,15 @@ export default function HomeScreen() {
           applyActiveLocation(active);
           focusedLocationKeyRef.current = activeLocationKey(active);
         }
+        if (shouldRefreshLiveWeather(liveWeatherRef.current)) {
+          void refreshLiveWeather();
+        }
         void loadEdition({ quiet: true });
       })();
     };
     const sub = AppState.addEventListener("change", onChange);
     return () => sub.remove();
-  }, [loadEdition]);
+  }, [loadEdition, refreshLiveWeather]);
 
   function handleHomeRefresh() {
     logHomeScrollDebug("refresh_start", {
@@ -4755,6 +4875,26 @@ export default function HomeScreen() {
               }}
               historyAroundTown={intelligence?.historyAroundTown}
               weatherSummary={intelligence?.weatherSummary ?? null}
+              weatherSnapshot={intelligence?.weatherSnapshot ?? null}
+              liveWeather={liveWeather}
+              liveWeatherSource={liveWeatherSource}
+              weatherLocationMeta={{
+                activeMetro: activeLocation?.place
+                  ? metroKeyFromKindredPlace(activeLocation.place)
+                  : null,
+                coordinates: activeLocation?.place
+                  ? {
+                      lat: activeLocation.place.lat,
+                      lon: activeLocation.place.lon,
+                    }
+                  : null,
+                devOverrideActive:
+                  isDevEditionOverrideActive() ||
+                  isDeveloperPreviewSessionActive(),
+                endpointInvoked: liveWeatherFetchMeta.endpointInvoked,
+                httpStatus: liveWeatherFetchMeta.httpStatus,
+                liveFetchError: liveWeatherFetchMeta.liveFetchError,
+              }}
               morningWeatherBeat={intelligence?.morning?.beats?.weather ?? null}
               onSeeAllHistoryAroundTown={() => {
                 persistHomeScrollNow();

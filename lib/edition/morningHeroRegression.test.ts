@@ -73,6 +73,9 @@ function intelligenceWithoutHero(): EditionIntelligence {
     leadWhyChosen: null,
     leadContinuityKicker: null,
     banditsPick: null,
+    historyAroundTown: null,
+    weatherSummary: null,
+    weatherSnapshot: null,
   };
 }
 

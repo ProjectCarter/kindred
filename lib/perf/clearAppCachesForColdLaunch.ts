@@ -14,6 +14,7 @@ import { clearAllHomeScrollSessions } from "../edition/homeSession";
 import { resetImageRegistry } from "../edition/imageRegistry";
 import { clearAllListScrollSessions } from "../edition/listScrollSession";
 import { clearLiveRefreshMemory } from "../edition/liveRefresh";
+import { clearLiveWeatherCache, clearLiveWeatherMemoryCache } from "../weather/liveWeatherClient";
 import { clearTimezoneSyncMemory } from "../edition/timezone";
 import { supabase } from "../supabase";
 import {
@@ -39,6 +40,7 @@ const MEMORY_CACHE_LABELS = [
   "list_scroll_memory",
   "article_session_memory",
   "live_refresh_memory",
+  "live_weather_memory",
   "timezone_sync_memory",
 ] as const;
 
@@ -74,6 +76,8 @@ export async function clearAppCachesForColdLaunch(): Promise<ClearAppCachesResul
   clearAllHomeScrollSessions();
   clearAllListScrollSessions();
   clearLiveRefreshMemory();
+  clearLiveWeatherMemoryCache();
+  void clearLiveWeatherCache();
   clearTimezoneSyncMemory();
 
   const memoryCachesCleared = [...MEMORY_CACHE_LABELS] as string[];

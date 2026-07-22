@@ -26,6 +26,7 @@ const baseIntel = (): EditionIntelligence => ({
   banditsPick: null,
   historyAroundTown: null,
   weatherSummary: null,
+  weatherSnapshot: null,
 });
 
 test("resolveWeatherSummary prefers network intelligence", () => {

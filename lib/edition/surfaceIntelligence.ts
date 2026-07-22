@@ -38,6 +38,8 @@ import {
   type MorningEditionPayload,
 } from "./morningEdition";
 import { extractWeatherSummaryFromEditorialContext } from "../weather/parseWeatherSummary";
+import { extractWeatherSnapshotFromEditorialContext } from "../weather/weatherSnapshot";
+import type { KindredWeatherSnapshot } from "../weather/weatherSnapshot";
 import type { MorningHeroExperience } from "./heroArtwork/types";
 import type { LeadStory } from "./LeadStory";
 import type { ArticleCompanion, KnowledgeNote } from "./articleCompanion";
@@ -82,6 +84,8 @@ export type EditionIntelligence = {
   historyAroundTown: HistoryAroundTownEditionPayload | null;
   /** Deterministic forecast summary when stored on the edition row. */
   weatherSummary: string | null;
+  /** Structured observation snapshot — grounds current temp, condition, alerts. */
+  weatherSnapshot: KindredWeatherSnapshot | null;
 };
 
 export type ParseEditionIntelligenceOptions = {
@@ -203,6 +207,9 @@ export function parseEditionIntelligence(
     banditsPick: banditsPick(bandit),
     historyAroundTown,
     weatherSummary: extractWeatherSummaryFromEditorialContext(
+      row.editorial_context
+    ),
+    weatherSnapshot: extractWeatherSnapshotFromEditorialContext(
       row.editorial_context
     ),
   };

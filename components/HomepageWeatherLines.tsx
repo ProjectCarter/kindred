@@ -7,6 +7,16 @@ type Props = {
 };
 
 export function HomepageWeatherLines({ weather }: Props) {
+  if (weather.isUnavailable) {
+    return (
+      <View style={styles.wrap} accessibilityRole="text">
+        <Text style={styles.current} maxFontSizeMultiplier={1.2}>
+          {weather.condition.emoji} {weather.condition.label}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrap} accessibilityRole="text">
       <Text style={styles.current} maxFontSizeMultiplier={1.2}>
@@ -20,6 +30,11 @@ export function HomepageWeatherLines({ weather }: Props) {
       <Text style={styles.condition} maxFontSizeMultiplier={1.15}>
         {weather.condition.label}
       </Text>
+      {weather.alert ? (
+        <Text style={styles.alert} maxFontSizeMultiplier={1.15}>
+          {weather.alert.emoji} {weather.alert.label}
+        </Text>
+      ) : null}
       {weather.planningNote?.trim() ? (
         <Text style={styles.planningNote} maxFontSizeMultiplier={1.15}>
           {weather.planningNote.trim()}
@@ -54,6 +69,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: paper.inkBody,
+  },
+  alert: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 22,
+    color: paper.inkBody,
+    marginTop: 6,
   },
   planningNote: {
     fontFamily: "Georgia",

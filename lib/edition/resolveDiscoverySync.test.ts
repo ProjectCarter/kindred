@@ -66,6 +66,7 @@ test("needsNetworkDiscoveryMerge when cache lacks discovery", () => {
         banditsPick: null,
         historyAroundTown: null,
         weatherSummary: null,
+        weatherSnapshot: null,
       },
       onScreenIntelligence: {
         discovery: null,
@@ -86,6 +87,7 @@ test("needsNetworkDiscoveryMerge when cache lacks discovery", () => {
         banditsPick: null,
         historyAroundTown: null,
         weatherSummary: null,
+        weatherSnapshot: null,
       },
     }),
     true
@@ -112,6 +114,7 @@ test("needsNetworkDiscoveryMerge is false when cache already has discovery", () 
     banditsPick: null,
     historyAroundTown: null,
     weatherSummary: null,
+    weatherSnapshot: null,
   };
   assert.equal(
     needsNetworkDiscoveryMerge({

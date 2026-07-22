@@ -46,16 +46,13 @@ import { generateUsNationalDailyForEditionDate } from "../nationalDaily/generate
 import { logNationalNewsAttachedToCity } from "../nationalDaily/resolveNationalNews.ts";
 import {
   fetchWeatherForecast,
-  toLegacyWeatherPayload,
   weatherSourceAttribution,
-  buildWeatherIntelligence,
 } from "../weather/providers/index.ts";
 import {
-  formatWeatherSummary,
   resolveTemperatureUnit,
   type TemperatureUnitPreference,
 } from "../weather/units.ts";
-import { composeHeroWeatherTag } from "../weather/heroWeatherTag.ts";
+import { buildWeatherEditionPayload } from "../weather/buildWeatherEditionPayload.ts";
 import { getLocalPlacesForEdition } from "../places/index.ts";
 import { allocateLocalEventsByHorizon } from "../localEvents/horizonAllocator.ts";
 import { assertEventsVerifiedForPublication } from "../localEvents/eventDateVerification.ts";
@@ -356,35 +353,55 @@ async function runWeatherStage(
     ctx.location.lon,
     admin
   );
-  const weather = toLegacyWeatherPayload(forecast);
-  const conditionCode =
-    weather?.current?.weather_code ?? weather?.daily?.weather_code?.[0] ?? null;
-  const summary = formatWeatherSummary({
+  const payload = buildWeatherEditionPayload({
+    forecast,
     city: ctx.location.city,
-    currentC: weather?.current?.temperature_2m ?? null,
-    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
-    lowC: weather?.daily?.temperature_2m_min?.[0] ?? null,
     unit: ctx.tempUnit,
-    conditionCode,
-  });
-  const intel = buildWeatherIntelligence(forecast, summary);
-  const tag = composeHeroWeatherTag({
     editionDate: ctx.editionDate,
     userId: ctx.userId,
-    highC: weather?.daily?.temperature_2m_max?.[0] ?? null,
-    currentC: weather?.current?.temperature_2m ?? null,
-    conditionCode,
-    unit: ctx.tempUnit,
   });
-  const attribution = weatherSourceAttribution(forecast);
+
+  if (!payload.summary || !payload.snapshot) {
+    await admin
+      .from("edition_sections")
+      .delete()
+      .eq("edition_id", ctx.editionId)
+      .eq("section_type", "weather");
+
+    const { data: existingEdition } = await admin
+      .from("editions")
+      .select("editorial_context")
+      .eq("id", ctx.editionId)
+      .maybeSingle();
+    const prevContext =
+      existingEdition?.editorial_context &&
+      typeof existingEdition.editorial_context === "object"
+        ? (existingEdition.editorial_context as Record<string, unknown>)
+        : {};
+
+    await admin
+      .from("editions")
+      .update({
+        editorial_context: {
+          ...prevContext,
+          weatherSummary: null,
+          weatherIntel: null,
+          weatherSnapshot: null,
+        },
+      })
+      .eq("id", ctx.editionId);
+
+    await maybeMarkEditionPaintable(admin, ctx.editionId);
+    return { itemCount: 0, payloadBytes: 0 };
+  }
 
   await upsertEditionSection(admin, {
     edition_id: ctx.editionId,
     section_type: "weather",
     position: 1,
-    headline: tag,
-    body: summary,
-    source_note: attribution,
+    headline: payload.tag ?? payload.summary,
+    body: payload.summary,
+    source_note: payload.attribution,
   });
 
   const { data: existingEdition } = await admin
@@ -403,15 +420,23 @@ async function runWeatherStage(
     .update({
       editorial_context: {
         ...prevContext,
-        weatherSummary: summary,
-        weatherIntel: intel,
+        weatherSummary: payload.summary,
+        weatherIntel: payload.intel,
+        weatherSnapshot: payload.snapshot,
       },
     })
     .eq("id", ctx.editionId);
 
   await maybeMarkEditionPaintable(admin, ctx.editionId);
 
-  return { itemCount: 1, payloadBytes: estimateJsonBytes({ summary, tag }) };
+  return {
+    itemCount: 1,
+    payloadBytes: estimateJsonBytes({
+      summary: payload.summary,
+      tag: payload.tag,
+      snapshot: payload.snapshot,
+    }),
+  };
 }
 
 async function runLocalEventsStage(

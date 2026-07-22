@@ -28,6 +28,13 @@ import type { LocalEvent } from "../localEvents/provider.ts";
 import { isPlaceholderCopy } from "../contentQuality.ts";
 import type { LeadStory } from "../leadStory/types.ts";
 import type { LocalNewsContentType } from "../../../../lib/edition/localNewsDesk.ts";
+import { parseWeatherSnapshot } from "../weather/weatherSnapshot.ts";
+import {
+  validateSummaryConditionPhrase,
+  validateSummaryCurrentTemp,
+  validateWeatherSnapshot,
+  WEATHER_PUBLISH_MAX_AGE_MS,
+} from "../weather/weatherValidation.ts";
 import { isMorningHeroDetailComplete } from "../heroArtwork/presentation.ts";
 import { isEditoriallyExcludedListing } from "../localEvents/familyFriendlyFilter.ts";
 import { meetsDiscoveryConfidenceGate } from "../editorial/confidencePayload.ts";
@@ -441,9 +448,67 @@ export async function runTechnicalValidationOnSnapshot(input: {
   } else {
     weatherChecks.push({ id: "weather_summary", status: "PASS" });
   }
+
+  const weatherSnapshot = parseWeatherSnapshot(
+    (snapshot.editorialContext as { weatherSnapshot?: unknown } | null)
+      ?.weatherSnapshot
+  );
+  if (weatherSnapshot) {
+    const freshness = validateWeatherSnapshot(weatherSnapshot, {
+      maxAgeMs: WEATHER_PUBLISH_MAX_AGE_MS,
+    });
+    if (!freshness.ok) {
+      weatherChecks.push({ id: "weather_snapshot_fresh", status: "FAIL" });
+      weatherReasons.push(...freshness.reasons);
+    } else {
+      weatherChecks.push({ id: "weather_snapshot_fresh", status: "PASS" });
+    }
+
+    const currentMatch = /^Current\s+([\d.]+)°/i.exec(weatherSummary ?? "");
+    const summaryCurrentF = currentMatch ? Number(currentMatch[1]) : null;
+    const currentValidation = validateSummaryCurrentTemp(
+      summaryCurrentF,
+      weatherSnapshot
+    );
+    if (!currentValidation.ok) {
+      weatherChecks.push({ id: "weather_current_match", status: "FAIL" });
+      weatherReasons.push(...currentValidation.reasons);
+    } else {
+      weatherChecks.push({ id: "weather_current_match", status: "PASS" });
+    }
+
+    const conditionPhrase = /;\s*([^;.]+)\.?$/i.exec(weatherSummary ?? "")?.[1]
+      ?.trim();
+    const conditionValidation = validateSummaryConditionPhrase(
+      conditionPhrase ?? null,
+      weatherSnapshot
+    );
+    if (!conditionValidation.ok) {
+      weatherChecks.push({ id: "weather_condition_match", status: "FAIL" });
+      weatherReasons.push(...conditionValidation.reasons);
+    } else {
+      weatherChecks.push({ id: "weather_condition_match", status: "PASS" });
+    }
+  } else if (weatherSection?.body?.trim()) {
+    weatherChecks.push({ id: "weather_snapshot", status: "WARNING" });
+    weatherReasons.push("missing_weather_snapshot");
+  }
+
+  const weatherHasBlockingFailure = weatherReasons.some((r) =>
+    [
+      "stale_weather_observation",
+      "summary_current_mismatch",
+      "summary_condition_mismatch",
+      "high_below_low",
+      "current_outside_daily_range",
+      "missing_current_temperature",
+    ].includes(r)
+  );
   const weatherStatus = recordDeskPublicationOutcome({
     desk: "weather",
-    status: deskStatusForPublicationIssues("weather", weatherReasons.length > 0),
+    status: weatherHasBlockingFailure
+      ? "FAIL"
+      : deskStatusForPublicationIssues("weather", weatherReasons.length > 0),
     reasons: weatherReasons,
     blockingFailures,
     warnings,
