@@ -1,0 +1,14 @@
+Kindred performance investigation gate (hook-injected).
+
+Lead subagent: @performance-agent (`.claude/agents/performance-agent.md`)
+
+Run skills in order:
+1. performance-diagnostics — `.claude/skills/performance-diagnostics/SKILL.md` (primary)
+2. performance-audit — `.claude/skills/performance-audit/SKILL.md` (cold-start sign-off)
+
+Diagnose before changing code. Use output style `performance-report`.
+
+Budget targets: cold ≤5s, cached ≤2s, TTFMC ≤2s, article ≤1s, edge@launch = 0.
+Fast but incomplete = FAIL (`lib/perf/editionCompleteness.ts`).
+
+Log prefixes: `[perf:metrics]`, `[perf:pipeline]`, `[buildEdition] timing`

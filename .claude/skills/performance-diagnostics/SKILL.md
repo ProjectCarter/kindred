@@ -5,7 +5,7 @@ description: Diagnose Kindred performance regressions across edition generation,
 
 # Performance Diagnostics
 
-**Diagnose first. Fix second.** This skill is the operational troubleshooting layer for the full Kindred pipeline. For cold-start TTFMC sign-off only, also run [performance-audit](../performance-audit/SKILL.md).
+**Diagnose first. Fix second.** This skill is the operational troubleshooting layer for the full Kindred pipeline. For cold-start TTFMC sign-off only, also run the `performance-audit` skill.
 
 ## Law (read, do not duplicate)
 
@@ -50,7 +50,7 @@ Locate **where time is spent** and **what blocked the UI** across server build, 
 |-------|------|
 | Full pipeline | [`supabase/functions/_shared/buildEdition.ts`](../../../supabase/functions/_shared/buildEdition.ts) |
 | Job queue / cron | [`supabase/functions/process-edition-jobs/index.ts`](../../../supabase/functions/process-edition-jobs/index.ts) |
-| Local News | [`selectLeadStory.ts`](../../../supabase/functions/_shared/localNews/selectLeadStory.ts), [`localNewsDesk.ts`](../../../supabase/functions/_shared/localNews/localNewsDesk.ts) |
+| Local News | [`selectLeadStory.ts`](../../../supabase/functions/_shared/leadStory/selectLeadStory.ts), [`localNewsDesk.ts`](../../../lib/edition/localNewsDesk.ts) |
 | National News | [`resolveNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/resolveNationalNews.ts), [`selectNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/selectNationalNews.ts) |
 | Story generation | [`storyEditor/`](../../../supabase/functions/_shared/storyEditor/) |
 | Health report | [`lib/dev/editionHealthReport.ts`](../../../lib/dev/editionHealthReport.ts) |
@@ -289,7 +289,7 @@ node scripts/verify-edition-completeness.mjs
 
 ### Checklist
 
-- [ ] **Incorrect images:** National vs Local desk mix-up — run [news-pipeline-audit](../news-pipeline-audit/SKILL.md)
+- [ ] **Incorrect images:** National vs Local desk mix-up — run the `news-pipeline-audit` skill
 - [ ] **Missing images:** `heroImage.uri` empty; `instantEnter` defers decode in ArticleReader
 - [ ] **Oversized downloads:** Remote URLs without CDN resize — profile with network tab / Flipper
 - [ ] **Placeholders:** Editorial fallback sources in ArticleReader; V1 text-only listings skip photos
@@ -333,13 +333,13 @@ Run the matching flow **before** proposing code changes.
 2. Is `generating` true while job `processing`? Expected overnight; bug if daytime
 3. Pipeline SUMMARY — which stage never ENDs?
 4. Completeness gate refusing partial paint?
-5. Run [homepage-audit](../homepage-audit/SKILL.md) for empty vs slow
+5. Run the `homepage-audit` skill for empty vs slow
 
 ### "Edition generation slow"
 
 1. Edge logs — top 5 `[buildEdition] timing` labels by ms
 2. TIMING REPORT buckets vs Total
-3. Stuck `generation_jobs` / duplicate claims — [edition-builder](../edition-builder/SKILL.md)
+3. Stuck `generation_jobs` / duplicate claims — run the `edition-builder` skill
 4. `audit-global-editions.ts` generationTimeMs trend
 
 ### "Articles open slowly"
@@ -368,14 +368,14 @@ Run the matching flow **before** proposing code changes.
 1. `mergeNationalNewsHydration` — runs after edition row load, not before cache paint
 2. `columnOnly: true` — no legacy top_stories fallback during sync
 3. Empty `nationalNews` in cache but network row has data — hydration merge bug
-4. Run [national-news-verification](../national-news-verification/SKILL.md)
+4. Run the `national-news-verification` skill
 
 ### "Local News delays homepage"
 
 1. `lead_story` / `editorial_context` parse on editions row
 2. `resolveLocalNewsHomePackage` / teaser build cost in EditionReader
 3. Build-side: `News - Local Editorial Decisions` timing
-4. Run [local-news-verification](../local-news-verification/SKILL.md)
+4. Run the `local-news-verification` skill
 
 ---
 
@@ -452,4 +452,4 @@ SHIP | SHIP WITH MONITORING | DO NOT SHIP
 - Modify application code during diagnosis (this skill is read-only)
 - Accept speed gained by hiding missing desks
 - Duplicate editorial or performance law — follow links above
-- Confuse this skill with [performance-audit](../performance-audit/SKILL.md) — run both for release sign-off
+- Confuse this skill with the `performance-audit` skill — run both for release sign-off

@@ -1,6 +1,7 @@
 ---
 name: ui-agent
 description: Kindred UI and visual consistency specialist. Use for homepage layout, images, typography, spacing, loading states, navigation, and preserving locked editorial design.
+skills: homepage-audit, performance-diagnostics
 model: inherit
 ---
 

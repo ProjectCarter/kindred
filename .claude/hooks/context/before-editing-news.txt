@@ -1,0 +1,16 @@
+Kindred news-desk edit gate (hook-injected). You are about to edit Local or National News code.
+
+Lead subagent: @news-agent (`.claude/agents/news-agent.md`)
+
+Run before implementing:
+1. local-news-verification — `.claude/skills/local-news-verification/SKILL.md`
+2. national-news-verification — `.claude/skills/national-news-verification/SKILL.md`
+3. news-pipeline-audit — `.claude/skills/news-pipeline-audit/SKILL.md`
+
+Architecture references (inspect, do not guess):
+- Build: `supabase/functions/_shared/leadStory/selectLeadStory.ts`, `nationalDaily/resolveNationalNews.ts`
+- Hydration: `lib/edition/homepageNewsHydration.ts`, `lib/edition/nationalNewsHydration.ts`
+- Render: `components/EditionReader.tsx` (Local News above National News)
+
+Prefer read-only diagnosis first unless the user explicitly asked to edit.
+Use output style `bug-report` for investigations.

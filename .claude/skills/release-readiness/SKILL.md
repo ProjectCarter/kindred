@@ -61,12 +61,12 @@ node scripts/audit-gilbert-homepage-today.mjs [date]
 npm run audit:nationwide          # full editorial audit (heavier)
 ```
 
-**Invoke other skills as needed:**
+**Invoke other skills as needed** (read `.claude/skills/<name>/SKILL.md`):
 
-- `/homepage-audit` — section matrix
-- `/performance-audit` — if perf-sensitive diff
-- `/security-review` — on full branch diff
-- `/regression-guard` — if editorial gates touched
+- Run the `homepage-audit` skill — section matrix
+- Run the `performance-audit` skill — if perf-sensitive diff
+- Run the `security-review` skill — on full branch diff
+- Run the `regression-guard` skill — if editorial gates touched
 
 ## Verification checklist
 

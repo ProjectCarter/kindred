@@ -1,0 +1,17 @@
+Kindred edition generation edit gate (hook-injected). You are about to edit the edition build pipeline.
+
+Lead subagents:
+- @edition-agent — build, completeness, cache (`.claude/agents/edition-agent.md`)
+- @performance-agent — build timing (`.claude/agents/performance-agent.md`)
+
+Run skill before implementing:
+- edition-builder — `.claude/skills/edition-builder/SKILL.md`
+
+References:
+- `supabase/functions/_shared/buildEdition.ts` — `[buildEdition] timing` logs
+- `supabase/functions/process-edition-jobs/index.ts`
+- `THE_PRESSES_NEVER_STOP.md`
+- Completeness: `lib/perf/editionCompleteness.ts`
+
+Never mark edition ready before `edition_sections` exist.
+Prefer read-only diagnosis unless the user explicitly asked to edit.

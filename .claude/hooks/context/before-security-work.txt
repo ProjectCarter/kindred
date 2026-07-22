@@ -1,0 +1,13 @@
+Kindred security work gate (hook-injected).
+
+Lead subagent: @security-agent (`.claude/agents/security-agent.md`)
+
+Run skill:
+- security-review — `.claude/skills/security-review/SKILL.md`
+
+Use output style `security-report`.
+
+Never commit real `.env`, service-role keys, or CRON secrets.
+Client code: anon key only. Scripts: env from `.env.local` only.
+
+If editing edge auth, verify against `THE_PRESSES_NEVER_STOP.md` (CRON_SECRET in Vault).

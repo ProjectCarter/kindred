@@ -1,0 +1,21 @@
+Kindred release gate (hook-injected). User intent: prepare or evaluate a release.
+
+Lead subagent: @qa-agent (`.claude/agents/qa-agent.md`)
+
+Run skills in order:
+1. homepage-audit — `.claude/skills/homepage-audit/SKILL.md`
+2. performance-audit — `.claude/skills/performance-audit/SKILL.md`
+3. performance-diagnostics — `.claude/skills/performance-diagnostics/SKILL.md`
+4. security-review — `.claude/skills/security-review/SKILL.md`
+5. release-readiness — `.claude/skills/release-readiness/SKILL.md`
+6. city-validation — use output style `.claude/output-styles/city-validation.md`
+7. regression-guard — `.claude/skills/regression-guard/SKILL.md`
+
+Support subagents: @security-agent, @performance-agent, @edition-agent, @news-agent, @discovery-agent
+
+Use output style `release-report`.
+
+On FAIL / DO NOT SHIP: `.claude/hooks/util/set-release-blocker.sh "<reason>"`
+On PASS: `.claude/hooks/util/clear-release-blocker.sh`
+
+Do not ship with Critical security findings or incomplete editions.

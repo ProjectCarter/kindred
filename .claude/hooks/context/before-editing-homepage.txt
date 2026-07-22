@@ -1,0 +1,18 @@
+Kindred homepage edit gate (hook-injected). You are about to edit homepage render or load code.
+
+Lead subagents:
+- @ui-agent — layout, loading, navigation (`.claude/agents/ui-agent.md`)
+- @performance-agent — paint, cache, hydration (`.claude/agents/performance-agent.md`)
+
+Run skill before implementing:
+- homepage-audit — `.claude/skills/homepage-audit/SKILL.md`
+
+If performance-related, also run:
+- performance-diagnostics — `.claude/skills/performance-diagnostics/SKILL.md`
+
+Locked sections — do not redesign: see `.cursor/rules/kindred-editorial-design.mdc`
+
+Key files: `components/EditionReader.tsx`, `app/home.tsx`, `lib/edition/editionCache.ts`
+
+Prefer read-only diagnosis unless the user explicitly asked to edit.
+Use output style `homepage-audit` for reports.

@@ -1,0 +1,19 @@
+Kindred pre-commit gate (hook-injected). Before completing this git commit:
+
+Run these Skills in order and honor their verdicts:
+1. security-review — `.claude/skills/security-review/SKILL.md`
+2. regression-guard — `.claude/skills/regression-guard/SKILL.md`
+3. homepage-audit — `.claude/skills/homepage-audit/SKILL.md`
+4. performance-diagnostics — `.claude/skills/performance-diagnostics/SKILL.md`
+5. release-readiness — `.claude/skills/release-readiness/SKILL.md`
+
+Use output style `commit-summary` or `release-report` as appropriate.
+
+If any skill yields FAIL or DO NOT SHIP for staged changes:
+- Do not commit
+- Run: `.claude/hooks/util/set-release-blocker.sh "<reason>"`
+- Clear after fix: `.claude/hooks/util/clear-release-blocker.sh`
+
+Law: `CLAUDE.md`, `docs/KINDRED_CONSTITUTION.md` — read, do not duplicate.
+
+Do not commit unless the user explicitly requested commit in this session.

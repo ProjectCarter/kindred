@@ -1,6 +1,7 @@
 ---
 name: discovery-agent
 description: Kindred discovery desks specialist. Use for Local Events, Activities, Food and Drinks, History Around Town, geographic validation, ranking quality, and discovery payload issues.
+skills: homepage-audit, edition-builder
 model: inherit
 ---
 

@@ -5,7 +5,7 @@ description: Audits the full Kindred Local + National News pipeline before relea
 
 # News Pipeline Audit
 
-Orchestrates **Local News + National News** end-to-end. Use with `/local-news-verification` and `/national-news-verification` for desk-deep dives.
+Orchestrates **Local News + National News** end-to-end. Use with the `local-news-verification` and `national-news-verification` skills for desk-deep dives.
 
 ## Law (read, do not duplicate)
 
@@ -20,7 +20,7 @@ Orchestrates **Local News + National News** end-to-end. Use with `/local-news-ve
 - [`lib/edition/nationalNewsHydration.ts`](../../../lib/edition/nationalNewsHydration.ts) — runtime merge diagnostics (`mergeNationalNewsHydration`)
 - [`supabase/functions/_shared/leadStory/selectLeadStory.ts`](../../../supabase/functions/_shared/leadStory/selectLeadStory.ts) — local lead + desk fallback at build
 - [`supabase/functions/_shared/nationalDaily/resolveNationalNews.ts`](../../../supabase/functions/_shared/nationalDaily/resolveNationalNews.ts) — shared daily package
-- Related skills: `/local-news-verification`, `/national-news-verification`, `/homepage-audit`
+- Related skills: `local-news-verification`, `national-news-verification`, `homepage-audit` (see `.claude/skills/`)
 
 ## Purpose
 
@@ -31,7 +31,7 @@ Single **pre-release news system audit** — both desks present, correctly order
 - Before shipping news-related changes
 - After warm-cache or `homepageNewsHydration` edits
 - When user reports wrong order, duplicate stories, or missing news desk
-- Part of `/release-readiness` for news-heavy branches
+- Part of the `release-readiness` skill for news-heavy branches
 
 ## Inputs
 
@@ -80,9 +80,9 @@ Trace in code:
 - `homepageNewsHydration.ts` — `resolveEditionNewsDesks` (`columnOnly: true`), `withSyncedNewsDesksInCache`
 - Must not null-overwrite valid national package during warm merge
 
-**Step 4 — Local verification:** Follow `/local-news-verification` checklist.
+**Step 4 — Local verification:** Follow the `local-news-verification` skill checklist.
 
-**Step 5 — National verification:** Follow `/national-news-verification` checklist.
+**Step 5 — National verification:** Follow the `national-news-verification` skill checklist.
 
 **Step 6 — Cross-desk matrix:** For each national story, confirm no matching local `id` or normalized headline. For each local story, confirm not in `national_news.stories`.
 
@@ -218,7 +218,7 @@ One action only.
 
 | If this fails… | Run skill… |
 |----------------|------------|
-| Local desk only | `/local-news-verification` |
-| National desk only | `/national-news-verification` |
-| Full homepage context | `/homepage-audit` |
-| Post-fix regression | `/regression-guard` |
+| Local desk only | Run the `local-news-verification` skill |
+| National desk only | Run the `national-news-verification` skill |
+| Full homepage context | Run the `homepage-audit` skill |
+| Post-fix regression | Run the `regression-guard` skill |

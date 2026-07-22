@@ -1,0 +1,6 @@
+{
+  "block": false,
+  "reason": "Example — set block true to prevent commits",
+  "updated_at": "2026-07-22T00:00:00Z",
+  "skills_pending": ["release-readiness"]
+}
