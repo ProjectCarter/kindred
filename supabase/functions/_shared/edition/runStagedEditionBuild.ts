@@ -1004,7 +1004,7 @@ async function attachHistoryAroundTownToEdition(
 
   let poolPayload = cachedHistory?.payload;
   if (!poolPayload) {
-    poolPayload = await buildMetroHistoryCandidatePool(admin, ctx.catalogMetroKey);
+    poolPayload = await buildMetroHistoryCandidatePool(admin, ctx.location);
     await saveMetroSectionCache(admin, {
       sectionType: "history_around_town",
       metroKey: ctx.metroKey,

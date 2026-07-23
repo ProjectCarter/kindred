@@ -15,7 +15,8 @@ import {
   listApprovedHistoryPlaces,
   rowToSnapshot,
 } from "../historyAroundTown/library.ts";
-import type { HistoryPlaceSnapshot } from "../historyAroundTown/types.ts";
+import type { HistoryPlaceRow, HistoryPlaceSnapshot } from "../historyAroundTown/types.ts";
+import { libraryMetroKeysForLocation } from "../../../../lib/markets/libraryMetroKeys.ts";
 import {
   buildMetroEventsPoolPayload,
   buildMetroHistoryPoolPayload,
@@ -80,9 +81,35 @@ export async function buildMetroPlacesCandidatePool(
 
 export async function buildMetroHistoryCandidatePool(
   admin: SupabaseClient,
-  catalogMetroKey: string
+  location: PlacesLocation
 ): Promise<ReturnType<typeof buildMetroHistoryPoolPayload>> {
-  const rows = await listApprovedHistoryPlaces(admin, catalogMetroKey);
+  const city = location.city?.trim();
+  if (!city || city.toLowerCase() === "your area") {
+    return buildMetroHistoryPoolPayload([]);
+  }
+
+  const metroKeys = libraryMetroKeysForLocation({
+    city,
+    state: location.state,
+    region: location.region,
+    lat: location.lat ?? NaN,
+    lon: location.lon ?? NaN,
+  });
+
+  let rows: HistoryPlaceRow[] = [];
+  for (const key of metroKeys) {
+    const found = await listApprovedHistoryPlaces(admin, key);
+    if (found.length) {
+      rows = found;
+      break;
+    }
+  }
+
+  if (!rows.length) {
+    console.warn("[historyAroundTown:metroPool] no approved places", { metroKeys });
+    return buildMetroHistoryPoolPayload([]);
+  }
+
   const slugIndex = new Map(rows.map((row) => [row.slug, row]));
   const snapshots = rows
     .map((row) => rowToSnapshot(row, slugIndex))
