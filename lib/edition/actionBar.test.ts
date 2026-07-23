@@ -196,7 +196,7 @@ describe("Universal Action Bar", () => {
     expect(actions.some((a) => a.label === "Share")).toBe(false);
   });
 
-  it("event with coordinates builds a coordinate Google Maps URL", () => {
+  it("event with coordinates prefers venue name and city in Google Maps URL", () => {
     const event: LocalEventCard = {
       ...paidEvent(),
       lat: 33.4617,
@@ -205,8 +205,8 @@ describe("Universal Action Bar", () => {
     const actions = resolveEventArticleActions(event);
     const maps = actions.find((a) => a.id === "maps");
     expect(maps?.label).toBe("Open in Maps");
-    expect(maps?.url).toContain("33.4617");
-    expect(maps?.url).toContain("-111.9446");
+    expect(maps?.url).toContain("Desert%20Botanical%20Garden");
+    expect(maps?.url).toContain("Phoenix");
     expect(maps?.url).toContain("google.com/maps/search");
   });
 

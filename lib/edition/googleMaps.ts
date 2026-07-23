@@ -30,22 +30,28 @@ function isValidCoord(value: number | null | undefined): value is number {
 
 /**
  * Resolve the Maps search query from verified data only.
- * Priority: coordinates → street address → name + city + region/state.
+ * Priority: name + address → name + city/state → address → coordinates.
  */
 export function resolveMapsSearchQuery(dest: MapsDestination): string | null {
-  if (isValidCoord(dest.lat) && isValidCoord(dest.lon)) {
-    return `${dest.lat},${dest.lon}`;
-  }
-
-  const address = dest.address?.trim();
-  if (address && isUsableStreetAddress(address)) return address;
-
   const name = dest.name?.trim();
+  const address = dest.address?.trim();
   const city = dest.city?.trim();
   const region = dest.region?.trim() || dest.state?.trim();
 
+  if (name && address && isUsableStreetAddress(address)) {
+    return `${name}, ${address}`;
+  }
+
   if (name && (city || region)) {
     return [name, city, region].filter(Boolean).join(", ");
+  }
+
+  if (address && isUsableStreetAddress(address)) {
+    return address;
+  }
+
+  if (isValidCoord(dest.lat) && isValidCoord(dest.lon)) {
+    return `${dest.lat},${dest.lon}`;
   }
 
   return null;
