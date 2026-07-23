@@ -8,26 +8,28 @@ export function foodDrinksSeeAllLabel(count: number): string {
   return `See all ${count} Food & Drinks`;
 }
 
-/** Show footer when the full pool exceeds the homepage subset. */
+/** Show footer whenever the desk has a pool and a navigation handler. */
 export function shouldShowFoodDrinksSeeAll(input: {
   homepageVisibleCount: number;
   poolItemCount: number;
   hasSeeAllHandler: boolean;
 }): boolean {
+  void input.homepageVisibleCount;
   if (!input.hasSeeAllHandler || input.poolItemCount <= 0) return false;
-  return input.poolItemCount > input.homepageVisibleCount;
+  return true;
 }
 
-/** EditorialCardGrid See All footer — matches Activities rhythm. */
+/** EditorialCardGrid See All footer — always when the desk has items to open. */
 export function shouldShowEditorialSeeAllFooter(input: {
   hasHandler: boolean;
   visibleCount: number;
   seeAllTotal?: number;
   cardCount: number;
 }): boolean {
+  void input.visibleCount;
   if (!input.hasHandler) return false;
   const total = input.seeAllTotal ?? input.cardCount;
-  return total > input.visibleCount;
+  return total > 0;
 }
 
 export function editorialSeeAllFooterLabel(

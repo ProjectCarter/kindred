@@ -20,6 +20,12 @@ import type { BanditsPick as BanditsPickData } from "../lib/edition/bandit";
 import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
 import { isNewsSectionsEnabled } from "../lib/edition/newsSectionsFeature";
 import {
+  isActivitiesEnabled,
+  isEventsEnabled,
+  isFoodDrinksEnabled,
+  isMasterpieceEnabled,
+} from "../lib/edition/editionSectionFlags";
+import {
   articleFromBanditsPick,
   articleFromDiscoveryItem,
   articleFromEditionSection,
@@ -643,9 +649,22 @@ function EditionReaderInner({
 
   const curatedLocalEvents = curatedEdition.localEvents;
 
+  /** Show every available event up to 8 — fall back when curation under-fills the pool. */
+  const localEventsHomepageOrder = useMemo(() => {
+    const cap = Math.min(events.length, HOMEPAGE_INITIAL_RENDER_COUNT);
+    if (curatedLocalEvents.length >= cap) {
+      return curatedLocalEvents;
+    }
+    return undefined;
+  }, [curatedLocalEvents, events.length]);
+
   const visibleEvents = useMemo(
-    () => curatedLocalEvents.slice(0, HOMEPAGE_INITIAL_RENDER_COUNT),
-    [curatedLocalEvents]
+    () =>
+      (localEventsHomepageOrder ?? curatedLocalEvents).slice(
+        0,
+        HOMEPAGE_INITIAL_RENDER_COUNT
+      ),
+    [localEventsHomepageOrder, curatedLocalEvents]
   );
 
   useMemo(() => {
@@ -1037,8 +1056,8 @@ function EditionReaderInner({
         homepageWeather={homepageWeather}
         banditGreeting={banditGreeting}
         welcomeMessage={welcomeMessage}
-        morningHero={morningHero}
-        onOpenMasterpiece={onOpenMasterpiece}
+        morningHero={isMasterpieceEnabled() ? morningHero : null}
+        onOpenMasterpiece={isMasterpieceEnabled() ? onOpenMasterpiece : undefined}
         mastheadTrailing={mastheadTrailing}
         mastheadScrollY={mastheadScrollY}
         heroContext={{
@@ -1054,56 +1073,64 @@ function EditionReaderInner({
       />
 
       <FolioReveal index={folioCursor++}>
-        <LocalEventsGrid
-          events={events}
-          homepageOrder={curatedLocalEvents}
-          sportsMarketId={sportsMarketId}
-          onOpenEvent={onOpenEvent}
-          onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
-          loadStatus={localEventsStatus}
-        />
+        {isEventsEnabled() ? (
+          <LocalEventsGrid
+            key={`local-events-${events.length}-${curatedLocalEvents.length}`}
+            floatingCardTint="sky"
+            events={events}
+            homepageOrder={localEventsHomepageOrder}
+            sportsMarketId={sportsMarketId}
+            onOpenEvent={onOpenEvent}
+            onSeeAll={events.length > 0 ? onSeeAllEvents : undefined}
+            loadStatus={localEventsStatus}
+          />
+        ) : null}
       </FolioReveal>
 
       <FolioReveal index={folioCursor++}>
-        <ActivitiesSection
-          items={curatedFullAllocation.activities}
-          locationCity={locationCity}
-          readerLocation={resolvedReaderLocation}
-          onOpenItem={
-            onOpenArticle
-              ? (item) => {
-                  openRankedDiscoveryItem(item, "activity");
-                }
-              : undefined
-          }
-          onSeeAll={
-            curatedFullAllocation.activities.length > 0
-              ? onSeeAllActivities
-              : undefined
-          }
-        />
+        {isActivitiesEnabled() ? (
+          <ActivitiesSection
+            items={curatedFullAllocation.activities}
+            locationCity={locationCity}
+            readerLocation={resolvedReaderLocation}
+            onOpenItem={
+              onOpenArticle
+                ? (item) => {
+                    openRankedDiscoveryItem(item, "activity");
+                  }
+                : undefined
+            }
+            onSeeAll={
+              curatedFullAllocation.activities.length > 0
+                ? onSeeAllActivities
+                : undefined
+            }
+          />
+        ) : null}
       </FolioReveal>
 
-      <FolioReveal index={folioCursor++}>
-        <RecommendationsSection
-          items={curatedFullAllocation.recommendations}
-          locationCity={locationCity}
-          readerLocation={resolvedReaderLocation}
-          onOpenItem={
-            onOpenArticle
-              ? (item) => {
-                  openRankedDiscoveryItem(item, "recommendation");
-                }
-              : undefined
-          }
-          onSeeAll={
-            curatedFullAllocation.recommendations.length > 0 &&
-            onSeeAllRecommendations
-              ? (pool) => onSeeAllRecommendations(pool)
-              : undefined
-          }
-        />
-      </FolioReveal>
+      {isFoodDrinksEnabled() ? (
+        <FolioReveal index={folioCursor++}>
+          <RecommendationsSection
+            items={curatedFullAllocation.recommendations}
+            locationCity={locationCity}
+            readerLocation={resolvedReaderLocation}
+            onOpenItem={
+              onOpenArticle
+                ? (item) => {
+                    openRankedDiscoveryItem(item, "recommendation");
+                  }
+                : undefined
+            }
+            onSeeAll={
+              curatedFullAllocation.recommendations.length > 0 &&
+              onSeeAllRecommendations
+                ? (pool) => onSeeAllRecommendations(pool)
+                : undefined
+            }
+          />
+        </FolioReveal>
+      ) : null}
 
       <FolioReveal index={folioCursor++}>
         {storyOf && storyOfWillRender ? (
@@ -1133,6 +1160,20 @@ function EditionReaderInner({
                 : undefined
             }
           />
+        </FolioReveal>
+      ) : null}
+
+      {!isNewsSectionsEnabled() ? (
+        <FolioReveal index={folioCursor++}>
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionLabelRow}>
+              <Text style={styles.sectionLabel}>💰 Local Deals</Text>
+              <View style={styles.sectionRule} />
+            </View>
+            <Text style={styles.sectionIntro}>
+              Coupons, discounts, and local savings are coming soon.
+            </Text>
+          </View>
         </FolioReveal>
       ) : null}
 
@@ -1170,7 +1211,7 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {/* Local News + National News (V2+) or Local Deals placeholder (V1). */}
+      {/* Local News + National News (V2+). */}
       {isNewsSectionsEnabled() ? (
         <>
           <FolioReveal index={folioCursor++} disabled>
@@ -1193,19 +1234,7 @@ function EditionReaderInner({
             />
           </FolioReveal>
         </>
-      ) : (
-        <FolioReveal index={folioCursor++}>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>💰 Local Deals</Text>
-              <View style={styles.sectionRule} />
-            </View>
-            <Text style={styles.sectionIntro}>
-              Coupons, discounts, and local savings are coming soon.
-            </Text>
-          </View>
-        </FolioReveal>
-      )}
+      ) : null}
 
       {lookingAhead ? (
         <FolioReveal index={folioCursor++}>

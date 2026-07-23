@@ -103,6 +103,7 @@ export function RecommendationsSection({
   return (
     <EditorialCardGrid
       kicker={FOOD_DRINK_SECTION_KICKER}
+      floatingCardTint="lavender"
       cards={displayCards}
       initialRenderCount={renderLimit}
       seeAllTotal={seeAllPool.length}

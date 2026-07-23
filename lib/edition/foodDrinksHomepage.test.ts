@@ -73,14 +73,14 @@ test("See all footer appears when pool exceeds homepage subset", () => {
   );
 });
 
-test("See all footer is omitted when there are no additional items", () => {
+test("See all footer appears even when homepage already shows the full pool", () => {
   assert.equal(
     shouldShowFoodDrinksSeeAll({
       homepageVisibleCount: 8,
       poolItemCount: 8,
       hasSeeAllHandler: true,
     }),
-    false
+    true
   );
   assert.equal(
     shouldShowEditorialSeeAllFooter({
@@ -89,7 +89,15 @@ test("See all footer is omitted when there are no additional items", () => {
       seeAllTotal: 5,
       cardCount: 5,
     }),
-    false
+    true
+  );
+  assert.equal(
+    shouldShowFoodDrinksSeeAll({
+      homepageVisibleCount: 6,
+      poolItemCount: 6,
+      hasSeeAllHandler: true,
+    }),
+    true
   );
 });
 

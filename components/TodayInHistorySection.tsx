@@ -6,7 +6,7 @@ import { historyCardIntro, historyHeadlineIncludesYear } from "../lib/edition/hi
 import { resolveTodayInHistoryDisplayHeadline } from "../lib/edition/history/headline";
 import { sectionIntro } from "../lib/edition/sectionIntro";
 import { STORY_OF_CARD_ASPECT_RATIO } from "../lib/edition/storyOfImage";
-import { paper, press, space, type } from "../lib/edition/newspaperTheme";
+import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   section: EditionSection;
@@ -119,8 +119,8 @@ export function TodayInHistorySection({
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: space.sectionGap,
-    paddingBottom: 52,
+    marginBottom: 18,
+    paddingBottom: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },

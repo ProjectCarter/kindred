@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { paper, press } from "../lib/edition/newspaperTheme";
 import { HOMEPAGE_INITIAL_RENDER_COUNT, sliceForInitialRender } from "../lib/edition/editorialPublishing";
+import { shouldShowEditorialSeeAllFooter } from "../lib/edition/foodDrinksHomepage";
 import { trackSectionViewedOnce } from "../lib/analytics";
 import type { EventInfoBadgeId } from "../lib/edition/eventBadges";
 import { eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
@@ -53,7 +54,26 @@ type Props = {
   showBanditWhenEmpty?: boolean;
   /** Fire section_viewed once per edition when the desk mounts on the homepage. */
   analyticsSectionType?: string;
+  /**
+   * Homepage floating-card desks — independent tinted tiles on cream.
+   * `lavender` → Food & Drinks · `sage` → Activities · `sky` → Local Events.
+   */
+  floatingCardTint?: "lavender" | "sage" | "sky";
 };
+
+/** Homepage floating-card grid — matches homepage content gutter. */
+const FLOATING_HOMEPAGE_GUTTER = 28;
+const FLOATING_GRID_GAP = 14;
+/** Fixed tile height — ~15% shorter than the original editorial grid. */
+const FLOATING_CARD_HEIGHT = 243;
+
+const FLOATING_CARD_TINTS = {
+  lavender: "rgba(194, 169, 239, 0.15)",
+  /** Activities floating cards — #FFD6A5 at the same opacity as Food & Drinks. */
+  sage: "rgba(255, 214, 165, 0.15)",
+  /** Local Events floating cards — #FF7770 at the same opacity. */
+  sky: "rgba(255, 119, 112, 0.15)",
+} as const;
 
 /**
  * Shared editorial grid — equal two-column, typography-first listings for
@@ -72,8 +92,10 @@ export function EditorialCardGrid({
   emptyCopy = "Nothing new to surface here today — check back tomorrow.",
   showBanditWhenEmpty = false,
   analyticsSectionType,
+  floatingCardTint,
 }: Props) {
   const { width } = useWindowDimensions();
+  const hasFloatingCards = floatingCardTint != null;
   const completeCards = cards.filter((card) => Boolean(card.title?.trim()));
 
   useEffect(() => {
@@ -89,17 +111,24 @@ export function EditorialCardGrid({
     renderCount != null && Number.isFinite(renderCount)
       ? sliceForInitialRender(completeCards, renderCount)
       : completeCards;
-  const remainingCount = completeCards.length - visible.length;
   const seeAllTotal = seeAllTotalProp ?? completeCards.length;
-  const showSeeAllFooter =
-    Boolean(onSeeAll) &&
-    (seeAllTotalProp != null
-      ? seeAllTotal > visible.length
-      : remainingCount > 0);
+  const showSeeAllFooter = shouldShowEditorialSeeAllFooter({
+    hasHandler: Boolean(onSeeAll),
+    visibleCount: visible.length,
+    seeAllTotal: seeAllTotalProp,
+    cardCount: completeCards.length,
+  });
+
+  const floatingCardWidth = hasFloatingCards
+    ? (width - FLOATING_HOMEPAGE_GUTTER * 2 - FLOATING_GRID_GAP) / 2
+    : 0;
+  const floatingGridWidth = floatingCardWidth * 2 + FLOATING_GRID_GAP;
+
+  const sectionStyle = [styles.section];
 
   if (visible.length === 0) {
     return (
-      <View style={styles.section}>
+      <View style={sectionStyle}>
         <View style={styles.labelRow}>
           <Text style={styles.kicker}>{kicker}</Text>
           <View style={styles.labelRule} />
@@ -127,97 +156,132 @@ export function EditorialCardGrid({
     rows.push(visible.slice(i, i + 2));
   }
 
+  const gridRows = rows.map((row, rowIndex) => (
+    <View
+      key={`row-${rowIndex}`}
+      style={[
+        styles.row,
+        hasFloatingCards && styles.floatingRow,
+        hasFloatingCards && { width: floatingGridWidth },
+        !hasFloatingCards &&
+          rowIndex < rows.length - 1 &&
+          styles.rowRule,
+      ]}
+    >
+      {row.map((card, colIndex) => {
+        const open = onOpenCard ? () => onOpenCard(card) : undefined;
+        const isLeft = colIndex === 0;
+
+        return (
+          <Pressable
+            key={card.id}
+            onPress={open}
+            disabled={!open}
+            accessibilityRole={open ? "button" : "text"}
+            accessibilityLabel={[
+              card.overline,
+              card.title,
+              card.subtitle,
+              card.note,
+              card.badges?.length
+                ? eventInfoBadgeAccessibilitySummary([...card.badges])
+                : null,
+            ]
+              .filter(Boolean)
+              .join(". ")}
+            style={({ pressed }) => [
+              !hasFloatingCards && styles.cell,
+              hasFloatingCards
+                ? [
+                    styles.floatingTile,
+                    {
+                      width: floatingCardWidth,
+                      height: FLOATING_CARD_HEIGHT,
+                      backgroundColor: FLOATING_CARD_TINTS[floatingCardTint!],
+                    },
+                  ]
+                : isLeft
+                  ? styles.cellLeft
+                  : styles.cellRight,
+              open && pressed && { opacity: press.opacity },
+            ]}
+          >
+            <View style={styles.cardRule} />
+            <View style={styles.copy}>
+              {card.overline ? (
+                <Text
+                  style={[styles.overline, hasFloatingCards && styles.overlineOnFloating]}
+                  maxFontSizeMultiplier={1.1}
+                >
+                  {card.overline}
+                </Text>
+              ) : null}
+
+              <EditorialTitle
+                icon={card.categoryIcon}
+                title={card.title}
+                style={styles.title}
+                numberOfLines={3}
+                maxFontSizeMultiplier={1.15}
+              />
+
+              {card.badges?.length ? (
+                <EventInfoBadgeRow
+                  badges={[...card.badges]}
+                  style={styles.badgeRow}
+                />
+              ) : null}
+
+              {card.subtitle ? (
+                <Text
+                  style={[styles.venue, hasFloatingCards && styles.venueOnFloating]}
+                  numberOfLines={2}
+                  maxFontSizeMultiplier={1.1}
+                >
+                  {card.subtitle}
+                </Text>
+              ) : null}
+
+              {card.note ? (
+                <Text
+                  style={[styles.bandit, hasFloatingCards && styles.banditOnFloating]}
+                  numberOfLines={3}
+                  maxFontSizeMultiplier={1.15}
+                >
+                  {card.note}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
+        );
+      })}
+      {row.length === 1 ? (
+        hasFloatingCards ? (
+          <View
+            style={{
+              width: floatingCardWidth,
+              height: FLOATING_CARD_HEIGHT,
+            }}
+          />
+        ) : (
+          <View style={styles.cell} />
+        )
+      ) : null}
+    </View>
+  ));
+
   return (
-    <View style={styles.section} accessibilityRole="summary">
+    <View style={sectionStyle} accessibilityRole="summary">
       <View style={styles.labelRow}>
         <Text style={styles.kicker}>{kicker}</Text>
         <View style={styles.labelRule} />
       </View>
 
-      {rows.map((row, rowIndex) => (
-        <View
-          key={`row-${rowIndex}`}
-          style={[
-            styles.row,
-            rowIndex < rows.length - 1 && styles.rowRule,
-          ]}
-        >
-          {row.map((card, colIndex) => {
-            const open = onOpenCard ? () => onOpenCard(card) : undefined;
-            const isLeft = colIndex === 0;
-
-            return (
-              <Pressable
-                key={card.id}
-                onPress={open}
-                disabled={!open}
-                accessibilityRole={open ? "button" : "text"}
-                accessibilityLabel={[
-                  card.overline,
-                  card.title,
-                  card.subtitle,
-                  card.note,
-                  card.badges?.length
-                    ? eventInfoBadgeAccessibilitySummary([...card.badges])
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(". ")}
-                style={({ pressed }) => [
-                  styles.cell,
-                  isLeft ? styles.cellLeft : styles.cellRight,
-                  open && pressed && { opacity: press.opacity },
-                ]}
-              >
-                <View style={styles.cardRule} />
-                <View style={styles.copy}>
-                  {card.overline ? (
-                    <Text style={styles.overline} maxFontSizeMultiplier={1.1}>
-                      {card.overline}
-                    </Text>
-                  ) : null}
-
-                  <EditorialTitle
-                    icon={card.categoryIcon}
-                    title={card.title}
-                    style={styles.title}
-                    numberOfLines={3}
-                    maxFontSizeMultiplier={1.15}
-                  />
-
-                  {card.badges?.length ? (
-                    <EventInfoBadgeRow
-                      badges={[...card.badges]}
-                      style={styles.badgeRow}
-                    />
-                  ) : null}
-
-                  {card.subtitle ? (
-                    <Text
-                      style={styles.venue}
-                      numberOfLines={2}
-                      maxFontSizeMultiplier={1.1}
-                    >
-                      {card.subtitle}
-                    </Text>
-                  ) : null}
-
-                  {card.note ? (
-                    <Text
-                      style={styles.bandit}
-                      numberOfLines={3}
-                      maxFontSizeMultiplier={1.15}
-                    >
-                      {card.note}
-                    </Text>
-                  ) : null}
-                </View>
-              </Pressable>
-            );
-          })}
-          {row.length === 1 ? <View style={styles.cell} /> : null}
-        </View>
-      ))}
+      {hasFloatingCards ? (
+        <View style={styles.floatingGrid}>{gridRows}</View>
+      ) : (
+        gridRows
+      )}
 
       {showSeeAllFooter && onSeeAll ? (
         <Pressable
@@ -231,10 +295,15 @@ export function EditorialCardGrid({
             seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`
           }
         >
-          <Text style={styles.seeAllText} maxFontSizeMultiplier={1.2}>
+          <Text
+            style={[styles.seeAllText, hasFloatingCards && styles.seeAllTextOnFloating]}
+            maxFontSizeMultiplier={1.2}
+          >
             {seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`}
             {"  "}
-            <Text style={styles.seeAllArrow}>→</Text>
+            <Text style={[styles.seeAllArrow, hasFloatingCards && styles.seeAllTextOnFloating]}>
+              →
+            </Text>
           </Text>
         </Pressable>
       ) : null}
@@ -249,6 +318,34 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
+  },
+  /** Centered floating-card grid (Food & Drinks + Activities). */
+  floatingGrid: {
+    alignItems: "center",
+  },
+  /** Independent tiles — 2-up with breathing room. */
+  floatingRow: {
+    gap: FLOATING_GRID_GAP,
+    marginBottom: FLOATING_GRID_GAP,
+  },
+  /** Premium floating tile shell — tint applied per desk. */
+  floatingTile: {
+    borderRadius: 20,
+    padding: 14,
+    overflow: "hidden",
+  },
+  /** Slight contrast lift — readable on tinted tiles. */
+  overlineOnFloating: {
+    color: "#6B645C",
+  },
+  venueOnFloating: {
+    color: "#5F5852",
+  },
+  banditOnFloating: {
+    color: paper.ink,
+  },
+  seeAllTextOnFloating: {
+    color: "#A35F35",
   },
   labelRow: {
     flexDirection: "row",

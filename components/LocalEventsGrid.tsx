@@ -28,6 +28,8 @@ type Props = {
   showBanditWhenEmpty?: boolean;
   /** Distinguishes a confirmed quiet day from a failed/recovering fetch. */
   loadStatus?: LocalEventsLoadStatus;
+  /** Homepage only — floating #95DFF2 tiles on cream (See All keeps classic grid). */
+  floatingCardTint?: "sky";
 };
 
 function eventCardId(event: LocalEventCard): string {
@@ -47,36 +49,74 @@ export function LocalEventsGrid({
   onSeeAll,
   showBanditWhenEmpty = false,
   loadStatus = "ready",
+  floatingCardTint,
 }: Props) {
-  /** See All passes the full persisted list — keep server editorial order. */
-  const usePersistedOrder =
-    events.length > 0 && initialRenderCount >= events.length;
   /** Phase 5 — edition curation already balanced the homepage slice. */
   const useCuratedHomepageOrder = Boolean(homepageOrder?.length);
   /** TEMPORARY — Eventbrite-only test: skip client re-scoring, use persisted order. */
   const eventbriteOnlyTest =
     events.length > 0 && events.every((e) => e.sourceId === "eventbrite");
+
+  const visibleEvents = useMemo(() => {
+    let slice: LocalEventCard[];
+    if (useCuratedHomepageOrder) {
+      const curated = homepageOrder!.slice(0, initialRenderCount);
+      const target = Math.min(
+        events.filter((event) => Boolean(event.name?.trim())).length,
+        initialRenderCount
+      );
+      if (curated.length >= target) {
+        slice = curated;
+      } else {
+        const seen = new Set(curated.map((event) => eventCardId(event)));
+        const fill = events
+          .filter(
+            (event) =>
+              Boolean(event.name?.trim()) && !seen.has(eventCardId(event))
+          )
+          .slice(0, target - curated.length);
+        slice = [...curated, ...fill];
+      }
+    } else if (
+      (events.length > 0 && initialRenderCount >= events.length) ||
+      eventbriteOnlyTest
+    ) {
+      slice = events.slice(0, initialRenderCount);
+    } else {
+      slice = orderEventsForGrid(events, initialRenderCount);
+    }
+    // Horizon/threshold filters can zero the grid while the edition still
+    // carries events — always surface the persisted pool on the homepage.
+    if (slice.length === 0 && events.length > 0) {
+      slice = events
+        .filter((event) => Boolean(event.name?.trim()))
+        .slice(0, initialRenderCount);
+    }
+    return slice;
+  }, [
+    events,
+    homepageOrder,
+    useCuratedHomepageOrder,
+    eventbriteOnlyTest,
+    initialRenderCount,
+  ]);
+
   const published =
     useCuratedHomepageOrder
       ? homepageOrder!
-      : usePersistedOrder || eventbriteOnlyTest
+      : (events.length > 0 && initialRenderCount >= events.length) ||
+          eventbriteOnlyTest
         ? events
         : orderEventsForEdition(events);
-  const visibleEvents =
-    useCuratedHomepageOrder
-      ? homepageOrder!.slice(0, initialRenderCount)
-      : usePersistedOrder || eventbriteOnlyTest
-        ? events.slice(0, initialRenderCount)
-        : orderEventsForGrid(events, initialRenderCount);
   const seeAllTotal = useCuratedHomepageOrder ? events.length : published.length;
 
   const eventsById = useMemo(() => {
     const map = new Map<string, LocalEventCard>();
-    for (const event of published) {
+    for (const event of [...published, ...visibleEvents]) {
       map.set(eventCardId(event), event);
     }
     return map;
-  }, [published]);
+  }, [published, visibleEvents]);
 
   const cards = useMemo(
     () =>
@@ -89,13 +129,14 @@ export function LocalEventsGrid({
   const emptyCopy =
     loadStatus === "failed"
       ? "Local events are having trouble loading right now. Pull to refresh in a moment."
-      : loadStatus === "recovering"
+      : loadStatus === "recovering" || loadStatus === "loading"
         ? "Checking for events nearby…"
         : "A quiet day nearby — the perfect excuse for a slow walk.";
 
   return (
     <EditorialCardGrid
       kicker="Local Events"
+      floatingCardTint={floatingCardTint}
       cards={cards}
       initialRenderCount={initialRenderCount}
       seeAllTotal={seeAllTotal}

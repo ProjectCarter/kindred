@@ -14,7 +14,7 @@ import {
   STORY_OF_CARD_ASPECT_RATIO,
   type ResolvedStoryOfImage,
 } from "../lib/edition/storyOfImage";
-import { paper, press, space, type } from "../lib/edition/newspaperTheme";
+import { paper, press, type } from "../lib/edition/newspaperTheme";
 
 type Props = {
   section: EditionSection;
@@ -181,8 +181,8 @@ export function storyOfSubtitleFromSection(section: EditionSection): string | nu
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: space.sectionGap,
-    paddingBottom: 52,
+    marginBottom: 28,
+    paddingBottom: 28,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },

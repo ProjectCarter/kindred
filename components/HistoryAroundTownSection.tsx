@@ -168,9 +168,9 @@ function HistoryPlaceCard({
 
 const styles = StyleSheet.create({
   section: {
-    marginTop: 8,
-    marginBottom: 56,
-    paddingBottom: 48,
+    marginTop: 4,
+    marginBottom: 20,
+    paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     color: paper.inkBody,
   },
   seeAllRow: {
-    paddingTop: 18,
+    paddingTop: 8,
   },
   seeAll: {
     fontFamily: "Georgia",
