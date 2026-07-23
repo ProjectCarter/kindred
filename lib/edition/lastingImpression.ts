@@ -3,16 +3,16 @@
  * Keep in sync with supabase/functions/_shared/editorial/lastingImpression.ts
  */
 
-import { endingReadsLikeSummary } from "./editorialIntelligence";
-import { containsGenericPlaceObservation } from "./humanDetails";
+import { endingReadsLikeSummary } from "./editorialIntelligence.ts";
+import { containsGenericPlaceObservation } from "./humanDetails.ts";
 import {
   findGenericLastingThoughtPattern,
   hasMemorableIdeaSignal,
-} from "./memorableWriting";
+} from "./memorableWriting.ts";
 import {
   findGenericConclusionPattern,
   validateUniqueConclusion,
-} from "./uniqueConclusions";
+} from "./uniqueConclusions.ts";
 
 export type LastingImpressionDesk =
   | "events"

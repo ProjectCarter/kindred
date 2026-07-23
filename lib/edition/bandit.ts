@@ -1,7 +1,7 @@
-import { banditDayLine } from "./morningRitual";
-import { isDisqualifiedBanditsPickStory } from "./banditPickQuality";
-import { isBanditsPicksEnabled } from "./banditsPicksFeature";
-import type { DiscoveryItem } from "./discovery";
+import { banditDayLine } from "./morningRitual.ts";
+import { isDisqualifiedBanditsPickStory } from "./banditPickQuality.ts";
+import { isBanditsPicksEnabled } from "./banditsPicksFeature.ts";
+import type { DiscoveryItem } from "./discovery.ts";
 
 /**
  * Bandit — Kindred’s calm morning newspaper editor.

@@ -1,35 +1,35 @@
 import type { ImageSourcePropType } from "react-native";
-import type { EventInfoBadgeId } from "./eventBadges";
-import { inferEventInfoBadges } from "./eventBadges";
-import { filterValidEvents } from "./localEventsValidation";
+import type { EventInfoBadgeId } from "./eventBadges.ts";
+import { inferEventInfoBadges } from "./eventBadges.ts";
+import { filterValidEvents } from "./localEventsValidation.ts";
 import {
   classifyEventListingSection,
   filterEventsForLocalEventsDesk,
-} from "./editionSectionOwnership";
+} from "./editionSectionOwnership.ts";
 import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
   LOCAL_EVENT_PUBLISH_MIN_SCORE,
   meetsLocalEventPublishThreshold,
-} from "./editorialPublishing";
-import { isGenericEventTitle } from "./venueQuality";
+} from "./editorialPublishing.ts";
+import { isGenericEventTitle } from "./venueQuality.ts";
 import {
   parseEventStartDate,
   resolveCardHorizon,
   type EventHorizonBucket,
-} from "./eventHorizon";
-import { selectEditorialHomepageLocalEvents } from "./localEventsHomepage";
+} from "./eventHorizon.ts";
+import { selectEditorialHomepageLocalEvents } from "./localEventsHomepage.ts";
 import {
   parseEventImageRights,
   authorizedEventImageUrl,
   type EventImageRights,
-} from "./eventImageRights";
-import { validateBanditNote, validateEditorialHeadline, sanitizeEventEditorialParagraphs } from "./eventEditorial";
-import { passesEventGoldenTest } from "./eventStorytelling";
-import { resolveEventCategoryIcon } from "./categoryIcon";
+} from "./eventImageRights.ts";
+import { validateBanditNote, validateEditorialHeadline, sanitizeEventEditorialParagraphs } from "./eventEditorial.ts";
+import { passesEventGoldenTest } from "./eventStorytelling.ts";
+import { resolveEventCategoryIcon } from "./categoryIcon.ts";
 import {
   applyLocalEventPresentation,
   resolveEventDisplayHeadline,
-} from "./localEventPresentation";
+} from "./localEventPresentation.ts";
 
 export type LocalEventImageSource = "provider_thumbnail";
 export type LocalEventCategory =
@@ -60,7 +60,7 @@ export function eventCategoryLabel(category?: LocalEventCategory | null): string
   return EVENT_CATEGORY_LABEL[category] ?? null;
 }
 
-export { authorizedEventImageUrl } from "./eventImageRights";
+export { authorizedEventImageUrl } from "./eventImageRights.ts";
 export {
   eventCategoryFallbackImage,
   eventDisplayImageKind,
@@ -70,7 +70,7 @@ export {
   resolveEventDisplayImage,
   type EventDisplayImageKind,
   type ResolvedEventDisplayImage,
-} from "./eventDisplayImage";
+} from "./eventDisplayImage.ts";
 
 export type LocalEventCard = {
   name: string;

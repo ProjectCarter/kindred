@@ -2,13 +2,13 @@
  * Resolve the sports market for an edition from city / metro metadata.
  */
 
-import { metroKeyFromPlace } from "../../location/metroKey";
-import { resolveLocation } from "../hero/location";
+import { metroKeyFromPlace } from "../../location/metroKey.ts";
+import { resolveLocation } from "../hero/location.ts";
 import {
   getSportsMarketById,
   SPORTS_MARKET_CATALOG,
   type SportsMarketId,
-} from "./catalog";
+} from "./catalog.ts";
 
 export type SportsMarketLocationInput = {
   city?: string | null;

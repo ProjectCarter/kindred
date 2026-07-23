@@ -5,15 +5,15 @@
  * Canonical law: .cursor/rules/kindred-visual-language.mdc
  */
 
-import type { LocalEventCategory } from "./localEvents";
-import { resolveSportEventIcon, SPORT_EVENT_ICON_FALLBACK } from "./sportEventIcon";
-import type { DiscoveryCategory, DiscoveryItem } from "./discovery";
-import type { EditorialCategoryId } from "./editorialCategory";
-import type { BanditsPickKind } from "./bandit";
+import type { LocalEventCategory } from "./localEvents.ts";
+import { resolveSportEventIcon, SPORT_EVENT_ICON_FALLBACK } from "./sportEventIcon.ts";
+import type { DiscoveryCategory, DiscoveryItem } from "./discovery.ts";
+import type { EditorialCategoryId } from "./editorialCategory.ts";
+import type { BanditsPickKind } from "./bandit.ts";
 import {
   isFoodDrinkDiscoveryItem,
   resolveFoodDrinkCuisineEmoji,
-} from "./foodDrinkCuisineEmoji";
+} from "./foodDrinkCuisineEmoji.ts";
 import {
   CATEGORY_ICON_DICTIONARY,
   CATEGORY_ICON_FALLBACK,
@@ -23,13 +23,13 @@ import {
   hayFromParts,
   resolveEditorialEmojiFromHay,
   resolveEditorialVenueEmoji,
-} from "./editorialEmojiCatalog";
+} from "./editorialEmojiCatalog.ts";
 
 export {
   CATEGORY_ICON_DICTIONARY,
   CATEGORY_ICON_FALLBACK,
   EDITORIAL_EMOJI,
-} from "./editorialEmojiCatalog";
+} from "./editorialEmojiCatalog.ts";
 
 export type CategoryIconContext = "event" | "activity" | "recommendation" | "bandits_pick";
 

@@ -3,18 +3,18 @@
  * never in the morning paper.
  */
 
-import { containsGenericAiPhrase } from "./editorialIntelligence";
+import { containsGenericAiPhrase } from "./editorialIntelligence.ts";
 import {
   containsFabricatedHumanDetail,
   containsGenericPlaceObservation,
   humanDetailObservationForCategory,
-} from "./humanDetails";
-import { buildVarietySeed, closingLineForVariety } from "./editionVariety";
+} from "./humanDetails.ts";
+import { buildVarietySeed, closingLineForVariety } from "./editionVariety.ts";
 import {
   lastingImpressionClosingForPlace,
   validateLastingImpressionClosing,
-} from "./lastingImpression";
-import { validateSourceConfidenceText } from "./sourceConfidence";
+} from "./lastingImpression.ts";
+import { validateSourceConfidenceText } from "./sourceConfidence.ts";
 
 /** Patterns that break the newspaper illusion — never publish to readers. */
 export const ENGINE_LANGUAGE_PATTERN =

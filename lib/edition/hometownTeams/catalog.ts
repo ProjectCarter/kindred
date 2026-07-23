@@ -3,7 +3,7 @@
  * Homepage boost and sport icons read from this data; no city-specific code paths.
  */
 
-import type { SportEventIconKey } from "../sportEventIcon";
+import type { SportEventIconKey } from "../sportEventIcon.ts";
 
 export type HometownTeamTier = "pro" | "college" | "spring_training";
 

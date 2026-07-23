@@ -3,7 +3,7 @@
  * rather than publishing it.
  */
 
-import { containsEngineLanguage } from "./editorialVoice";
+import { containsEngineLanguage } from "./editorialVoice.ts";
 
 const PLACEHOLDER_PATTERNS: RegExp[] = [
   /editorial quality worthy of a magazine desk/i,

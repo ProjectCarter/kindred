@@ -1,4 +1,4 @@
-import type { HeroRegionId, ResolvedLocation } from "./types";
+import type { HeroRegionId, ResolvedLocation } from "./types.ts";
 
 type CityRecord = {
   city: string;

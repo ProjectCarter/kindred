@@ -3,7 +3,7 @@
  * Scores are computed at edition build and stored on each item; never shown to readers.
  */
 
-import type { DiscoveryItem } from "./discovery";
+import type { DiscoveryItem } from "./discovery.ts";
 
 export type EditorialConfidenceAction = "publish" | "enrich" | "reject";
 

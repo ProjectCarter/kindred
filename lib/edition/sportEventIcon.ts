@@ -3,8 +3,8 @@
  * Fallback 🏅 when sport cannot be confidently identified.
  */
 
-import type { LocalEventCategory } from "./localEvents";
-import { resolveHometownTeamSport } from "./hometownTeams/matchHometownTeam";
+import type { LocalEventCategory } from "./localEvents.ts";
+import { resolveHometownTeamSport } from "./hometownTeams/matchHometownTeam.ts";
 
 export const SPORT_EVENT_ICON_FALLBACK = "🏅";
 

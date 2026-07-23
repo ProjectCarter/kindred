@@ -3,7 +3,7 @@
  * Images and long descriptions are optional.
  */
 
-import type { LocalEventCard } from "./localEvents";
+import type { LocalEventCard } from "./localEvents.ts";
 
 export function isValidEventCard(event: LocalEventCard): boolean {
   const title = event.name?.trim();

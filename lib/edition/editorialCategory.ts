@@ -6,7 +6,7 @@
  * Server mirror: supabase/functions/_shared/editorialCategory.ts
  */
 
-import type { ImageCategoryTag } from "./imageTaxonomy";
+import type { ImageCategoryTag } from "./imageTaxonomy.ts";
 
 export type EditorialCategoryId =
   | "restaurant"

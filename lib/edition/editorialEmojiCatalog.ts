@@ -8,7 +8,7 @@
  * Keep in sync with `.cursor/rules/kindred-visual-language.mdc`.
  */
 
-import type { LocalEventCategory } from "./localEvents";
+import type { LocalEventCategory } from "./localEvents.ts";
 
 /** One editorial category → one permanent emoji. */
 export const EDITORIAL_EMOJI = {

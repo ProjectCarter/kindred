@@ -8,7 +8,7 @@ import {
   resolveVenueClassification,
   buildEditorialImageSearchQueries,
   extractCityState,
-} from "./venueClassification";
+} from "./venueClassification.ts";
 
 export type ImageCategoryTag =
   | "coffee_shop"

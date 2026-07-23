@@ -20,7 +20,7 @@ export type EventImageCategory =
 
 export type EventDisplayImageInput = {
   imageUrl?: string | null;
-  imageRights?: import("./eventImageRights").EventImageRights | null;
+  imageRights?: import("./eventImageRights.ts").EventImageRights | null;
   category?: EventImageCategory | null;
 };
 

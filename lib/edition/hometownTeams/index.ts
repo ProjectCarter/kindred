@@ -7,16 +7,16 @@ export {
   type HometownTeamTier,
   type SportsMarketCatalogEntry,
   type SportsMarketId,
-} from "./catalog";
+} from "./catalog.ts";
 export {
   resolveSportsMarketId,
   resolveSportsMarketLabel,
   type SportsMarketLocationInput,
-} from "./resolveSportsMarket";
+} from "./resolveSportsMarket.ts";
 export {
   isHometownTeamEvent,
   matchHometownTeam,
   resolveHometownTeamHomepageBoost,
   resolveHometownTeamSport,
   type HometownTeamMatch,
-} from "./matchHometownTeam";
+} from "./matchHometownTeam.ts";

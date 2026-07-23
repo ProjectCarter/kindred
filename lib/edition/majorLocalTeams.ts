@@ -3,13 +3,13 @@
  * Delegates to the location-aware hometownTeams catalog.
  */
 
-import type { LocalEventCard } from "./localEvents";
+import type { LocalEventCard } from "./localEvents.ts";
 import {
   HOMETOWN_TEAM_HOMEPAGE_BOOST,
   isHometownTeamEvent,
   resolveHometownTeamHomepageBoost,
   type HometownTeamTier,
-} from "./hometownTeams";
+} from "./hometownTeams/index.ts";
 
 export type MajorLocalTeamTier = HometownTeamTier;
 

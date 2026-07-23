@@ -3,7 +3,7 @@
  * Keep in sync with supabase/functions/_shared/editorial/editorialIntelligence.ts
  */
 
-import { hasMemorableIdeaSignal } from "./memorableWriting";
+import { hasMemorableIdeaSignal } from "./memorableWriting.ts";
 
 export const GENERIC_AI_PHRASE_PATTERNS: RegExp[] = [
   /whether you('re| are) (?:a )?(?:local|visitor)/i,

@@ -1,11 +1,11 @@
-import type { LocalEventCard, LocalEventCategory } from "./localEvents";
+import type { LocalEventCard, LocalEventCategory } from "./localEvents.ts";
 import {
   EVENT_INFO_BADGE_MAX,
   EVENT_INFO_BADGE_ORDER,
   buildEventBadgeSignals,
   resolveEventBadges,
   type EventInfoBadgeId,
-} from "./eventBadgeResolver";
+} from "./eventBadgeResolver.ts";
 
 export {
   BADGE_MIN_CONFIDENCE,
@@ -26,7 +26,7 @@ export {
   type EventCategory,
   type EventInfoBadgeId,
   type VenueCategory,
-} from "./eventBadgeResolver";
+} from "./eventBadgeResolver.ts";
 
 export type EventBadgeInferenceInput = {
   name: string;

@@ -3,7 +3,7 @@
  * Keep in sync with supabase/functions/_shared/editorial/humanDetails.ts
  */
 
-import { containsGenericAiPhrase } from "./editorialIntelligence";
+import { containsGenericAiPhrase } from "./editorialIntelligence.ts";
 
 export type HumanDetailsDesk =
   | "events"

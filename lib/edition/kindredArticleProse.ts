@@ -7,12 +7,12 @@ import {
   containsGenericAiPhrase,
   endingReadsLikeSummary,
   filterGenericAiParagraphs,
-} from "./editorialIntelligence";
-import { validateLastingThought } from "./memorableWriting";
+} from "./editorialIntelligence.ts";
+import { validateLastingThought } from "./memorableWriting.ts";
 import {
   extractLastParagraph,
   validateUniqueConclusion,
-} from "./uniqueConclusions";
+} from "./uniqueConclusions.ts";
 
 /** Banned newspaper wrap-ups — never publish. */
 export const NEWSPAPER_WRAP_UP_PATTERNS: RegExp[] = [

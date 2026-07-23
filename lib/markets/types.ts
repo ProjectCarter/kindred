@@ -4,7 +4,7 @@ import type {
   MARKET_STATUS,
   MARKET_TYPE,
   POPULATION_TIER,
-} from "./constants";
+} from "./constants.ts";
 import type { PopulationTier } from "./marketRolloutScoring.ts";
 
 export type UsMarketStatus = (typeof MARKET_STATUS)[number];

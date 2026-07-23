@@ -3,7 +3,7 @@
  * Hero Artwork is a separate desk from editorial photography (_shared/images/*).
  */
 
-import type { HeroArtworkCollectionId } from "./collections";
+import type { HeroArtworkCollectionId } from "./collections.ts";
 
 export type HeroArtworkOrientation = "portrait" | "landscape" | "square";
 

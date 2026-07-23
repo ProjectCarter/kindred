@@ -5,23 +5,23 @@
  * Does not change retrieval, scoring, validation, or See All ordering.
  */
 
-import type { LocalEventCard } from "./localEvents";
-import { authorizedEventImageUrl } from "./localEvents";
+import type { LocalEventCard } from "./localEvents.ts";
+import { authorizedEventImageUrl } from "./localEvents.ts";
 import {
   parseEventStartDate,
   resolveCardHorizon,
-} from "./eventHorizon";
-import { meetsLocalEventPublishThreshold } from "./editorialPublishing";
-import { resolveMajorLocalTeamHomepageBoost } from "./majorLocalTeams";
+} from "./eventHorizon.ts";
+import { meetsLocalEventPublishThreshold } from "./editorialPublishing.ts";
+import { resolveMajorLocalTeamHomepageBoost } from "./majorLocalTeams.ts";
 import {
   LOCAL_EVENTS_HOMEPAGE_DIVERSITY_WEIGHTS,
   normalizeSpreadKey,
   selectEditorialSpread,
-} from "./editorialDiversity";
+} from "./editorialDiversity.ts";
 import {
   assessLocalEventHomepageEditorial,
   filterLocalEventsForHomepageCuration,
-} from "./localEventsHomepageEditorial";
+} from "./localEventsHomepageEditorial.ts";
 
 /** Editorial desks for a balanced front page — targets are ideals, not quotas. */
 export type LocalEventsHomepageDesk =

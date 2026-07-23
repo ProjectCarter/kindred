@@ -7,8 +7,8 @@ import {
   HOMETOWN_TEAM_HOMEPAGE_BOOST,
   type HometownTeamTier,
   type SportsMarketCatalogEntry,
-} from "./catalog";
-import type { SportEventIconKey } from "../sportEventIcon";
+} from "./catalog.ts";
+import type { SportEventIconKey } from "../sportEventIcon.ts";
 
 export type HometownTeamMatch = {
   teamName: string;

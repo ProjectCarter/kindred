@@ -29,7 +29,7 @@ import type { LocalEvent } from "../localEvents/provider.ts";
 import { isPlaceholderCopy } from "../contentQuality.ts";
 import type { LeadStory } from "../leadStory/types.ts";
 import type { LocalNewsContentType } from "../../../../lib/edition/localNewsDesk.ts";
-import { parseWeatherSnapshot } from "../weather/weatherSnapshot.ts";
+import { parseWeatherSnapshot } from "../../../../lib/weather/weatherSnapshot.ts";
 import {
   validateSummaryConditionPhrase,
   validateSummaryCurrentTemp,

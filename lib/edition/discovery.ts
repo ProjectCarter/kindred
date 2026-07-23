@@ -4,8 +4,8 @@
  * Every future recommendation surface should use this same engine.
  */
 
-import { isInternalScoreLabel } from "./contentQuality";
-import { containsEngineLanguage } from "./editorialVoice";
+import { isInternalScoreLabel } from "./contentQuality.ts";
+import { containsEngineLanguage } from "./editorialVoice.ts";
 
 export type DiscoverySurface =
   | "bandits_picks"
@@ -91,9 +91,9 @@ export type DiscoveryItem = {
     sourcePageUrl?: string | null;
     attributionText?: string | null;
   } | null;
-  knowledgeGrounding?: import("./knowledgeGrounding").KnowledgeLookupResult | null;
+  knowledgeGrounding?: import("./knowledgeGrounding.ts").KnowledgeLookupResult | null;
   /** Internal editorial confidence — never shown to readers. */
-  editorialConfidence?: import("./editorialConfidence").EditorialConfidence | null;
+  editorialConfidence?: import("./editorialConfidence.ts").EditorialConfidence | null;
   /** Kindred Venue Editorial Score — recommendation strength, not provider rating. */
   venueEditorial?: {
     score: number;

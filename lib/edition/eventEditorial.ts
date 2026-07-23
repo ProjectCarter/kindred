@@ -3,27 +3,27 @@
  * Editorial law: docs/editorial/EVENT_EDITORIAL_STANDARD.md
  */
 
-import type { LocalEventCard, LocalEventCategory } from "./localEvents";
-import { eventCategoryLabel } from "./localEvents";
-import { containsEngineLanguage } from "./editorialVoice";
-import { containsGenericAiPhrase } from "./editorialIntelligence";
+import type { LocalEventCard, LocalEventCategory } from "./localEvents.ts";
+import { eventCategoryLabel } from "./localEvents.ts";
+import { containsEngineLanguage } from "./editorialVoice.ts";
+import { containsGenericAiPhrase } from "./editorialIntelligence.ts";
 import {
   filterHumanDetailParagraphs,
   humanDetailObservationForEventCategory,
-} from "./humanDetails";
+} from "./humanDetails.ts";
 import {
   ensureLastingImpressionClosing,
   lastingImpressionClosingForEvent,
-} from "./lastingImpression";
+} from "./lastingImpression.ts";
 import {
   filterSourceConfidenceParagraphs,
-} from "./sourceConfidence";
+} from "./sourceConfidence.ts";
 import {
   applyEditionVarietyToBody,
   buildVarietySeed,
-} from "./editionVariety";
-import type { EventInfoBadgeId } from "./eventBadges";
-import { passesEventGoldenTest } from "./eventStorytelling";
+} from "./editionVariety.ts";
+import type { EventInfoBadgeId } from "./eventBadges.ts";
+import { passesEventGoldenTest } from "./eventStorytelling.ts";
 
 /** Permanently banned — never publish in Bandit's Note or event articles. */
 export const BANNED_EVENT_EDITORIAL_PATTERNS: RegExp[] = [

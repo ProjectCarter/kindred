@@ -3,12 +3,12 @@
  * Editorial law: docs/editorial/EVENT_STORYTELLING_STANDARD.md
  */
 
-import type { LocalEventCard, LocalEventCategory } from "./localEvents";
+import type { LocalEventCard, LocalEventCategory } from "./localEvents.ts";
 import {
   extractLastParagraph,
   passesUniqueConclusionTest,
-} from "./uniqueConclusions";
-import { passesLastingThoughtTest } from "./memorableWriting";
+} from "./uniqueConclusions.ts";
+import { passesLastingThoughtTest } from "./memorableWriting.ts";
 
 export type EventStoryType =
   | "concert"
