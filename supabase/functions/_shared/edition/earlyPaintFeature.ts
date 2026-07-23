@@ -1,8 +1,10 @@
 /** Server mirror — lib/edition/earlyPaintFeature.ts */
-export {
+import {
   EDITION_EARLY_PAINT_DEFAULT,
   isEditionEarlyPaintEnabledClientDefault,
 } from "../../../../lib/edition/earlyPaintFeature.ts";
+
+export { EDITION_EARLY_PAINT_DEFAULT, isEditionEarlyPaintEnabledClientDefault };
 
 /**
  * Production early-paint toggle — server env only, never client-exposed.

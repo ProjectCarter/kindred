@@ -112,6 +112,8 @@ async function resetJob() {
   if (error) throw new Error(error.message);
 }
 
+const PIPELINE_COMPLETE_STAGES = ["publish_edition", "finalize_edition"];
+
 async function waitForReady(timeoutMs = 900_000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -124,19 +126,21 @@ async function waitForReady(timeoutMs = 900_000) {
       .maybeSingle();
 
     const completed = job?.completed_stages ?? [];
-    const finalized = completed.includes("finalize_edition");
+    const pipelineComplete = PIPELINE_COMPLETE_STAGES.some((stage) =>
+      completed.includes(stage)
+    );
     console.log("[poll]", {
       status: job?.status,
       stage: job?.build_stage,
       stages: completed.length,
-      finalized,
+      pipelineComplete,
       err: job?.last_error?.slice?.(0, 120),
     });
 
     if (job?.status === "failed") {
       throw new Error(job.last_error ?? "generation failed");
     }
-    if (finalized && (job?.status === "completed" || job?.status === "ready")) {
+    if (pipelineComplete && (job?.status === "completed" || job?.status === "ready")) {
       return job;
     }
 
@@ -155,7 +159,7 @@ async function waitForReady(timeoutMs = 900_000) {
 
     await new Promise((r) => setTimeout(r, 15_000));
   }
-  throw new Error("timed out waiting for finalize_edition");
+  throw new Error("timed out waiting for publish_edition");
 }
 
 const beforeYesterday = await snapshotDay(YESTERDAY);

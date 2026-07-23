@@ -76,7 +76,10 @@ import type { RunUserGenerationJobInput } from "./runUserGenerationJob.ts";
 import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.ts";
 import { filterEventsForLocalEventsDesk } from "./editionSectionOwnership.ts";
 import { allocateDiscoverySections } from "../discovery/sectionAllocation.ts";
+import { pruneDiscoveryPayloadByConfidence } from "../editorial/confidencePayload.ts";
+import { discoverySurfaceItemCount } from "../editionCompleteness.ts";
 import { buildHistoryAroundTownForEdition } from "../historyAroundTown/library.ts";
+import type { HistoryAroundTownEditionPayload } from "../historyAroundTown/types.ts";
 import { isEditionEarlyPaintEnabled } from "./earlyPaintFeature.ts";
 import {
   buildValidationStageDiagnostic,
@@ -106,6 +109,38 @@ import {
 import { recordEditionPipelineHealth } from "./editionHealthPersistence.ts";
 import { recordEditionQuality } from "./editionQualityPersistence.ts";
 import { recordPipelineStageTiming } from "./editionPipelineHealth.ts";
+import { probeUsNationalDailyCache } from "../nationalDaily/resolveUsNationalDaily.ts";
+import {
+  buildFreshnessDecision,
+  isSectionForceRefreshRequested,
+} from "../../../../lib/edition/sectionFreshness.ts";
+import {
+  logSectionFreshnessDecision,
+  loadValidMetroSectionCache,
+  saveMetroSectionCache,
+} from "./metroSectionCache.ts";
+import {
+  isEventsEnabled,
+  isActivitiesEnabled,
+  isFoodDrinksEnabled,
+  isHistoryAroundTownEnabled,
+  isMasterpieceEnabled,
+  isTodayInHistoryEnabled,
+} from "./editionSectionFlags.ts";
+import {
+  buildMetroEventsCandidatePool,
+  buildMetroPlacesCandidatePool,
+  buildMetroHistoryCandidatePool,
+} from "./buildMetroSectionPool.ts";
+import {
+  buildLocalEventsSectionFromPool,
+  assembleDiscoveryFromPlacesPool,
+  buildFoodDrinksSectionBodyFromDiscovery,
+  assembleHistoryAroundTownFromPool,
+  type ReaderAssemblyContext,
+} from "./assembleMetroForReader.ts";
+import { parseMetroPlacesPool } from "../../../../lib/edition/metroPoolPayload.ts";
+import { KINDRED_METRO_CACHE_VERSION } from "../../../../lib/edition/metroCacheVersion.ts";
 
 export type StagedBuildJobRow = {
   id: string;
@@ -134,6 +169,28 @@ type BuildState = {
   discovery?: DiscoveryPayload;
   editorial?: Awaited<ReturnType<typeof runLocalEditorialDecisions>>;
 };
+
+function pruneAssembledDiscoveryPayload(
+  discovery: DiscoveryPayload
+): DiscoveryPayload {
+  const before = discovery;
+  const pruned = pruneDiscoveryPayloadByConfidence(discovery);
+  if (
+    discoverySurfaceItemCount(pruned) === 0 &&
+    discoverySurfaceItemCount(before) > 0
+  ) {
+    console.warn(
+      "[runStagedEditionBuild] confidence prune removed all discovery surfaces — keeping pre-prune payload"
+    );
+    return before;
+  }
+  console.log("[runStagedEditionBuild] discovery editorial confidence prune complete", {
+    pickCount: pruned.picks.length,
+    surfaceItems: discoverySurfaceItemCount(pruned),
+    enrichQueue: pruned.selectionMeta.enrichQueue?.length ?? 0,
+  });
+  return pruned;
+}
 
 async function loadJob(
   admin: SupabaseClient,
@@ -238,7 +295,55 @@ async function runInitializeStage(
 async function runGenerateNationalStage(
   admin: SupabaseClient,
   ctx: StageContext
-): Promise<{ itemCount: number; payloadBytes: number }> {
+): Promise<{ itemCount: number; payloadBytes: number; skipped?: boolean }> {
+  if (!isMasterpieceEnabled() && !isTodayInHistoryEnabled()) {
+    logSectionFreshnessDecision(
+      buildFreshnessDecision({
+        section: "today_masterpiece",
+        metroKey: null,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "section_disabled",
+      }),
+      ctx.traceId,
+      { cache_status: "section_disabled", Claude_called: false }
+    );
+    return { itemCount: 0, payloadBytes: 0, skipped: true };
+  }
+
+  const forceNational =
+    isSectionForceRefreshRequested("today_masterpiece", ctx.forceRefreshSections) ||
+    isSectionForceRefreshRequested("today_in_history", ctx.forceRefreshSections);
+
+  if (!forceNational) {
+    const cached = await probeUsNationalDailyCache(admin, ctx.editionDate);
+    if (cached) {
+      const decision = buildFreshnessDecision({
+        section: "today_masterpiece",
+        metroKey: null,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "national_daily_cache_hit",
+      });
+      logSectionFreshnessDecision(decision, ctx.traceId);
+      const historyDecision = buildFreshnessDecision({
+        section: "today_in_history",
+        metroKey: null,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "national_daily_cache_hit",
+      });
+      logSectionFreshnessDecision(historyDecision, ctx.traceId);
+      return { itemCount: 3, payloadBytes: 0, skipped: true };
+    }
+  }
+
   const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY")?.trim();
   const newsApiKey = Deno.env.get("NEWS_API_KEY")?.trim();
   if (!anthropicApiKey) {
@@ -247,6 +352,19 @@ async function runGenerateNationalStage(
   if (isNewsSectionsEnabled() && !newsApiKey) {
     throw new Error("NEWS_API_KEY missing — cannot generate national daily");
   }
+
+  logSectionFreshnessDecision(
+    buildFreshnessDecision({
+      section: "today_masterpiece",
+      metroKey: null,
+      nationalContentDate: ctx.editionDate,
+      record: null,
+      forceRefresh: forceNational,
+      claudeGenerationTriggered: true,
+      reason: forceNational ? "force_refresh_requested" : "national_daily_cache_miss",
+    }),
+    ctx.traceId
+  );
 
   const national = await generateUsNationalDailyForEditionDate(admin, {
     editionDate: ctx.editionDate,
@@ -279,7 +397,8 @@ async function runAttachNationalStage(
     );
   }
 
-  const morningHero = national.todayMasterpiece?.presentation ?? null;
+  const morningHero =
+    isMasterpieceEnabled() ? (national.todayMasterpiece?.presentation ?? null) : null;
   const patch: Record<string, unknown> = {
     us_national_daily_id: national.id,
     ...(isNewsSectionsEnabled()
@@ -299,7 +418,7 @@ async function runAttachNationalStage(
     .eq("id", ctx.editionId);
   if (error) throw new Error(error.message);
 
-  if (national.todayInHistory) {
+  if (national.todayInHistory && isTodayInHistoryEnabled()) {
     await upsertEditionSection(admin, {
       edition_id: ctx.editionId,
       section_type: "today_in_history",
@@ -442,101 +561,166 @@ async function runWeatherStage(
   };
 }
 
+function readerAssemblyContext(ctx: StageContext): ReaderAssemblyContext {
+  return {
+    editionDate: ctx.editionDate,
+    city: ctx.location.city,
+    region: ctx.location.region,
+    state: ctx.location.state,
+    readerLat: ctx.location.lat,
+    readerLon: ctx.location.lon,
+  };
+}
+
+async function persistWallClockVerifiedLocalEvents(
+  admin: SupabaseClient,
+  ctx: StageContext,
+  readerCtx: ReaderAssemblyContext,
+  candidates: LocalEvent[],
+  foodDrinkEventReroutes: LocalEvent[] = []
+): Promise<{ localEvents: LocalEvent[]; sectionBody: string } | null> {
+  const eventTimezone = resolveEventTimezone(ctx.location);
+  const publishable = assertEventsVerifiedForPublication(candidates, {
+    now: new Date(),
+    location: ctx.location,
+    eventTimezone,
+    editionDate: ctx.editionDate,
+  });
+  if (!publishable.length) return null;
+
+  const sectionBody = buildLocalEventsBody(publishable, { editionCity: readerCtx.city });
+  await upsertEditionSection(admin, {
+    edition_id: ctx.editionId,
+    section_type: "local_events",
+    position: 3,
+    headline: "A Few Things Happening Around Town",
+    body: sectionBody,
+    source_note: "Curated from trusted local event sources",
+  });
+  await maybeMarkEditionPaintable(admin, ctx.editionId);
+  return { localEvents: publishable, sectionBody };
+}
+
 async function runLocalEventsStage(
   admin: SupabaseClient,
   ctx: StageContext,
   buildState: BuildState
 ): Promise<{ localEvents: LocalEvent[]; itemCount: number; payloadBytes: number }> {
-  const eventsLocation = ctx.location;
-  const eventTimezone = resolveEventTimezone(eventsLocation);
-  const editionDateObj = new Date(
-    Number(ctx.editionDate.slice(0, 4)),
-    Number(ctx.editionDate.slice(5, 7)) - 1,
-    Number(ctx.editionDate.slice(8, 10))
-  );
+  if (!isEventsEnabled()) {
+    logSectionFreshnessDecision(
+      buildFreshnessDecision({
+        section: "local_events",
+        metroKey: ctx.metroKey,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "section_disabled",
+      }),
+      ctx.traceId,
+      { cache_status: "section_disabled", Claude_called: false }
+    );
+    return { localEvents: [], itemCount: 0, payloadBytes: 0 };
+  }
 
-  let raw = await getLocalEvents(eventsLocation, {
+  const started = Date.now();
+  const readerCtx = readerAssemblyContext(ctx);
+  const { record: cachedEvents, decision } = await loadValidMetroSectionCache(admin, {
+    sectionType: "local_events",
+    metroKey: ctx.metroKey,
+    editionDate: ctx.editionDate,
+    forceRefreshSections: ctx.forceRefreshSections,
+    traceId: ctx.traceId,
+  });
+
+  let poolPayload = cachedEvents?.payload;
+  let claudeCalled = false;
+
+  if (poolPayload) {
+    const assembled = buildLocalEventsSectionFromPool(poolPayload, readerCtx);
+    if (assembled?.localEvents.length) {
+      const persisted = await persistWallClockVerifiedLocalEvents(
+        admin,
+        ctx,
+        readerCtx,
+        assembled.localEvents,
+        assembled.foodDrinkEventReroutes ?? []
+      );
+      if (persisted) {
+        buildState.localEvents = persisted.localEvents;
+        buildState.foodDrinkEventReroutes = assembled.foodDrinkEventReroutes ?? [];
+        logSectionFreshnessDecision(decision, ctx.traceId, {
+          cache_status: "cache_hit_valid",
+          cache_version: cachedEvents?.content_version ?? null,
+          item_count: persisted.localEvents.length,
+          duration_ms: Date.now() - started,
+          Claude_called: false,
+        });
+        return {
+          localEvents: persisted.localEvents,
+          itemCount: persisted.localEvents.length,
+          payloadBytes: estimateJsonBytes(persisted),
+        };
+      }
+    }
+  }
+
+  const pool = await buildMetroEventsCandidatePool(
     admin,
-    catalogMetroKey: ctx.catalogMetroKey,
-    editionDate: ctx.editionDate,
-    timezone: eventTimezone,
-  });
-
-  if (ctx.editionMarket) {
-    raw = filterLocalEventsByMarket(raw, ctx.editionMarket, ctx.marketAnchor).kept;
-  }
-
-  const familyFiltered = filterFamilyFriendlyEvents(raw);
-  if (familyFiltered.filteredCount > 0) {
-    console.log("[runStagedEditionBuild] local_events family filter", {
-      traceId: ctx.traceId,
-      filteredCount: familyFiltered.filteredCount,
-      samples: familyFiltered.samples,
-    });
-  }
-
-  const owned = filterEventsForLocalEventsDesk(familyFiltered.kept);
-  if (owned.reroutedFood.length > 0 || owned.excluded.length > 0) {
-    console.log("[runStagedEditionBuild] local_events desk ownership", {
-      traceId: ctx.traceId,
-      kept: owned.kept.length,
-      reroutedFood: owned.reroutedFood.length,
-      excluded: owned.excluded.length,
-      reroutedSamples: owned.reroutedFood.slice(0, 3).map((e) => e.name),
-    });
-  }
-
-  const allocated = allocateLocalEventsByHorizon(owned.kept, {
-    maxTotal: LOCAL_EVENTS_EDITION_SURFACED_MAX,
-    now: editionDateObj,
-    readerCity: ctx.location.city,
-    readerLat: ctx.location.lat,
-    readerLon: ctx.location.lon,
-  });
-
-  const reservePool = owned.kept.filter(
-    (candidate) =>
-      !allocated.some(
-        (picked) =>
-          `${picked.name}|${picked.startDateTime}`.toLowerCase() ===
-          `${candidate.name}|${candidate.startDateTime}`.toLowerCase()
-      )
-  );
-
-  let publishable: LocalEvent[] = [];
-  if (allocated.length > 0) {
-    publishable = await surfaceLocalEventsForEdition(allocated, reservePool, {
+    {
+      location: ctx.location,
+      catalogMetroKey: ctx.catalogMetroKey,
       editionDate: ctx.editionDate,
-      allowAiEnrichment: Boolean(Deno.env.get("ANTHROPIC_API_KEY")),
-      homepageMinimum: HOMEPAGE_INITIAL_RENDER_COUNT,
-      now: editionDateObj,
-      readerCity: ctx.location.city,
-      readerLat: ctx.location.lat,
-      readerLon: ctx.location.lon,
-    });
-  }
+      editionMarket: ctx.editionMarket,
+      marketAnchor: ctx.marketAnchor,
+      traceId: ctx.traceId,
+    },
+    { allowAiEnrichment: Boolean(Deno.env.get("ANTHROPIC_API_KEY")) }
+  );
+  claudeCalled = Boolean(Deno.env.get("ANTHROPIC_API_KEY"));
 
-  publishable = assertEventsVerifiedForPublication(publishable, {
-    now: new Date(),
-    location: eventsLocation,
-    eventTimezone,
+  await saveMetroSectionCache(admin, {
+    sectionType: "local_events",
+    metroKey: ctx.metroKey,
     editionDate: ctx.editionDate,
+    payload: pool,
+    contentVersion: KINDRED_METRO_CACHE_VERSION,
   });
 
-  if (publishable.length > 0) {
-    await upsertEditionSection(admin, {
-      edition_id: ctx.editionId,
-      section_type: "local_events",
-      position: 3,
-      headline: "A Few Things Happening Around Town",
-      body: buildLocalEventsBody(publishable, { editionCity: ctx.location.city }),
-      source_note: "Curated from trusted local event sources",
-    });
-    await maybeMarkEditionPaintable(admin, ctx.editionId);
-  }
+  const assembled = buildLocalEventsSectionFromPool(pool, readerCtx);
+  const persisted = assembled?.localEvents.length
+    ? await persistWallClockVerifiedLocalEvents(
+        admin,
+        ctx,
+        readerCtx,
+        assembled.localEvents,
+        assembled.foodDrinkEventReroutes ?? []
+      )
+    : null;
+  const publishable = persisted?.localEvents ?? [];
 
   buildState.localEvents = publishable;
-  buildState.foodDrinkEventReroutes = owned.reroutedFood;
+  buildState.foodDrinkEventReroutes = assembled?.foodDrinkEventReroutes ?? [];
+  logSectionFreshnessDecision(
+    buildFreshnessDecision({
+      section: "local_events",
+      metroKey: ctx.metroKey,
+      nationalContentDate: ctx.editionDate,
+      record: null,
+      forceRefresh: isSectionForceRefreshRequested("local_events", ctx.forceRefreshSections),
+      claudeGenerationTriggered: claudeCalled,
+      reason: poolPayload ? "pool_regenerated_after_invalid_cache" : "metro_pool_generated",
+    }),
+    ctx.traceId,
+    {
+      cache_status: "generated",
+      cache_version: KINDRED_METRO_CACHE_VERSION,
+      item_count: publishable.length,
+      duration_ms: Date.now() - started,
+      Claude_called: claudeCalled,
+    }
+  );
+
   return {
     localEvents: publishable,
     itemCount: publishable.length,
@@ -549,52 +733,128 @@ async function runActivitiesStage(
   ctx: StageContext,
   buildState: BuildState
 ): Promise<{ discovery: DiscoveryPayload; itemCount: number; payloadBytes: number }> {
-  if (!buildState.localPlaces) {
-    let places = await getLocalPlacesForEdition(admin, ctx.location, {
-      catalogMetroKey: ctx.catalogMetroKey,
-    });
-    if (ctx.editionMarket) {
-      places = filterPlacesByMarket(places, ctx.editionMarket, ctx.marketAnchor).kept;
+  if (!isActivitiesEnabled()) {
+    logSectionFreshnessDecision(
+      buildFreshnessDecision({
+        section: "activities",
+        metroKey: ctx.metroKey,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "section_disabled",
+      }),
+      ctx.traceId,
+      { cache_status: "section_disabled", Claude_called: false }
+    );
+    const emptyDiscovery = buildState.discovery;
+    if (emptyDiscovery) {
+      return { discovery: emptyDiscovery, itemCount: 0, payloadBytes: 0 };
     }
-    buildState.localPlaces = places;
+    return {
+      discovery: {
+        version: 1,
+        generatedAt: new Date().toISOString(),
+        editionDate: ctx.editionDate,
+        location: {
+          city: ctx.location.city,
+          region: ctx.location.region,
+          state: ctx.location.state,
+          lat: ctx.location.lat,
+          lon: ctx.location.lon,
+        },
+        surfaces: {},
+        picks: [],
+        editorBrief: "",
+        selectionMeta: {
+          candidateCount: 0,
+          selectedCount: 0,
+          editorNotes: [],
+        },
+      },
+      itemCount: 0,
+      payloadBytes: 0,
+    };
   }
 
-  const localEventsForDiscovery = (buildState.localEvents ?? []).filter(
-    (event) =>
-      filterEventsForLocalEventsDesk([event]).kept.length > 0
-  );
-
-  const personalization = await loadPersonalizationProfile(admin, ctx.userId, ctx.location);
-  const discovery = runDiscoveryDecisions({
+  const started = Date.now();
+  const readerCtx = readerAssemblyContext(ctx);
+  const { record: cachedActivities } = await loadValidMetroSectionCache(admin, {
+    sectionType: "activities",
+    metroKey: ctx.metroKey,
     editionDate: ctx.editionDate,
-    now: new Date(),
-    city: ctx.location.city,
-    region: ctx.location.region,
-    state: ctx.location.state,
-    readerLat: ctx.location.lat,
-    readerLon: ctx.location.lon,
-    interests: personalization.interests,
-    followedTopics: personalization.followedTopics,
-    favoriteSources: personalization.favoriteSources,
-    weatherSummary: null,
-    weatherIntel: null,
-    npsParks: [],
-    isWeekend: false,
-    isSunday: false,
-    localEvents: localEventsForDiscovery,
-    localPlaces: buildState.localPlaces as Parameters<
-      typeof runDiscoveryDecisions
-    >[0]["localPlaces"],
-    recentKeys: [],
+    forceRefreshSections: ctx.forceRefreshSections,
+    traceId: ctx.traceId,
   });
 
+  let placesPool = cachedActivities?.payload
+    ? parseMetroPlacesPool(cachedActivities.payload)
+    : null;
+
+  if (!placesPool) {
+    placesPool = await buildMetroPlacesCandidatePool(admin, {
+      location: ctx.location,
+      catalogMetroKey: ctx.catalogMetroKey,
+      editionDate: ctx.editionDate,
+      editionMarket: ctx.editionMarket,
+      marketAnchor: ctx.marketAnchor,
+      traceId: ctx.traceId,
+    });
+    await saveMetroSectionCache(admin, {
+      sectionType: "activities",
+      metroKey: ctx.metroKey,
+      editionDate: ctx.editionDate,
+      payload: placesPool,
+      contentVersion: KINDRED_METRO_CACHE_VERSION,
+    });
+  }
+
+  buildState.localPlaces = placesPool.localPlaces;
+  const personalization = await loadPersonalizationProfile(admin, ctx.userId, ctx.location);
+  const localEventsForDiscovery = (buildState.localEvents ?? []).filter(
+    (event) => filterEventsForLocalEventsDesk([event]).kept.length > 0
+  );
+
+  let discovery = pruneAssembledDiscoveryPayload(
+    assembleDiscoveryFromPlacesPool({
+    localPlaces: placesPool.localPlaces as Parameters<
+      typeof assembleDiscoveryFromPlacesPool
+    >[0]["localPlaces"],
+    localEvents: localEventsForDiscovery,
+    ctx: {
+      ...readerCtx,
+      interests: personalization.interests,
+      followedTopics: personalization.followedTopics,
+      favoriteSources: personalization.favoriteSources,
+    },
+    recentKeys: [],
+  })
+  );
+
   buildState.discovery = discovery;
-  await admin
-    .from("editions")
-    .update({ discovery })
-    .eq("id", ctx.editionId);
+  await admin.from("editions").update({ discovery }).eq("id", ctx.editionId);
 
   const activityCount = discovery.picks.filter((p) => p.category === "activities").length;
+  logSectionFreshnessDecision(
+    buildFreshnessDecision({
+      section: "activities",
+      metroKey: ctx.metroKey,
+      nationalContentDate: ctx.editionDate,
+      record: cachedActivities,
+      forceRefresh: isSectionForceRefreshRequested("activities", ctx.forceRefreshSections),
+      claudeGenerationTriggered: false,
+      reason: cachedActivities ? "cache_hit_assembled_for_reader" : "metro_pool_generated",
+    }),
+    ctx.traceId,
+    {
+      cache_status: cachedActivities ? "cache_hit_valid" : "generated",
+      cache_version: cachedActivities?.content_version ?? KINDRED_METRO_CACHE_VERSION,
+      item_count: activityCount,
+      duration_ms: Date.now() - started,
+      Claude_called: false,
+    }
+  );
+
   return {
     discovery,
     itemCount: activityCount,
@@ -607,69 +867,103 @@ async function runFoodDrinksStage(
   ctx: StageContext,
   buildState: BuildState
 ): Promise<{ itemCount: number; payloadBytes: number }> {
+  if (!isFoodDrinksEnabled()) {
+    logSectionFreshnessDecision(
+      buildFreshnessDecision({
+        section: "food_drinks",
+        metroKey: ctx.metroKey,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "section_disabled",
+      }),
+      ctx.traceId,
+      { cache_status: "section_disabled", Claude_called: false }
+    );
+    return { itemCount: 0, payloadBytes: 0 };
+  }
+
+  const started = Date.now();
+  const readerCtx = readerAssemblyContext(ctx);
   let discovery = buildState.discovery;
+
   if (!discovery) {
-    if (!buildState.localPlaces) {
-      let places = await getLocalPlacesForEdition(admin, ctx.location, {
+    const placesPool =
+      parseMetroPlacesPool(
+        (
+          await loadValidMetroSectionCache(admin, {
+            sectionType: "activities",
+            metroKey: ctx.metroKey,
+            editionDate: ctx.editionDate,
+            forceRefreshSections: ctx.forceRefreshSections,
+            traceId: ctx.traceId,
+          })
+        ).record?.payload
+      ) ??
+      (await buildMetroPlacesCandidatePool(admin, {
+        location: ctx.location,
         catalogMetroKey: ctx.catalogMetroKey,
-      });
-      if (ctx.editionMarket) {
-        places = filterPlacesByMarket(places, ctx.editionMarket, ctx.marketAnchor).kept;
-      }
-      buildState.localPlaces = places;
-    }
+        editionDate: ctx.editionDate,
+        editionMarket: ctx.editionMarket,
+        marketAnchor: ctx.marketAnchor,
+        traceId: ctx.traceId,
+      }));
 
     const personalization = await loadPersonalizationProfile(admin, ctx.userId, ctx.location);
-    discovery = runDiscoveryDecisions({
-      editionDate: ctx.editionDate,
-      now: new Date(),
-      city: ctx.location.city,
-      region: ctx.location.region,
-      state: ctx.location.state,
-      readerLat: ctx.location.lat,
-      readerLon: ctx.location.lon,
-      interests: personalization.interests,
-      followedTopics: personalization.followedTopics,
-      favoriteSources: personalization.favoriteSources,
-      weatherSummary: null,
-      weatherIntel: null,
-      npsParks: [],
-      isWeekend: false,
-      isSunday: false,
+    discovery = pruneAssembledDiscoveryPayload(
+      assembleDiscoveryFromPlacesPool({
+      localPlaces: placesPool.localPlaces as Parameters<
+        typeof assembleDiscoveryFromPlacesPool
+      >[0]["localPlaces"],
       localEvents: (buildState.localEvents ?? []).filter(
         (event) => filterEventsForLocalEventsDesk([event]).kept.length > 0
       ),
-      localPlaces: buildState.localPlaces as Parameters<
-        typeof runDiscoveryDecisions
-      >[0]["localPlaces"],
-      recentKeys: [],
-    });
+      ctx: {
+        ...readerCtx,
+        interests: personalization.interests,
+        followedTopics: personalization.followedTopics,
+        favoriteSources: personalization.favoriteSources,
+      },
+    })
+    );
     buildState.discovery = discovery;
   }
 
-  const allocation = allocateDiscoverySections(discovery);
-  const foodItems = allocation.recommendations;
+  const foodSectionBody = buildFoodDrinksSectionBodyFromDiscovery(discovery);
+  const foodItems = allocateDiscoverySections(discovery).recommendations;
 
-  if (foodItems.length > 0) {
+  if (foodSectionBody) {
     await upsertEditionSection(admin, {
       edition_id: ctx.editionId,
       section_type: "food_drinks",
       position: 6,
       headline: "Food & Drink",
-      body: JSON.stringify({
-        version: 1,
-        items: foodItems.map((item) => ({
-          id: item.item.id,
-          title: item.item.title,
-          category: item.item.category,
-          score: item.score,
-        })),
-      }),
+      body: foodSectionBody,
       source_note: "Kindred Food & Drink desk",
     });
   }
 
   await admin.from("editions").update({ discovery }).eq("id", ctx.editionId);
+
+  logSectionFreshnessDecision(
+    buildFreshnessDecision({
+      section: "food_drinks",
+      metroKey: ctx.metroKey,
+      nationalContentDate: ctx.editionDate,
+      record: null,
+      forceRefresh: isSectionForceRefreshRequested("food_drinks", ctx.forceRefreshSections),
+      claudeGenerationTriggered: false,
+      reason: "assembled_for_reader",
+    }),
+    ctx.traceId,
+    {
+      cache_status: "skipped",
+      item_count: foodItems.length,
+      duration_ms: Date.now() - started,
+      Claude_called: false,
+    }
+  );
 
   return {
     itemCount: foodItems.length,
@@ -681,26 +975,53 @@ async function attachHistoryAroundTownToEdition(
   admin: SupabaseClient,
   ctx: StageContext
 ): Promise<{ placeCount: number; carouselCount: number; payloadBytes: number }> {
-  let historyAroundTown = null;
-  try {
-    historyAroundTown = await buildHistoryAroundTownForEdition(admin, {
-      city: ctx.location.city,
-      state: ctx.location.state,
-      region: ctx.location.region,
-      lat: ctx.location.lat,
-      lon: ctx.location.lon,
-    });
-  } catch (err) {
-    console.warn("[historyAroundTown:staged] attach failed", {
-      editionId: ctx.editionId,
-      metroKey: ctx.metroKey,
-      message: err instanceof Error ? err.message : String(err),
-    });
+  if (!isHistoryAroundTownEnabled()) {
+    logSectionFreshnessDecision(
+      buildFreshnessDecision({
+        section: "history_around_town",
+        metroKey: ctx.metroKey,
+        nationalContentDate: ctx.editionDate,
+        record: null,
+        forceRefresh: false,
+        claudeGenerationTriggered: false,
+        reason: "section_disabled",
+      }),
+      ctx.traceId,
+      { cache_status: "section_disabled", Claude_called: false }
+    );
     return { placeCount: 0, carouselCount: 0, payloadBytes: 0 };
   }
 
+  const started = Date.now();
+  const readerCtx = readerAssemblyContext(ctx);
+  const { record: cachedHistory } = await loadValidMetroSectionCache(admin, {
+    sectionType: "history_around_town",
+    metroKey: ctx.metroKey,
+    editionDate: ctx.editionDate,
+    forceRefreshSections: ctx.forceRefreshSections,
+    traceId: ctx.traceId,
+  });
+
+  let poolPayload = cachedHistory?.payload;
+  if (!poolPayload) {
+    poolPayload = await buildMetroHistoryCandidatePool(admin, ctx.catalogMetroKey);
+    await saveMetroSectionCache(admin, {
+      sectionType: "history_around_town",
+      metroKey: ctx.metroKey,
+      editionDate: ctx.editionDate,
+      payload: poolPayload,
+      contentVersion: KINDRED_METRO_CACHE_VERSION,
+    });
+  }
+
+  const historyAroundTown = assembleHistoryAroundTownFromPool(
+    poolPayload,
+    readerCtx,
+    ctx.catalogMetroKey
+  );
+
   if (!historyAroundTown) {
-    console.warn("[historyAroundTown:staged] no approved places", {
+    console.warn("[historyAroundTown:staged] no approved places after assembly", {
       editionId: ctx.editionId,
       metroKey: ctx.metroKey,
       city: ctx.location.city,
@@ -722,6 +1043,29 @@ async function attachHistoryAroundTownToEdition(
     carousel: historyAroundTown.carousel.length,
   });
 
+  logSectionFreshnessDecision(
+    buildFreshnessDecision({
+      section: "history_around_town",
+      metroKey: ctx.metroKey,
+      nationalContentDate: ctx.editionDate,
+      record: cachedHistory,
+      forceRefresh: isSectionForceRefreshRequested(
+        "history_around_town",
+        ctx.forceRefreshSections
+      ),
+      claudeGenerationTriggered: false,
+      reason: cachedHistory ? "cache_hit_assembled_for_reader" : "metro_pool_generated",
+    }),
+    ctx.traceId,
+    {
+      cache_status: cachedHistory ? "cache_hit_valid" : "generated",
+      cache_version: cachedHistory?.content_version ?? KINDRED_METRO_CACHE_VERSION,
+      item_count: historyAroundTown.carousel.length,
+      duration_ms: Date.now() - started,
+      Claude_called: false,
+    }
+  );
+
   return {
     placeCount: historyAroundTown.places.length,
     carouselCount: historyAroundTown.carousel.length,
@@ -735,6 +1079,39 @@ async function runStoryOfStage(
 ): Promise<{ itemCount: number; payloadBytes: number }> {
   const historyAroundTown = await attachHistoryAroundTownToEdition(admin, ctx);
 
+  const { record: cachedStory } = await loadValidMetroSectionCache(admin, {
+    sectionType: "story_of",
+    metroKey: ctx.metroKey,
+    editionDate: ctx.editionDate,
+    forceRefreshSections: ctx.forceRefreshSections,
+    traceId: ctx.traceId,
+  });
+
+  if (cachedStory?.payload && typeof cachedStory.payload === "object") {
+    const cached = cachedStory.payload as {
+      version?: number;
+      headline?: string;
+      body?: string;
+      sourceNote?: string;
+    };
+    if (cached.headline?.trim() && cached.body?.trim()) {
+      await upsertEditionSection(admin, {
+        edition_id: ctx.editionId,
+        section_type: "story_of",
+        position: 5,
+        headline: cached.headline,
+        body: cached.body,
+        source_note: cached.sourceNote ?? "Kindred city history library",
+      });
+      await maybeMarkEditionPaintable(admin, ctx.editionId);
+      return {
+        itemCount: 1 + (historyAroundTown.placeCount > 0 ? 1 : 0),
+        payloadBytes:
+          estimateJsonBytes(cached.body) + historyAroundTown.payloadBytes,
+      };
+    }
+  }
+
   const article = await fetchApprovedCityArticle(admin, ctx.location);
   if (!article) {
     await maybeMarkEditionPaintable(admin, ctx.editionId);
@@ -744,15 +1121,40 @@ async function runStoryOfStage(
     };
   }
 
+  const sourceNote = cityArticleSourceNote(article);
   await upsertEditionSection(admin, {
     edition_id: ctx.editionId,
     section_type: "story_of",
     position: 5,
     headline: article.headline,
     body: article.body,
-    source_note: cityArticleSourceNote(article),
+    source_note: sourceNote,
   });
   await maybeMarkEditionPaintable(admin, ctx.editionId);
+
+  await saveMetroSectionCache(admin, {
+    sectionType: "story_of",
+    metroKey: ctx.metroKey,
+    editionDate: ctx.editionDate,
+    payload: {
+      version: 1,
+      headline: article.headline,
+      body: article.body,
+      sourceNote,
+    },
+  });
+  logSectionFreshnessDecision(
+    buildFreshnessDecision({
+      section: "story_of",
+      metroKey: ctx.metroKey,
+      nationalContentDate: ctx.editionDate,
+      record: null,
+      forceRefresh: isSectionForceRefreshRequested("story_of", ctx.forceRefreshSections),
+      claudeGenerationTriggered: false,
+      reason: "evergreen_library_saved",
+    }),
+    ctx.traceId
+  );
 
   return {
     itemCount: 1 + (historyAroundTown.placeCount > 0 ? 1 : 0),
@@ -1168,6 +1570,7 @@ type StageContext = {
   metroKey: string;
   editionId: string;
   traceId: string | null;
+  forceRefreshSections: readonly string[] | null;
   location: {
     city: string;
     region: string | null;
@@ -1231,6 +1634,7 @@ async function buildStageContext(
     metroKey: input.metroKey,
     editionId,
     traceId: input.editionTraceId ?? null,
+    forceRefreshSections: input.forceRefreshSections ?? null,
     location,
     editionMarket,
     catalogMetroKey: catalogMetroKeyForMarket(editionMarket),
@@ -1311,6 +1715,7 @@ export async function runEditionBuildStage(
           metroKey: input.metroKey,
           editionId: "",
           traceId: input.editionTraceId ?? null,
+          forceRefreshSections: input.forceRefreshSections ?? null,
           location,
           editionMarket,
           catalogMetroKey: catalogMetroKeyForMarket(editionMarket),

@@ -94,12 +94,31 @@ function deskReport(
   return { desk, status, checks, reasons, relatedBuildStages };
 }
 
+function hydratePersistedEventSchedule(raw: Record<string, unknown>): LocalEvent {
+  const event = raw as LocalEvent;
+  if (typeof event.startDateTime === "string" && event.startDateTime.trim()) {
+    return event;
+  }
+
+  const date =
+    typeof raw.date === "string" ? raw.date.trim().replace(/[·,\s]+$/, "") : "";
+  const time = typeof raw.time === "string" ? raw.time.trim() : "";
+  if (!date || !time) return event;
+
+  return {
+    ...event,
+    startDateTime: `${date} · ${time}`,
+  };
+}
+
 function parseLocalEvents(body: string | null | undefined): LocalEvent[] {
   if (!body?.trim()) return [];
   try {
     const parsed = JSON.parse(body) as { events?: unknown[] };
     return Array.isArray(parsed.events)
-      ? (parsed.events.filter((e) => e && typeof e === "object") as LocalEvent[])
+      ? parsed.events
+          .filter((e) => e && typeof e === "object")
+          .map((e) => hydratePersistedEventSchedule(e as Record<string, unknown>))
       : [];
   } catch {
     return [];
