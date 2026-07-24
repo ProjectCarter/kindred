@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 824" width="390" height="824" font-family="Helvetica, Arial, sans-serif">
+  <!-- REPLACE ME: drop a real 390x824 app screenshot at this path to swap the preview. -->
+  <defs>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C2A9EF"/>
+      <stop offset="1" stop-color="#8E63D6"/>
+    </linearGradient>
+  </defs>
+  <rect width="390" height="824" fill="#FDFCF9"/>
+
+  <!-- Masthead -->
+  <text x="195" y="70" text-anchor="middle" font-family="Georgia, serif" font-size="34" font-weight="700" fill="#20242E">Kindred</text>
+  <text x="195" y="94" text-anchor="middle" font-size="12" letter-spacing="2" fill="#6B7180">TUESDAY MORNING EDITION</text>
+  <line x1="28" y1="112" x2="362" y2="112" stroke="#EDE8DC" stroke-width="1.5"/>
+
+  <!-- Weather strip -->
+  <rect x="28" y="128" width="334" height="56" rx="16" fill="#F4EFFC"/>
+  <circle cx="58" cy="156" r="12" fill="#D8A63A"/>
+  <text x="82" y="152" font-size="16" font-weight="700" fill="#20242E">72 and clear</text>
+  <text x="82" y="171" font-size="12" fill="#6B7180">A perfect afternoon to be outside</text>
+
+  <!-- Hero story -->
+  <rect x="28" y="200" width="334" height="180" rx="20" fill="url(#hero)"/>
+  <text x="48" y="240" font-size="12" letter-spacing="1.5" fill="#FDFCF9" opacity="0.85">TODAY'S MASTERPIECE</text>
+  <text x="48" y="272" font-family="Georgia, serif" font-size="22" font-weight="700" fill="#FDFCF9">The light before</text>
+  <text x="48" y="298" font-family="Georgia, serif" font-size="22" font-weight="700" fill="#FDFCF9">the morning</text>
+  <text x="48" y="332" font-size="13" fill="#FDFCF9" opacity="0.85">A single work of art, and the story</text>
+  <text x="48" y="350" font-size="13" fill="#FDFCF9" opacity="0.85">behind it.</text>
+
+  <!-- Section header -->
+  <text x="28" y="422" font-family="Georgia, serif" font-size="18" font-weight="700" fill="#20242E">Around you today</text>
+
+  <!-- List cards -->
+  <g>
+    <rect x="28" y="440" width="334" height="70" rx="16" fill="#FFFFFF" stroke="#EDE8DC"/>
+    <rect x="44" y="458" width="34" height="34" rx="10" fill="#F4EFFC"/>
+    <text x="82" y="472" font-size="15" font-weight="700" fill="#20242E">Live music at Riverside Park</text>
+    <text x="82" y="492" font-size="12" fill="#6B7180">Free  -  6:00 PM  -  Downtown</text>
+  </g>
+  <g>
+    <rect x="28" y="522" width="334" height="70" rx="16" fill="#FFFFFF" stroke="#EDE8DC"/>
+    <rect x="44" y="540" width="34" height="34" rx="10" fill="#FBF0DC"/>
+    <text x="82" y="554" font-size="15" font-weight="700" fill="#20242E">A new taco spot worth the drive</text>
+    <text x="82" y="574" font-size="12" fill="#6B7180">Local favorite  -  Opens 11 AM</text>
+  </g>
+  <g>
+    <rect x="28" y="604" width="334" height="70" rx="16" fill="#FFFFFF" stroke="#EDE8DC"/>
+    <rect x="44" y="622" width="34" height="34" rx="10" fill="#E6F0E6"/>
+    <text x="82" y="636" font-size="15" font-weight="700" fill="#20242E">Golden-hour trail near you</text>
+    <text x="82" y="656" font-size="12" fill="#6B7180">2.4 mi  -  Easy  -  Dog friendly</text>
+  </g>
+  <g>
+    <rect x="28" y="686" width="334" height="70" rx="16" fill="#FFFFFF" stroke="#EDE8DC"/>
+    <rect x="44" y="704" width="34" height="34" rx="10" fill="#F0ECF9"/>
+    <text x="82" y="718" font-size="15" font-weight="700" fill="#20242E">The story behind Main Street</text>
+    <text x="82" y="738" font-size="12" fill="#6B7180">History around town</text>
+  </g>
+
+  <!-- Tab bar -->
+  <line x1="0" y1="776" x2="390" y2="776" stroke="#EDE8DC" stroke-width="1.5"/>
+  <circle cx="70" cy="800" r="6" fill="#8E63D6"/>
+  <circle cx="160" cy="800" r="6" fill="#C9C6D2"/>
+  <circle cx="250" cy="800" r="6" fill="#C9C6D2"/>
+  <circle cx="340" cy="800" r="6" fill="#C9C6D2"/>
+</svg>
