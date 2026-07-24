@@ -6,6 +6,7 @@ import {
   classifyEventListingSection,
   filterEventsForLocalEventsDesk,
 } from "./editionSectionOwnership.ts";
+import { isBusinessProfessionalEventCard } from "./businessEventFilter.ts";
 import {
   HOMEPAGE_INITIAL_RENDER_COUNT,
   LOCAL_EVENT_PUBLISH_MIN_SCORE,
@@ -458,6 +459,12 @@ export function parseLocalEventsBody(
     const localEventsOnly = owned.kept.filter(
       (event) => classifyEventListingSection(event) === "local_events"
     );
+    // Business / professional-development exclusion — Local Events only.
+    // Removes already-cached business listings before they reach the homepage.
+    const nonBusiness = localEventsOnly.filter(
+      (event) => !isBusinessProfessionalEventCard(event)
+    );
+    const businessDropped = localEventsOnly.length - nonBusiness.length;
     const ownershipDropped = [
       ...owned.reroutedFood,
       ...owned.excluded,
@@ -470,7 +477,9 @@ export function parseLocalEventsBody(
         afterNameFilter: mapped.length,
         afterValidation: valid.length,
         afterOwnership: localEventsOnly.length,
-        droppedCount: dropped.length + ownershipDropped.length,
+        afterBusinessFilter: nonBusiness.length,
+        businessDropped,
+        droppedCount: dropped.length + ownershipDropped.length + businessDropped,
       });
     }
 
@@ -478,8 +487,8 @@ export function parseLocalEventsBody(
       const oldest = parsedEventsBodyCache.keys().next().value;
       if (oldest) parsedEventsBodyCache.delete(oldest);
     }
-    parsedEventsBodyCache.set(cacheKey, localEventsOnly);
-    return localEventsOnly;
+    parsedEventsBodyCache.set(cacheKey, nonBusiness);
+    return nonBusiness;
   } catch (err) {
     if (__DEV__) {
       console.warn("[localEvents:parse] JSON parse failed", {

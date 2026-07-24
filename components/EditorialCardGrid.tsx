@@ -15,6 +15,7 @@ import { eventInfoBadgeAccessibilitySummary } from "../lib/edition/eventBadges";
 import { BanditCharacter } from "./BanditCharacter";
 import { EditorialTitle } from "./EditorialTitle";
 import { EventInfoBadgeRow } from "./EventInfoBadgeRow";
+import { CompactBrickRow, COMPACT_ROW_GAP } from "./CompactBrickRow";
 
 export type EditorialGridCard = {
   id: string;
@@ -59,7 +60,17 @@ type Props = {
    * `lavender` → Food & Drinks · `sage` → Activities · `sky` → Local Events.
    */
   floatingCardTint?: "lavender" | "sage" | "sky";
+  /**
+   * Homepage-only compact presentation — a single vertical stack of fixed-height
+   * "brick" rows instead of the two-column grid. See All screens leave this off.
+   */
+  compact?: boolean;
+  /** Accent color for the left rounded square in compact rows (per section). */
+  accentColor?: string;
 };
+
+/** Fallback accent when a compact caller omits an explicit section color. */
+const DEFAULT_COMPACT_ACCENT = "#C2A9EF";
 
 /** Homepage floating-card grid — matches homepage content gutter. */
 const FLOATING_HOMEPAGE_GUTTER = 28;
@@ -93,6 +104,8 @@ export function EditorialCardGrid({
   showBanditWhenEmpty = false,
   analyticsSectionType,
   floatingCardTint,
+  compact = false,
+  accentColor,
 }: Props) {
   const { width } = useWindowDimensions();
   const hasFloatingCards = floatingCardTint != null;
@@ -150,6 +163,40 @@ export function EditorialCardGrid({
       </View>
     );
   }
+
+  const compactStack = compact ? (
+    <View style={styles.compactStack}>
+      {visible.map((card) => {
+        const open = onOpenCard ? () => onOpenCard(card) : undefined;
+        const secondary =
+          card.subtitle?.trim() ||
+          card.overline?.trim() ||
+          card.note?.trim() ||
+          null;
+        return (
+          <CompactBrickRow
+            key={card.id}
+            title={card.title}
+            secondary={secondary}
+            icon={card.categoryIcon}
+            accentColor={accentColor ?? DEFAULT_COMPACT_ACCENT}
+            onPress={open}
+            accessibilityLabel={[
+              card.overline,
+              card.title,
+              card.subtitle,
+              card.note,
+              card.badges?.length
+                ? eventInfoBadgeAccessibilitySummary([...card.badges])
+                : null,
+            ]
+              .filter(Boolean)
+              .join(". ")}
+          />
+        );
+      })}
+    </View>
+  ) : null;
 
   const rows: EditorialGridCard[][] = [];
   for (let i = 0; i < visible.length; i += 2) {
@@ -277,7 +324,9 @@ export function EditorialCardGrid({
         <View style={styles.labelRule} />
       </View>
 
-      {hasFloatingCards ? (
+      {compact ? (
+        compactStack
+      ) : hasFloatingCards ? (
         <View style={styles.floatingGrid}>{gridRows}</View>
       ) : (
         gridRows
@@ -318,6 +367,10 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
+  },
+  /** Compact homepage stack — evenly spaced fixed-height brick rows. */
+  compactStack: {
+    gap: COMPACT_ROW_GAP,
   },
   /** Centered floating-card grid (Food & Drinks + Activities). */
   floatingGrid: {

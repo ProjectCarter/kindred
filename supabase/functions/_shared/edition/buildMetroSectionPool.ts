@@ -7,6 +7,7 @@ import { getLocalEvents } from "../localEvents/provider.ts";
 import type { LocalEventLocation } from "../localEvents/provider.ts";
 import { filterLocalEventsByMarket, filterPlacesByMarket } from "../markets/editionMarket.ts";
 import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.ts";
+import { filterNonBusinessEvents } from "../localEvents/businessEventFilter.ts";
 import { filterEventsForLocalEventsDesk } from "./editionSectionOwnership.ts";
 import { surfaceLocalEventsForEdition } from "../localEvents/surfaceLocalEventsForEdition.ts";
 import { LOCAL_EVENTS_EDITION_SURFACED_MAX } from "../editorial/publishing.ts";
@@ -52,7 +53,8 @@ export async function buildMetroEventsCandidatePool(
   }
 
   const familyFiltered = filterFamilyFriendlyEvents(raw);
-  const owned = filterEventsForLocalEventsDesk(familyFiltered.kept);
+  const businessFiltered = filterNonBusinessEvents(familyFiltered.kept);
+  const owned = filterEventsForLocalEventsDesk(businessFiltered.kept);
 
   const enriched = await surfaceLocalEventsForEdition(owned.kept, [], {
     editionDate: ctx.editionDate,

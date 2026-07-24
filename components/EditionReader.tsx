@@ -108,6 +108,7 @@ import { resolveSportsMarketId } from "../lib/edition/hometownTeams";
 import { metroKeyFromPlace } from "../lib/location/metroKey";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { EditorialCardGrid } from "./EditorialCardGrid";
+import { CompactBrickRow } from "./CompactBrickRow";
 import { NewsArticleSection } from "./NewsArticleSection";
 import { banditsPickToListingCards } from "../lib/edition/homepageListingCards";
 import {
@@ -1076,7 +1077,7 @@ function EditionReaderInner({
         {isEventsEnabled() ? (
           <LocalEventsGrid
             key={`local-events-${events.length}-${curatedLocalEvents.length}`}
-            floatingCardTint="sky"
+            compact
             events={events}
             homepageOrder={localEventsHomepageOrder}
             sportsMarketId={sportsMarketId}
@@ -1170,9 +1171,11 @@ function EditionReaderInner({
               <Text style={styles.sectionLabel}>💰 Local Deals</Text>
               <View style={styles.sectionRule} />
             </View>
-            <Text style={styles.sectionIntro}>
-              Coupons, discounts, and local savings are coming soon.
-            </Text>
+            <CompactBrickRow
+              title="Local savings, coming soon"
+              secondary="Coupons and discounts from nearby businesses"
+              accentColor="#B7E4C7"
+            />
           </View>
         </FolioReveal>
       ) : null}

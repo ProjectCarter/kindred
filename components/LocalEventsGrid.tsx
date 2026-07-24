@@ -30,6 +30,8 @@ type Props = {
   loadStatus?: LocalEventsLoadStatus;
   /** Homepage only — floating #95DFF2 tiles on cream (See All keeps classic grid). */
   floatingCardTint?: "sky";
+  /** Homepage only — compact "brick" row stack (See All keeps the classic grid). */
+  compact?: boolean;
 };
 
 function eventCardId(event: LocalEventCard): string {
@@ -50,6 +52,7 @@ export function LocalEventsGrid({
   showBanditWhenEmpty = false,
   loadStatus = "ready",
   floatingCardTint,
+  compact = false,
 }: Props) {
   /** Phase 5 — edition curation already balanced the homepage slice. */
   const useCuratedHomepageOrder = Boolean(homepageOrder?.length);
@@ -136,7 +139,9 @@ export function LocalEventsGrid({
   return (
     <EditorialCardGrid
       kicker="Local Events"
-      floatingCardTint={floatingCardTint}
+      floatingCardTint={compact ? undefined : floatingCardTint}
+      compact={compact}
+      accentColor="#81CDC6"
       cards={cards}
       initialRenderCount={initialRenderCount}
       seeAllTotal={seeAllTotal}

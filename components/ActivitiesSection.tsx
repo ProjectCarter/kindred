@@ -60,7 +60,8 @@ export function ActivitiesSection({
   return (
     <EditorialCardGrid
       kicker="Activities"
-      floatingCardTint="sage"
+      compact
+      accentColor="#FFE791"
       cards={cards}
       initialRenderCount={initialRenderCount ?? limit}
       seeAllTotal={seeAllAccessibleCount}

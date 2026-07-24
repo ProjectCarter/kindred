@@ -20,6 +20,7 @@ import { applyEventImageRightsBatch } from "./sourceRights.ts";
 import { attachEventHorizon } from "./horizon.ts";
 import { filterVerifiedEventsForEdition } from "./eventDateVerification.ts";
 import { filterFamilyFriendlyEvents } from "./familyFriendlyFilter.ts";
+import { filterNonBusinessEvents } from "./businessEventFilter.ts";
 import { gatherFromAllSources } from "./sources/registry.ts";
 import { rankLocalEventsForEdition } from "./ranking.ts";
 import { resolveEventTimezone } from "./eventTimezone.ts";
@@ -119,8 +120,9 @@ async function prepareVerifiedCatalogEvents(
     if (!result.events.length) continue;
 
     const familyFiltered = filterFamilyFriendlyEvents(result.events);
-    if (familyFiltered.kept.length) {
-      sourceBatches.push(familyFiltered.kept);
+    const businessFiltered = filterNonBusinessEvents(familyFiltered.kept);
+    if (businessFiltered.kept.length) {
+      sourceBatches.push(businessFiltered.kept);
     }
   }
 
@@ -483,9 +485,17 @@ export async function loadEventsCatalogForEdition(
       samples: familyFiltered.samples,
     });
   }
+  const businessFiltered = filterNonBusinessEvents(familyFiltered.kept);
+  if (businessFiltered.filteredCount > 0) {
+    console.log("[events:catalog] business filter on read", {
+      metroKey,
+      filteredCount: businessFiltered.filteredCount,
+      samples: businessFiltered.samples,
+    });
+  }
   const ranked = options?.forMetroPool
-    ? familyFiltered.kept
-    : rankLocalEventsForEdition(familyFiltered.kept, {
+    ? businessFiltered.kept
+    : rankLocalEventsForEdition(businessFiltered.kept, {
         now,
         readerCity: location.city,
         readerLat: location.lat,
@@ -541,13 +551,15 @@ export async function loadEventsCatalogForEnrichment(
 
   const events = rows.map(rowToLocalEvent);
   const familyFiltered = filterFamilyFriendlyEvents(events);
+  const businessFiltered = filterNonBusinessEvents(familyFiltered.kept);
   console.log("[events:catalog] enrichment read", {
     metroKey,
     stored: rows.length,
     afterFamilyFilter: familyFiltered.kept.length,
-    filtered: familyFiltered.filteredCount,
+    afterBusinessFilter: businessFiltered.kept.length,
+    filtered: familyFiltered.filteredCount + businessFiltered.filteredCount,
   });
-  return familyFiltered.kept;
+  return businessFiltered.kept;
 }
 
 export async function listEventsMetrosForSync(

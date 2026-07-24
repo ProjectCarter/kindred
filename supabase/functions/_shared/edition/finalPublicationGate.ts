@@ -14,6 +14,7 @@ import {
   filterFamilyFriendlyEvents,
   isEditoriallyExcludedListing,
 } from "../localEvents/familyFriendlyFilter.ts";
+import { filterNonBusinessEvents } from "../localEvents/businessEventFilter.ts";
 import type { LocalEvent } from "../localEvents/provider.ts";
 import {
   LOCAL_EVENTS_EDITION_SURFACED_MAX,
@@ -25,6 +26,7 @@ export type PublicationGateRejection = {
   name: string;
   reason:
     | "family_unsafe"
+    | "business_professional"
     | "unverified_schedule"
     | "missing_editorial"
     | "discovery_excluded"
@@ -86,7 +88,16 @@ export function gateLocalEventsForPublication(
     bumpReason(byReason, "family_unsafe");
   }
 
-  const schedule = filterVerifiedEventsForEdition(family.kept, context);
+  const business = filterNonBusinessEvents(family.kept);
+  for (const sample of business.samples) {
+    rejected.push({
+      name: sample.name,
+      reason: "business_professional",
+    });
+    bumpReason(byReason, "business_professional");
+  }
+
+  const schedule = filterVerifiedEventsForEdition(business.kept, context);
   for (const row of schedule.rejected) {
     rejected.push({
       name: row.name.slice(0, 80),

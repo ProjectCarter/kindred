@@ -40,6 +40,7 @@ import {
   qualifyEventbriteEvents,
 } from "./eventbriteOnlyMode.ts";
 import { filterFamilyFriendlyEvents } from "./familyFriendlyFilter.ts";
+import { filterNonBusinessEvents } from "./businessEventFilter.ts";
 
 export type LocalEventsPipelineMeta = {
   candidateCount: number;
@@ -76,6 +77,9 @@ export type LocalEventsPipelineMeta = {
     signal: string;
     category: import("./familyFriendlyFilter.ts").EditorialExclusionCategory;
   }>;
+  /** Business / professional-development listings removed before dedupe and ranking. */
+  businessFilteredCount?: number;
+  businessFilterSamples?: Array<{ name: string; signal: string }>;
 };
 
 export type LocalEventsPipelineOptions = LocalEventsFetchOptions & {
@@ -96,6 +100,9 @@ export async function runLocalEventsPipeline(
   const sourceCounts: Record<string, number> = {};
   let familyFilteredCount = 0;
   const familyFilterSamples: LocalEventsPipelineMeta["familyFilterSamples"] = [];
+  let businessFilteredCount = 0;
+  const businessFilterSamples: LocalEventsPipelineMeta["businessFilterSamples"] =
+    [];
 
   // 1. Gather
   const gatherResults = await gatherFromAllSources(location, options);
@@ -109,9 +116,17 @@ export async function runLocalEventsPipeline(
           familyFilterSamples.push(sample);
         }
       }
-      if (familyFiltered.kept.length) {
-        sourceCounts[result.sourceId] = familyFiltered.kept.length;
-        sourceBatches.push(familyFiltered.kept);
+      // Business / professional-development exclusion — Local Events only.
+      const businessFiltered = filterNonBusinessEvents(familyFiltered.kept);
+      businessFilteredCount += businessFiltered.filteredCount;
+      for (const sample of businessFiltered.samples) {
+        if (businessFilterSamples.length < 8) {
+          businessFilterSamples.push(sample);
+        }
+      }
+      if (businessFiltered.kept.length) {
+        sourceCounts[result.sourceId] = businessFiltered.kept.length;
+        sourceBatches.push(businessFiltered.kept);
       }
     }
     if (result.error) {
@@ -126,6 +141,16 @@ export async function runLocalEventsPipeline(
     });
     editorNotes.push(
       `Editorial exclusion filter removed ${familyFilteredCount} listing(s) before ranking.`
+    );
+  }
+
+  if (businessFilteredCount > 0) {
+    console.log("[localEvents:businessFilter] removed business/professional listings", {
+      filteredCount: businessFilteredCount,
+      samples: businessFilterSamples,
+    });
+    editorNotes.push(
+      `Business/professional exclusion filter removed ${businessFilteredCount} listing(s) before ranking.`
     );
   }
 
@@ -218,6 +243,7 @@ export async function runLocalEventsPipeline(
   editorNotes.push(
     `Gathered ${candidateCount} candidates from ${sourcesUsed.length} source(s); ` +
       `${familyFilteredCount} removed by editorial exclusion filter; ` +
+      `${businessFilteredCount} removed by business/professional filter; ` +
       `${merged.length} after dedupe; ${inHorizon.length} within 30 days; ` +
       `${dateVerified.rejected.length} rejected by date verification; ` +
       `${ranked.length} scored above threshold; ${ranked.length} persisted.`
@@ -249,6 +275,9 @@ export async function runLocalEventsPipeline(
     familyFilteredCount,
     familyFilterSamples:
       familyFilterSamples.length > 0 ? familyFilterSamples : undefined,
+    businessFilteredCount,
+    businessFilterSamples:
+      businessFilterSamples.length > 0 ? businessFilterSamples : undefined,
   };
 
   console.log("[localEvents:pipeline] complete", meta);
@@ -273,6 +302,7 @@ async function runEventbriteOnlyPipeline(
 
   const raw = gatherResults.flatMap((r) => r.events);
   const familyFiltered = filterFamilyFriendlyEvents(raw);
+  const businessFiltered = filterNonBusinessEvents(familyFiltered.kept);
   const sourceCounts: Record<string, number> = {};
   for (const result of gatherResults) {
     if (result.events.length) {
@@ -290,13 +320,24 @@ async function runEventbriteOnlyPipeline(
     );
   }
 
+  if (businessFiltered.filteredCount > 0) {
+    console.log("[localEvents:businessFilter] eventbriteOnly removed listings", {
+      filteredCount: businessFiltered.filteredCount,
+      samples: businessFiltered.samples,
+    });
+    editorNotes.push(
+      `Business/professional exclusion filter removed ${businessFiltered.filteredCount} listing(s).`
+    );
+  }
+
   console.log("[localEvents:eventbriteOnly] gathered", {
     totalReturned: raw.length,
     afterFamilyFilter: familyFiltered.kept.length,
+    afterBusinessFilter: businessFiltered.kept.length,
     sources: Object.keys(sourceCounts),
   });
 
-  const normalized = normalizeEvents(familyFiltered.kept);
+  const normalized = normalizeEvents(businessFiltered.kept);
   const beforeRights = normalized.filter((e) => Boolean(e.imageUrl?.trim())).length;
   const withRights = applyEventImageRightsBatch(normalized);
   const imagesDisplayAuthorized = withRights.filter((e) =>
@@ -346,6 +387,9 @@ async function runEventbriteOnlyPipeline(
     familyFilteredCount: familyFiltered.filteredCount,
     familyFilterSamples:
       familyFiltered.samples.length > 0 ? familyFiltered.samples : undefined,
+    businessFilteredCount: businessFiltered.filteredCount,
+    businessFilterSamples:
+      businessFiltered.samples.length > 0 ? businessFiltered.samples : undefined,
   };
 
   console.log("[localEvents:eventbriteOnly] complete", meta);
