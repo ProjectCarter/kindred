@@ -72,6 +72,8 @@ import {
   resolveArticleContextActions,
 } from "../lib/edition/actionBar";
 import { ArticleActionList } from "./ArticleActionList";
+import { DetailHeroCard, DetailAboutCard } from "./DetailHeroCard";
+import { detailHeroThemeForArticle } from "../lib/edition/detailHero";
 
 function isCityHistorySection(section: string): boolean {
   return section === "story_of" || section === "your_city";
@@ -136,6 +138,27 @@ export function ArticleReader({
   const briefing = isKindredBriefing(article);
   const textOnlyListing = isV1TextOnlyListing(article);
   const isLocalNewsArticle = article.section === "local_news";
+
+  // Standardized Kindred detail hero — Activities, Food & Drinks, and Local
+  // Events only. Null for every protected section (Story of, Today in History,
+  // News, Lead, Knowledge, …), which keep their existing reader layout.
+  const heroTheme = detailHeroThemeForArticle(article);
+  const isListingDetail = Boolean(heroTheme);
+  const isEventListing =
+    article.section === "local_events" || article.savedContentType === "event";
+  // "About" card summary: discovery uses the dek; events use the generated
+  // summary (first body paragraph) so the card explains why to attend — never
+  // the bare venue/location line. Bandit's note keeps its own block below.
+  const eventUsesFirstBody =
+    isEventListing && Boolean(article.body?.[0]?.trim());
+  const aboutCardBody = !isListingDetail
+    ? null
+    : isEventListing
+      ? eventUsesFirstBody
+        ? article.body[0].trim()
+        : null
+      : article.dek?.trim() || null;
+  const showAboutCard = Boolean(heroTheme) && Boolean(aboutCardBody);
 
   const handleBack = useCallback(() => {
     updateArticleSessionScroll(article.id, scrollYRef.current);
@@ -397,7 +420,9 @@ export function ArticleReader({
     null;
 
   const pullQuote =
-    article.pullQuote && article.body.length >= 4 ? article.pullQuote : null;
+    !isEventListing && article.pullQuote && article.body.length >= 4
+      ? article.pullQuote
+      : null;
   const pullIndex = useMemo(() => {
     if (!pullQuote || article.body.length < 4) return -1;
     return Math.min(
@@ -628,8 +653,18 @@ export function ArticleReader({
             />
           </View>
 
-          {/* 1. Hero — omitted for V1 text-only listing desks */}
-          {textOnlyListing ? (
+          {/* 1. Hero — emoji hero card for listing detail pages; text-only
+              rule for other V1 listing desks; photograph elsewhere. */}
+          {heroTheme ? (
+            <View style={[styles.listingHeroWrap, { width: readingWidth }]}>
+              <DetailHeroCard
+                emoji={article.categoryIcon?.trim() || heroTheme.fallbackEmoji}
+                title={article.headline}
+                categoryLabel={heroTheme.categoryLabel}
+                accent={heroTheme.accent}
+              />
+            </View>
+          ) : textOnlyListing ? (
             <View style={styles.textOnlyLead}>
               <View style={styles.textOnlyRule} />
             </View>
@@ -736,19 +771,22 @@ export function ArticleReader({
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
-            {/* 2. Category — desk label from Universal Content System when known */}
-            <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
-              {briefing
-                ? "Kindred briefing"
-                : article.section === "bandits_pick"
-                  ? "What's Special Right Now"
-                  : article.contentType
-                    ? categoryLabelForType(article.contentType)
-                    : formatSectionLabel(article.section)}
-            </Text>
+            {/* 2. Category — desk label from Universal Content System when known.
+                Listing detail pages carry the category in the hero pill. */}
+            {!isListingDetail ? (
+              <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
+                {briefing
+                  ? "Kindred briefing"
+                  : article.section === "bandits_pick"
+                    ? "What's Special Right Now"
+                    : article.contentType
+                      ? categoryLabelForType(article.contentType)
+                      : formatSectionLabel(article.section)}
+              </Text>
+            ) : null}
 
-            {/* 3. Headline */}
-            {article.categoryIcon ? (
+            {/* 3. Headline — the hero card is the title on listing detail pages. */}
+            {isListingDetail ? null : article.categoryIcon ? (
               <EditorialTitle
                 icon={article.categoryIcon}
                 title={article.headline}
@@ -784,8 +822,15 @@ export function ArticleReader({
               </View>
             ) : null}
 
-            {/* 6. Opening summary */}
-            {article.dek ? (
+            {/* 6. Opening summary — tinted "About" card on listing detail pages */}
+            {showAboutCard && heroTheme ? (
+              <DetailAboutCard
+                label={heroTheme.aboutLabel}
+                body={aboutCardBody!}
+                tint={heroTheme.tint}
+                style={styles.listingAbout}
+              />
+            ) : isListingDetail ? null : article.dek ? (
               <Text style={styles.dek} maxFontSizeMultiplier={1.25}>
                 {article.dek}
               </Text>
@@ -803,31 +848,35 @@ export function ArticleReader({
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
-            {/* 7–9. Body · supporting images · pull quotes */}
-            {(article.body ?? []).map((paragraph, index) => (
-              <View key={`p-${index}`}>
-                <BodyParagraph
-                  text={paragraph}
-                  isLead={index === 0 && !briefing}
-                />
-                {pullQuote && index === pullIndex ? (
-                  <PullQuote text={pullQuote} />
-                ) : null}
-                {(figuresByParagraph.get(index) ?? []).map((fig, fi) => (
-                  <InlineFigure
-                    key={`fig-${index}-${fi}`}
-                    figure={fig}
-                    width={Math.min(windowWidth - 16, readingWidth + 28)}
-                    bleed={Math.max(
-                      0,
-                      (Math.min(windowWidth - 16, readingWidth + 28) -
-                        readingWidth) /
-                        2
-                    )}
+            {/* 7–9. Body · supporting images · pull quotes.
+                Event listings promote the first paragraph into the About card. */}
+            {(article.body ?? []).map((paragraph, index) => {
+              if (eventUsesFirstBody && index === 0) return null;
+              return (
+                <View key={`p-${index}`}>
+                  <BodyParagraph
+                    text={paragraph}
+                    isLead={index === 0 && !briefing}
                   />
-                ))}
-              </View>
-            ))}
+                  {pullQuote && index === pullIndex ? (
+                    <PullQuote text={pullQuote} />
+                  ) : null}
+                  {(figuresByParagraph.get(index) ?? []).map((fig, fi) => (
+                    <InlineFigure
+                      key={`fig-${index}-${fi}`}
+                      figure={fig}
+                      width={Math.min(windowWidth - 16, readingWidth + 28)}
+                      bleed={Math.max(
+                        0,
+                        (Math.min(windowWidth - 16, readingWidth + 28) -
+                          readingWidth) /
+                          2
+                      )}
+                    />
+                  ))}
+                </View>
+              );
+            })}
 
             {isCityHistorySection(article.section) && article.stateAtAGlance ? (
               <StateAtAGlanceSection
@@ -1317,6 +1366,15 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     alignSelf: "center",
     width: "100%",
+  },
+  listingHeroWrap: {
+    alignSelf: "center",
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  listingAbout: {
+    marginTop: 8,
+    marginBottom: 36,
   },
   heroActionsRow: {
     flexDirection: "row",

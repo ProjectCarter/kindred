@@ -17,8 +17,11 @@ import {
 } from "../../lib/edition/eventStore";
 import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
 import { resolveListingActionsForEvent } from "../../lib/edition/actionBar";
+import { resolveEventCategoryIcon } from "../../lib/edition/categoryIcon";
 import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
 import { ArticleActionList } from "../../components/ArticleActionList";
+import { DetailHeroCard, DetailAboutCard } from "../../components/DetailHeroCard";
+import { DETAIL_HERO_ACCENTS, detailTint } from "../../lib/edition/detailHero";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
 import { articleBackRowInsets } from "../../lib/navigation/articleBackLayout";
@@ -62,6 +65,22 @@ export default function EventDetailScreen() {
   const infoBadges = event ? eventInfoBadgesFor(event) : [];
   const place = event ? eventPlaceLine(event) : "";
   const listingActions = event ? resolveListingActionsForEvent(event) : [];
+  const heroEmoji = event
+    ? event.categoryIcon ??
+      resolveEventCategoryIcon({
+        name: event.name,
+        venue: event.venue,
+        category: event.category,
+      })
+    : "🎉";
+  // "About this event" summary — why someone would want to attend. Prefer the
+  // generated editorial summary, then Bandit's invitation. Never the bare
+  // venue/location (that already appears in the details below).
+  const aboutSummary = event
+    ? event.editorialBody?.find((p) => p?.trim())?.trim() ??
+      event.banditNote?.trim() ??
+      null
+    : null;
 
   if (!event) {
     return (
@@ -92,18 +111,20 @@ export default function EventDetailScreen() {
           <Text style={styles.back}>{back}</Text>
         </Pressable>
 
-        <View style={styles.leadRule} />
-
         <View style={styles.body}>
+          <DetailHeroCard
+            emoji={heroEmoji}
+            title={event.name}
+            categoryLabel="Event"
+            accent={DETAIL_HERO_ACCENTS.event}
+            style={styles.hero}
+          />
+
           {badge ? (
             <Text style={styles.badge} maxFontSizeMultiplier={1.2}>
               {badge}
             </Text>
           ) : null}
-
-          <Text style={styles.title} maxFontSizeMultiplier={1.25}>
-            {event.name}
-          </Text>
 
           <EventInfoBadgeRow badges={infoBadges} style={styles.badgeRow} />
 
@@ -114,11 +135,13 @@ export default function EventDetailScreen() {
             {place}
           </Text>
 
-          {event.banditNote?.trim() ? (
-            <Text style={styles.bandit} maxFontSizeMultiplier={1.2}>
-              {event.banditNote.trim()}
-              <Text style={styles.banditSign}> — Bandit</Text>
-            </Text>
+          {aboutSummary ? (
+            <DetailAboutCard
+              label="About this event"
+              body={aboutSummary}
+              tint={detailTint(DETAIL_HERO_ACCENTS.event)}
+              style={styles.aboutCard}
+            />
           ) : null}
 
           {listingActions.length > 0 ? (
@@ -177,16 +200,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginTop: 24,
   },
-  leadRule: {
-    height: 2,
-    backgroundColor: paper.terracotta,
-    opacity: 0.35,
-    marginHorizontal: 24,
-    marginBottom: 8,
-  },
   body: {
     paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingTop: 8,
+  },
+  hero: {
+    marginBottom: 20,
   },
   badge: {
     alignSelf: "flex-start",
@@ -197,14 +216,8 @@ const styles = StyleSheet.create({
     color: paper.terracotta,
     marginBottom: 14,
   },
-  title: {
-    fontFamily: "Georgia",
-    fontSize: 34,
-    lineHeight: 42,
-    fontWeight: "600",
-    letterSpacing: -0.4,
-    color: paper.ink,
-    marginBottom: 12,
+  aboutCard: {
+    marginBottom: 24,
   },
   badgeRow: {
     marginBottom: 14,
@@ -220,19 +233,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: paper.inkMuted,
     marginBottom: 20,
-  },
-  bandit: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 28,
-    fontStyle: "italic",
-    color: paper.inkBody,
-    marginBottom: 24,
-    maxWidth: 480,
-  },
-  banditSign: {
-    fontStyle: "italic",
-    color: paper.inkFaint,
   },
   source: {
     fontSize: 12,

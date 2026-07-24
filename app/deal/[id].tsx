@@ -11,7 +11,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { DealImagePanel } from "../../components/DealImagePanel";
+import { DetailHeroCard } from "../../components/DetailHeroCard";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
 import { articleBackRowInsets } from "../../lib/navigation/articleBackLayout";
@@ -19,7 +19,9 @@ import {
   dealCategory,
   dealMapsUrl,
   getLocalDealById,
+  LOCAL_DEALS_HOMEPAGE_ACCENT,
 } from "../../lib/deals/localDeals";
+import { detailTint } from "../../lib/edition/detailHero";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -111,15 +113,14 @@ export default function DealDetailScreen() {
         </Pressable>
 
         <View style={styles.body}>
-          <DealImagePanel deal={deal} height={240} style={styles.hero} />
+          <DetailHeroCard
+            emoji={deal.emoji}
+            title={deal.title}
+            categoryLabel={category.title}
+            accent={LOCAL_DEALS_HOMEPAGE_ACCENT}
+            style={styles.hero}
+          />
 
-          <Text style={styles.overline} maxFontSizeMultiplier={1.2}>
-            {category.emoji}  {category.title}
-          </Text>
-
-          <Text style={styles.title} maxFontSizeMultiplier={1.25}>
-            {deal.title}
-          </Text>
           <Text style={styles.merchant} maxFontSizeMultiplier={1.2}>
             {deal.merchant} · {deal.city}
           </Text>
@@ -226,33 +227,18 @@ const styles = StyleSheet.create({
   hero: {
     marginBottom: 22,
   },
-  overline: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    color: paper.terracotta,
-    marginBottom: 12,
-  },
-  title: {
-    fontFamily: "Georgia",
-    fontSize: 32,
-    lineHeight: 40,
-    fontWeight: "600",
-    letterSpacing: -0.4,
-    color: paper.ink,
-    marginBottom: 8,
-  },
   merchant: {
     fontSize: 15,
     lineHeight: 22,
     color: paper.inkMuted,
+    marginTop: 4,
     marginBottom: 22,
+    textAlign: "center",
   },
   savingsCard: {
-    borderRadius: 16,
-    backgroundColor: paper.terracottaWash,
-    padding: 18,
+    borderRadius: 18,
+    backgroundColor: detailTint(LOCAL_DEALS_HOMEPAGE_ACCENT),
+    padding: 20,
     marginBottom: 24,
   },
   savingsLabel: {
@@ -260,7 +246,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     fontWeight: "700",
     textTransform: "uppercase",
-    color: paper.terracotta,
+    color: paper.inkMuted,
     marginBottom: 8,
   },
   savingsDetail: {
