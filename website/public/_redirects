@@ -1,0 +1,5 @@
+# Cloudflare Pages redirects
+# Force the www subdomain to the apex production domain (301 permanent).
+# Requires www.discoverkindred.com to also be attached as a custom domain
+# on the same Pages project so requests reach Pages.
+https://www.discoverkindred.com/* https://discoverkindred.com/:splat 301
