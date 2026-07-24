@@ -108,7 +108,8 @@ import { resolveSportsMarketId } from "../lib/edition/hometownTeams";
 import { metroKeyFromPlace } from "../lib/location/metroKey";
 import { LocalEventsGrid } from "./LocalEventsGrid";
 import { EditorialCardGrid } from "./EditorialCardGrid";
-import { CompactBrickRow } from "./CompactBrickRow";
+import { LocalDealsSection } from "./LocalDealsSection";
+import type { LocalDeal } from "../lib/deals/localDeals";
 import { NewsArticleSection } from "./NewsArticleSection";
 import { banditsPickToListingCards } from "../lib/edition/homepageListingCards";
 import {
@@ -147,6 +148,10 @@ type Props = {
   onSeeAllActivities?: () => void;
   /** Front-page "See all N recommendations →" — opens the full Recommendations list. */
   onSeeAllRecommendations?: (items: RankedDiscoveryItem[]) => void;
+  /** Front-page "See all N deals →" — opens the full Local Deals list. */
+  onSeeAllDeals?: () => void;
+  /** Opens a single Local Deal detail page. */
+  onOpenDeal?: (deal: LocalDeal) => void;
   /** Stored knowledge payload — used when tapping explainer notes. */
   knowledge?: KnowledgePayload | null;
   /** Shared U.S. national daily — canonical Today in History image source. */
@@ -244,6 +249,8 @@ function EditionReaderInner({
   onSeeAllEvents,
   onSeeAllActivities,
   onSeeAllRecommendations,
+  onSeeAllDeals,
+  onOpenDeal,
   knowledge,
   nationalDaily: nationalDailyProp,
   pairedNationalDaily: pairedNationalDailyProp,
@@ -1166,17 +1173,7 @@ function EditionReaderInner({
 
       {!isNewsSectionsEnabled() ? (
         <FolioReveal index={folioCursor++}>
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionLabelRow}>
-              <Text style={styles.sectionLabel}>💰 Local Deals</Text>
-              <View style={styles.sectionRule} />
-            </View>
-            <CompactBrickRow
-              title="Local savings, coming soon"
-              secondary="Coupons and discounts from nearby businesses"
-              accentColor="#B7E4C7"
-            />
-          </View>
+          <LocalDealsSection onOpenDeal={onOpenDeal} onSeeAll={onSeeAllDeals} />
         </FolioReveal>
       ) : null}
 

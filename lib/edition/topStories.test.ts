@@ -55,6 +55,6 @@ test("EditionReader gates news folios behind ENABLE_NEWS_SECTIONS", () => {
   assert.match(source, /isNewsSectionsEnabled/);
   assert.match(source, /resolveLocalNewsHomePackage/);
   assert.match(source, /NewsArticleSection/);
-  assert.match(source, /Local Deals/);
-  assert.match(source, /Local savings, coming soon/);
+  assert.match(source, /LocalDealsSection/);
+  assert.match(source, /onOpenDeal/);
 });

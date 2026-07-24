@@ -4903,6 +4903,14 @@ export default function HomeScreen() {
                 );
                 router.push("/recommendations");
               }}
+              onSeeAllDeals={() => {
+                persistHomeScrollNow();
+                router.push("/deals");
+              }}
+              onOpenDeal={(deal) => {
+                persistHomeScrollNow();
+                router.push(`/deal/${encodeURIComponent(deal.id)}`);
+              }}
               historyAroundTown={intelligence?.historyAroundTown}
               weatherSummary={intelligence?.weatherSummary ?? null}
               weatherSnapshot={intelligence?.weatherSnapshot ?? null}
