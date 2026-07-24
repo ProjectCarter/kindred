@@ -19,6 +19,8 @@ export type RunUserGenerationJobInput = {
   metroKey: string;
   editionTraceId?: string | null;
   temperatureUnitPreference?: TemperatureUnitPreference;
+  /** Developer-only — bypass section freshness cache for named desks. */
+  forceRefreshSections?: readonly string[] | null;
   locationHint?: {
     city: string;
     state?: string | null;

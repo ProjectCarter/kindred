@@ -1,0 +1,290 @@
+{
+  "report": {
+    "generatedAt": "2026-07-22T17:16:37.389Z",
+    "scenariosRun": 15,
+    "scenariosPassed": 15,
+    "repairAccuracy": 1,
+    "repairSuccessRate": 0.1111111111111111,
+    "unnecessaryReruns": 0,
+    "averageRepairCost": 1,
+    "runtimeImpactMs": 6,
+    "validationHistoryIntegrity": true,
+    "diagnosticQuality": true,
+    "architecturalWeaknesses": [
+      "V1 orchestration auto-repairs only blocking desks (local_events, activities, food_drinks) when overallStatus=FAIL. Warning-tier desks (local_news, weather, national_news) publish on WARNING without automatic repair — desk→stage mapping exists for Phase 4 optional repair.",
+      "National News blocking failures that are not also caused by a blocking desk resolve as no_repairable_blocking_desks in orchestration; shared-package regeneration is verified at planner level until a blocking path surfaces national package invalidity."
+    ],
+    "phase4Recommendation": "ready",
+    "scenarioResults": [
+      {
+        "id": "local_events_only",
+        "description": "Local Events fails → rerun ONLY local_events",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "local_events"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 4
+      },
+      {
+        "id": "activities_only",
+        "description": "Activities fails → rerun ONLY activities",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "activities"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 1
+      },
+      {
+        "id": "food_drinks_only",
+        "description": "Food & Drinks fails → rerun ONLY food_drinks",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "food_drinks"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "local_news_mapping",
+        "description": "Local News desk maps to local_news stage (planner accuracy)",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [
+          "local_news"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 0,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "national_package_invalid",
+        "description": "Shared national package invalid → generate_national_daily + attach_national_daily only (planner)",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "generate_national_daily",
+          "attach_national_daily"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": false,
+        "failedCleanly": true,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "weather_warning_publishes",
+        "description": "Weather warning → edition still publishes",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "missing_national_news_warning",
+        "description": "Missing National News → WARNING only, publishes",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "missing_masterpiece_warning",
+        "description": "Missing Today's Masterpiece → WARNING only",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "missing_today_in_history_warning",
+        "description": "Missing Today in History → WARNING only",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "bandits_pick_disabled_skipped",
+        "description": "Bandit's Pick disabled → SKIPPED without affecting publication",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "multiple_independent_blocking_failures",
+        "description": "Multiple independent blocking failures → only affected stages",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "local_events",
+          "food_drinks"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 2,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "successful_repair_then_publish",
+        "description": "Successful repair → publish normally",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "activities"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 3,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 1
+      },
+      {
+        "id": "repair_limit_fail_cleanly",
+        "description": "Repair fails after retry limit → diagnostics preserved, fail cleanly",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 2,
+        "repairStages": [
+          "activities"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": true,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 2,
+        "diagnosticsCount": 2,
+        "runtimeMs": 0
+      },
+      {
+        "id": "cross_section_dup_repair",
+        "description": "Cross-section Activities/Food duplication → activities then food_drinks",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "activities",
+          "food_drinks"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 2,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "national_attach_only",
+        "description": "National attachment failure → attach_national_daily only (planner)",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "attach_national_daily"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": false,
+        "failedCleanly": true,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      }
+    ]
+  },
+  "stress": {
+    "iterations": 100,
+    "fullRegenDetected": 0,
+    "initializeEditionRequeued": 0,
+    "maxRepairCost": 3
+  }
+}

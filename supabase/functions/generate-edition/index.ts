@@ -97,6 +97,7 @@ Deno.serve(async (req) => {
     let temperatureUnitPreference: TemperatureUnitPreference | null = null;
     let devPreview = false;
     let editionTraceId: string | null = null;
+    let forceRefreshSections: string[] | null = null;
 
     try {
       const body = await req.json();
@@ -119,6 +120,12 @@ Deno.serve(async (req) => {
       devPreview = body?.devPreview === true;
       if (typeof body?.editionTraceId === "string" && body.editionTraceId.trim()) {
         editionTraceId = body.editionTraceId.trim();
+      }
+      if (devPreview && Array.isArray(body?.forceRefreshSections)) {
+        forceRefreshSections = body.forceRefreshSections
+          .filter((value: unknown): value is string => typeof value === "string")
+          .map((value: string) => value.trim())
+          .filter(Boolean);
       }
     } catch {
       // No JSON body
@@ -244,6 +251,7 @@ Deno.serve(async (req) => {
         editionTraceId,
         temperatureUnitPreference: temperatureUnitPreference ?? "auto",
         locationHint,
+        forceRefreshSections,
       });
 
       return json(
@@ -315,6 +323,7 @@ Deno.serve(async (req) => {
       editionTraceId,
       temperatureUnitPreference: temperatureUnitPreference ?? "auto",
       locationHint,
+      forceRefreshSections,
     });
 
     return json(

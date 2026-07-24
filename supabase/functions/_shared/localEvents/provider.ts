@@ -208,6 +208,8 @@ export type LocalEventsFetchOptions = {
   admin?: import("https://esm.sh/@supabase/supabase-js@2.45.4").SupabaseClient;
   /** Canonical catalog metro key (e.g. phoenix-az for Gilbert readers). */
   catalogMetroKey?: string | null;
+  /** When true, skip reader-specific ranking — metro pool generation only. */
+  forMetroPool?: boolean;
 };
 
 export type LocalEventsPipelineProbe = {
@@ -262,7 +264,7 @@ export async function getLocalEvents(
   options?: LocalEventsFetchOptions
 ): Promise<LocalEvent[]> {
   if (options?.admin) {
-    await registerEventsMetro(options.admin, location);
+    await registerEventsMetro(options.admin, location, options.catalogMetroKey);
     return loadEventsCatalogForEdition(options.admin, location, options);
   }
   const { getLocalEventsFromPipeline } = await import("./pipeline.ts");

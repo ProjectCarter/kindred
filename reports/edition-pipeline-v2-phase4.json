@@ -1,0 +1,1572 @@
+{
+  "mode": "fixture",
+  "phase3Summary": {
+    "generatedAt": "2026-07-22T17:25:38.830Z",
+    "scenariosRun": 15,
+    "scenariosPassed": 15,
+    "repairAccuracy": 1,
+    "repairSuccessRate": 1,
+    "unnecessaryReruns": 0,
+    "averageRepairCost": 1,
+    "runtimeImpactMs": 11,
+    "validationHistoryIntegrity": true,
+    "diagnosticQuality": true,
+    "architecturalWeaknesses": [
+      "V1 orchestration auto-repairs only blocking desks (local_events, activities, food_drinks) when overallStatus=FAIL. Warning-tier desks (local_news, weather, national_news) publish on WARNING without automatic repair — desk→stage mapping exists for Phase 4 optional repair.",
+      "National News blocking failures that are not also caused by a blocking desk resolve as no_repairable_blocking_desks in orchestration; shared-package regeneration is verified at planner level until a blocking path surfaces national package invalidity."
+    ],
+    "phase4Recommendation": "ready",
+    "scenarioResults": [
+      {
+        "id": "local_events_only",
+        "description": "Local Events fails → rerun ONLY local_events",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "local_events"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 8
+      },
+      {
+        "id": "activities_only",
+        "description": "Activities fails → rerun ONLY activities",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "activities"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "food_drinks_only",
+        "description": "Food & Drinks fails → rerun ONLY food_drinks",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "food_drinks"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 1
+      },
+      {
+        "id": "local_news_mapping",
+        "description": "Local News desk maps to local_news stage (planner accuracy)",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [
+          "local_news"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 0,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "national_package_invalid",
+        "description": "Shared national package invalid → generate_national_daily + attach_national_daily only (planner)",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "generate_national_daily",
+          "attach_national_daily"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": false,
+        "failedCleanly": true,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "weather_warning_publishes",
+        "description": "Weather warning → edition still publishes",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 1
+      },
+      {
+        "id": "missing_national_news_warning",
+        "description": "Missing National News → WARNING only, publishes",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "missing_masterpiece_warning",
+        "description": "Missing Today's Masterpiece → WARNING only",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "missing_today_in_history_warning",
+        "description": "Missing Today in History → WARNING only",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "bandits_pick_disabled_skipped",
+        "description": "Bandit's Pick disabled → SKIPPED without affecting publication",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 0,
+        "repairStages": [],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 0,
+        "diagnosticsCount": 0,
+        "runtimeMs": 0
+      },
+      {
+        "id": "multiple_independent_blocking_failures",
+        "description": "Multiple independent blocking failures → only affected stages",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "local_events",
+          "food_drinks"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 2,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "successful_repair_then_publish",
+        "description": "Successful repair → publish normally",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "activities"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": true,
+        "failedCleanly": false,
+        "validationHistoryLength": 3,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "repair_limit_fail_cleanly",
+        "description": "Repair fails after retry limit → diagnostics preserved, fail cleanly",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 2,
+        "repairStages": [
+          "activities"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 1,
+        "published": false,
+        "failedCleanly": true,
+        "validationHistoryLength": 2,
+        "repairHistoryLength": 2,
+        "diagnosticsCount": 2,
+        "runtimeMs": 1
+      },
+      {
+        "id": "cross_section_dup_repair",
+        "description": "Cross-section Activities/Food duplication → activities then food_drinks",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "activities",
+          "food_drinks"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 2,
+        "published": false,
+        "failedCleanly": false,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      },
+      {
+        "id": "national_attach_only",
+        "description": "National attachment failure → attach_national_daily only (planner)",
+        "passed": true,
+        "failures": [],
+        "repairAttempts": 1,
+        "repairStages": [
+          "attach_national_daily"
+        ],
+        "unnecessaryReruns": 0,
+        "repairCost": 0,
+        "published": false,
+        "failedCleanly": true,
+        "validationHistoryLength": 1,
+        "repairHistoryLength": 1,
+        "diagnosticsCount": 1,
+        "runtimeMs": 0
+      }
+    ]
+  },
+  "report": {
+    "generatedAt": "2026-07-22T17:25:38.848Z",
+    "editionDate": "2026-07-22",
+    "citiesRun": 7,
+    "citiesPassed": 7,
+    "overallPassRate": 1,
+    "perCityScorecard": [
+      {
+        "label": "Gilbert",
+        "metroKey": "gilbert-az",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      },
+      {
+        "label": "Phoenix",
+        "metroKey": "phoenix-az",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      },
+      {
+        "label": "Seattle",
+        "metroKey": "seattle-wa",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      },
+      {
+        "label": "Chicago",
+        "metroKey": "chicago-il",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      },
+      {
+        "label": "Miami",
+        "metroKey": "miami-fl",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      },
+      {
+        "label": "Cincinnati",
+        "metroKey": "cincinnati-oh",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      },
+      {
+        "label": "New York",
+        "metroKey": "new-york-ny",
+        "passed": true,
+        "score": 75,
+        "criticalFindings": 0
+      }
+    ],
+    "perSectionScorecard": {
+      "general": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "local_events": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "activities": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "food_drinks": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "story_of": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "masterpiece": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "today_in_history": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "local_news": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "national_news": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "images": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      },
+      "pipeline": {
+        "passed": 7,
+        "failed": 0,
+        "total": 7
+      }
+    },
+    "duplicateContentFindings": [],
+    "missingContentFindings": [],
+    "incorrectImageFindings": [],
+    "incorrectLocationFindings": [],
+    "performanceMetrics": {
+      "averageGenerationMs": 45000,
+      "averageValidationMs": 1200,
+      "averageRepairMs": 0,
+      "averagePublishMs": 400,
+      "totalPipelineMs": 316600
+    },
+    "nationalParityIssues": [],
+    "localDistinctIssues": [],
+    "launchBlockers": [],
+    "recommendation": "ready_for_v1",
+    "cityResults": [
+      {
+        "label": "Gilbert",
+        "metroKey": "gilbert-az",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      },
+      {
+        "label": "Phoenix",
+        "metroKey": "phoenix-az",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      },
+      {
+        "label": "Seattle",
+        "metroKey": "seattle-wa",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      },
+      {
+        "label": "Chicago",
+        "metroKey": "chicago-il",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      },
+      {
+        "label": "Miami",
+        "metroKey": "miami-fl",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      },
+      {
+        "label": "Cincinnati",
+        "metroKey": "cincinnati-oh",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      },
+      {
+        "label": "New York",
+        "metroKey": "new-york-ny",
+        "editionDate": "2026-07-22",
+        "passed": true,
+        "score": 75,
+        "sectionScorecards": [
+          {
+            "section": "general",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "local_events",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "activities",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "food_drinks",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "story_of",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_story_of",
+                "section": "story_of",
+                "message": "Story of Your City body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "masterpiece",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "today_in_history",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_today_in_history",
+                "section": "today_in_history",
+                "message": "Today in History body lacks depth"
+              }
+            ]
+          },
+          {
+            "section": "local_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_local_news",
+                "section": "local_news",
+                "message": "Local News body lacks editorial depth"
+              }
+            ]
+          },
+          {
+            "section": "national_news",
+            "passed": true,
+            "checksPassed": 0,
+            "checksTotal": 1,
+            "findings": [
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Congress advances infrastructure package"
+              },
+              {
+                "severity": "medium",
+                "category": "thin_national_story",
+                "section": "national_news",
+                "message": "Thin national story: Markets steady as inflation cools"
+              }
+            ]
+          },
+          {
+            "section": "images",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          },
+          {
+            "section": "pipeline",
+            "passed": true,
+            "checksPassed": 1,
+            "checksTotal": 1,
+            "findings": []
+          }
+        ],
+        "findings": [
+          {
+            "severity": "medium",
+            "category": "thin_story_of",
+            "section": "story_of",
+            "message": "Story of Your City body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_today_in_history",
+            "section": "today_in_history",
+            "message": "Today in History body lacks depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_local_news",
+            "section": "local_news",
+            "message": "Local News body lacks editorial depth"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Congress advances infrastructure package"
+          },
+          {
+            "severity": "medium",
+            "category": "thin_national_story",
+            "section": "national_news",
+            "message": "Thin national story: Markets steady as inflation cools"
+          }
+        ],
+        "pipeline": {
+          "generationMs": 45000,
+          "validationMs": 1200,
+          "repairMs": 0,
+          "publishMs": 400,
+          "validationStatus": "PASS",
+          "repairStagesRequeued": [],
+          "fullEditionRegeneration": false
+        },
+        "completeness": {
+          "complete": true,
+          "missing": []
+        }
+      }
+    ]
+  }
+}

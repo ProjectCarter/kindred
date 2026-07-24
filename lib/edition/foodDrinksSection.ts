@@ -3,6 +3,8 @@
  * Canonical key: food_drinks (legacy recommendations normalizes here).
  */
 
+import { isFoodDrinksEnabled } from "./editionSectionFlags.ts";
+
 import type { EditionSection } from "./types.ts";
 import type {
   DiscoveryCategory,
@@ -151,7 +153,7 @@ export function resolveFoodDrinksItemsFromSection(
   return resolved;
 }
 
-export function resolveFoodDrinksHomepageItems(input: {
+export function resolveFoodDrinksHomepageItemsUncached(input: {
   sections: readonly EditionSection[];
   discovery: DiscoveryPayload | null | undefined;
   fallbackItems?: RankedDiscoveryItem[] | null;
@@ -160,6 +162,15 @@ export function resolveFoodDrinksHomepageItems(input: {
   const fromSection = resolveFoodDrinksItemsFromSection(section, input.discovery);
   if (fromSection.length > 0) return fromSection;
   return input.fallbackItems ?? [];
+}
+
+export function resolveFoodDrinksHomepageItems(input: {
+  sections: readonly EditionSection[];
+  discovery: DiscoveryPayload | null | undefined;
+  fallbackItems?: RankedDiscoveryItem[] | null;
+}): RankedDiscoveryItem[] {
+  if (!isFoodDrinksEnabled()) return [];
+  return resolveFoodDrinksHomepageItemsUncached(input);
 }
 
 /** Section types rendered by RecommendationsSection — hide from generic folio cards. */

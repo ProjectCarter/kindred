@@ -6,6 +6,7 @@ import {
   findFoodDrinksSection,
   parseFoodDrinksSectionBody,
   resolveFoodDrinksHomepageItems,
+  resolveFoodDrinksHomepageItemsUncached,
   resolveFoodDrinksItemsFromSection,
   isRenderedFoodDrinksSectionType,
 } from "./foodDrinksSection.ts";
@@ -85,7 +86,7 @@ test("persisted food_drinks section resolves discovery items for homepage", () =
       })
     ),
   ];
-  const items = resolveFoodDrinksHomepageItems({
+  const items = resolveFoodDrinksHomepageItemsUncached({
     sections,
     discovery: discoveryWithCoffee(),
     fallbackItems: [],
@@ -126,7 +127,7 @@ test("empty food_drinks section falls back to discovery allocation", () => {
       surfaces: ["bakeries"],
     },
   ];
-  const items = resolveFoodDrinksHomepageItems({
+  const items = resolveFoodDrinksHomepageItemsUncached({
     sections: [section("food_drinks", JSON.stringify({ version: 1, items: [] }))],
     discovery: discoveryWithCoffee(),
     fallbackItems: fallback,
@@ -152,7 +153,7 @@ test("malformed food_drinks body omits section and uses fallback", () => {
       surfaces: ["restaurants"],
     },
   ];
-  const items = resolveFoodDrinksHomepageItems({
+  const items = resolveFoodDrinksHomepageItemsUncached({
     sections: [section("food_drinks", "not-json")],
     discovery: null,
     fallbackItems: fallback,
@@ -170,7 +171,7 @@ test("findFoodDrinksSection prefers canonical key", () => {
 });
 
 test("empty food_drinks section with no fallback omits homepage desk", () => {
-  const items = resolveFoodDrinksHomepageItems({
+  const items = resolveFoodDrinksHomepageItemsUncached({
     sections: [section("food_drinks", JSON.stringify({ version: 1, items: [] }))],
     discovery: null,
     fallbackItems: [],

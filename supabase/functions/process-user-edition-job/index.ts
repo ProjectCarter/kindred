@@ -96,6 +96,11 @@ Deno.serve(async (req) => {
       editionTraceId: body.editionTraceId ?? null,
       temperatureUnitPreference: body.temperatureUnit ?? "auto",
       locationHint,
+      forceRefreshSections: Array.isArray(body.forceRefreshSections)
+        ? body.forceRefreshSections.filter(
+            (value: unknown): value is string => typeof value === "string"
+          )
+        : null,
     });
 
     console.log("[process-user-edition-job] finished", {

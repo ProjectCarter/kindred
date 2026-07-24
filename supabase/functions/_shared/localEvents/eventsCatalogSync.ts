@@ -70,9 +70,11 @@ export { metroKeyFromEventLocation };
 
 export async function registerEventsMetro(
   admin: SupabaseClient,
-  location: LocalEventLocation
+  location: LocalEventLocation,
+  catalogMetroKey?: string | null
 ): Promise<void> {
-  const metroKey = metroKeyFromEventLocation(location);
+  const metroKey =
+    catalogMetroKey?.trim() || metroKeyFromEventLocation(location);
   await admin.from("events_catalog_metros").upsert(
     {
       metro_key: metroKey,
@@ -481,18 +483,21 @@ export async function loadEventsCatalogForEdition(
       samples: familyFiltered.samples,
     });
   }
-  const ranked = rankLocalEventsForEdition(familyFiltered.kept, {
-    now,
-    readerCity: location.city,
-    readerLat: location.lat,
-    readerLon: location.lon,
-  });
+  const ranked = options?.forMetroPool
+    ? familyFiltered.kept
+    : rankLocalEventsForEdition(familyFiltered.kept, {
+        now,
+        readerCity: location.city,
+        readerLat: location.lat,
+        readerLon: location.lon,
+      });
 
   console.log("[events:catalog] edition read", {
     metroKey,
     stored: rows.length,
     ranked: ranked.length,
     timezone: eventTimezone,
+    forMetroPool: Boolean(options?.forMetroPool),
   });
 
   return ranked;

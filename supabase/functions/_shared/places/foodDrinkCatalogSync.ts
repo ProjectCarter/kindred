@@ -144,9 +144,10 @@ export function metroKeyFromLocation(location: PlacesLocation): string {
 
 export async function registerFoodDrinkMetro(
   admin: SupabaseClient,
-  location: PlacesLocation
+  location: PlacesLocation,
+  catalogMetroKey?: string | null
 ): Promise<void> {
-  const metroKey = metroKeyFromLocation(location);
+  const metroKey = catalogMetroKey?.trim() || metroKeyFromLocation(location);
   await admin.from("food_drink_catalog_metros").upsert(
     {
       metro_key: metroKey,

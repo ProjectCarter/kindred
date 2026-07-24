@@ -70,6 +70,42 @@ test("upsert conflict target includes metro_key", () => {
   assert.equal(editionsConflictTarget(), "user_id,edition_date,metro_key");
 });
 
+const PHOENIX_VALLEY_CITIES = [
+  ["Phoenix", 33.4484, -112.074],
+  ["Scottsdale", 33.4942, -111.9261],
+  ["Tempe", 33.4255, -111.94],
+  ["Mesa", 33.4152, -111.8315],
+  ["Chandler", 33.3062, -111.8413],
+  ["Gilbert", 33.3528, -111.789],
+  ["Glendale", 33.5387, -112.186],
+  ["Peoria", 33.5806, -112.2374],
+  ["Surprise", 33.6292, -112.3679],
+  ["Avondale", 33.4356, -112.3496],
+  ["Goodyear", 33.4353, -112.358],
+  ["Queen Creek", 33.2487, -111.6343],
+  ["Buckeye", 33.3703, -112.5838],
+  ["Cave Creek", 33.8334, -111.9508],
+  ["Fountain Hills", 33.6117, -111.7174],
+  ["Apache Junction", 33.415, -111.5496],
+] as const;
+
+for (const [city, lat, lon] of PHOENIX_VALLEY_CITIES) {
+  test(`${city} resolves to phoenix-az canonical edition metro_key`, () => {
+    const market = resolveEditionMarket({
+      city,
+      state: "AZ",
+      lat,
+      lon,
+    });
+    assert.ok(market, `${city} should resolve to a market`);
+    assert.equal(market!.metroKey, "phoenix-az");
+    assert.ok(
+      market!.metroCities.some((member) => member.toLowerCase() === city.toLowerCase()),
+      `${city} should be explicit metro_cities member`
+    );
+  });
+}
+
 test("catalog city slug differs from canonical edition metro for Gilbert", () => {
   assert.equal(metroKeyFromPlace(GILBERT), "gilbert-az");
   assert.equal(editionMetroKeyFromPlace(GILBERT), "phoenix-az");

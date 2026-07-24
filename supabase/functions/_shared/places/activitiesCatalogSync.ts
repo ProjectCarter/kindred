@@ -104,9 +104,10 @@ export { metroKeyFromLocation as activitiesMetroKeyFromLocation };
 
 export async function registerActivitiesMetro(
   admin: SupabaseClient,
-  location: PlacesLocation
+  location: PlacesLocation,
+  catalogMetroKey?: string | null
 ): Promise<void> {
-  const metroKey = metroKeyFromLocation(location);
+  const metroKey = catalogMetroKey?.trim() || metroKeyFromLocation(location);
   await admin.from("activities_catalog_metros").upsert(
     {
       metro_key: metroKey,

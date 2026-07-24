@@ -123,6 +123,7 @@ import {
 import { loadWithRetry } from "../lib/edition/loadWithRetry";
 import {
   countValidEventsInSections,
+  countEventsInSections,
   logLocalEventsPipeline,
   pipelineCountsFromSections,
   type LocalEventsLoadStatus,
@@ -189,6 +190,7 @@ import {
   maybeRecordDevEditionSnapshot,
   tryApplyDevEditionPreview,
 } from "../lib/dev/devEditionHomeIntegration";
+import { consumePendingForceRefreshSections } from "../lib/dev/forceRefreshSections";
 import {
   resolveEffectiveEditionDate,
   resolveEffectiveEditionDateSync,
@@ -1287,7 +1289,7 @@ export default function HomeScreen() {
         cachedBundle: merged,
       })
     );
-    const cachedEventCount = countValidEventsInSections(merged.sections);
+    const cachedEventCount = countEventsInSections(merged.sections);
     setLocalEventsStatus(cachedEventCount > 0 ? "ready" : "loading");
 
     if (
@@ -1574,7 +1576,7 @@ export default function HomeScreen() {
   }): Promise<EditionSection[]> {
     const { editionId, editionDate, place, sections, expectedMetroKey, traceId } = params;
     if (!place || !needsLocalEventsRecovery(sections)) {
-      const count = countValidEventsInSections(sections);
+      const count = countEventsInSections(sections);
       setLocalEventsStatus(count > 0 ? "ready" : "quiet_day");
       return sections;
     }
@@ -1615,7 +1617,13 @@ export default function HomeScreen() {
       return result.mergedSections;
     }
 
-    setLocalEventsStatus(result.attempted ? "failed" : "quiet_day");
+    setLocalEventsStatus(
+      countEventsInSections(sections) > 0
+        ? "ready"
+        : result.attempted
+          ? "failed"
+          : "quiet_day"
+    );
     if (__DEV__) {
       console.warn("[home] localEvents recovery did not restore events", result);
     }
@@ -2835,7 +2843,7 @@ export default function HomeScreen() {
       if (shouldMergeSectionBodies) {
         setSections(nextSections);
         setLocalEventsStatus(
-          countValidEventsInSections(nextSections) > 0 ? "ready" : "loading"
+          countEventsInSections(nextSections) > 0 ? "ready" : "loading"
         );
         if (__DEV__) {
           console.log(
@@ -4141,6 +4149,10 @@ export default function HomeScreen() {
       let invokeError: Error | null = null;
       try {
         devGenerateTrace(traceId, "invoke_start");
+        const forceRefreshSections =
+          isDevEditionOverrideActive()
+            ? await consumePendingForceRefreshSections()
+            : null;
         const invokeResult = await Promise.race([
           supabase.functions.invoke("generate-edition", {
             body: {
@@ -4148,7 +4160,14 @@ export default function HomeScreen() {
               editionDate,
               temperatureUnit: tempUnit,
               editionTraceId: traceId,
-              ...(isDevEditionOverrideActive() ? { devPreview: true } : {}),
+              ...(isDevEditionOverrideActive()
+                ? {
+                    devPreview: true,
+                    ...(forceRefreshSections?.length
+                      ? { forceRefreshSections }
+                      : {}),
+                  }
+                : {}),
             },
             signal: abort.signal,
           }),

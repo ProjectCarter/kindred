@@ -40,6 +40,11 @@ import {
   resolveEditionMarketForReader,
 } from "./editorial/discoveryGeography.ts";
 import { filterLocalEventsByMarket } from "../../../lib/markets/editionMarketIsolation.ts";
+import {
+  isLocalEventsMetroCacheValidToday,
+  loadValidMetroSectionCache,
+} from "./edition/metroSectionCache.ts";
+import { buildLocalEventsSectionFromPool } from "./edition/assembleMetroForReader.ts";
 
 export type LiveRefreshLocation = LocalEventLocation;
 
@@ -47,6 +52,7 @@ export type LiveRefreshInput = {
   editionId: string;
   userId: string;
   editionDate: string; // YYYY-MM-DD, the edition's own local date
+  metroKey?: string | null;
   location: LiveRefreshLocation;
   /** Only needed to re-run Discovery's interest-weighted selection. */
   interests?: string[];
@@ -99,6 +105,59 @@ function isBusyDayFor(editionDate: string): boolean {
   return dow === 0 || dow === 6 || isUsHolidayOrEve(dateObj);
 }
 
+async function persistLocalEventsSectionBody(
+  admin: SupabaseClient,
+  editionId: string,
+  body: string,
+  eventCount: number
+): Promise<{ ok: boolean; changed: boolean; count: number; error?: string }> {
+  const { data: existing, error: existingError } = await admin
+    .from("edition_sections")
+    .select("id, body, position")
+    .eq("edition_id", editionId)
+    .eq("section_type", "local_events")
+    .maybeSingle();
+
+  if (existingError) {
+    return { ok: false, changed: false, count: 0, error: existingError.message };
+  }
+
+  if (existing?.id) {
+    if (existing.body === body) {
+      return { ok: true, changed: false, count: eventCount };
+    }
+    const { error: updateError } = await admin
+      .from("edition_sections")
+      .update({ body })
+      .eq("id", existing.id);
+    if (updateError) {
+      return { ok: false, changed: false, count: eventCount, error: updateError.message };
+    }
+    return { ok: true, changed: true, count: eventCount };
+  }
+
+  const { data: maxPos } = await admin
+    .from("edition_sections")
+    .select("position")
+    .eq("edition_id", editionId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const position = (maxPos?.position ?? 0) + 1;
+  const { error: insertError } = await admin.from("edition_sections").insert({
+    edition_id: editionId,
+    section_type: "local_events",
+    position,
+    headline: "A Few Things Happening Around Town",
+    body,
+    source_note: "Curated from trusted local event sources",
+  });
+  if (insertError) {
+    return { ok: false, changed: false, count: eventCount, error: insertError.message };
+  }
+  return { ok: true, changed: true, count: eventCount };
+}
+
 /**
  * Re-fetch events (times, cancellations, ticket links, photography) and
  * patch only the `local_events` edition_sections row. Structured JSON in,
@@ -111,6 +170,44 @@ export async function refreshEventsSection(
 ): Promise<{ ok: boolean; changed: boolean; count: number; error?: string }> {
   try {
     const eventTimezone = resolveEventTimezone(input.location);
+    const metroKey = input.metroKey?.trim() || null;
+
+    if (
+      metroKey &&
+      (await isLocalEventsMetroCacheValidToday(
+        admin,
+        metroKey,
+        input.editionDate
+      ))
+    ) {
+      const { record: cachedEvents } = await loadValidMetroSectionCache(admin, {
+        sectionType: "local_events",
+        metroKey,
+        editionDate: input.editionDate,
+      });
+      if (cachedEvents?.payload) {
+        const assembled = buildLocalEventsSectionFromPool(
+          cachedEvents.payload,
+          {
+            editionDate: input.editionDate,
+            city: input.location.city,
+            region: input.location.region ?? null,
+            state: input.location.state ?? null,
+            readerLat: input.location.lat,
+            readerLon: input.location.lon,
+          }
+        );
+        if (assembled?.sectionBody?.trim() && assembled.localEvents.length > 0) {
+          return persistLocalEventsSectionBody(
+            admin,
+            input.editionId,
+            assembled.sectionBody,
+            assembled.localEvents.length
+          );
+        }
+      }
+    }
+
     const { catalogMetroKey, editionMarket, marketAnchor } =
       liveRefreshCatalogContext(input.location);
     let fetched: LocalEvent[] = await getLocalEvents(input.location, {
@@ -145,7 +242,15 @@ export async function refreshEventsSection(
 
     const publishable = await surfaceLocalEventsForEdition(surfaced, reservePool, {
       editionDate: input.editionDate,
-      allowAiEnrichment: Boolean(Deno.env.get("ANTHROPIC_API_KEY")),
+      allowAiEnrichment:
+        Boolean(Deno.env.get("ANTHROPIC_API_KEY")) &&
+        !(input.metroKey
+          ? await isLocalEventsMetroCacheValidToday(
+              admin,
+              input.metroKey,
+              input.editionDate
+            )
+          : false),
       homepageMinimum: HOMEPAGE_INITIAL_RENDER_COUNT,
       now: new Date(),
       readerCity: input.location.city,
@@ -168,53 +273,12 @@ export async function refreshEventsSection(
       editionCity: input.location.city,
     });
 
-    const { data: existing, error: existingError } = await admin
-      .from("edition_sections")
-      .select("id, body, position")
-      .eq("edition_id", input.editionId)
-      .eq("section_type", "local_events")
-      .maybeSingle();
-
-    if (existingError) {
-      return { ok: false, changed: false, count: 0, error: existingError.message };
-    }
-
-    if (existing?.id) {
-      if (existing.body === body) {
-        return { ok: true, changed: false, count: events.length };
-      }
-      const { error: updateError } = await admin
-        .from("edition_sections")
-        .update({ body })
-        .eq("id", existing.id);
-      if (updateError) {
-        return { ok: false, changed: false, count: events.length, error: updateError.message };
-      }
-      return { ok: true, changed: true, count: events.length };
-    }
-
-    // No local_events row on this edition yet (e.g. it built on a quiet day) —
-    // add one now that events exist, same shape buildEdition.ts would write.
-    const { data: maxPos } = await admin
-      .from("edition_sections")
-      .select("position")
-      .eq("edition_id", input.editionId)
-      .order("position", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const position = (maxPos?.position ?? 0) + 1;
-    const { error: insertError } = await admin.from("edition_sections").insert({
-      edition_id: input.editionId,
-      section_type: "local_events",
-      position,
-      headline: "A Few Things Happening Around Town",
+    return persistLocalEventsSectionBody(
+      admin,
+      input.editionId,
       body,
-      source_note: "Sourced from Google Events",
-    });
-    if (insertError) {
-      return { ok: false, changed: false, count: events.length, error: insertError.message };
-    }
-    return { ok: true, changed: true, count: events.length };
+      events.length
+    );
   } catch (err) {
     return {
       ok: false,

@@ -55,6 +55,7 @@ type EditionRow = {
   id: string;
   user_id: string;
   edition_date: string;
+  metro_key: string | null;
   live_refreshed_at: string | null;
 };
 
@@ -83,7 +84,7 @@ Deno.serve(async (req) => {
 
     const { data: candidatesRaw, error: candidatesError } = await admin
       .from("editions")
-      .select("id, user_id, edition_date, live_refreshed_at")
+      .select("id, user_id, edition_date, metro_key, live_refreshed_at")
       .eq("status", "ready")
       .gte("edition_date", yesterday)
       .or(`live_refreshed_at.is.null,live_refreshed_at.lt.${cutoff}`)
@@ -140,6 +141,7 @@ Deno.serve(async (req) => {
           editionId: edition.id,
           userId: edition.user_id,
           editionDate: edition.edition_date,
+          metroKey: edition.metro_key,
           location,
           interests,
         });

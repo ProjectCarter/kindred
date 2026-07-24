@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
 
     const { data: edition, error: editionError } = await admin
       .from("editions")
-      .select("id")
+      .select("id, metro_key")
       .eq("user_id", user.id)
       .eq("edition_date", date)
       .eq("status", "ready")
@@ -121,6 +121,7 @@ Deno.serve(async (req) => {
       editionId: edition.id,
       userId: user.id,
       editionDate: date,
+      metroKey: edition.metro_key ?? null,
       location,
       interests: profile?.interests ?? [],
     });

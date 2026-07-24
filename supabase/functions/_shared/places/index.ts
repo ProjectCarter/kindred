@@ -113,10 +113,13 @@ export async function getLocalPlacesForEdition(
   if (!location.city || location.city === "your area") return [];
 
   try {
-    await registerFoodDrinkMetro(admin, location);
-    await registerActivitiesMetro(admin, location);
-    const metroKey =
-      options?.catalogMetroKey?.trim() || metroKeyFromLocation(location);
+    await registerFoodDrinkMetro(admin, location, options?.catalogMetroKey);
+    await registerActivitiesMetro(admin, location, options?.catalogMetroKey);
+    const metroKey = options?.catalogMetroKey?.trim();
+    if (!metroKey) {
+      console.warn("[places] edition read missing catalogMetroKey — refusing city-slug fallback");
+      return [];
+    }
 
     const [activitiesRes, foodRes] = await Promise.all([
       admin
