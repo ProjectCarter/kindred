@@ -65,6 +65,7 @@ export default function EventsScreen() {
 
         <LocalEventsGrid
           events={events}
+          compact
           initialRenderCount={events.length || 1}
           showBanditWhenEmpty
           onOpenEvent={(event) => {

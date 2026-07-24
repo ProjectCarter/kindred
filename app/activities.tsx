@@ -61,6 +61,8 @@ export default function ActivitiesScreen() {
 
         <EditorialCardGrid
           kicker="Activities"
+          compact
+          accentColor="#FFE791"
           cards={cards}
           initialRenderCount={cards.length || 1}
           emptyCopy="Nothing new to try nearby this month — check back tomorrow."

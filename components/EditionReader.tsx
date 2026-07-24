@@ -1140,6 +1140,12 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
+      {!isNewsSectionsEnabled() ? (
+        <FolioReveal index={folioCursor++}>
+          <LocalDealsSection onOpenDeal={onOpenDeal} onSeeAll={onSeeAllDeals} />
+        </FolioReveal>
+      ) : null}
+
       <FolioReveal index={folioCursor++}>
         {storyOf && storyOfWillRender ? (
           <StoryOfSection
@@ -1168,12 +1174,6 @@ function EditionReaderInner({
                 : undefined
             }
           />
-        </FolioReveal>
-      ) : null}
-
-      {!isNewsSectionsEnabled() ? (
-        <FolioReveal index={folioCursor++}>
-          <LocalDealsSection onOpenDeal={onOpenDeal} onSeeAll={onSeeAllDeals} />
         </FolioReveal>
       ) : null}
 
