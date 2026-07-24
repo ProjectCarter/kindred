@@ -21,6 +21,10 @@ const EXACT_MIRROR_PAIRS = [
     "lib/edition/memorableWriting.ts",
     "supabase/functions/_shared/editorial/memorableWriting.ts",
   ],
+  [
+    "lib/edition/editorialStandard.ts",
+    "supabase/functions/_shared/editorial/editorialStandard.ts",
+  ],
 ];
 
 function isReExportShim(relPath) {

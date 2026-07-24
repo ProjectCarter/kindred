@@ -6,10 +6,13 @@
  * professionally copy-edited paper, not a voice assistant transcript.
  * Editorial craft standards apply to every article Kindred publishes.
  */
-import { KINDRED_EDITORIAL_STANDARDS_DIGEST } from "../../../lib/edition/kindredEditorialStandards.ts";
+import {
+  KINDRED_EDITORIAL_STANDARDS_DIGEST,
+  KINDRED_EDITORIAL_STANDARD_DIGEST,
+} from "../../../lib/edition/kindredEditorialStandards.ts";
 import { KINDRED_ARTICLE_CRAFT_STANDARDS } from "../../../lib/edition/kindredArticleProse.ts";
 
-export { KINDRED_EDITORIAL_STANDARDS_DIGEST };
+export { KINDRED_EDITORIAL_STANDARDS_DIGEST, KINDRED_EDITORIAL_STANDARD_DIGEST };
 
 export const NEWSPAPER_STYLE_RULES =
   "Style guide — numbers and dates: write temperatures exactly as given, as numerals with the " +

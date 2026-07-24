@@ -3,6 +3,37 @@
  * Shared by Story Editor, section writers, history, masterpiece, events, and cursor rules.
  */
 
+import {
+  DISCOVERY_SCORE_BANDS,
+  KINDRED_REACTIONS,
+} from "./editorialStandard.ts";
+
+/**
+ * Discovery-desk editorial digest — derived from the shared Phase 0 constants
+ * so band numbers and reactions never drift from code. Exposed through the
+ * prompt-digest pipeline (see supabase/functions/_shared/editorialStyle.ts) so
+ * it is available to every prompt builder. It is intentionally NOT yet folded
+ * into the live NEWSPAPER_STYLE_RULES prompt string, so no generated content
+ * changes at this phase.
+ */
+export const KINDRED_EDITORIAL_STANDARD_DIGEST = `
+KINDRED EDITORIAL STANDARD (discovery desks — permanent law):
+
+The Kindred Test — before anything is published, ask: "If I showed this to
+someone over breakfast, would they be excited they discovered it today?"
+If the answer is no, it should probably not appear.
+
+Every recommendation should provoke at least one genuine reaction:
+"I want to go," "I want to eat there," "I want to do that," or
+"I'm glad I learned that." (${Object.keys(KINDRED_REACTIONS).length} reactions)
+
+Editorial priorities: discovery over popularity · local over generic ·
+interesting over ordinary · timely over stale · community over commercial ·
+quality over quantity.
+
+Discovery Score (0–100): ${DISCOVERY_SCORE_BANDS.feature}+ exceptional, feature it · ${DISCOVERY_SCORE_BANDS.strong}+ strong · ${DISCOVERY_SCORE_BANDS.acceptable}+ acceptable · below ${DISCOVERY_SCORE_BANDS.acceptable} do not publish unless exceptional.
+`.trim();
+
 /** Compact enforceable digest for AI prompts and engineering gates. */
 export const KINDRED_EDITORIAL_STANDARDS_DIGEST = `
 KINDRED EDITORIAL STANDARDS (every article, every desk — permanent law):
