@@ -18,7 +18,7 @@ const fraunces = Fraunces({
   fallback: ["Georgia", "serif"],
 });
 
-const siteUrl = "https://discoverkindred.com";
+const siteUrl = "https://www.discoverkindred.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
