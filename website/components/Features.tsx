@@ -11,49 +11,49 @@ const features: Feature[] = [
     emoji: "🎉",
     title: "Local Events",
     description:
-      "Concerts, festivals, markets, and community nights — the best of what's happening today, hand-picked and verified.",
+      "Discover concerts, festivals, markets, sports, and the best things happening around you today.",
   },
   {
     emoji: "🍔",
     title: "Food & Drinks",
     description:
-      "Neighborhood restaurants, coffee shops, and breweries worth leaving the house for — local favorites over chains.",
+      "Find great local restaurants, cafés, breweries, wine bars, and neighborhood favorites worth visiting.",
   },
   {
     emoji: "🌲",
     title: "Activities",
     description:
-      "Trails, escape rooms, kayaking, mini golf, and hidden gems that turn an ordinary day into a great one.",
-  },
-  {
-    emoji: "📰",
-    title: "Local News",
-    description:
-      "What's actually happening in your city, written like a calm morning paper — clear, factual, and worth your time.",
-  },
-  {
-    emoji: "🌎",
-    title: "National News",
-    description:
-      "The day's essential national stories, edited down to what matters — no outrage, no endless feed.",
-  },
-  {
-    emoji: "🎨",
-    title: "Today's Masterpiece",
-    description:
-      "A single work of art each day with the story behind it — a small, beautiful moment of culture.",
-  },
-  {
-    emoji: "🏛️",
-    title: "History Around Town",
-    description:
-      "The people and places that shaped your city, told in short, memorable pieces you'll actually remember.",
+      "Discover hikes, kayaking, pickleball, escape rooms, golf, parks, and other fun things to do nearby.",
   },
   {
     emoji: "☀️",
     title: "Weather",
     description:
-      "A clean, glanceable forecast built into your morning read — so you know exactly how to plan the day.",
+      "A beautiful morning forecast that helps you plan your day at a glance.",
+  },
+  {
+    emoji: "🏛",
+    title: "History Around Town",
+    description:
+      "Discover the stories behind landmarks, neighborhoods, monuments, and places you pass every day.",
+  },
+  {
+    emoji: "📜",
+    title: "Today in History",
+    description:
+      "Interesting historical moments from this day, presented in a quick, enjoyable daily read.",
+  },
+  {
+    emoji: "🖼",
+    title: "Today's Masterpiece",
+    description:
+      "Experience one remarkable work of art every morning along with the story behind it.",
+  },
+  {
+    emoji: "💰",
+    title: "Local Deals",
+    description:
+      "Save money with exclusive local offers, discounts, affiliate deals, and promotions from businesses near you.",
   },
 ];
 
@@ -63,17 +63,17 @@ export default function Features() {
       <div className="container-kindred">
         <div className="mx-auto max-w-2xl text-center">
           <Reveal>
-            <span className="eyebrow">One edition, everything local</span>
+            <span className="eyebrow">Everything local, in one place</span>
           </Reveal>
           <Reveal delay={80}>
             <h2 className="mt-5 font-serif text-4xl font-semibold tracking-tight text-ink sm:text-5xl dark:text-[#F4F2FA]">
-              Everything worth knowing, beautifully edited
+              Everything worth doing, beautifully organized
             </h2>
           </Reveal>
           <Reveal delay={140}>
             <p className="mt-4 text-lg text-ink-muted dark:text-[#B7B3C6]">
-              Eight desks, one daily edition. Each section is curated like a real
-              newspaper — trustworthy, relevant, and genuinely useful.
+              Eight ways to explore your city, brought together in one beautifully
+              organized daily experience — curated, trustworthy, and genuinely useful.
             </p>
           </Reveal>
         </div>

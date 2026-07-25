@@ -27,15 +27,15 @@ export const metadata: Metadata = {
     template: "%s · Kindred",
   },
   description:
-    "Kindred is your personalized local morning newspaper. Discover events, food & drinks, activities, history, weather, and local stories happening around you — every day, in one beautiful daily edition.",
+    "Kindred is a premium local discovery app. Discover events, food & drinks, activities, weather, local history, today's masterpiece, today in history, and exclusive local deals happening around you — every day, in one beautiful daily experience.",
   keywords: [
     "Kindred",
-    "local newspaper app",
+    "local discovery app",
     "local events",
     "things to do near me",
     "local discovery",
-    "daily edition",
-    "local news app",
+    "daily guide",
+    "local deals",
   ],
   authors: [{ name: "Kindred" }],
   creator: "Kindred",
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
     url: siteUrl,
     title: "Kindred — Discover what's happening around you",
     description:
-      "Your personalized local morning newspaper. Events, food & drinks, activities, history, weather, and local stories — one beautiful daily edition.",
+      "A premium local discovery app. Events, food & drinks, activities, weather, local history, today's masterpiece, and exclusive local deals — one beautiful daily experience.",
     siteName: "Kindred",
     images: [
       {
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Kindred — Discover what's happening around you",
     description:
-      "Your personalized local morning newspaper. One beautiful daily edition of everything happening around you.",
+      "A premium local discovery app. Discover everything happening around you — in one beautiful daily experience. Discover more, spend less.",
     images: ["/og-image.svg"],
   },
   icons: {

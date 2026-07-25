@@ -4,18 +4,18 @@ const scattered = [
   "Events app",
   "Restaurant reviews",
   "Trail finder",
-  "Local news site",
-  "National headlines",
   "Weather app",
-  "Social feeds",
-  "Neighborhood forum",
+  "Local deals",
+  "City history",
+  "Daily masterpiece",
+  "Things to do",
 ];
 
 const points = [
   {
     title: "One calm read, every morning",
     description:
-      "Your city, edited into a single beautiful edition. Open it with your coffee and you're caught up in minutes.",
+      "Your city, curated into one beautiful daily experience. Open it with your coffee and you'll know what's worth doing today.",
   },
   {
     title: "Curated, not endless",
@@ -49,7 +49,7 @@ export default function WhyKindred() {
                 <p className="mt-5 text-lg leading-relaxed text-ink-muted dark:text-[#B7B3C6]">
                   Most mornings mean bouncing between a dozen apps just to figure out
                   what&rsquo;s happening around you. Kindred combines all of it into one
-                  beautifully designed daily edition — so discovering your city feels
+                  beautifully designed daily experience — so discovering your city feels
                   effortless again.
                 </p>
               </Reveal>
@@ -96,7 +96,7 @@ export default function WhyKindred() {
                   <span aria-hidden="true" className="text-2xl">📖</span>
                   <div>
                     <p className="font-serif text-lg font-semibold">Kindred</p>
-                    <p className="text-xs text-cream/80">All of it, in one edition.</p>
+                    <p className="text-xs text-cream/80">All of it, in one app.</p>
                   </div>
                 </div>
               </div>

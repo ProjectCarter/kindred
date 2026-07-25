@@ -16,7 +16,7 @@ export default function Hero() {
           <Reveal>
             <span className="eyebrow">
               <span className="h-1.5 w-1.5 rounded-full bg-gold" />
-              Your daily local edition
+              Premium local discovery
             </span>
           </Reveal>
 
@@ -31,8 +31,9 @@ export default function Hero() {
 
           <Reveal delay={160}>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-ink-muted sm:text-xl dark:text-[#B7B3C6]">
-              Kindred brings together local events, food &amp; drinks, activities,
-              history, weather, and news into one beautiful daily experience.
+              Kindred brings together local events, activities, food &amp; drinks,
+              weather, local history, today&rsquo;s masterpiece, today in history, and
+              exclusive local deals into one beautiful daily experience.
             </p>
           </Reveal>
 
@@ -52,7 +53,8 @@ export default function Hero() {
 
           <Reveal delay={320}>
             <p className="mt-6 text-sm text-ink-muted dark:text-[#8E8AA0]">
-              No noise. No doomscrolling. Just your city, beautifully edited each morning.
+              Discover more. Spend less. No noise, no doomscrolling &mdash; just your
+              city, beautifully organized each morning.
             </p>
           </Reveal>
         </div>

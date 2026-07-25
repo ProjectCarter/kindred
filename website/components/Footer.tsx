@@ -10,8 +10,8 @@ export default function Footer() {
           <div className="max-w-sm">
             <Logo />
             <p className="mt-4 text-sm leading-relaxed text-ink-muted dark:text-[#B7B3C6]">
-              Your personalized local morning newspaper — events, food, activities,
-              history, weather, and stories from around you, every day.
+              A premium local discovery app — events, food &amp; drinks, activities,
+              history, weather, and more from around you, every day.
             </p>
             <a
               href="mailto:hello@discoverkindred.com"

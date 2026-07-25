@@ -1,8 +1,9 @@
 # Kindred — Marketing Website
 
-The landing page for **Kindred** (discoverkindred.com) — a personalized local
-morning newspaper that helps people discover events, food & drinks, activities,
-history, weather, and local stories around them every day.
+The landing page for **Kindred** (discoverkindred.com) — a premium local
+discovery app that helps people discover events, food & drinks, activities,
+weather, local history, today's masterpiece, today in history, and local deals
+around them every day.
 
 Built with **Next.js (App Router)**, **TypeScript**, and **TailwindCSS**.
 

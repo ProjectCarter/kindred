@@ -12,8 +12,8 @@ const structuredData = {
   applicationCategory: "LifestyleApplication",
   operatingSystem: "iOS, Android",
   description:
-    "Kindred is your personalized local morning newspaper that helps you discover events, activities, restaurants, history, weather, and local stories happening around you every day.",
-  url: "https://discoverkindred.com",
+    "Kindred is a premium local discovery app that helps you discover events, activities, food & drinks, weather, local history, today's masterpiece, today in history, and exclusive local deals happening around you every day.",
+  url: "https://www.discoverkindred.com",
   offers: {
     "@type": "Offer",
     price: "0",
