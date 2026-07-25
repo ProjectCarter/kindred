@@ -528,6 +528,45 @@ function mapsDestinationFromSavedLocation(
   return null;
 }
 
+/**
+ * The standardized detail-page second button — one action directly below Google
+ * Maps. Section-specific label, derived only from links Kindred already has
+ * (never fabricated). Returns null when no verified link exists (Maps only).
+ *
+ * - Events: Buy Tickets (filled) when tickets are sold, else Learn More.
+ * - Activities: Learn More (official website).
+ * - Food & Drinks: View Menu when available, else Visit Website.
+ */
+export function resolveListingSecondaryButton(
+  savedContentType: string | null | undefined,
+  actions: ActionBarAction[]
+): { label: string; url: string; variant: "primary" | "secondary" } | null {
+  const withUrl = (id: ActionBarActionId) =>
+    actions.find((a) => a.id === id && a.url?.trim())?.url?.trim() ?? null;
+
+  if (savedContentType === "event") {
+    const tickets = withUrl("buy_tickets");
+    if (tickets) return { label: "Buy Tickets", url: tickets, variant: "primary" };
+    const learn =
+      withUrl("learn_more") ?? withUrl("official_event_page") ?? withUrl("website");
+    if (learn) return { label: "Learn More", url: learn, variant: "secondary" };
+    return null;
+  }
+
+  if (savedContentType === "activity") {
+    const site = withUrl("website") ?? withUrl("learn_more");
+    if (site) return { label: "Learn More", url: site, variant: "secondary" };
+    return null;
+  }
+
+  // Food & Drinks (recommendation) and any other place listing.
+  const menu = withUrl("menu");
+  if (menu) return { label: "View Menu", url: menu, variant: "secondary" };
+  const site = withUrl("website");
+  if (site) return { label: "Visit Website", url: site, variant: "secondary" };
+  return null;
+}
+
 /** Practical article actions only — no Pin / Save / Share (those stay in the hero row). */
 export function resolveArticleContextActions(
   article: KindredArticle,

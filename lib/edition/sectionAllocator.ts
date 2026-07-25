@@ -65,6 +65,8 @@ import {
   type ReaderLocation,
 } from "./localDiscoveryScope";
 import { isFoodEstablishmentItem } from "./foodDrinkDesk";
+import { isServiceBusinessListing } from "./serviceBusinessFilter";
+import { isDiscoveryQualityExcluded } from "./discoveryQualityFilter";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -112,6 +114,18 @@ const DESTINATION_EXPERIENCE_CATEGORIES = DESTINATION_ACTIVITY_CATEGORIES;
 /** Does this item belong in Activities — a real thing to go do? */
 function belongsInActivities(item: RankedDiscoveryItem): boolean {
   if (isFoodEstablishmentItem(item)) return false;
+
+  // Activities are experiences, never everyday service/professional businesses.
+  if (
+    isServiceBusinessListing({
+      name: item.item.title,
+      venueCategories: item.item.venueCategories,
+      category: item.item.category,
+      dek: item.item.dek,
+    })
+  ) {
+    return false;
+  }
 
   if (DESTINATION_EXPERIENCE_CATEGORIES.has(item.item.category)) {
     return true;
@@ -238,6 +252,18 @@ export function allocateDiscoverySections(
   ])
     .filter((d) => !isRealEvent(d))
     .filter((d) => Boolean(d.item.title?.trim()))
+    // Discovery Quality Filter (V3): one constitutional gate for every section —
+    // restricted / service / editorially-excluded listings never reach Activities,
+    // Food & Drinks, or Recommendations, even from an already-cached edition.
+    .filter(
+      (d) =>
+        !isDiscoveryQualityExcluded({
+          name: d.item.title,
+          venueCategories: d.item.venueCategories,
+          category: d.item.category,
+          dek: d.item.dek,
+        })
+    )
     .filter((d) => d.score >= minScore)
     .filter((d) => meetsDiscoveryPublishConfidence(d.item))
     .filter((d) => {

@@ -753,6 +753,7 @@ export function localPlacesAsDiscoveryItems(
     lat?: number | null;
     lon?: number | null;
     note?: string | null;
+    about?: string | null;
     providerCategories?: string[];
     editorialScore?: number | null;
     editorialLabels?: string[];
@@ -787,6 +788,7 @@ export function localPlacesAsDiscoveryItems(
         p.note?.trim() ||
         [sanitizeAddressForDisplay(p.address), p.city].filter(Boolean).join(" — ") ||
         "A local place worth a closer look.",
+      about: p.about?.trim() || null,
       category,
       place: { city: p.city ?? null, state: p.state ?? null },
       source: {

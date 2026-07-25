@@ -49,6 +49,7 @@ import type { ImageSourcePropType } from "react-native";
 import { resolveDiscoveryCategoryIcon, resolveEventCategoryIcon, resolveBanditsPickCategoryIcon } from "./categoryIcon";
 import { resolveVenueClassification } from "./venueClassification";
 import { inferActivitySubtype } from "./activities";
+import { toKnownForBlurb } from "./detailHero";
 
 /**
  * Canonical article model for Kindred’s native reader.
@@ -122,6 +123,15 @@ export type KindredArticle = {
   savedContentType?: ClippingContentType | null;
   /** Human-readable venue/place line, for the Clippings card. */
   savedLocation?: string | null;
+  /** City only — for the detail Quick Overview title ("Name • City"). */
+  savedCity?: string | null;
+  /** One-sentence "Known for" line — verified attributes only, never invented. */
+  knownFor?: string | null;
+  /**
+   * Editorial "About" paragraphs — Kindred's own grounded 1–2 paragraph summary
+   * (server-generated `about`, when present). Presentation-only; never invented.
+   */
+  aboutParagraphs?: string[] | null;
   /** Human-readable date/time line, for the Clippings card (events). */
   savedEventTime?: string | null;
   /** Provider-backed actions — never invented URLs. */
@@ -1005,6 +1015,13 @@ export function articleFromLocalEvent(
       }),
     savedContentType: "event",
     savedLocation: place || null,
+    savedCity: event.city?.trim() || null,
+    // "Known for" — an editorial recommendation (why choose this over the dozens
+    // of other options), sourced only from Kindred's genuine editorial voice, the
+    // Bandit's Note. Never a category chip, provider blurb, or listing text, and
+    // never invented — omitted entirely when there is no editorial line to stand
+    // behind.
+    knownFor: toKnownForBlurb(banditNote),
     savedEventTime: whenLine || null,
     savedEventEndsAt: resolveEventEndsAt(event.date, event.time),
     actionContext: actionContextFromLocalEvent(event),

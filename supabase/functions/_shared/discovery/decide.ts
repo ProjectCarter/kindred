@@ -8,6 +8,7 @@ import { scoreDiscoveryItem } from "./score.ts";
 import { formatDiscoveryBrief, selectDiscoverySurface, whyLine } from "./select.ts";
 import { seasonForDate } from "./taxonomy.ts";
 import { discoveryItemsForEnrichment } from "../editorial/confidencePayload.ts";
+import { isDiscoveryQualityExcluded } from "../editorial/discoveryQualityFilter.ts";
 import type {
   DiscoveryItem,
   DiscoveryPayload,
@@ -75,7 +76,22 @@ export function runDiscoveryDecisions(
     ...localEventsAsDiscoveryItems(ctx.localEvents ?? []),
     ...localPlacesAsDiscoveryItems(ctx.localPlaces ?? []),
     ...npsParksAsDiscoveryItems(ctx.npsParks ?? []),
-  ];
+  ]
+    // Discovery Quality Filter (Constitutional Amendment V3): the single
+    // eligibility gate every surface shares, applied before any scoring so a
+    // restricted / service / editorially-excluded listing can never be
+    // recommended in Activities, Food & Drinks, Recommendations, or any desk.
+    .filter(
+      (item) =>
+        !isDiscoveryQualityExcluded({
+          name: item.title,
+          venueCategories: item.venueCategories,
+          category: item.category,
+          dek: item.dek,
+          description: item.about,
+          tags: item.tags,
+        })
+    );
 
   const ranked = catalog
     .map((item) => scoreDiscoveryItem(item, ctx))

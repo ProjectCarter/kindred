@@ -66,6 +66,11 @@ export type DiscoveryItem = {
   id: string;
   title: string;
   dek: string;
+  /**
+   * Kindred's 1–2 paragraph grounded editorial "About" summary, when generated.
+   * Separate from `dek` (the one-line card blurb). Never verbatim provider text.
+   */
+  about?: string | null;
   category: DiscoveryCategory;
   family: DiscoveryFamily;
   /** Where this recommendation applies; null = broadly relevant. */

@@ -7,12 +7,14 @@
  */
 
 import type { LocalEvent } from "./provider.ts";
+import { assessRestrictedBusinessListing } from "../editorial/restrictedBusinessFilter.ts";
 
 export type EditorialExclusionCategory =
   | "adult_entertainment"
   | "hate_extremism"
   | "violence_illegal"
-  | "scam_fraud";
+  | "scam_fraud"
+  | "restricted_business";
 
 export type FamilyFriendlyFilterAssessment = {
   excluded: boolean;
@@ -325,8 +327,31 @@ export function assessFamilyFriendlyListing(
     assessAdultEntertainment(hay, title, tagHay) ??
     assessHateExtremism(hay) ??
     assessViolenceIllegal(hay) ??
-    assessScamFraud(hay) ?? { excluded: false }
+    assessScamFraud(hay) ??
+    assessRestrictedCategory(input) ?? { excluded: false }
   );
+}
+
+/**
+ * Constitutional Amendment V3 restricted categories — firearms/weapons, cannabis,
+ * vape/smoke/tobacco, gambling — shared with the discovery Quality Filter so
+ * events and places apply the same rules. Adult venues are already handled above.
+ */
+function assessRestrictedCategory(
+  input: FamilyFriendlyListingInput
+): FamilyFriendlyFilterAssessment | null {
+  const restricted = assessRestrictedBusinessListing({
+    name: input.name,
+    category: input.category,
+    dek: input.description,
+    venueCategories: input.tags,
+  });
+  if (!restricted.excluded) return null;
+  return {
+    excluded: true,
+    signal: restricted.signal,
+    category: "restricted_business",
+  };
 }
 
 export function buildEventFamilyFriendlyInput(

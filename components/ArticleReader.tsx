@@ -70,13 +70,35 @@ import {
 } from "../lib/edition/contentSystem";
 import {
   resolveArticleContextActions,
+  resolveListingSecondaryButton,
 } from "../lib/edition/actionBar";
+import { GOOGLE_MAPS_ACTION_LABEL } from "../lib/edition/googleMaps";
+import { openGoogleMapsDestination } from "../lib/edition/googleMaps";
 import { ArticleActionList } from "./ArticleActionList";
+import { DetailActionButton, DetailActionStack } from "./DetailActionButton";
 import { DetailHeroCard, DetailAboutCard } from "./DetailHeroCard";
-import { detailHeroThemeForArticle } from "../lib/edition/detailHero";
+import {
+  detailHeroThemeForArticle,
+  toAboutParagraphs,
+  toKnownForBlurb,
+} from "../lib/edition/detailHero";
 
 function isCityHistorySection(section: string): boolean {
   return section === "story_of" || section === "your_city";
+}
+
+/**
+ * True when two overview lines are effectively the same source text — one is a
+ * prefix of the other (the short description is often the first sentence of the
+ * "Known for" line). Compared on letters/digits only so punctuation and the
+ * trailing ellipsis don't hide a match.
+ */
+function overviewTextsOverlap(a: string, b: string): boolean {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const na = norm(a);
+  const nb = norm(b);
+  if (!na || !nb) return false;
+  return na === nb || na.startsWith(nb) || nb.startsWith(na);
 }
 
 function isProtectedHistoricalSection(section: string): boolean {
@@ -146,19 +168,40 @@ export function ArticleReader({
   const isListingDetail = Boolean(heroTheme);
   const isEventListing =
     article.section === "local_events" || article.savedContentType === "event";
-  // "About" card summary: discovery uses the dek; events use the generated
-  // summary (first body paragraph) so the card explains why to attend — never
-  // the bare venue/location line. Bandit's note keeps its own block below.
-  const eventUsesFirstBody =
-    isEventListing && Boolean(article.body?.[0]?.trim());
-  const aboutCardBody = !isListingDetail
-    ? null
-    : isEventListing
-      ? eventUsesFirstBody
-        ? article.body[0].trim()
-        : null
-      : article.dek?.trim() || null;
-  const showAboutCard = Boolean(heroTheme) && Boolean(aboutCardBody);
+  // Quick Overview card: a "Name • City" title, a quick fact line (events →
+  // date · time), the editorial "About" paragraphs, and a "Why you'll love it"
+  // line. No street address — the Google Maps action above covers directions.
+  const overviewTitle = isListingDetail
+    ? [article.headline?.trim(), article.savedCity?.trim()]
+        .filter(Boolean)
+        .join(" • ") || null
+    : null;
+  const overviewMeta =
+    isListingDetail && isEventListing
+      ? article.savedEventTime?.trim() || null
+      : null;
+  // "Why you'll love it" — the warm "why go" line, already sourced from verified
+  // editorial text upstream (Bandit's Note / verified-category line / authored
+  // deal copy). Trim to card length only; never invent.
+  const overviewKnownFor = isListingDetail
+    ? toKnownForBlurb(article.knownFor, 50)
+    : null;
+  // ABOUT — one or two concise editorial paragraphs (Editorial Constitution V2).
+  // Prefer Kindred's server-written grounded `about`; otherwise Kindred's own
+  // composed editorial body. Never verbatim provider text, and deduped against
+  // the "Why you'll love it" line so the card never repeats itself.
+  const overviewAboutSource =
+    article.aboutParagraphs && article.aboutParagraphs.length > 0
+      ? article.aboutParagraphs
+      : article.body;
+  const overviewParagraphs = isListingDetail
+    ? toAboutParagraphs(overviewAboutSource, {
+        maxParagraphs: 2,
+        maxWordsEach: 55,
+        avoid: overviewKnownFor,
+      })
+    : [];
+  const showOverview = isListingDetail;
 
   const handleBack = useCallback(() => {
     updateArticleSessionScroll(article.id, scrollYRef.current);
@@ -208,7 +251,31 @@ export function ArticleReader({
     () => resolveArticleContextActions(article),
     [article]
   );
+  // Standardized detail buttons — Google Maps + one section-specific action.
+  const mapsAction = useMemo(
+    () => articleContextActions.find((a) => a.id === "maps") ?? null,
+    [articleContextActions]
+  );
+  const secondaryButton = useMemo(
+    () =>
+      isListingDetail
+        ? resolveListingSecondaryButton(
+            article.savedContentType,
+            articleContextActions
+          )
+        : null,
+    [isListingDetail, article.savedContentType, articleContextActions]
+  );
   const continueItems = companion?.continueReading ?? [];
+
+  const openMapsAction = useCallback(() => {
+    if (!mapsAction) return;
+    if (mapsAction.mapsDestination) {
+      void openGoogleMapsDestination(mapsAction.mapsDestination);
+      return;
+    }
+    if (mapsAction.url) void Linking.openURL(mapsAction.url).catch(() => {});
+  }, [mapsAction]);
 
   useEffect(() => {
     heroReadyRef.current = heroReady;
@@ -765,9 +832,37 @@ export function ArticleReader({
               </Pressable>
             </View>
 
-            {!textOnlyListing &&
-            articleContextActions.length > 0 &&
-            !isLocalNewsArticle ? (
+            {/* Standardized detail actions — Google Maps then one section button,
+                directly under Save/Share and above the Quick Overview card.
+                Full articles keep the newspaper-style contextual link list. */}
+            {isListingDetail ? (
+              mapsAction || secondaryButton ? (
+                <DetailActionStack style={styles.detailActions}>
+                  {mapsAction ? (
+                    <DetailActionButton
+                      label={GOOGLE_MAPS_ACTION_LABEL}
+                      variant="secondary"
+                      accessibilityRole="link"
+                      accessibilityLabel={GOOGLE_MAPS_ACTION_LABEL}
+                      onPress={openMapsAction}
+                    />
+                  ) : null}
+                  {secondaryButton ? (
+                    <DetailActionButton
+                      label={secondaryButton.label}
+                      variant={secondaryButton.variant}
+                      accessibilityRole="link"
+                      accessibilityLabel={secondaryButton.label}
+                      onPress={() =>
+                        void Linking.openURL(secondaryButton.url).catch(() => {})
+                      }
+                    />
+                  ) : null}
+                </DetailActionStack>
+              ) : null
+            ) : !textOnlyListing &&
+              articleContextActions.length > 0 &&
+              !isLocalNewsArticle ? (
               <ArticleActionList actions={articleContextActions} />
             ) : null}
 
@@ -799,8 +894,8 @@ export function ArticleReader({
               </Text>
             )}
 
-            {/* 4. Reading time · source · date */}
-            {metaLine ? (
+            {/* 4. Reading time · source · date — hidden on listing detail pages */}
+            {isListingDetail ? null : metaLine ? (
               <Text style={styles.meta} maxFontSizeMultiplier={1.15}>
                 {metaLine}
               </Text>
@@ -810,8 +905,8 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {/* 5. Bandit's introduction or note */}
-            {banditNote ? (
+            {/* 5. Bandit's note — sits above the summary on non-listing pages */}
+            {banditNote && !isListingDetail ? (
               <View style={styles.banditNote} accessibilityRole="text">
                 {article.section !== "bandits_pick" ? (
                   <Text style={styles.banditNoteKicker}>Bandit’s Note</Text>
@@ -822,11 +917,14 @@ export function ArticleReader({
               </View>
             ) : null}
 
-            {/* 6. Opening summary — tinted "About" card on listing detail pages */}
-            {showAboutCard && heroTheme ? (
+            {/* 6. Quick Overview — the whole decision page on listing details */}
+            {showOverview && heroTheme ? (
               <DetailAboutCard
                 label={heroTheme.aboutLabel}
-                body={aboutCardBody!}
+                title={overviewTitle ?? undefined}
+                meta={overviewMeta ?? undefined}
+                body={overviewParagraphs.length ? overviewParagraphs : undefined}
+                knownFor={overviewKnownFor ?? undefined}
                 tint={heroTheme.tint}
                 style={styles.listingAbout}
               />
@@ -836,7 +934,8 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {briefing && !isLocalNewsArticle ? (
+            {/* Disclaimer moves to the very bottom on listing detail pages */}
+            {briefing && !isLocalNewsArticle && !isListingDetail ? (
               <Text style={styles.briefingNote} maxFontSizeMultiplier={1.25}>
                 {article.body.length <= 1
                   ? "A short Kindred note — the full report lives with the publisher."
@@ -844,14 +943,11 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {textOnlyListing && articleContextActions.length > 0 ? (
-              <ArticleActionList actions={articleContextActions} />
-            ) : null}
-
             {/* 7–9. Body · supporting images · pull quotes.
                 Event listings promote the first paragraph into the About card. */}
             {(article.body ?? []).map((paragraph, index) => {
-              if (eventUsesFirstBody && index === 0) return null;
+              // Listing detail pages are decision pages — no article body.
+              if (isListingDetail) return null;
               return (
                 <View key={`p-${index}`}>
                   <BodyParagraph
@@ -885,13 +981,15 @@ export function ArticleReader({
               />
             ) : null}
 
-            {/* Desk modules — practical questions answered in prose (UCS) */}
+            {/* Desk modules — practical questions answered in prose (UCS).
+                Suppressed on listing detail pages (Quick Overview only). */}
             {(article.modules?.length ?? 0) > 0 &&
-            !isCityHistorySection(article.section) ? (
+            !isCityHistorySection(article.section) &&
+            !isListingDetail ? (
               <ContentTemplateModules modules={article.modules!} />
             ) : null}
 
-            {(article.nearbyEditorial?.length ?? 0) > 0 ? (
+            {(article.nearbyEditorial?.length ?? 0) > 0 && !isListingDetail ? (
               <View style={styles.nearbyBlock}>
                 <Text style={styles.nearbyKicker}>Nearby</Text>
                 {article.nearbyEditorial!.map((place, index) => (
@@ -918,7 +1016,7 @@ export function ArticleReader({
               </View>
             ) : null}
 
-            {article.closingBanditNote ? (
+            {article.closingBanditNote && !isListingDetail ? (
               <View style={styles.banditNote} accessibilityRole="text">
                 <Text style={styles.banditNoteKicker}>Bandit's Note</Text>
                 <Text style={styles.banditNoteBody} maxFontSizeMultiplier={1.25}>
@@ -937,16 +1035,18 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            <View style={styles.colophon}>
-              <View style={styles.footerRule} />
-              <Text style={styles.endMark}>◆</Text>
-              <Text style={styles.attribution}>
-                From this morning’s paper  ·  {article.source}
-              </Text>
-            </View>
+            {!isListingDetail ? (
+              <View style={styles.colophon}>
+                <View style={styles.footerRule} />
+                <Text style={styles.endMark}>◆</Text>
+                <Text style={styles.attribution}>
+                  From this morning’s paper  ·  {article.source}
+                </Text>
+              </View>
+            ) : null}
 
-            {/* 10. Related stories */}
-            {relatedItems.length > 0 ? (
+            {/* 10. Related stories — suppressed on listing detail pages */}
+            {relatedItems.length > 0 && !isListingDetail ? (
               <EndMatterBlock
                 kicker="Related stories"
                 intro="Nearby threads from today’s paper — chosen to deepen the reading, not the scroll."
@@ -968,20 +1068,23 @@ export function ArticleReader({
               </EndMatterBlock>
             ) : null}
 
-            {/* 11. Continue Reading */}
-            <EndMatterBlock
-              kicker="Continue reading"
-              intro="The rest of today’s morning paper is waiting."
-            >
-              <ActionLink
-                label="Return to Today’s Paper"
-                onPress={handleBack}
-                prefix="← "
-              />
-            </EndMatterBlock>
+            {/* 11. Continue Reading — full articles only. Listing detail pages
+                get a minimal Source → Return → disclaimer footer below. */}
+            {!isListingDetail ? (
+              <EndMatterBlock
+                kicker="Continue reading"
+                intro="The rest of today’s morning paper is waiting."
+              >
+                <ActionLink
+                  label="Return to Today’s Paper"
+                  onPress={handleBack}
+                  prefix="← "
+                />
+              </EndMatterBlock>
+            ) : null}
 
-            {/* 12. What's Special Right Now */}
-            {banditPickItems.length > 0 ? (
+            {/* 12. What's Special Right Now — suppressed on listing detail pages */}
+            {banditPickItems.length > 0 && !isListingDetail ? (
               <EndMatterBlock
                 kicker="What's Special Right Now"
                 intro="What Bandit says not to miss today or this week."
@@ -995,6 +1098,33 @@ export function ArticleReader({
                   />
                 ))}
               </EndMatterBlock>
+            ) : null}
+
+            {/* Listing detail footer — Source → Return → one-line disclaimer.
+                The whole end of the page: no newspaper modules, no filler. */}
+            {isListingDetail ? (
+              <View style={styles.listingFooter}>
+                {article.source?.trim() ? (
+                  <View style={styles.sourceBlock}>
+                    <Text style={styles.sourceLabel}>SOURCE</Text>
+                    <Text style={styles.sourceName} maxFontSizeMultiplier={1.2}>
+                      {article.source.trim()}
+                    </Text>
+                  </View>
+                ) : null}
+                <ActionLink
+                  label="Return to Today’s Paper"
+                  onPress={handleBack}
+                  prefix="← "
+                />
+                <Text
+                  style={[styles.briefingNote, styles.listingDisclaimer]}
+                  maxFontSizeMultiplier={1.25}
+                >
+                  Kindred summarizes trusted listings for quick local discovery.
+                  This is not the publisher’s full listing.
+                </Text>
+              </View>
             ) : null}
           </View>
         </Animated.View>
@@ -1375,6 +1505,32 @@ const styles = StyleSheet.create({
   listingAbout: {
     marginTop: 8,
     marginBottom: 36,
+  },
+  listingDisclaimer: {
+    marginTop: 8,
+    marginBottom: 0,
+  },
+  detailActions: {
+    marginTop: 2,
+    marginBottom: 28,
+  },
+  listingFooter: {
+    marginTop: 4,
+  },
+  sourceBlock: {
+    marginBottom: 20,
+  },
+  sourceLabel: {
+    ...type.kicker,
+    color: paper.inkFaint,
+    letterSpacing: 1.8,
+    marginBottom: 6,
+  },
+  sourceName: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
+    color: paper.inkBody,
   },
   heroActionsRow: {
     flexDirection: "row",

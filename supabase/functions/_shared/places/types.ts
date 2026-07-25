@@ -79,7 +79,14 @@ export type NormalizedPlace = {
   editorialLabels?: string[];
   /** Permanent Kindred venue UUID when loaded from catalog. */
   kindredVenueId?: string | null;
+  /** Kindred's one-sentence editorial note (see notes.ts) — homepage card blurb. */
   note?: string | null;
+  /**
+   * Kindred's 1–2 paragraph editorial "About" summary (see notes.ts), grounded
+   * in the same verified facts as `note`. Persisted in the `editorial_article`
+   * catalog column. Never verbatim provider text; null when not yet generated.
+   */
+  about?: string | null;
 };
 
 export type PlacesSearchResult = {

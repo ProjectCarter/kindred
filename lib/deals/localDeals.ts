@@ -51,6 +51,19 @@ export type LocalDeal = {
   description: string;
   /** Plain-language savings summary shown on the detail page. */
   savingsDetail: string;
+  /**
+   * Editorial "Known for" — the warm, local-friend reason to visit (roughly
+   * 20–50 words). It answers "why would someone want to go here?", not what the
+   * offer is. Authored placeholder copy about a fictional merchant concept —
+   * never a claim about a real business.
+   */
+  knownFor: string;
+  /**
+   * "Offer Includes" highlight bullets for the detail overview — short factual
+   * points drawn from this deal's own terms. Presentation seed content only;
+   * never claims about a real business. Omit when there is nothing to list.
+   */
+  highlights?: string[];
   /** Human expiration line, when known. */
   expiration?: string | null;
   /** City used for the Google Maps search + card location line. */
@@ -105,6 +118,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A newcomer-friendly day pass on the house when you rent a harness and shoes. Auto-belays and a bouldering cave make it an easy first try for beginners and a quick session for regulars.",
     savingsDetail: "First-time day pass free with any gear rental — about $18 in value.",
+    knownFor:
+      "A welcoming spot to try climbing for the first time or fit in a quick session, with forgiving auto-belays, a bouldering cave, and staff who are used to walking nervous beginners up their very first wall.",
+    highlights: ["First-time climbers", "Gear rental required", "Auto-belays & bouldering cave"],
     expiration: "Through the end of the month",
     city: "Gilbert, AZ",
     website: null,
@@ -122,6 +138,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Beat the heat with a morning round on a shaded 18-hole desert course. The second round is free when you tee off before noon — a good excuse to make it a rematch.",
     savingsDetail: "Buy one round, get the second free before 12 p.m.",
+    knownFor:
+      "A shaded, easygoing course that turns a hot morning into a relaxed round for the whole group — low-key enough for kids and just competitive enough to talk everyone into a rematch.",
+    highlights: ["Second round free", "Before noon daily", "Shaded 18-hole course"],
     expiration: null,
     city: "Gilbert, AZ",
     website: null,
@@ -138,6 +157,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A guided evening paddle along the lake's quiet coves as the desert light turns gold. Guides handle the route and the gear; you handle the photos.",
     savingsDetail: "$15 off each guided sunset tour booking.",
+    knownFor:
+      "A guided evening paddle through the lake's quiet coves just as the desert light turns gold — the route and gear are handled for you, so the only job left is to take it all in.",
+    highlights: ["Guided sunset tour", "Gear provided", "Reservation required"],
     expiration: "Seasonal — through early fall",
     city: "Mesa, AZ",
     website: null,
@@ -154,6 +176,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Three original rooms ranging from beginner to fiendish, ideal for a small group or a date night with a little friendly competition. Weekday slots are the quietest.",
     savingsDetail: "20% off any room booked Monday through Thursday.",
+    knownFor:
+      "Three original story-driven rooms from beginner to fiendish, built for clever puzzle-solving under a little friendly pressure — an easy win for a date night, a group outing, or a first-timer's attempt at beating the clock.",
+    highlights: ["Weekdays (Mon–Thu)", "Groups of 2–6", "Beginner to advanced rooms"],
     expiration: null,
     city: "Chandler, AZ",
     website: null,
@@ -172,6 +197,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A neighborhood taqueria known for mesquite-grilled plates and hand-pressed tortillas. Your first order of street corn is on the house with any entrée.",
     savingsDetail: "Complimentary order of elote (street corn) with each entrée.",
+    knownFor:
+      "A from-scratch neighborhood taqueria built around mesquite-grilled plates and hand-pressed tortillas — the kind of unfussy, deeply local spot regulars quietly hope stays their little secret.",
+    highlights: ["Free elote (street corn)", "Dine-in only", "One per entrée"],
     expiration: null,
     city: "Gilbert, AZ",
     website: null,
@@ -188,6 +216,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Wood-fired pies with a blistered, airy crust and a short menu that changes with the season. Order one and the second is free — bring a friend or take one home.",
     savingsDetail: "Buy any Neapolitan pizza, get a second of equal or lesser value free.",
+    knownFor:
+      "Wood-fired Neapolitan pies with a blistered, airy crust and a short menu that changes with the season — a relaxed, share-a-table pick whether you're staying in or grabbing one to go.",
+    highlights: ["Buy one, get one free", "Dine-in or takeout", "Equal or lesser value"],
     expiration: "Through this month",
     city: "Gilbert, AZ",
     website: null,
@@ -204,6 +235,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Slow-simmered tonkotsu and a bright, vegetable-forward shoyu share the menu at this small counter-service shop. A quiet weeknight favorite.",
     savingsDetail: "$5 off when two dinner bowls are ordered together.",
+    knownFor:
+      "A tiny counter shop trading in slow-simmered tonkotsu and a bright, vegetable-forward shoyu — the kind of warm, low-key find that makes an ordinary weeknight dinner for two feel like a treat.",
+    highlights: ["$5 off two bowls", "Dine-in only", "Minimum two bowls"],
     expiration: null,
     city: "Tempe, AZ",
     website: null,
@@ -222,6 +256,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A small-batch roaster with a rotating single-origin menu and pastries baked in-house each morning. Order a latte before eleven and choose a pastry on the house.",
     savingsDetail: "One pastry free with any latte ordered before 11 a.m.",
+    knownFor:
+      "A small-batch roaster with a rotating single-origin menu and pastries baked in-house each morning — an unhurried, good-light corner that quietly makes the whole day start better.",
+    highlights: ["Free pastry with a latte", "Before 11 a.m. daily", "While supplies last"],
     expiration: null,
     city: "Gilbert, AZ",
     website: null,
@@ -238,6 +275,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Small-batch ice cream with a handful of inventive flavors alongside the classics. On Sundays, the second scoop is free — a standing reason to walk over after dinner.",
     savingsDetail: "Buy one scoop, get the second free every Sunday.",
+    knownFor:
+      "Small-batch ice cream with a few inventive flavors sitting right beside the classics — the sort of after-dinner walk-over that quietly turns into a standing weekend ritual.",
+    highlights: ["Second scoop free", "Sundays only", "Dine-in or takeaway"],
     expiration: null,
     city: "Chandler, AZ",
     website: null,
@@ -254,6 +294,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Cake and raised doughnuts made fresh before dawn, with a few seasonal specials each week. Buy six and take home thirteen.",
     savingsDetail: "A baker's dozen (13) for the price of six doughnuts.",
+    knownFor:
+      "Cake and raised doughnuts made fresh before dawn, with a few seasonal specials each week — worth the early trip while the good ones are still warm from the fryer.",
+    highlights: ["13 for the price of 6", "In-store only", "One dozen deal per customer"],
     expiration: "While supplies last each morning",
     city: "Mesa, AZ",
     website: null,
@@ -272,6 +315,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A neighborhood taproom pouring a rotating lineup of house beers, from a crisp desert lager to a barrel-aged seasonal. Thursday flights are the easiest way to taste around.",
     savingsDetail: "$3 off any tasting flight every Thursday.",
+    knownFor:
+      "A welcoming neighborhood taproom pouring everything from a crisp desert lager to a barrel-aged seasonal — a relaxed, unpretentious place to taste around and unwind with friends after work.",
+    highlights: ["$3 off tasting flights", "Thursdays only", "Must be 21+"],
     expiration: null,
     city: "Gilbert, AZ",
     website: null,
@@ -288,6 +334,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A cozy list leaning toward small producers, with a knowledgeable staff happy to point you somewhere new. Bottles are half price on Mondays.",
     savingsDetail: "50% off retail bottles enjoyed in-house on Mondays.",
+    knownFor:
+      "A cozy list leaning toward small producers, with staff who genuinely enjoy pointing you somewhere new — an inviting, low-lit place to slow down over a good bottle you'd never have picked yourself.",
+    highlights: ["Half-price bottles", "Mondays only", "Must be 21+"],
     expiration: null,
     city: "Scottsdale, AZ",
     website: null,
@@ -306,6 +355,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "An independent bookshop with a well-curated local-author shelf and regular reading nights. Take 15% off any title from an Arizona writer.",
     savingsDetail: "15% off any book by a local or regional author.",
+    knownFor:
+      "An independent bookshop with a thoughtfully curated local-author shelf and regular reading nights — the browse-for-an-hour kind of place that quietly keeps a neighborhood's character alive.",
+    highlights: ["15% off local authors", "In-store only", "Excludes sale pricing"],
     expiration: null,
     city: "Gilbert, AZ",
     website: null,
@@ -322,6 +374,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A rambling collective of vendor booths — mid-century furniture, vinyl, and the occasional genuine find. Worth an unhurried afternoon of browsing.",
     savingsDetail: "$20 off any single purchase of $100 or more.",
+    knownFor:
+      "A rambling collective of vendor booths — mid-century furniture, old vinyl, and the occasional genuine find — best enjoyed as an unhurried afternoon of treasure hunting with no particular list in hand.",
+    highlights: ["$20 off $100+", "One discount per visit", "Excludes consignment"],
     expiration: null,
     city: "Mesa, AZ",
     website: null,
@@ -340,6 +395,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A community theater staging a mix of familiar musicals and new work in an intimate room where there isn't a bad seat. Weeknight tickets are the best value.",
     savingsDetail: "$10 off each ticket to Tuesday–Thursday performances.",
+    knownFor:
+      "An intimate community theater staging familiar musicals and new work in a room without a bad seat — a warm, personal night out where you're close enough to feel every scene.",
+    highlights: ["$10 off tickets", "Tue–Thu shows", "Subject to availability"],
     expiration: "Current season",
     city: "Gilbert, AZ",
     website: null,
@@ -356,6 +414,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Classic lanes with a snack bar and a low-key arcade in the corner — an easy plan for a group or a rainy-day afternoon with the kids.",
     savingsDetail: "Shoe rental free when you bowl two or more games.",
+    knownFor:
+      "Classic lanes with a snack bar and a small arcade tucked in the corner — the reliable, everyone's-welcome plan for a group hangout, a birthday, or a rainy-day afternoon with the kids.",
+    highlights: ["Free shoe rental", "Two-game minimum", "Arcade & snack bar"],
     expiration: null,
     city: "Chandler, AZ",
     website: null,
@@ -372,6 +433,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A restored drive-in showing double features under the desert sky. Bring the whole car for one flat price on carload nights.",
     savingsDetail: "One flat $25 admission per vehicle on designated carload nights.",
+    knownFor:
+      "A restored drive-in showing double features under the open desert sky — a nostalgic, pack-the-whole-car night out that's getting harder to find anywhere else.",
+    highlights: ["$25 per vehicle", "Carload nights only", "Double features"],
     expiration: "Select nights — check the marquee",
     city: "Mesa, AZ",
     website: null,
@@ -390,6 +454,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A boutique inn with a courtyard pool and a quiet in-house café — an easy overnight reset without leaving town. Weekend rate includes a relaxed noon checkout.",
     savingsDetail: "20% off weekend room rates plus complimentary late checkout.",
+    knownFor:
+      "A boutique inn with a courtyard pool and a quiet in-house café — an easy overnight reset that feels like a proper getaway without ever leaving town.",
+    highlights: ["20% off weekend rates", "Late checkout to noon", "Fri–Sun nights"],
     expiration: "Subject to availability",
     city: "Mesa, AZ",
     website: null,
@@ -406,6 +473,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "A desert spa day for two — pool access, a treatment each, and a slow afternoon. Midweek pricing keeps it a genuine treat rather than a splurge.",
     savingsDetail: "Reduced midweek rate on the spa-day-for-two package.",
+    knownFor:
+      "A calm desert spa day for two — pool time, a treatment each, and a slow, unbothered afternoon that turns a midweek slump into a genuine escape.",
+    highlights: ["Spa day for two", "Midweek (Mon–Thu)", "Advance booking required"],
     expiration: null,
     city: "Scottsdale, AZ",
     website: null,
@@ -424,6 +494,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Cruisers and e-bikes a few steps from the canal trails, with helmets and locks included. Pay the half-day rate and keep the bike until closing.",
     savingsDetail: "Full-day rental charged at the half-day rate.",
+    knownFor:
+      "Cruisers and e-bikes just steps from the canal trails, with helmets and locks included — the simplest way to trade the car for a breezy morning of exploring on two wheels.",
+    highlights: ["All-day for half-day rate", "Helmet & lock included", "Return by closing"],
     expiration: null,
     city: "Tempe, AZ",
     website: null,
@@ -440,6 +513,9 @@ const DEALS: readonly LocalDeal[] = [
     description:
       "Covered valet in the heart of downtown, an easy start to a night out. The first two hours are free on weekends when you show the offer.",
     savingsDetail: "First two hours of weekend valet free.",
+    knownFor:
+      "Covered valet right in the heart of downtown — a small luxury that makes a night out feel effortless from the second you pull up to the curb.",
+    highlights: ["First 2 hours free", "Weekends only", "Covered valet"],
     expiration: null,
     city: "Gilbert, AZ",
     website: null,

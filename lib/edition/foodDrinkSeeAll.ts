@@ -16,6 +16,7 @@ import {
   type ReaderLocation,
 } from "./localDiscoveryScope.ts";
 import { compareVenueEditorialRank } from "./venueEditorialScore.ts";
+import { isDiscoveryQualityExcluded } from "./discoveryQualityFilter.ts";
 
 export type FoodDrinkSeeAllExclusion = {
   id: string;
@@ -86,6 +87,18 @@ export function buildFoodDrinkGuidePool(
   return applyLocalFirstFoodBalance(
     dedupeById(items ?? [])
       .filter((d) => RECOMMENDATION_CATEGORIES.has(d.item.category))
+      // Discovery Quality Filter (V3): keep restricted / smoke / vape / cannabis /
+      // adult / service listings out of Food & Drinks (homepage + See All + guide
+      // all share this pool). The food safe harbor protects genuine restaurants.
+      .filter(
+        (d) =>
+          !isDiscoveryQualityExcluded({
+            name: d.item.title,
+            venueCategories: d.item.venueCategories,
+            category: d.item.category,
+            dek: d.item.dek,
+          })
+      )
       .filter(isGuideEligibleVenueEditorial)
       .filter((d) => isWithinLocalDiscoveryRadius(d, readerLocation))
       .filter((d) => isCompleteCard(d.item))

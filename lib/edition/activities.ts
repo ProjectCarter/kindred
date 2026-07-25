@@ -15,6 +15,7 @@ import {
 } from "./localDiscoveryScope";
 import { isActivityProShopParts } from "./venueQuality";
 import { isFoodEstablishmentItem } from "./foodDrinkDesk";
+import { isDiscoveryQualityExcluded } from "./discoveryQualityFilter";
 import { resolveDiscoveryCategoryIcon } from "./categoryIcon";
 import { inferActivitySubtype, type ActivitySubtype } from "./activitySubtype";
 
@@ -110,6 +111,18 @@ export function selectActivityCards(
           d.item.dek,
           ...(d.item.venueCategories ?? []),
         ])
+    )
+    // Cached-edition safety net (Discovery Quality Filter, V3): keep restricted
+    // and service/professional businesses out of Activities even before the
+    // edition is regenerated.
+    .filter(
+      (d) =>
+        !isDiscoveryQualityExcluded({
+          name: d.item.title,
+          venueCategories: d.item.venueCategories,
+          category: d.item.category,
+          dek: d.item.dek,
+        })
     )
     .filter((d) => isWithinActivitiesSectionRadius(d, readerLocation));
 

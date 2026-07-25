@@ -6,6 +6,7 @@ import type { SourceHistoryEntry, VenueFieldSources } from "../editorial/sourceM
 import type { VenueLifecycle } from "../editorial/venueLifecycle.ts";
 import { KINDRED_LOCAL_RADIUS_KM } from "../editorial/editorialStandard.ts";
 import { isLowValueVenue, venueHayFromParts } from "../editorial/venueQuality.ts";
+import { assessDiscoveryQuality } from "../editorial/discoveryQualityFilter.ts";
 import { haversineKm } from "../discovery/geo.ts";
 import type { NormalizedPlace, PlacesCategory } from "./types.ts";
 
@@ -146,6 +147,23 @@ export function verifyFoodDrinkPlace(
     return { ok: false, reason: "low_value_venue" };
   }
 
+  // Discovery Quality Filter (V3): keep restricted / adult / smoke / vape /
+  // cannabis / gambling businesses out of the Food & Drink catalog too. The
+  // filter's food safe harbor protects genuine restaurants named for a trigger
+  // word (e.g. "The Smoke Shop BBQ", "Gun Barrel Steakhouse").
+  const quality = assessDiscoveryQuality({
+    name,
+    venueCategories: place.providerCategories,
+    category: place.category,
+    dek: place.address,
+  });
+  if (!quality.eligible) {
+    return {
+      ok: false,
+      reason: quality.category ? `restricted:${quality.category}` : "restricted_business",
+    };
+  }
+
   if (place.lat == null || place.lon == null) {
     return { ok: false, reason: "missing_coordinates" };
   }
@@ -172,6 +190,7 @@ export function catalogRowToNormalizedPlace(row: FoodDrinkCatalogRow): Normalize
     rating: null,
     priceTier: null,
     note: row.editorial_teaser ?? row.note,
+    about: row.editorial_article ?? null,
   };
 }
 
@@ -198,7 +217,7 @@ export function normalizedPlaceToCatalogInsert(
     editorial_tags: [],
     note: place.note ?? null,
     editorial_teaser: place.note ?? null,
-    editorial_article: null,
+    editorial_article: place.about ?? null,
     phone: null,
     cuisine: null,
     opening_hours: null,

@@ -61,7 +61,11 @@ export async function writeEditorialNotesForPlaces(
 
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) {
-    return places.map((p) => ({ ...p, note: fallbackNote(p, category) }));
+    return places.map((p) => ({
+      ...p,
+      note: fallbackNote(p, category),
+      about: null,
+    }));
   }
 
   try {
@@ -101,13 +105,19 @@ export async function writeEditorialNotesForPlaces(
           "If it's a small, independent, or local-feeling place, let that come through. " +
           "If little is known beyond the name, write an honest, understated line rather than embellishing. " +
           "No exclamation points. No hashtags. No 'must-visit' clichés. Vary openings across the list. " +
+          "ALSO write a warm editorial 'about' for each place: one or two short paragraphs " +
+          "(2–4 sentences total, under 65 words) that help a reader decide whether to go — what the " +
+          "experience feels like, what makes it worth a stop, and who would enjoy it — using ONLY the " +
+          "name/address/category given. Same rules: never invent hours, menu items, ratings, prices, " +
+          "awards, or specifics you weren't told; if little is known, keep it honest and understated; " +
+          "never copy a provider description; no clichés, no marketing voice. " +
           `${buildEditorialIntelligencePromptBlock()} ` +
           `${buildHumanDetailsPromptBlock(humanDetailsDeskForPlacesCategory(category))} ` +
           `${buildLastingImpressionPromptBlock(humanDetailsDeskForPlacesCategory(category))} ` +
           `${buildSourceConfidencePromptBlock(sourceConfidenceDeskForPlacesCategory(category))} ` +
           `${buildEditionVarietyPromptBlock(varietySeed)} ` +
           "Respond ONLY with JSON: " +
-          '{"notes":["..."]} with one string per place in the same order.',
+          '{"notes":["..."],"abouts":["..."]} with one string per place in each array, in the same order.',
         messages: [
           {
             role: "user",
@@ -119,17 +129,24 @@ export async function writeEditorialNotesForPlaces(
 
     if (!response.ok) {
       console.error("[places:notes] HTTP error", response.status, category);
-      return places.map((p) => ({ ...p, note: fallbackNote(p, category) }));
+      return places.map((p) => ({
+        ...p,
+        note: fallbackNote(p, category),
+        about: null,
+      }));
     }
 
     const data = await response.json();
     const text =
       typeof data?.content?.[0]?.text === "string" ? data.content[0].text : "";
-    const notes = parseNotesJson(text, places.length);
+    const { notes, abouts } = parseNotesJson(text, places.length);
 
     return places.map((p, i) => ({
       ...p,
       note: sanitizePlaceNote(notes[i], category) || fallbackNote(p, category),
+      // `about` is optional: omit (null) rather than fabricate when invalid, so
+      // the reader falls back to Kindred's composed editorial body.
+      about: sanitizePlaceAbout(abouts[i], category),
     }));
   } catch (err) {
     console.error("[places:notes] failure", {
@@ -137,33 +154,47 @@ export async function writeEditorialNotesForPlaces(
       city,
       error: err instanceof Error ? err.message : String(err),
     });
-    return places.map((p) => ({ ...p, note: fallbackNote(p, category) }));
+    return places.map((p) => ({
+      ...p,
+      note: fallbackNote(p, category),
+      about: null,
+    }));
   }
 }
 
-function parseNotesJson(text: string, expected: number): string[] {
-  const trimmed = text.trim();
-  try {
-    const parsed = JSON.parse(trimmed) as { notes?: unknown };
-    if (Array.isArray(parsed.notes)) {
-      return parsed.notes.map((n) => (typeof n === "string" ? n.trim() : ""));
-    }
-  } catch {
-    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    if (fenced?.[1]) {
-      try {
-        const parsed = JSON.parse(fenced[1].trim()) as { notes?: unknown };
-        if (Array.isArray(parsed.notes)) {
-          return parsed.notes.map((n) =>
-            typeof n === "string" ? n.trim() : ""
-          );
-        }
-      } catch {
-        /* fall through */
+function parseNotesJson(
+  text: string,
+  expected: number
+): { notes: string[]; abouts: string[] } {
+  const empty = () => Array.from({ length: expected }, () => "");
+  const toStrings = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.map((n) => (typeof n === "string" ? n.trim() : ""))
+      : empty();
+
+  const extract = (raw: string): { notes: string[]; abouts: string[] } | null => {
+    try {
+      const parsed = JSON.parse(raw) as { notes?: unknown; abouts?: unknown };
+      if (Array.isArray(parsed.notes) || Array.isArray(parsed.abouts)) {
+        return { notes: toStrings(parsed.notes), abouts: toStrings(parsed.abouts) };
       }
+    } catch {
+      /* fall through */
     }
+    return null;
+  };
+
+  const trimmed = text.trim();
+  const direct = extract(trimmed);
+  if (direct) return direct;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    const fromFence = extract(fenced[1].trim());
+    if (fromFence) return fromFence;
   }
-  return Array.from({ length: expected }, () => "");
+
+  return { notes: empty(), abouts: empty() };
 }
 
 function sanitizePlaceNote(note: string | undefined, category: PlacesCategory): string | null {
@@ -175,6 +206,28 @@ function sanitizePlaceNote(note: string | undefined, category: PlacesCategory): 
   }).passes) {
     return null;
   }
+  return trimmed;
+}
+
+/**
+ * Validate the 1–2 paragraph editorial "about" the same way as the one-liner:
+ * reject generic AI phrasing and low source confidence, cap length as a safety
+ * net, and return null (omit) rather than fabricate when it fails.
+ */
+function sanitizePlaceAbout(
+  about: string | undefined,
+  category: PlacesCategory
+): string | null {
+  const trimmed = about?.replace(/\s+/g, " ").trim() ?? "";
+  if (trimmed.length < 40) return null;
+  if (containsGenericAiPhrase(trimmed)) return null;
+  if (!validateSourceConfidenceText(trimmed, {
+    desk: sourceConfidenceDeskForPlacesCategory(category),
+  }).passes) {
+    return null;
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length > 90) return `${words.slice(0, 90).join(" ")}…`;
   return trimmed;
 }
 

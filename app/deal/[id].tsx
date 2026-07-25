@@ -4,14 +4,21 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { DetailHeroCard } from "../../components/DetailHeroCard";
+import { DetailHeroCard, DetailAboutCard } from "../../components/DetailHeroCard";
+import {
+  DetailActionButton,
+  DetailActionStack,
+} from "../../components/DetailActionButton";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
 import { articleBackRowInsets } from "../../lib/navigation/articleBackLayout";
@@ -21,7 +28,8 @@ import {
   getLocalDealById,
   LOCAL_DEALS_HOMEPAGE_ACCENT,
 } from "../../lib/deals/localDeals";
-import { detailTint } from "../../lib/edition/detailHero";
+import { GOOGLE_MAPS_ACTION_LABEL } from "../../lib/edition/googleMaps";
+import { detailTint, toAboutParagraphs } from "../../lib/edition/detailHero";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
@@ -77,15 +85,36 @@ export default function DealDetailScreen() {
   }
 
   const category = dealCategory(deal.category);
+  // ABOUT — one or two concise editorial paragraphs, deduped against the warm
+  // "Why you'll love it" line so the card never repeats itself.
+  const overviewParagraphs = toAboutParagraphs(deal.description, {
+    maxParagraphs: 2,
+    maxWordsEach: 55,
+    avoid: deal.knownFor ?? null,
+  });
+  // Quick fact line — the offer and when it ends, so the warm "Known for" copy
+  // can stay purely about why the place is worth a visit.
+  const overviewMeta =
+    [deal.savingsDetail?.trim(), deal.expiration?.trim()]
+      .filter(Boolean)
+      .join(" · ") || null;
+  const cityShort = deal.city.split(",")[0].trim();
+  const overviewTitle = cityShort
+    ? `${deal.merchant} • ${cityShort}`
+    : deal.merchant;
 
   function openMaps() {
     if (!deal) return;
     void Linking.openURL(dealMapsUrl(deal)).catch(() => {});
   }
 
-  function openWebsite() {
-    if (!deal?.website) return;
-    void Linking.openURL(deal.website).catch(() => {});
+  function shareDeal() {
+    if (!deal) return;
+    const parts = [deal.title, deal.merchant];
+    parts.push("", deal.website || "From today’s Kindred edition");
+    void Share.share({ message: parts.join("\n"), title: deal.title }).catch(
+      () => {}
+    );
   }
 
   function redeem() {
@@ -121,74 +150,86 @@ export default function DealDetailScreen() {
             style={styles.hero}
           />
 
-          <Text style={styles.merchant} maxFontSizeMultiplier={1.2}>
-            {deal.merchant} · {deal.city}
-          </Text>
-
-          <View style={styles.savingsCard}>
-            <Text style={styles.savingsLabel}>What you save</Text>
-            <Text style={styles.savingsDetail}>{deal.savingsDetail}</Text>
-            {deal.expiration ? (
-              <Text style={styles.expiration}>{deal.expiration}</Text>
-            ) : null}
-          </View>
-
-          <Text style={styles.description} maxFontSizeMultiplier={1.3}>
-            {deal.description}
-          </Text>
-
-          <Pressable
-            onPress={redeem}
-            style={({ pressed }) => [
-              styles.redeem,
-              pressed && { opacity: press.opacity },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Redeem deal — preview"
-          >
-            <Text style={styles.redeemText}>Redeem Deal</Text>
-          </Pressable>
-
-          <View style={styles.secondaryActions}>
+          {/* Like / Share — same row and placement as every detail page. Local
+              Deals are not saveable in V1, so only Share is shown here. */}
+          <View style={styles.iconRow}>
             <Pressable
-              onPress={openMaps}
+              onPress={shareDeal}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Share"
               style={({ pressed }) => [
-                styles.secondaryButton,
+                styles.iconButton,
                 pressed && { opacity: press.opacity },
               ]}
-              accessibilityRole="link"
-              accessibilityLabel={`Open ${deal.merchant} in Google Maps`}
             >
-              <Text style={styles.secondaryText}>Google Maps</Text>
+              <SymbolView
+                name="square.and.arrow.up"
+                size={19}
+                weight="regular"
+                tintColor={paper.inkMuted}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                fallback={
+                  <Ionicons name="share-outline" size={19} color={paper.inkMuted} />
+                }
+              />
             </Pressable>
-
-            {deal.website ? (
-              <Pressable
-                onPress={openWebsite}
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  pressed && { opacity: press.opacity },
-                ]}
-                accessibilityRole="link"
-                accessibilityLabel={`Open the ${deal.merchant} website`}
-              >
-                <Text style={styles.secondaryText}>Official Website</Text>
-              </Pressable>
-            ) : null}
           </View>
 
-          {deal.terms?.trim() ? (
-            <View style={styles.termsBlock}>
-              <Text style={styles.termsHeading}>Terms &amp; Conditions</Text>
-              <Text style={styles.termsText} maxFontSizeMultiplier={1.3}>
-                {deal.terms.trim()}
-              </Text>
-            </View>
-          ) : null}
+          {/* Google Maps + section action — standardized stacked buttons. */}
+          <DetailActionStack style={styles.actions}>
+            <DetailActionButton
+              label={GOOGLE_MAPS_ACTION_LABEL}
+              variant="secondary"
+              accessibilityRole="link"
+              accessibilityLabel={`Open ${deal.merchant} in Google Maps`}
+              onPress={openMaps}
+            />
+            <DetailActionButton
+              label="Redeem Deal"
+              variant="primary"
+              accessibilityLabel="Redeem deal — preview"
+              onPress={redeem}
+            />
+          </DetailActionStack>
 
-          <Text style={styles.previewNote} maxFontSizeMultiplier={1.2}>
-            Preview — sample deal shown while Local Deals is in development.
-          </Text>
+          {/* Quick Overview — everything about the deal in one card. */}
+          <DetailAboutCard
+            label="About this deal"
+            title={overviewTitle}
+            meta={overviewMeta ?? undefined}
+            body={overviewParagraphs.length ? overviewParagraphs : undefined}
+            knownFor={deal.knownFor?.trim() || undefined}
+            tint={detailTint(LOCAL_DEALS_HOMEPAGE_ACCENT)}
+            style={styles.aboutCard}
+          >
+            {deal.terms?.trim() ? (
+              <View style={styles.conditions}>
+                <Text style={styles.conditionsLabel}>GOOD TO KNOW</Text>
+                <Text style={styles.conditionsText} maxFontSizeMultiplier={1.3}>
+                  {deal.terms.trim()}
+                </Text>
+              </View>
+            ) : null}
+          </DetailAboutCard>
+
+          {/* Footer — Return → one-line disclaimer. Nothing else. */}
+          <View style={styles.footer}>
+            <Pressable
+              onPress={handleBack}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Return to Today’s Paper"
+              style={({ pressed }) => [pressed && { opacity: press.opacity }]}
+            >
+              <Text style={styles.returnLink}>← Return to Today’s Paper</Text>
+            </Pressable>
+            <Text style={styles.disclaimer} maxFontSizeMultiplier={1.25}>
+              Kindred summarizes trusted listings for quick local discovery. This
+              is not the publisher’s full listing.
+            </Text>
+          </View>
         </View>
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
@@ -225,110 +266,64 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   hero: {
-    marginBottom: 22,
-  },
-  merchant: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.inkMuted,
-    marginTop: 4,
-    marginBottom: 22,
-    textAlign: "center",
-  },
-  savingsCard: {
-    borderRadius: 18,
-    backgroundColor: detailTint(LOCAL_DEALS_HOMEPAGE_ACCENT),
-    padding: 20,
-    marginBottom: 24,
-  },
-  savingsLabel: {
-    fontSize: 11,
-    letterSpacing: 1.4,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    color: paper.inkMuted,
-    marginBottom: 8,
-  },
-  savingsDetail: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 26,
-    color: paper.ink,
-  },
-  expiration: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: paper.inkMuted,
-    marginTop: 10,
-  },
-  description: {
-    fontFamily: "Georgia",
-    fontSize: 18,
-    lineHeight: 30,
-    color: paper.inkBody,
-    marginBottom: 28,
-    maxWidth: 520,
-  },
-  redeem: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 15,
-    borderRadius: 14,
-    backgroundColor: paper.terracotta,
-    marginBottom: 14,
-  },
-  redeemText: {
-    fontFamily: "Georgia",
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    color: "#FFFFFF",
-  },
-  secondaryActions: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 28,
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 13,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: paper.terracotta,
-  },
-  secondaryText: {
-    fontSize: 14,
-    fontWeight: "600",
-    letterSpacing: 0.3,
-    color: paper.terracotta,
-  },
-  termsBlock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: paper.border,
-    paddingTop: 20,
     marginBottom: 20,
   },
-  termsHeading: {
+  iconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 22,
+    marginBottom: 22,
+  },
+  iconButton: {
+    minWidth: 44,
+    minHeight: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -8,
+  },
+  actions: {
+    marginBottom: 24,
+  },
+  aboutCard: {
+    marginBottom: 24,
+  },
+  conditions: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: paper.border,
+  },
+  conditionsLabel: {
     fontSize: 11,
     letterSpacing: 1.4,
     fontWeight: "700",
-    textTransform: "uppercase",
     color: paper.inkMuted,
-    marginBottom: 10,
+    marginBottom: 6,
   },
-  termsText: {
+  conditionsText: {
     fontFamily: "Georgia",
     fontSize: 14,
     lineHeight: 22,
     color: paper.inkBody,
-    maxWidth: 520,
   },
-  previewNote: {
-    fontSize: 12,
-    letterSpacing: 0.3,
+  footer: {
+    marginTop: 4,
+  },
+  returnLink: {
+    fontFamily: "Georgia",
+    fontSize: 16,
     fontStyle: "italic",
-    color: paper.inkFaint,
+    color: paper.terracotta,
+    letterSpacing: 0.15,
+    paddingVertical: 10,
+  },
+  disclaimer: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 24,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginTop: 8,
+    maxWidth: 420,
   },
 });

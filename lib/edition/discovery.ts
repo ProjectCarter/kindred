@@ -54,6 +54,8 @@ export type DiscoveryItem = {
   id: string;
   title: string;
   dek: string;
+  /** Kindred's 1–2 paragraph grounded editorial "About" summary, when generated. */
+  about?: string | null;
   category: DiscoveryCategory;
   family: string;
   place?: {

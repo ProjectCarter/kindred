@@ -25,6 +25,14 @@ const EXACT_MIRROR_PAIRS = [
     "lib/edition/editorialStandard.ts",
     "supabase/functions/_shared/editorial/editorialStandard.ts",
   ],
+  [
+    "lib/edition/restrictedBusinessFilter.ts",
+    "supabase/functions/_shared/editorial/restrictedBusinessFilter.ts",
+  ],
+  [
+    "lib/edition/serviceBusinessFilter.ts",
+    "supabase/functions/_shared/editorial/serviceBusinessFilter.ts",
+  ],
 ];
 
 function isReExportShim(relPath) {

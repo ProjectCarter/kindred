@@ -10,11 +10,9 @@ import {
   filterVerifiedEventsForEdition,
   type EventDateVerificationContext,
 } from "../localEvents/eventDateVerification.ts";
-import {
-  filterFamilyFriendlyEvents,
-  isEditoriallyExcludedListing,
-} from "../localEvents/familyFriendlyFilter.ts";
+import { filterFamilyFriendlyEvents } from "../localEvents/familyFriendlyFilter.ts";
 import { filterNonBusinessEvents } from "../localEvents/businessEventFilter.ts";
+import { isDiscoveryQualityExcluded } from "../editorial/discoveryQualityFilter.ts";
 import type { LocalEvent } from "../localEvents/provider.ts";
 import {
   LOCAL_EVENTS_EDITION_SURFACED_MAX,
@@ -53,19 +51,19 @@ function bumpReason(map: Record<string, number>, reason: string): void {
   map[reason] = (map[reason] ?? 0) + 1;
 }
 
-function discoveryListingHay(item: DiscoveryItem): string {
-  return [
-    item.title,
-    item.dek,
-    item.address,
-    ...(item.venueCategories ?? []),
-  ]
-    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
-    .join(" ");
+function isDiscoveryItemQualityExcluded(item: DiscoveryItem): boolean {
+  return isDiscoveryQualityExcluded({
+    name: item.title,
+    venueCategories: item.venueCategories,
+    category: item.category,
+    dek: item.dek,
+    description: item.about ?? item.address,
+    tags: item.tags,
+  });
 }
 
 function isPublishableDiscoveryItem(item: DiscoveryItem): boolean {
-  if (isEditoriallyExcludedListing(discoveryListingHay(item)).excluded) {
+  if (isDiscoveryItemQualityExcluded(item)) {
     return false;
   }
   return meetsDiscoveryConfidenceGate(item);
@@ -149,7 +147,7 @@ function filterRankedDiscoveryItems(
   const kept: RankedDiscoveryItem[] = [];
 
   for (const row of items) {
-    if (isEditoriallyExcludedListing(discoveryListingHay(row.item)).excluded) {
+    if (isDiscoveryItemQualityExcluded(row.item)) {
       rejectedFamily += 1;
       continue;
     }

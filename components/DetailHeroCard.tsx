@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { paper } from "../lib/edition/newspaperTheme";
 
@@ -47,29 +48,79 @@ export function DetailHeroCard({
 }
 
 /**
- * Tinted "About" card — a subtle, ~12% wash of the section accent that connects
- * the hero to a short, highlighted summary. Not the full article; the one reason
- * this item is worth attention.
+ * Quick Overview card — a subtle wash of the section accent that turns a detail
+ * page into a decision page. Everything important in one calm card: an identity
+ * line, location (with a pin), a quick fact line, a short factual summary, and a
+ * bulleted highlight list. Not an article; the fast facts that help someone
+ * decide in about ten seconds. Every field is optional and omitted when the
+ * source has nothing to show — Kindred never invents to fill a slot.
  */
 export function DetailAboutCard({
   label,
+  title,
+  meta,
   body,
+  knownFor,
   tint,
   style,
+  children,
 }: {
   label: string;
-  body: string;
+  /** Bold title line — "Name • City". The single informational identity line. */
+  title?: string;
+  /** Secondary quick fact (e.g. date · time for events, expiration for deals). */
+  meta?: string;
+  /** Editorial "About" copy — one or two concise paragraphs. */
+  body?: string | string[];
+  /** One or two warm "Why you'll love it" sentences — verified only, omitted when absent. */
+  knownFor?: string;
   tint: string;
   style?: StyleProp<ViewStyle>;
+  /** Section-specific extras. */
+  children?: ReactNode;
 }) {
+  const hasHeader = Boolean(title?.trim() || meta?.trim());
+  const paragraphs = (Array.isArray(body) ? body : body ? [body] : [])
+    .map((p) => p?.trim())
+    .filter((p): p is string => Boolean(p));
   return (
     <View style={[styles.about, { backgroundColor: tint }, style]}>
       <Text style={styles.aboutLabel} maxFontSizeMultiplier={1.2}>
         {label.toUpperCase()}
       </Text>
-      <Text style={styles.aboutBody} maxFontSizeMultiplier={1.35}>
-        {body}
-      </Text>
+      {title?.trim() ? (
+        <Text style={styles.aboutPrimary} maxFontSizeMultiplier={1.2}>
+          {title.trim()}
+        </Text>
+      ) : null}
+      {meta?.trim() ? (
+        <Text style={styles.aboutMeta} maxFontSizeMultiplier={1.2}>
+          {meta.trim()}
+        </Text>
+      ) : null}
+      {paragraphs.map((paragraph, index) => (
+        <Text
+          key={index}
+          style={[
+            styles.aboutBody,
+            (index > 0 || hasHeader) && styles.aboutBodySpaced,
+          ]}
+          maxFontSizeMultiplier={1.35}
+        >
+          {paragraph}
+        </Text>
+      ))}
+      {knownFor?.trim() ? (
+        <View style={styles.knownFor}>
+          <Text style={styles.knownForLabel} maxFontSizeMultiplier={1.2}>
+            WHY YOU'LL LOVE IT
+          </Text>
+          <Text style={styles.knownForText} maxFontSizeMultiplier={1.3}>
+            {knownFor.trim()}
+          </Text>
+        </View>
+      ) : null}
+      {children}
     </View>
   );
 }
@@ -123,10 +174,47 @@ const styles = StyleSheet.create({
     color: paper.inkMuted,
     marginBottom: 10,
   },
+  aboutPrimary: {
+    fontFamily: "Georgia",
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: "600",
+    color: paper.ink,
+    marginBottom: 3,
+  },
+  aboutMeta: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 22,
+    color: paper.inkMuted,
+    marginTop: 2,
+  },
   aboutBody: {
     fontFamily: "Georgia",
     fontSize: 17,
     lineHeight: 26,
+    color: paper.inkBody,
+  },
+  aboutBodySpaced: {
+    marginTop: 12,
+  },
+  knownFor: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: paper.border,
+  },
+  knownForLabel: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+    fontWeight: "700",
+    color: paper.inkMuted,
+    marginBottom: 6,
+  },
+  knownForText: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
     color: paper.inkBody,
   },
 });

@@ -3,32 +3,45 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { getStashedEvent } from "../../lib/edition/eventStore";
 import {
-  deriveEventBadge,
-  eventPlaceLine,
-  getStashedEvent,
-} from "../../lib/edition/eventStore";
-import { eventInfoBadgesFor } from "../../lib/edition/eventBadges";
-import { resolveListingActionsForEvent } from "../../lib/edition/actionBar";
+  resolveListingActionsForEvent,
+  resolveListingSecondaryButton,
+} from "../../lib/edition/actionBar";
+import {
+  GOOGLE_MAPS_ACTION_LABEL,
+  openGoogleMapsDestination,
+} from "../../lib/edition/googleMaps";
 import { resolveEventCategoryIcon } from "../../lib/edition/categoryIcon";
-import { EventInfoBadgeRow } from "../../components/EventInfoBadgeRow";
-import { ArticleActionList } from "../../components/ArticleActionList";
 import { DetailHeroCard, DetailAboutCard } from "../../components/DetailHeroCard";
-import { DETAIL_HERO_ACCENTS, detailTint } from "../../lib/edition/detailHero";
+import {
+  DetailActionButton,
+  DetailActionStack,
+} from "../../components/DetailActionButton";
+import {
+  DETAIL_HERO_ACCENTS,
+  detailTint,
+  toAboutParagraphs,
+  toKnownForBlurb,
+} from "../../lib/edition/detailHero";
 import { PullDownNavHeader } from "../../components/PullDownNavHeader";
 import { usePullDownNavScreen } from "../../lib/navigation/usePullDownNavScreen";
 import { articleBackRowInsets } from "../../lib/navigation/articleBackLayout";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
- * Full Local Event page — typography-first listing, logistics clear.
+ * Full Local Event page — a Quick Overview decision page. Hero, quick actions,
+ * and one overview card with the facts and a verified "Known for" line.
  */
 export default function EventDetailScreen() {
   const { id, backLabel } = useLocalSearchParams<{
@@ -53,6 +66,16 @@ export default function EventDetailScreen() {
     router.back();
   }
 
+  function shareEvent() {
+    if (!event) return;
+    const parts = [event.name];
+    if (event.venue?.trim()) parts.push(event.venue.trim());
+    parts.push("", event.sourceUrl || "From today’s Kindred edition");
+    void Share.share({ message: parts.join("\n"), title: event.name }).catch(
+      () => {}
+    );
+  }
+
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
     backLabel: back,
@@ -61,10 +84,11 @@ export default function EventDetailScreen() {
     backAccessibilityLabel: back.replace(/^←\s*/, "Back to "),
   });
 
-  const badge = event ? deriveEventBadge(event) : null;
-  const infoBadges = event ? eventInfoBadgesFor(event) : [];
-  const place = event ? eventPlaceLine(event) : "";
   const listingActions = event ? resolveListingActionsForEvent(event) : [];
+  const mapsAction = listingActions.find((a) => a.id === "maps") ?? null;
+  const secondaryButton = event
+    ? resolveListingSecondaryButton("event", listingActions)
+    : null;
   const heroEmoji = event
     ? event.categoryIcon ??
       resolveEventCategoryIcon({
@@ -73,14 +97,32 @@ export default function EventDetailScreen() {
         category: event.category,
       })
     : "🎉";
-  // "About this event" summary — why someone would want to attend. Prefer the
-  // generated editorial summary, then Bandit's invitation. Never the bare
-  // venue/location (that already appears in the details below).
-  const aboutSummary = event
-    ? event.editorialBody?.find((p) => p?.trim())?.trim() ??
-      event.banditNote?.trim() ??
-      null
+  // Quick Overview card: a "Name • City" title, date · time, a short factual
+  // description, and a verified editorial "Known for" line (why go).
+  const overviewTitle = event
+    ? [event.name, event.city?.trim()].filter(Boolean).join(" • ")
+    : "";
+  const whenLine = event
+    ? [event.date, event.time].filter(Boolean).join(" · ")
+    : "";
+  // "Why you'll love it" — an editorial recommendation (why choose this event),
+  // sourced only from Kindred's genuine editorial voice, the Bandit's Note. Never
+  // a category chip, provider blurb, or listing text, and never invented; omitted
+  // entirely when there is no editorial line to stand behind.
+  const overviewKnownFor = event
+    ? toKnownForBlurb(event.banditNote?.trim() ?? null)
     : null;
+  // ABOUT — one or two concise editorial paragraphs (Editorial Constitution V2),
+  // from Kindred's own editorial body. Deduped against the "Why you'll love it"
+  // line so the card never repeats itself.
+  const overviewParagraphs = event
+    ? toAboutParagraphs(
+        event.editorialBody && event.editorialBody.length > 0
+          ? event.editorialBody
+          : event.banditNote?.trim() || null,
+        { maxParagraphs: 2, maxWordsEach: 55, avoid: overviewKnownFor }
+      )
+    : [];
 
   if (!event) {
     return (
@@ -120,55 +162,99 @@ export default function EventDetailScreen() {
             style={styles.hero}
           />
 
-          {badge ? (
-            <Text style={styles.badge} maxFontSizeMultiplier={1.2}>
-              {badge}
-            </Text>
-          ) : null}
-
-          <EventInfoBadgeRow badges={infoBadges} style={styles.badgeRow} />
-
-          <Text style={styles.meta} maxFontSizeMultiplier={1.2}>
-            {[event.date, event.time].filter(Boolean).join(" · ")}
-          </Text>
-          <Text style={styles.place} maxFontSizeMultiplier={1.2}>
-            {place}
-          </Text>
-
-          {aboutSummary ? (
-            <DetailAboutCard
-              label="About this event"
-              body={aboutSummary}
-              tint={detailTint(DETAIL_HERO_ACCENTS.event)}
-              style={styles.aboutCard}
-            />
-          ) : null}
-
-          {listingActions.length > 0 ? (
-            <ArticleActionList actions={listingActions} />
-          ) : null}
-
-          {event.sourceName ? (
-            <Text style={styles.source} maxFontSizeMultiplier={1.15}>
-              Listed via {event.sourceName}
-            </Text>
-          ) : null}
-
-          {event.sourceUrl && listingActions.length === 0 ? (
+          {/* Like / Share — same row and placement as every detail page. */}
+          <View style={styles.iconRow}>
             <Pressable
-              onPress={() => {
-                void Linking.openURL(event.sourceUrl).catch(() => {});
-              }}
+              onPress={shareEvent}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Share"
               style={({ pressed }) => [
-                styles.cta,
+                styles.iconButton,
                 pressed && { opacity: press.opacity },
               ]}
-              accessibilityRole="link"
-              accessibilityLabel="View listing"
             >
-              <Text style={styles.ctaText}>View listing</Text>
+              <SymbolView
+                name="square.and.arrow.up"
+                size={19}
+                weight="regular"
+                tintColor={paper.inkMuted}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                fallback={
+                  <Ionicons name="share-outline" size={19} color={paper.inkMuted} />
+                }
+              />
             </Pressable>
+          </View>
+
+          {/* Google Maps + section action — standardized stacked buttons. */}
+          {mapsAction || secondaryButton ? (
+            <DetailActionStack style={styles.actions}>
+              {mapsAction ? (
+                <DetailActionButton
+                  label={GOOGLE_MAPS_ACTION_LABEL}
+                  variant="secondary"
+                  accessibilityRole="link"
+                  accessibilityLabel={GOOGLE_MAPS_ACTION_LABEL}
+                  onPress={() => {
+                    if (mapsAction.mapsDestination) {
+                      void openGoogleMapsDestination(mapsAction.mapsDestination);
+                    } else if (mapsAction.url) {
+                      void Linking.openURL(mapsAction.url).catch(() => {});
+                    }
+                  }}
+                />
+              ) : null}
+              {secondaryButton ? (
+                <DetailActionButton
+                  label={secondaryButton.label}
+                  variant={secondaryButton.variant}
+                  accessibilityRole="link"
+                  accessibilityLabel={secondaryButton.label}
+                  onPress={() =>
+                    void Linking.openURL(secondaryButton.url).catch(() => {})
+                  }
+                />
+              ) : null}
+            </DetailActionStack>
           ) : null}
+
+          {/* Quick Overview — name • city, date · time, description, known for */}
+          <DetailAboutCard
+            label="About this event"
+            title={overviewTitle}
+            meta={whenLine}
+            body={overviewParagraphs.length ? overviewParagraphs : undefined}
+            knownFor={overviewKnownFor ?? undefined}
+            tint={detailTint(DETAIL_HERO_ACCENTS.event)}
+            style={styles.aboutCard}
+          />
+
+          {/* Footer — Source → Return → one-line disclaimer. Nothing else. */}
+          <View style={styles.footer}>
+            {event.sourceName?.trim() ? (
+              <View style={styles.sourceBlock}>
+                <Text style={styles.sourceLabel}>SOURCE</Text>
+                <Text style={styles.sourceName} maxFontSizeMultiplier={1.2}>
+                  {event.sourceName.trim()}
+                </Text>
+              </View>
+            ) : null}
+            <Pressable
+              onPress={handleBack}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Return to Today’s Paper"
+              style={({ pressed }) => [pressed && { opacity: press.opacity }]}
+            >
+              <Text style={styles.returnLink}>← Return to Today’s Paper</Text>
+            </Pressable>
+            <Text style={styles.disclaimer} maxFontSizeMultiplier={1.25}>
+              Kindred summarizes trusted listings for quick local discovery. This
+              is not the publisher’s full listing.
+            </Text>
+          </View>
         </View>
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
@@ -207,50 +293,60 @@ const styles = StyleSheet.create({
   hero: {
     marginBottom: 20,
   },
-  badge: {
-    alignSelf: "flex-start",
-    fontSize: 10,
-    letterSpacing: 1.6,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    color: paper.terracotta,
-    marginBottom: 14,
+  iconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 22,
+    marginBottom: 22,
+  },
+  iconButton: {
+    minWidth: 44,
+    minHeight: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -8,
+  },
+  actions: {
+    marginBottom: 4,
   },
   aboutCard: {
+    marginTop: 20,
     marginBottom: 24,
   },
-  badgeRow: {
-    marginBottom: 14,
+  footer: {
+    marginTop: 4,
   },
-  meta: {
+  sourceBlock: {
+    marginBottom: 20,
+  },
+  sourceLabel: {
+    fontSize: 11,
+    letterSpacing: 1.8,
+    fontWeight: "700",
+    color: paper.inkFaint,
+    marginBottom: 6,
+  },
+  sourceName: {
+    fontFamily: "Georgia",
     fontSize: 16,
     lineHeight: 24,
     color: paper.inkBody,
-    marginBottom: 6,
   },
-  place: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.inkMuted,
-    marginBottom: 20,
-  },
-  source: {
-    fontSize: 12,
-    letterSpacing: 0.3,
-    color: paper.inkFaint,
-    marginBottom: 28,
-  },
-  cta: {
-    alignSelf: "flex-start",
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: paper.terracotta,
-  },
-  ctaText: {
-    fontSize: 14,
-    letterSpacing: 0.4,
-    fontWeight: "600",
+  returnLink: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    fontStyle: "italic",
     color: paper.terracotta,
+    letterSpacing: 0.15,
+    paddingVertical: 10,
+  },
+  disclaimer: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 24,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginTop: 8,
+    maxWidth: 420,
   },
 });

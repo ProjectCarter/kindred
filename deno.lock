@@ -86,6 +86,7 @@
         "npm:expo@54",
         "npm:react-native-safe-area-context@5.6",
         "npm:react-native-screens@4.16",
+        "npm:react-native-svg@15.12.1",
         "npm:react-native-url-polyfill@2",
         "npm:react-native@0.81.5",
         "npm:react@19.1.0",

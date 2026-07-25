@@ -5,6 +5,7 @@
 import { KINDRED_LOCAL_RADIUS_KM } from "../editorial/editorialStandard.ts";
 import { haversineKm } from "../discovery/geo.ts";
 import { isLowValueVenue, venueHayFromParts } from "../editorial/venueQuality.ts";
+import { assessDiscoveryQuality } from "../editorial/discoveryQualityFilter.ts";
 import type { NormalizedPlace, PlacesCategory } from "../places/types.ts";
 
 export type ActivityCatalogLifecycle =
@@ -112,6 +113,20 @@ export function verifyActivityPlace(
   if (isLowValueVenue(hay)) {
     return { ok: false, reason: "low_value_venue", confidence: 0 };
   }
+  // Discovery Quality Filter (V3): never import restricted, service, or
+  // editorially-excluded businesses into the Activities catalog.
+  const quality = assessDiscoveryQuality({
+    name: place.name,
+    venueCategories: place.providerCategories,
+    dek: place.address,
+  });
+  if (!quality.eligible) {
+    return {
+      ok: false,
+      reason: quality.category ? `restricted:${quality.category}` : "restricted_business",
+      confidence: 0,
+    };
+  }
 
   let confidence = 72;
   if (place.url?.trim()) confidence += 8;
@@ -190,5 +205,6 @@ export function rowToNormalizedPlace(row: ActivitiesCatalogRow): NormalizedPlace
     priceTier: row.price_level,
     kindredVenueId: row.id,
     note: row.editorial_teaser ?? row.note,
+    about: row.editorial_article ?? null,
   };
 }

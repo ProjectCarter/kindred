@@ -197,6 +197,7 @@ export async function loadFoodDrinkCatalogPlaces(
     editorialLabels: (row.editorial_labels ?? []) as string[],
     kindredVenueId: row.id,
     note: row.editorial_teaser ?? row.note,
+    about: row.editorial_article ?? null,
   }));
 }
 

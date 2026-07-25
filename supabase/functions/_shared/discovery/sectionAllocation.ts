@@ -25,6 +25,7 @@ import {
   RECOMMENDATION_CATEGORIES,
 } from "./localDiscoveryScope.ts";
 import { isFoodEstablishmentItem } from "./foodDrinkDesk.ts";
+import { isServiceBusinessListing } from "../editorial/serviceBusinessFilter.ts";
 
 const ALL_SURFACES: DiscoverySurface[] = [
   "bandits_picks",
@@ -71,6 +72,18 @@ function meetsDiscoveryPublishConfidence(
 
 function belongsInActivities(item: RankedDiscoveryItem): boolean {
   if (isFoodEstablishmentItem(item)) return false;
+
+  // Activities are experiences, never everyday service/professional businesses.
+  if (
+    isServiceBusinessListing({
+      name: item.item.title,
+      venueCategories: item.item.venueCategories,
+      category: item.item.category,
+      dek: item.item.dek,
+    })
+  ) {
+    return false;
+  }
 
   if (DESTINATION_ACTIVITY_CATEGORIES.has(item.item.category)) {
     return true;

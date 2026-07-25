@@ -96,10 +96,10 @@ export function dedupePlacesByProviderId(
 }
 
 const EDITION_ACTIVITY_SELECT =
-  "id, provider_id, provider_category, name, address, city, state, lat, lon, url, provider_categories, price_level, editorial_teaser, note";
+  "id, provider_id, provider_category, name, address, city, state, lat, lon, url, provider_categories, price_level, editorial_teaser, note, editorial_article";
 
 const EDITION_FOOD_SELECT =
-  "id, provider_id, provider_category, name, address, city, state, lat, lon, url, provider_categories, price_level, editorial_teaser, note, editorial_score, editorial_labels";
+  "id, provider_id, provider_category, name, address, city, state, lat, lon, url, provider_categories, price_level, editorial_teaser, note, editorial_article, editorial_score, editorial_labels";
 
 /**
  * Edition read path — two bulk catalog queries instead of 25 category round trips.
@@ -160,6 +160,7 @@ export async function getLocalPlacesForEdition(
       priceTier: row.price_level as number | null,
       kindredVenueId: String(row.id),
       note: (row.editorial_teaser as string | null) ?? (row.note as string | null),
+      about: (row.editorial_article as string | null) ?? null,
     }));
 
     const foodPlaces = (foodRes.data ?? []).map((row) => ({
@@ -179,6 +180,7 @@ export async function getLocalPlacesForEdition(
       editorialLabels: (row.editorial_labels as string[] | null) ?? [],
       kindredVenueId: String(row.id),
       note: (row.editorial_teaser as string | null) ?? (row.note as string | null),
+      about: (row.editorial_article as string | null) ?? null,
     }));
 
     const merged = dedupePlacesByProviderId([...activityPlaces, ...foodPlaces]);
