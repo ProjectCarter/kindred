@@ -25,7 +25,7 @@ import {
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
 import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
-import { TodaysMasterpiece } from "./TodaysMasterpiece";
+import { MasterpieceFeatureCard } from "./MasterpieceFeatureCard";
 import { morningSalutation } from "../lib/edition/morningRitual";
 import {
   KindredFullMasthead,
@@ -268,50 +268,7 @@ export function MorningArrival({
         />
       </Animated.View>
 
-      {/* Today's Masterpiece — pre-frozen library artwork; photography fallback below */}
-      <View style={styles.heroBleed}>
-        {showArtworkHero && artworkUri && morningHero ? (
-          <Animated.View style={{ opacity: photoOp }}>
-            <TodaysMasterpiece
-              morningHero={morningHero}
-              imageUri={artworkUri}
-              containerWidth={bleedWidth}
-              onOpenMasterpiece={onOpenMasterpiece}
-              onImageError={() => setArtworkFailed(true)}
-            />
-          </Animated.View>
-        ) : showPhotoHero && hero ? (
-          <Animated.View style={{ opacity: photoOp }}>
-            <View style={[styles.heroFrame, shadow.photo]}>
-              <Image
-                source={hero.source}
-                style={{ width: bleedWidth, height: heroHeight }}
-                resizeMode="cover"
-                accessibilityLabel={
-                  hero.title?.trim()
-                    ? hero.title
-                    : placeWeather
-                      ? placeWeather
-                      : "This morning near you"
-                }
-              />
-            </View>
-          </Animated.View>
-        ) : (
-          <View
-            style={[
-              styles.heroFallback,
-              { width: bleedWidth, height: Math.round(heroHeight * 0.55) },
-            ]}
-          >
-            <Animated.Text style={[styles.heroMark, { opacity: markOp }]}>
-              ◆
-            </Animated.Text>
-          </View>
-        )}
-      </View>
-
-      {/* Greeting, weather, then Bandit — Local Events follows in the folio. */}
+      {/* Greeting, compact weather, then Bandit — front-page morning flow. */}
       <View style={styles.morningCopy}>
         <Text style={styles.greeting} maxFontSizeMultiplier={1.25}>
           {salutation}
@@ -328,6 +285,50 @@ export function MorningArrival({
           </Text>
         ) : null}
       </View>
+
+      {/* Today's Masterpiece — premium featured card; photography fallback below */}
+      {showArtworkHero && artworkUri && morningHero ? (
+        <Animated.View style={[styles.masterpieceCard, { opacity: photoOp }]}>
+          <MasterpieceFeatureCard
+            morningHero={morningHero}
+            imageUri={artworkUri}
+            onOpenMasterpiece={onOpenMasterpiece}
+            onImageError={() => setArtworkFailed(true)}
+          />
+        </Animated.View>
+      ) : showPhotoHero && hero ? (
+        <View style={styles.heroBleed}>
+          <Animated.View style={{ opacity: photoOp }}>
+            <View style={[styles.heroFrame, shadow.photo]}>
+              <Image
+                source={hero.source}
+                style={{ width: bleedWidth, height: heroHeight }}
+                resizeMode="cover"
+                accessibilityLabel={
+                  hero.title?.trim()
+                    ? hero.title
+                    : placeWeather
+                      ? placeWeather
+                      : "This morning near you"
+                }
+              />
+            </View>
+          </Animated.View>
+        </View>
+      ) : (
+        <View style={styles.heroBleed}>
+          <View
+            style={[
+              styles.heroFallback,
+              { width: bleedWidth, height: Math.round(heroHeight * 0.55) },
+            ]}
+          >
+            <Animated.Text style={[styles.heroMark, { opacity: markOp }]}>
+              ◆
+            </Animated.Text>
+          </View>
+        </View>
+      )}
 
       <View style={styles.endRule} accessibilityElementsHidden />
     </Animated.View>
@@ -371,6 +372,10 @@ const styles = StyleSheet.create({
   heroBleed: {
     marginHorizontal: -FOLIO_GUTTER,
     marginBottom: 2,
+  },
+  masterpieceCard: {
+    marginTop: 14,
+    marginBottom: 6,
   },
   heroFrame: {
     overflow: "hidden",

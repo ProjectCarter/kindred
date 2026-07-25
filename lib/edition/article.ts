@@ -115,13 +115,13 @@ export type KindredArticle = {
     glyph?: string | null;
   }> | null;
   /**
-   * Which Clippings bucket this belongs to, when the adapter that built
-   * this article already knows (e.g. Activities vs Recommendations both
-   * flow through `articleFromDiscoveryItem` and are otherwise identical).
-   * Falls back to `inferClipContentType` (clippings.ts) when omitted.
+   * Content-type discriminator this article maps to, when the adapter that
+   * built it already knows (e.g. Activities vs Recommendations both flow
+   * through `articleFromDiscoveryItem` and are otherwise identical). Drives
+   * detail-page theming, image policy, and the section-specific action button.
    */
   savedContentType?: ClippingContentType | null;
-  /** Human-readable venue/place line, for the Clippings card. */
+  /** Human-readable venue/place line, used to resolve the Maps destination. */
   savedLocation?: string | null;
   /** City only — for the detail Quick Overview title ("Name • City"). */
   savedCity?: string | null;
@@ -1067,12 +1067,4 @@ export function isKindredBriefing(article: KindredArticle): boolean {
     return words < 500;
   }
   return words < 350;
-}
-
-/** edition_sections.id is a UUID — only those can be clipped to the library. */
-export function isClippableSectionId(id: string | null | undefined): boolean {
-  if (!id) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    id
-  );
 }

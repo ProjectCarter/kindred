@@ -104,7 +104,7 @@ export function RecommendationsSection({
     <EditorialCardGrid
       kicker={FOOD_DRINK_SECTION_KICKER}
       compact
-      accentColor="#C2A9EF"
+      accentColor="#F4B6A6"
       cards={displayCards}
       initialRenderCount={renderLimit}
       seeAllTotal={seeAllPool.length}

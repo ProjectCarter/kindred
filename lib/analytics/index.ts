@@ -8,7 +8,6 @@ export {
   trackSectionViewedOnce,
   trackArticleOpenedOnce,
   trackSeeAllTapped,
-  trackArticleSaved,
   trackArticleShared,
   trackCacheCleared,
   trackLocationChanged,

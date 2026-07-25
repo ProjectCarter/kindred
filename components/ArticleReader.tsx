@@ -44,16 +44,9 @@ import {
   press,
   motion,
 } from "../lib/edition/newspaperTheme";
-import {
-  useArticleReadingSession,
-  inferTopicFromSection,
-  trackReadingSignal,
-} from "../lib/personalization";
-import { supabase } from "../lib/supabase";
+import { useArticleReadingSession } from "../lib/personalization";
 import { resolveArticleHero, supportingFiguresForArticle } from "../lib/edition/articleHero";
 import { isWireNewsSection } from "../lib/edition/articleIntegrity";
-import { resolveSaveTarget } from "../lib/edition/saveTarget";
-import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
 import {
   MastheadLink,
 } from "./KindredMasthead";
@@ -151,8 +144,6 @@ export function ArticleReader({
     caption: string;
     credit: string;
   } | null>(null);
-  const [liked, setLiked] = useState(false);
-  const [likePending, setLikePending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const scrollYRef = useRef(initialScrollY);
   const restoredScroll = useRef(false);
@@ -245,8 +236,6 @@ export function ArticleReader({
     )
   ).current;
 
-  const saveTarget = useMemo(() => resolveSaveTarget(article), [article]);
-  const canSave = Boolean(saveTarget);
   const articleContextActions = useMemo(
     () => resolveArticleContextActions(article),
     [article]
@@ -454,25 +443,6 @@ export function ArticleReader({
     return () => sub.remove();
   }, [article, companion, editionId, backLabel]);
 
-  useEffect(() => {
-    if (!saveTarget) {
-      setLiked(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      const isLiked = await checkLiked(user.id, saveTarget.clipKey);
-      if (!cancelled) setLiked(isLiked);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [saveTarget]);
-
   const published = formatArticlePublishedAt(article.publishedAt);
   const readLabel = formatReadTime(article.estimatedReadMinutes);
   const metaLine = [readLabel, article.source, published]
@@ -583,71 +553,6 @@ export function ArticleReader({
       progressAnim.setValue(0);
     }
   }, [contentHeight, viewportHeight, progressAnim]);
-
-  async function handleToggleLike() {
-    if (!saveTarget || likePending) return;
-    const nextLiked = !liked;
-    setLiked(nextLiked);
-    setLikePending(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        setLiked(!nextLiked);
-        return;
-      }
-
-      const storyKey = `${article.section}:${article.headline}`.slice(0, 240);
-      const topic =
-        article.contentType ?? inferTopicFromSection(article.section, article.headline);
-
-      if (nextLiked) {
-        const result = await saveLike(user.id, saveTarget, article);
-        if (!result.ok) {
-          setLiked(false);
-          return;
-        }
-        if (!result.duplicate) {
-          void trackReadingSignal({
-            signalType: "like",
-            storyKey,
-            sectionType: article.section,
-            editionId,
-            sectionId: saveTarget.sectionId,
-            source: article.source,
-            topic,
-            payload: { headline: article.headline.slice(0, 160) },
-          });
-        }
-      } else {
-        const result = await removeLike(user.id, saveTarget.clipKey);
-        if (!result.ok) {
-          setLiked(true);
-          return;
-        }
-        void trackReadingSignal({
-          signalType: "unlike",
-          storyKey,
-          sectionType: article.section,
-          editionId,
-          sectionId: saveTarget.sectionId,
-          source: article.source,
-          topic,
-        });
-      }
-    } catch (err) {
-      if (__DEV__) {
-        console.error(
-          "[ArticleReader] like threw",
-          err instanceof Error ? err.message : String(err)
-        );
-      }
-      setLiked(!nextLiked);
-    } finally {
-      setLikePending(false);
-    }
-  }
 
   async function handleShare() {
     const parts = [article.headline];
@@ -769,41 +674,8 @@ export function ArticleReader({
           )}
 
           <View style={[styles.column, { width: readingWidth }]}>
-            {/* Save + Share — first interaction under the hero */}
+            {/* Share — first interaction under the hero */}
             <View style={styles.heroActionsRow}>
-              {canSave ? (
-                <Pressable
-                  onPress={() => void handleToggleLike()}
-                  disabled={likePending}
-                  hitSlop={10}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    liked
-                      ? "Saved. Tap to remove."
-                      : "Save"
-                  }
-                  style={({ pressed }) => [
-                    styles.heroActionButton,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <SymbolView
-                    name={liked ? "heart.fill" : "heart"}
-                    size={20}
-                    weight="regular"
-                    tintColor={liked ? paper.terracotta : paper.inkMuted}
-                    accessibilityElementsHidden
-                    importantForAccessibility="no"
-                    fallback={
-                      <Ionicons
-                        name={liked ? "heart" : "heart-outline"}
-                        size={20}
-                        color={liked ? paper.terracotta : paper.inkMuted}
-                      />
-                    }
-                  />
-                </Pressable>
-              ) : null}
               <Pressable
                 onPress={() => void handleShare()}
                 hitSlop={10}

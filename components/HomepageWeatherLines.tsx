@@ -17,27 +17,25 @@ export function HomepageWeatherLines({ weather }: Props) {
     );
   }
 
+  const detail = [weather.highLow, weather.condition.label]
+    .filter((part) => part && part.trim())
+    .join(" · ");
+
   return (
     <View style={styles.wrap} accessibilityRole="text">
-      <Text style={styles.current} maxFontSizeMultiplier={1.2}>
-        {weather.condition.emoji} {weather.current}
-      </Text>
-      {weather.highLow ? (
-        <Text style={styles.highLow} maxFontSizeMultiplier={1.15}>
-          {weather.highLow}
+      <View style={styles.row}>
+        <Text style={styles.current} maxFontSizeMultiplier={1.2}>
+          {weather.condition.emoji} {weather.current}
         </Text>
-      ) : null}
-      <Text style={styles.condition} maxFontSizeMultiplier={1.15}>
-        {weather.condition.label}
-      </Text>
+        {detail ? (
+          <Text style={styles.detail} maxFontSizeMultiplier={1.15} numberOfLines={1}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
       {weather.alert ? (
         <Text style={styles.alert} maxFontSizeMultiplier={1.15}>
           {weather.alert.emoji} {weather.alert.label}
-        </Text>
-      ) : null}
-      {weather.planningNote?.trim() ? (
-        <Text style={styles.planningNote} maxFontSizeMultiplier={1.15}>
-          {weather.planningNote.trim()}
         </Text>
       ) : null}
     </View>
@@ -48,6 +46,10 @@ const styles = StyleSheet.create({
   wrap: {
     marginBottom: 14,
   },
+  row: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
   current: {
     fontFamily: "Georgia",
     fontSize: 22,
@@ -55,20 +57,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.2,
     color: paper.ink,
-    marginBottom: 4,
   },
-  highLow: {
+  detail: {
+    flexShrink: 1,
+    marginLeft: 12,
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 22,
-    color: paper.inkMuted,
-    marginBottom: 2,
-  },
-  condition: {
-    fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.inkBody,
+    color: "#555555",
   },
   alert: {
     fontFamily: "Georgia",
@@ -76,13 +72,5 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: paper.inkBody,
     marginTop: 6,
-  },
-  planningNote: {
-    fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.inkMuted,
-    marginTop: 8,
-    maxWidth: 520,
   },
 });

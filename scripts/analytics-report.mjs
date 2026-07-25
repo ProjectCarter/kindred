@@ -104,10 +104,8 @@ for (const [domain, count] of countBy(external, (r) => r.destination_domain).sli
   console.log(`  ${domain}: ${count}`);
 }
 
-const saves = await fetchEvents(["article_saved"]);
 const shares = await fetchEvents(["article_shared"]);
-console.log(`\nSaves: ${saves.length}`);
-console.log(`Shares: ${shares.length}`);
+console.log(`\nShares: ${shares.length}`);
 
 const errors = await fetchEvents(["generation_error", "edition_load_failed"]);
 console.log("\nErrors by type:");

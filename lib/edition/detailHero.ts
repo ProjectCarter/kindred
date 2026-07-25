@@ -22,9 +22,9 @@ export type DetailHeroTheme = {
 
 /** Fixed Kindred section accents (identical to the homepage). */
 export const DETAIL_HERO_ACCENTS = {
-  event: "#81CDC6",
+  event: "#8EC5F5",
   activity: "#FFE791",
-  recommendation: "#C2A9EF",
+  recommendation: "#F4B6A6",
   deal: "#B7E4C7",
 } as const;
 

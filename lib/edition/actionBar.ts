@@ -28,7 +28,7 @@ import {
 export type { MapsDestination } from "./googleMaps";
 export { GOOGLE_MAPS_ACTION_LABEL, buildGoogleMapsSearchUrl, resolveMapsSearchQuery } from "./googleMaps";
 
-export type ActionBarActionKind = "url" | "maps" | "phone" | "share" | "save";
+export type ActionBarActionKind = "url" | "maps" | "phone" | "share";
 
 export type ActionBarActionId =
   | "buy_tickets"
@@ -43,7 +43,6 @@ export type ActionBarActionId =
   | "trail_info"
   | "park_info"
   | "learn_more"
-  | "save"
   | "share";
 
 export type ActionBarAction = {
@@ -239,27 +238,11 @@ export function resolveListingActionsForDiscoveryItem(
     surface === "activity"
       ? resolveActionsForActivity(item, {
           fallbackCity: options?.fallbackCity,
-          includeSave: false,
         })
       : resolveActionsForRecommendation(item, {
           fallbackCity: options?.fallbackCity,
-          includeSave: false,
         });
   return filterPracticalListingActions(raw);
-}
-
-export function resolveActionsForLocalEvent(
-  event: LocalEventCard,
-  options?: { includeSave?: boolean }
-): ActionBarAction[] {
-  if (options?.includeSave === false) {
-    return resolveEventArticleActions(event);
-  }
-  const out = resolveEventArticleActions(event);
-  const seen = new Set(out.map((a) => a.id));
-  pushUniqueUrl(out, saveAction(), seen);
-  pushUniqueUrl(out, shareAction(), seen);
-  return out;
 }
 
 function pushUniqueUrl(
@@ -307,15 +290,6 @@ function websiteAction(
   return { id, label, icon: "🌐", kind: "url", url: href };
 }
 
-function saveAction(): ActionBarAction {
-  return {
-    id: "save",
-    label: "Save",
-    icon: "❤️",
-    kind: "save",
-  };
-}
-
 function shareAction(): ActionBarAction {
   return {
     id: "share",
@@ -356,7 +330,7 @@ function discoveryWebsiteUrl(item: DiscoveryItem): string | null {
 /** Activities desk actions — Maps, Official Website. */
 export function resolveActionsForActivity(
   item: DiscoveryItem,
-  options?: { fallbackCity?: string | null; includeSave?: boolean }
+  options?: { fallbackCity?: string | null }
 ): ActionBarAction[] {
   const out: ActionBarAction[] = [];
   const seen = new Set<string>();
@@ -367,7 +341,6 @@ export function resolveActionsForActivity(
   const site = websiteAction(discoveryWebsiteUrl(item), "Official Website");
   if (site) pushUniqueUrl(out, site, seen);
 
-  if (options?.includeSave !== false) pushUniqueUrl(out, saveAction(), seen);
   pushUniqueUrl(out, shareAction(), seen);
 
   return out;
@@ -376,7 +349,7 @@ export function resolveActionsForActivity(
 /** Recommendations desk — Maps and Official Website first, then category extras. */
 export function resolveActionsForRecommendation(
   item: DiscoveryItem,
-  options?: { fallbackCity?: string | null; includeSave?: boolean }
+  options?: { fallbackCity?: string | null }
 ): ActionBarAction[] {
   const out: ActionBarAction[] = [];
   const seen = new Set<string>();
@@ -435,9 +408,6 @@ export function resolveActionsForRecommendation(
     );
   }
 
-  if (category !== "parks" && category !== "hiking" && options?.includeSave !== false) {
-    pushUniqueUrl(out, saveAction(), seen);
-  }
   pushUniqueUrl(out, shareAction(), seen);
 
   return out;
@@ -452,7 +422,6 @@ export function resolveActionsForBanditsPick(input: {
   mapsActionLabel?: string | null;
   ticketsRequired?: boolean;
   isFreeEvent?: boolean;
-  includeSave?: boolean;
 }): ActionBarAction[] {
   const out: ActionBarAction[] = [];
   const seen = new Set<string>();
@@ -594,7 +563,6 @@ export function resolveArticleContextActions(
   } else if (ctx.surface === "activity") {
     actions = resolveActionsForActivity(discoveryItemFromContext(article, ctx), {
       fallbackCity: options?.fallbackCity,
-      includeSave: false,
     });
   } else if (ctx.surface === "bandits_pick") {
     actions = resolveActionsForBanditsPick({
@@ -607,7 +575,6 @@ export function resolveArticleContextActions(
       mapsActionLabel: ctx.mapsActionLabel,
       ticketsRequired: ctx.ticketsRequired,
       isFreeEvent: ctx.isFreeEvent,
-      includeSave: false,
     });
   } else if (ctx.surface === "history_around_town") {
     actions = resolveActionsForHistoryPlace({
@@ -621,7 +588,7 @@ export function resolveArticleContextActions(
   } else {
     actions = resolveActionsForRecommendation(
       discoveryItemFromContext(article, ctx),
-      { fallbackCity: options?.fallbackCity, includeSave: false }
+      { fallbackCity: options?.fallbackCity }
     );
   }
 
@@ -633,73 +600,6 @@ export function resolveArticleContextActions(
           ? { ...a, label: "Open in Maps" }
           : a
     )
-  );
-}
-
-/** Resolve from a KindredArticle + optional stored context. */
-export function resolveActionsForArticle(
-  article: KindredArticle,
-  options?: { fallbackCity?: string | null }
-): ActionBarAction[] {
-  const ctx = article.actionContext;
-  if (!ctx) {
-    const out: ActionBarAction[] = [];
-    const seen = new Set<string>();
-    const fallbackDest = mapsDestinationFromSavedLocation(article.savedLocation);
-    if (fallbackDest) {
-      const maps = mapsAction(fallbackDest);
-      if (maps) pushUniqueUrl(out, maps, seen);
-    }
-    const site = websiteAction(
-      pickOfficialWebsiteFromUrls([article.sourceUrl]),
-      "Official Website"
-    );
-    if (site) pushUniqueUrl(out, site, seen);
-    pushUniqueUrl(out, saveAction(), seen);
-    pushUniqueUrl(out, shareAction(), seen);
-    return out;
-  }
-
-  if (ctx.surface === "event") {
-    return resolveEventArticleActionsFromArticle(article);
-  }
-
-  if (ctx.surface === "activity") {
-    return resolveActionsForActivity(
-      discoveryItemFromContext(article, ctx),
-      { fallbackCity: options?.fallbackCity, includeSave: true }
-    );
-  }
-
-  if (ctx.surface === "bandits_pick") {
-    return resolveActionsForBanditsPick({
-      url: ctx.websiteUrl ?? article.sourceUrl,
-      officialWebsite: ctx.websiteUrl,
-      mapsDestination:
-        ctx.mapsDestination ??
-        mapsDestinationFromSavedLocation(article.savedLocation),
-      includeSave: true,
-    });
-  }
-
-  if (ctx.surface === "history_around_town") {
-    const out = resolveActionsForHistoryPlace({
-      mapsDestination:
-        ctx.mapsDestination ??
-        mapsDestinationFromSavedLocation(article.savedLocation),
-      websiteUrl: ctx.websiteUrl ?? article.sourceUrl,
-      admissionUrl: ctx.ticketUrl,
-      googleMapsUrl: article.historyPlaceSnapshot?.googleMapsUrl ?? null,
-    });
-    const seen = new Set(out.map((a) => a.id));
-    pushUniqueUrl(out, saveAction(), seen);
-    pushUniqueUrl(out, shareAction(), seen);
-    return out;
-  }
-
-  return resolveActionsForRecommendation(
-    discoveryItemFromContext(article, ctx),
-    { fallbackCity: options?.fallbackCity, includeSave: true }
   );
 }
 

@@ -123,7 +123,7 @@ export default function RecommendationsScreen() {
               <EditorialCardGrid
                 kicker={FOOD_DRINK_SECTION_KICKER}
                 compact
-                accentColor="#C2A9EF"
+                accentColor="#F4B6A6"
                 cards={section.cards}
                 initialRenderCount={Math.max(section.cards.length, 1)}
                 onOpenCard={(card) => {

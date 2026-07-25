@@ -141,7 +141,7 @@ export function LocalEventsGrid({
       kicker="Local Events"
       floatingCardTint={compact ? undefined : floatingCardTint}
       compact={compact}
-      accentColor="#81CDC6"
+      accentColor="#8EC5F5"
       cards={cards}
       initialRenderCount={initialRenderCount}
       seeAllTotal={seeAllTotal}

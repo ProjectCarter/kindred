@@ -136,18 +136,6 @@ export function trackSeeAllTapped(sectionType: string): void {
   trackEvent("see_all_tapped", { section_type: sectionType });
 }
 
-export function trackArticleSaved(input: {
-  contentId: string;
-  contentTitle?: string | null;
-  sectionType?: string | null;
-}): void {
-  trackEvent("article_saved", {
-    content_id: input.contentId,
-    content_title: input.contentTitle ?? null,
-    section_type: input.sectionType ?? null,
-  });
-}
-
 export function trackArticleShared(input: {
   contentId: string;
   contentTitle?: string | null;

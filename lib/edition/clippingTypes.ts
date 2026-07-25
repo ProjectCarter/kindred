@@ -1,7 +1,7 @@
 /**
- * The four things a reader can save to their personal Clippings collection.
- * Shared between `article.ts` (tags content at creation time) and
- * Used by Save (likes) eligibility — see `saveTarget.ts`.
+ * The content-type discriminator for a Kindred article. Tagged at creation
+ * time in `article.ts` and read on the detail pages to drive hero theming,
+ * image policy, and the section-specific action button.
  */
 export type ClippingContentType =
   | "article"

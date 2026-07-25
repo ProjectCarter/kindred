@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   Image,
+  Linking,
   Pressable,
   ScrollView,
   Share,
@@ -11,6 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import type { KindredArticle } from "../lib/edition/article";
 import type { HistoryPlaceSnapshot } from "../lib/edition/historyAroundTown/types";
 import {
@@ -22,16 +25,20 @@ import {
 import {
   resolveArticleContextActions,
 } from "../lib/edition/actionBar";
-import { resolveSaveTarget } from "../lib/edition/saveTarget";
-import { checkLiked, saveLike, removeLike } from "../lib/edition/likes";
-import { supabase } from "../lib/supabase";
 import { trackArticleShared } from "../lib/analytics";
 import { paper, press, reader } from "../lib/edition/newspaperTheme";
 import { KindredDetailBackButton } from "./KindredDetailBackButton";
 import { PullDownNavHeader } from "./PullDownNavHeader";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
-import { ArticleActionList } from "./ArticleActionList";
+import {
+  DetailActionButton,
+  DetailActionStack,
+} from "./DetailActionButton";
+import {
+  GOOGLE_MAPS_ACTION_LABEL,
+  openGoogleMapsDestination,
+} from "../lib/edition/googleMaps";
 import { ArticleEditorialClosing } from "./ArticleEditorialClosing";
 import { StateAtAGlanceSection } from "./StateAtAGlanceSection";
 
@@ -69,8 +76,6 @@ export function HistoryPlaceReader({
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const readingWidth = Math.min(windowWidth - reader.gutter * 2, reader.measure);
-  const [liked, setLiked] = useState(false);
-  const [likePending, setLikePending] = useState(false);
   const [heroFailed, setHeroFailed] = useState(false);
 
   const snapshot = useMemo(
@@ -78,12 +83,24 @@ export function HistoryPlaceReader({
     [place]
   );
 
-  const saveTarget = useMemo(() => resolveSaveTarget(article), [article]);
-  const canSave = Boolean(saveTarget);
   const practicalActions = useMemo(
     () => resolveArticleContextActions(article),
     [article]
   );
+  const mapsAction = useMemo(
+    () => practicalActions.find((action) => action.id === "maps") ?? null,
+    [practicalActions]
+  );
+  const learnMoreUrl = useMemo(() => {
+    const site = practicalActions.find(
+      (action) =>
+        (action.id === "website" ||
+          action.id === "learn_more" ||
+          action.id === "official_event_page") &&
+        action.url?.trim()
+    );
+    return site?.url?.trim() ?? snapshot.officialWebsite?.trim() ?? null;
+  }, [practicalActions, snapshot.officialWebsite]);
   const uniqueFacts = useMemo(() => filterUniqueFacts(snapshot), [snapshot]);
   const visitorRows = useMemo(() => visitorInfoRows(snapshot), [snapshot]);
   const region = cityRegionLine(snapshot);
@@ -94,40 +111,6 @@ export function HistoryPlaceReader({
     title: snapshot.placeName,
     backAccessibilityLabel: backLabel,
   });
-
-  useEffect(() => {
-    if (!saveTarget) {
-      setLiked(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      setLiked(await checkLiked(user.id, saveTarget.clipKey));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [saveTarget]);
-
-  const toggleLike = useCallback(async () => {
-    if (!saveTarget || likePending) return;
-    setLikePending(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      if (liked) {
-        await removeLike(user.id, saveTarget.clipKey);
-        setLiked(false);
-      } else {
-        await saveLike(user.id, saveTarget, article);
-        setLiked(true);
-      }
-    } finally {
-      setLikePending(false);
-    }
-  }, [article, saveTarget, likePending, liked]);
 
   const handleShare = useCallback(async () => {
     const lines = [
@@ -211,32 +194,62 @@ export function HistoryPlaceReader({
             </View>
           ) : null}
 
-          <View style={styles.heroActions}>
-            {canSave ? (
-              <Pressable
-                onPress={() => void toggleLike()}
-                disabled={likePending}
-                style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel={liked ? "Saved. Tap to remove." : "Save"}
-              >
-                <Text style={styles.heroActionText}>
-                  {liked ? "❤️ Saved" : "🤍 Save"}
-                </Text>
-              </Pressable>
-            ) : null}
+          {/* Share — the standard interaction row used on every detail page. */}
+          <View style={styles.iconRow}>
             <Pressable
               onPress={() => void handleShare()}
-              style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}
+              hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel="Share"
+              style={({ pressed }) => [
+                styles.iconButton,
+                pressed && styles.pressed,
+              ]}
             >
-              <Text style={styles.heroActionText}>📤 Share</Text>
+              <SymbolView
+                name="square.and.arrow.up"
+                size={19}
+                weight="regular"
+                tintColor={paper.inkMuted}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                fallback={
+                  <Ionicons name="share-outline" size={19} color={paper.inkMuted} />
+                }
+              />
             </Pressable>
           </View>
 
-          {practicalActions.length > 0 ? (
-            <ArticleActionList actions={practicalActions} />
+          {/* Google Maps + Learn More — the standardized outlined detail buttons. */}
+          {mapsAction || learnMoreUrl ? (
+            <DetailActionStack style={styles.actions}>
+              {mapsAction ? (
+                <DetailActionButton
+                  label={GOOGLE_MAPS_ACTION_LABEL}
+                  variant="secondary"
+                  accessibilityRole="link"
+                  accessibilityLabel={GOOGLE_MAPS_ACTION_LABEL}
+                  onPress={() => {
+                    if (mapsAction.mapsDestination) {
+                      void openGoogleMapsDestination(mapsAction.mapsDestination);
+                    } else if (mapsAction.url) {
+                      void Linking.openURL(mapsAction.url).catch(() => {});
+                    }
+                  }}
+                />
+              ) : null}
+              {learnMoreUrl ? (
+                <DetailActionButton
+                  label="Learn More"
+                  variant="secondary"
+                  accessibilityRole="link"
+                  accessibilityLabel="Learn More"
+                  onPress={() =>
+                    void Linking.openURL(learnMoreUrl).catch(() => {})
+                  }
+                />
+              ) : null}
+            </DetailActionStack>
           ) : null}
 
           {snapshot.editorialIntroduction ? (
@@ -454,21 +467,21 @@ const styles = StyleSheet.create({
     color: paper.inkMuted,
     fontWeight: "600",
   },
-  heroActions: {
+  iconRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 18,
+    alignItems: "center",
+    gap: 22,
+    marginBottom: 22,
   },
-  heroAction: {
-    paddingVertical: 8,
-    paddingHorizontal: 2,
+  iconButton: {
+    minWidth: 44,
+    minHeight: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -8,
   },
-  heroActionText: {
-    fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.ink,
+  actions: {
+    marginBottom: 4,
   },
   pressed: {
     opacity: press.opacity,

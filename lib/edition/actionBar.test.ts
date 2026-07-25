@@ -1,7 +1,6 @@
 import {
   resolveActionsForActivity,
   resolveActionsForBanditsPick,
-  resolveActionsForLocalEvent,
   resolveActionsForRecommendation,
   resolveArticleContextActions,
   resolveEventArticleActions,
@@ -248,25 +247,16 @@ describe("Universal Action Bar", () => {
     );
   });
 
-  it("legacy resolveActionsForLocalEvent with includeSave adds save and share", () => {
-    const actions = resolveActionsForLocalEvent(paidEvent());
-    expect(actions.some((a) => a.label === "Share")).toBe(true);
-    expect(actions.some((a) => a.label === "Save")).toBe(true);
-  });
-
-  it("article context actions omit save and share", () => {
+  it("article context actions omit share", () => {
     const article = articleFromLocalEvent(paidEvent());
     const actions = resolveArticleContextActions(article);
-    expect(actions.some((a) => a.kind === "save")).toBe(false);
     expect(actions.some((a) => a.kind === "share")).toBe(false);
     expect(actions.some((a) => a.label === "Buy Tickets")).toBe(true);
     expect(actions.some((a) => a.label === "Open in Maps")).toBe(true);
   });
 
   it("restaurant surfaces Maps, Official Website, menu, and call when provider data exists", () => {
-    const actions = resolveActionsForRecommendation(restaurantItem(), {
-      includeSave: false,
-    });
+    const actions = resolveActionsForRecommendation(restaurantItem());
     expect(actions.map((a) => a.label)).toEqual(
       expect.arrayContaining([
         GOOGLE_MAPS_ACTION_LABEL,
@@ -281,9 +271,7 @@ describe("Universal Action Bar", () => {
   });
 
   it("coffee shop surfaces Google Maps but skips third-party Foursquare listing as official website", () => {
-    const actions = resolveActionsForRecommendation(coffeeItem(), {
-      includeSave: false,
-    });
+    const actions = resolveActionsForRecommendation(coffeeItem());
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
     expect(actions.some((a) => a.label === "Official Website")).toBe(false);
     expect(isThirdPartyListingUrl(coffeeItem().url)).toBe(true);
@@ -295,7 +283,7 @@ describe("Universal Action Bar", () => {
       url: "https://foursquare.com/v/joes-coffee/abc",
       officialWebsite: "https://www.joescoffee.example",
     };
-    const actions = resolveActionsForActivity(item, { includeSave: false });
+    const actions = resolveActionsForActivity(item);
     expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(
       actions.find((a) => a.id === "website")?.url
@@ -303,17 +291,13 @@ describe("Universal Action Bar", () => {
   });
 
   it("museum surfaces Official Website and Google Maps", () => {
-    const actions = resolveActionsForRecommendation(museumItem(), {
-      includeSave: false,
-    });
+    const actions = resolveActionsForRecommendation(museumItem());
     expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
   });
 
   it("national park surfaces Official Website and Google Maps", () => {
-    const actions = resolveActionsForRecommendation(npsParkItem(), {
-      includeSave: false,
-    });
+    const actions = resolveActionsForRecommendation(npsParkItem());
     expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
     const maps = actions.find((a) => a.id === "maps");
@@ -328,7 +312,7 @@ describe("Universal Action Bar", () => {
       category: "activities",
       venueCategories: ["Bowling Alley"],
     };
-    const actions = resolveActionsForActivity(item, { includeSave: false });
+    const actions = resolveActionsForActivity(item);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
     expect(actions.some((a) => a.label === "View Menu")).toBe(false);
     expect(actions.some((a) => a.label === "Call")).toBe(false);
@@ -341,7 +325,6 @@ describe("Universal Action Bar", () => {
         name: "Yosemite National Park",
         state: "CA",
       },
-      includeSave: false,
     });
     expect(actions.some((a) => a.label === "Official Website")).toBe(true);
     expect(actions.some((a) => a.label === GOOGLE_MAPS_ACTION_LABEL)).toBe(true);
