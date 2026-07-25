@@ -43,14 +43,21 @@ export default function PrivacyPage() {
 
       <LegalSection heading="Contact">
         <p>
-          Questions about privacy? Email{" "}
+          Questions about privacy, or want to access or delete your data? Email{" "}
           <a
-            href="mailto:hello@discoverkindred.com"
+            href="mailto:privacy@discoverkindred.com"
             className="font-medium text-lilac-600 hover:text-lilac-500 dark:text-lilac-300"
           >
-            hello@discoverkindred.com
+            privacy@discoverkindred.com
           </a>
-          .
+          , or visit our{" "}
+          <a
+            href="/data-requests"
+            className="font-medium text-lilac-600 hover:text-lilac-500 dark:text-lilac-300"
+          >
+            Data Requests
+          </a>{" "}
+          page.
         </p>
       </LegalSection>
     </LegalPage>

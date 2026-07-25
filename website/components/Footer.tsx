@@ -32,7 +32,13 @@ export default function Footer() {
             <a href="/terms" className="text-sm font-medium text-ink-soft transition-colors hover:text-lilac-600 dark:text-[#C7C4D4] dark:hover:text-lilac-200">
               Terms of Service
             </a>
-            <a href="mailto:hello@discoverkindred.com" className="text-sm font-medium text-ink-soft transition-colors hover:text-lilac-600 dark:text-[#C7C4D4] dark:hover:text-lilac-200">
+            <a href="/cookies" className="text-sm font-medium text-ink-soft transition-colors hover:text-lilac-600 dark:text-[#C7C4D4] dark:hover:text-lilac-200">
+              Cookie Policy
+            </a>
+            <a href="/data-requests" className="text-sm font-medium text-ink-soft transition-colors hover:text-lilac-600 dark:text-[#C7C4D4] dark:hover:text-lilac-200">
+              Data Requests
+            </a>
+            <a href="/contact" className="text-sm font-medium text-ink-soft transition-colors hover:text-lilac-600 dark:text-[#C7C4D4] dark:hover:text-lilac-200">
               Contact
             </a>
           </nav>
