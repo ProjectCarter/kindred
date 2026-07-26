@@ -5,8 +5,14 @@ import { resolveMasterpieceDisplayTitle } from "../lib/edition/heroArtwork/displ
 import { resolveArtworkYear } from "../lib/edition/heroArtwork/resolveYear";
 import { paper } from "../lib/edition/newspaperTheme";
 
-/** Kindred purple — border + label accent for Today's Masterpiece (tuned for dark). */
+/** Kindred purple — the "TODAY'S MASTERPIECE" label accent (tuned for dark). */
 const MASTERPIECE_ACCENT = "#9B7BEA";
+/**
+ * Deeper, richer premium violet for the card frame — more presence against the
+ * charcoal background than the label lavender, elegant and understated (never
+ * neon or glowing). Matched to the reference border.
+ */
+const MASTERPIECE_BORDER = "#7357DE";
 /** Subtle "tappable" affordance — quiet enough not to draw attention. */
 const CHEVRON_COLOR = "#75777F";
 
@@ -103,8 +109,8 @@ export function MasterpieceFeatureCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 2,
-    borderColor: MASTERPIECE_ACCENT,
+    borderWidth: 2.5,
+    borderColor: MASTERPIECE_BORDER,
     borderRadius: 18,
     backgroundColor: paper.cream,
     paddingTop: 16,
