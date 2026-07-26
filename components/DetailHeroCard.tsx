@@ -145,7 +145,9 @@ const styles = StyleSheet.create({
     lineHeight: 36,
     fontWeight: "600",
     letterSpacing: -0.4,
-    color: paper.ink,
+    // Fixed near-black — the hero sits on a bright section-accent color, so its
+    // text stays dark for contrast regardless of the app's dark theme.
+    color: "#15161B",
     textAlign: "center",
     maxWidth: "94%",
   },
@@ -160,7 +162,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     letterSpacing: 1.4,
     fontWeight: "700",
-    color: paper.ink,
+    color: "#15161B",
   },
   about: {
     width: "100%",

@@ -44,7 +44,7 @@ export function HomepageWeatherLines({ weather }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 14,
+    marginBottom: 10,
   },
   row: {
     flexDirection: "row",
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 22,
-    color: "#555555",
+    color: paper.inkMuted,
   },
   alert: {
     fontFamily: "Georgia",

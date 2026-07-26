@@ -107,7 +107,7 @@ export default function ArticleScreen() {
   if (needsAsync && !session?.article) {
     return (
       <SafeAreaView style={styles.flex}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <PaperLoading hint="Settling the page…" />
       </SafeAreaView>
     );
@@ -116,7 +116,7 @@ export default function ArticleScreen() {
   if (!session?.article) {
     return (
       <SafeAreaView style={styles.centered}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <Text style={styles.missingTitle}>This story isn’t available</Text>
         <Text style={styles.missingBody}>
           Return to your edition and open it again from the front page.
@@ -141,7 +141,7 @@ export default function ArticleScreen() {
   ) {
     return (
       <SafeAreaView style={styles.centered}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <Text style={styles.missingTitle}>This story isn’t available</Text>
         <Text style={styles.missingBody}>
           The article reader could not verify this story. Return to your edition
@@ -249,7 +249,7 @@ export default function ArticleScreen() {
 
   return (
     <View style={styles.flex}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       {article.section === "history_around_town" &&
       article.historyPlaceSnapshot ? (
         <HistoryPlaceReader

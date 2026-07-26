@@ -1,41 +1,46 @@
 /**
- * Kindred visual tokens — calm morning ritual.
- * Soft sky atmosphere, warm newspaper pages floating above it.
- * Arboretum air, not a news feed.
+ * Kindred visual tokens — premium dark luxury (v2).
+ *
+ * The entire app shares this palette, so the dark theme is defined here once and
+ * every screen inherits it. Token KEYS are preserved from the original light
+ * "newspaper" palette (so no consumer imports change); only the VALUES are
+ * remapped to a rich charcoal/black system. Names like `cream`/`creamDeep` are
+ * kept for stability and now read as "elevated surface" / "recessed surface".
+ *
+ * Hierarchy: `sky`/`page` = darkest screen atmosphere · `cream`/`creamWash` =
+ * elevated card surfaces · `creamDeep` = recessed/media · `ink…` = white→gray
+ * text ramp · `border` = subtle hairline · `terracotta` = Kindred orange accent.
  */
 export const paper = {
-  /** Morning sky — app atmosphere behind everything. */
-  sky: "#EEF6FB",
-  /** Navigation / sticky header wash. */
-  chrome: "#DCECF6",
-  /** Kindred paper — unified editorial stock (#FDFCF9) across the entire newspaper. */
-  page: "#FDFCF9",
-  newsprint: "#FDFCF9",
-  journal: "#FDFCF9",
-  /**
-   * Paper surface alias (cards, reading column, raised panels).
-   * Same stock as `page` — one printed newspaper.
-   */
-  cream: "#FDFCF9",
-  /** Slightly deeper paper for photographs / recessed panels. */
-  creamDeep: "#F0EBE3",
+  /** Darkest app atmosphere — screen background behind everything. */
+  sky: "#0C0D10",
+  /** Navigation / sticky header wash — a hair above the page. */
+  chrome: "#121419",
+  /** Primary screen & reading background — unified dark stock. */
+  page: "#0C0D10",
+  newsprint: "#0C0D10",
+  journal: "#0C0D10",
+  /** Elevated card surface (brick rows, feature cards, raised panels). */
+  cream: "#17191F",
+  /** Recessed / media surface (photo frames, placeholders). */
+  creamDeep: "#101217",
   /** Soft wash behind callouts and side notes. */
-  creamWash: "#F7F3EC",
-  /** Primary text. */
-  ink: "#2D2926",
-  inkBody: "#2D2926E8",
+  creamWash: "#15171C",
+  /** Primary text — near-white for a premium, non-glaring read. */
+  ink: "#F4F5F7",
+  inkBody: "#E3E4E9",
   /** Secondary text. */
-  inkMuted: "#7E776F",
-  inkFaint: "#7E776FB8",
-  /** Soft borders — never harsh. */
-  inkRule: "#DDD5CA",
-  border: "#DDD5CA",
-  /** Warm accent — terracotta, quieter than before. */
-  terracotta: "#B56A3A",
-  terracottaSoft: "#B56A3AE6",
-  terracottaWash: "#B56A3A14",
+  inkMuted: "#9A9CA6",
+  inkFaint: "#75777F",
+  /** Subtle hairline borders on dark surfaces. */
+  inkRule: "#2A2C33",
+  border: "#2A2C33",
+  /** Kindred orange — primary accent, tuned brighter for dark. */
+  terracotta: "#E98B45",
+  terracottaSoft: "#E98B45E6",
+  terracottaWash: "#E98B4522",
   /** Success / positive community signal. */
-  success: "#6E8B6A",
+  success: "#7FB47A",
 } as const;
 
 /**
@@ -60,22 +65,22 @@ export const masterpiece = {
   frameRadius: 1,
 } as const;
 
-/** Soft print-like elevation — pages floating on morning air. */
+/** Premium depth on dark — soft black elevation beneath floating surfaces. */
 export const shadow = {
   photo: {
-    shadowColor: "#2D2926",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 2,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 22,
+    elevation: 8,
   },
-  /** Quiet lift for newspaper surfaces on the sky. */
+  /** Quiet lift for card surfaces on the charcoal background. */
   page: {
-    shadowColor: "#2D2926",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 1,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    elevation: 4,
   },
 } as const;
 
@@ -85,14 +90,14 @@ export const press = {
   scale: 0.985,
 } as const;
 
-/** Vertical rhythm — more air, less density. */
+/** Vertical rhythm — compact and intentional, more content per screen. */
 export const space = {
   folioGutter: 28,
-  sectionGap: 52,
-  afterMasthead: 16,
-  afterBandit: 36,
-  afterLead: 56,
-  endPadding: 56,
+  sectionGap: 34,
+  afterMasthead: 12,
+  afterBandit: 28,
+  afterLead: 40,
+  endPadding: 40,
 } as const;
 
 export const type = {

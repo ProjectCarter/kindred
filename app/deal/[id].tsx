@@ -72,7 +72,7 @@ export default function DealDetailScreen() {
   if (!deal) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <Pressable
           onPress={handleBack}
           style={[styles.backRow, articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true })]}
@@ -126,7 +126,7 @@ export default function DealDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

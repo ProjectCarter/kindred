@@ -127,7 +127,7 @@ export default function EventDetailScreen() {
   if (!event) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <Pressable onPress={() => router.back()} style={[styles.backRow, articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true })]}>
           <Text style={styles.back}>{back}</Text>
         </Pressable>
@@ -138,7 +138,7 @@ export default function EventDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

@@ -5,10 +5,10 @@ import { resolveMasterpieceDisplayTitle } from "../lib/edition/heroArtwork/displ
 import { resolveArtworkYear } from "../lib/edition/heroArtwork/resolveYear";
 import { paper } from "../lib/edition/newspaperTheme";
 
-/** Deep Kindred purple — border + label accent for Today's Masterpiece. */
-const MASTERPIECE_ACCENT = "#6E46D9";
+/** Kindred purple — border + label accent for Today's Masterpiece (tuned for dark). */
+const MASTERPIECE_ACCENT = "#9B7BEA";
 /** Subtle "tappable" affordance — quiet enough not to draw attention. */
-const CHEVRON_COLOR = "#BCB4A9";
+const CHEVRON_COLOR = "#75777F";
 
 export type MasterpieceFeatureCardProps = {
   morningHero: MorningHeroExperience;
@@ -153,14 +153,14 @@ const styles = StyleSheet.create({
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 21,
-    color: "#555555",
+    color: paper.inkMuted,
   },
   summary: {
     marginTop: 10,
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 22,
-    color: "#555555",
+    color: paper.inkMuted,
   },
   chevron: {
     fontSize: 20,

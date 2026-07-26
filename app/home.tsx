@@ -5003,7 +5003,7 @@ const styles = StyleSheet.create({
   },
   mismatchButton: {
     alignSelf: "flex-start",
-    backgroundColor: paper.ink,
+    backgroundColor: paper.terracotta,
     paddingVertical: 10,
     paddingHorizontal: 16,
   },

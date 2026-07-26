@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   },
   actions: { gap: 8, marginTop: 4 },
   primaryBtn: {
-    backgroundColor: paper.ink,
+    backgroundColor: paper.terracotta,
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: "center",

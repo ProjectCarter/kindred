@@ -363,7 +363,7 @@ function usefulWeather(
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 20,
+    marginBottom: 14,
   },
   masthead: {
     marginBottom: 6,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   masterpieceCard: {
-    marginTop: 14,
+    marginTop: 10,
     marginBottom: 6,
   },
   heroFrame: {
@@ -393,8 +393,8 @@ const styles = StyleSheet.create({
   },
   morningCopy: {
     paddingRight: 8,
-    marginTop: 12,
-    marginBottom: 4,
+    marginTop: 8,
+    marginBottom: 2,
   },
   weather: {
     fontSize: 13,
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: -0.35,
     color: paper.ink,
-    marginBottom: 14,
+    marginBottom: 8,
     maxWidth: 520,
   },
   bandit: {
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
   },
   endRule: {
-    marginTop: 28,
+    marginTop: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },

@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   action: {
-    backgroundColor: paper.ink,
+    backgroundColor: paper.terracotta,
     paddingVertical: 14,
     alignItems: "center",
     marginBottom: 10,
@@ -481,8 +481,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   tempOptionActive: {
-    borderColor: paper.ink,
-    backgroundColor: paper.ink,
+    borderColor: paper.terracotta,
+    backgroundColor: paper.terracotta,
   },
   tempOptionText: {
     fontFamily: "Georgia",

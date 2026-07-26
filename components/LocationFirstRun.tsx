@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     marginBottom: 26,
   },
   primary: {
-    backgroundColor: paper.ink,
+    backgroundColor: paper.terracotta,
     paddingVertical: 14,
     alignItems: "center",
     marginBottom: 12,

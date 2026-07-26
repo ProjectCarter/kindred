@@ -48,7 +48,7 @@ export default function MasterpieceDetailScreen() {
   if (!morningHero) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <Pressable
           onPress={handleBack}
           style={[styles.backRow, articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true })]}

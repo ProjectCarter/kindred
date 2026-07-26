@@ -144,7 +144,6 @@ export function EditorialCardGrid({
       <View style={sectionStyle}>
         <View style={styles.labelRow}>
           <Text style={styles.kicker}>{kicker}</Text>
-          <View style={styles.labelRule} />
         </View>
         {showBanditWhenEmpty ? (
           <View style={styles.emptyWithBandit}>
@@ -321,7 +320,23 @@ export function EditorialCardGrid({
     <View style={sectionStyle} accessibilityRole="summary">
       <View style={styles.labelRow}>
         <Text style={styles.kicker}>{kicker}</Text>
-        <View style={styles.labelRule} />
+        {showSeeAllFooter && onSeeAll ? (
+          <Pressable
+            onPress={onSeeAll}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={
+              seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`
+            }
+            style={({ pressed }) => [pressed && { opacity: press.opacity }]}
+          >
+            <Text style={styles.seeAllInline} maxFontSizeMultiplier={1.2}>
+              {seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`}
+              {"  "}
+              <Text style={styles.seeAllInlineArrow}>→</Text>
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {compact ? (
@@ -331,31 +346,6 @@ export function EditorialCardGrid({
       ) : (
         gridRows
       )}
-
-      {showSeeAllFooter && onSeeAll ? (
-        <Pressable
-          onPress={onSeeAll}
-          style={({ pressed }) => [
-            styles.seeAllRow,
-            pressed && { opacity: press.opacity },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`
-          }
-        >
-          <Text
-            style={[styles.seeAllText, hasFloatingCards && styles.seeAllTextOnFloating]}
-            maxFontSizeMultiplier={1.2}
-          >
-            {seeAllLabel ? seeAllLabel(seeAllTotal) : `See all ${seeAllTotal}`}
-            {"  "}
-            <Text style={[styles.seeAllArrow, hasFloatingCards && styles.seeAllTextOnFloating]}>
-              →
-            </Text>
-          </Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -363,8 +353,8 @@ export function EditorialCardGrid({
 const styles = StyleSheet.create({
   section: {
     marginTop: 4,
-    marginBottom: 24,
-    paddingBottom: 20,
+    marginBottom: 16,
+    paddingBottom: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },
@@ -403,14 +393,26 @@ const styles = StyleSheet.create({
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    marginBottom: 16,
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
   },
   kicker: {
-    fontSize: 11,
-    letterSpacing: 2.6,
+    fontSize: 12,
+    letterSpacing: 2.4,
     fontWeight: "700",
     textTransform: "uppercase",
+    color: paper.terracotta,
+  },
+  /** Right-aligned "See all X →" living in the section header row. */
+  seeAllInline: {
+    fontSize: 13,
+    letterSpacing: 0.2,
+    fontWeight: "600",
+    color: paper.terracotta,
+  },
+  seeAllInlineArrow: {
+    fontSize: 13,
     color: paper.terracotta,
   },
   labelRule: {

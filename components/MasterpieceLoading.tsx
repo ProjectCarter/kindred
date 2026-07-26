@@ -37,7 +37,7 @@ export function MasterpieceLoading({
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       {onBack ? (
         <Pressable
           onPress={onBack}

@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: paper.border,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: paper.cream,
   },
   square: {
     width: 40,

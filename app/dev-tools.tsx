@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   linkRow: { paddingVertical: 8 },
   linkText: { fontFamily: "Georgia", fontSize: 15, color: paper.terracotta },
   primaryBtn: {
-    backgroundColor: paper.ink,
+    backgroundColor: paper.terracotta,
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",

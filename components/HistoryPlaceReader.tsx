@@ -132,7 +132,7 @@ export function HistoryPlaceReader({
 
   return (
     <SafeAreaView style={styles.container} edges={["left", "right"]}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -430,6 +430,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     ...reader.headline,
+    color: paper.ink,
     marginBottom: 10,
   },
   region: {
@@ -500,15 +501,18 @@ const styles = StyleSheet.create({
   },
   leadParagraph: {
     ...reader.body,
+    color: paper.inkBody,
     fontSize: 20,
     lineHeight: 34,
   },
   paragraph: {
     ...reader.body,
+    color: paper.inkBody,
     marginBottom: 18,
   },
   observation: {
     ...reader.body,
+    color: paper.inkBody,
     fontSize: 17,
     lineHeight: 28,
     marginBottom: 12,

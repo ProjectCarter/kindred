@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import type { Session } from "@supabase/supabase-js";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as Linking from "expo-linking";
@@ -223,6 +224,7 @@ export default function RootLayout() {
   if (loading || (session && hasInterests === null)) {
     return (
       <SafeAreaProvider>
+        <StatusBar style="light" />
         <PaperLoading hint="Your paper is waiting…" />
       </SafeAreaProvider>
     );
@@ -230,6 +232,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <StatusBar style="light" />
       <AppErrorBoundary>
         <Stack
           screenOptions={{
