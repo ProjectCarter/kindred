@@ -105,11 +105,12 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 2,
     borderColor: MASTERPIECE_ACCENT,
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: paper.cream,
-    paddingVertical: 20,
-    paddingLeft: 18,
-    paddingRight: 22,
+    paddingTop: 16,
+    paddingBottom: 14,
+    paddingLeft: 16,
+    paddingRight: 18,
   },
   pressed: {
     opacity: 0.92,
@@ -119,10 +120,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   artwork: {
-    width: 147,
+    width: 166,
     height: 172,
-    borderRadius: 14,
-    marginRight: 18,
+    borderRadius: 12,
+    marginRight: 16,
     backgroundColor: paper.creamDeep,
   },
   textCol: {
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     fontWeight: "700",
     color: MASTERPIECE_ACCENT,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   title: {
     fontFamily: "Georgia",
@@ -149,14 +150,14 @@ const styles = StyleSheet.create({
     color: paper.ink,
   },
   byline: {
-    marginTop: 6,
+    marginTop: 4,
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 21,
     color: paper.inkMuted,
   },
   summary: {
-    marginTop: 10,
+    marginTop: 6,
     fontFamily: "Georgia",
     fontSize: 15,
     lineHeight: 22,
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 24,
     color: CHEVRON_COLOR,
-    marginLeft: 14,
+    marginLeft: 12,
     alignSelf: "center",
   },
 });
