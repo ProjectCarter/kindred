@@ -353,8 +353,8 @@ export function EditorialCardGrid({
 const styles = StyleSheet.create({
   section: {
     marginTop: 4,
-    marginBottom: 16,
-    paddingBottom: 16,
+    marginBottom: 10,
+    paddingBottom: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   kicker: {
     fontSize: 12,
@@ -404,14 +404,21 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: paper.terracotta,
   },
-  /** Right-aligned "See all X →" living in the section header row. */
+  /**
+   * Right-aligned "See all X →" — premium editorial navigation. Georgia italic
+   * at a light weight so it reads like a magazine cross-reference, not UI text.
+   */
   seeAllInline: {
+    fontFamily: "Georgia",
+    fontStyle: "italic",
     fontSize: 13,
     letterSpacing: 0.2,
-    fontWeight: "600",
+    fontWeight: "400",
     color: paper.terracotta,
   },
   seeAllInlineArrow: {
+    fontFamily: "Georgia",
+    fontStyle: "italic",
     fontSize: 13,
     color: paper.terracotta,
   },

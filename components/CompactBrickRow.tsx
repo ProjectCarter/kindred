@@ -22,9 +22,9 @@ export type CompactBrickRowProps = {
 };
 
 /** Fixed row height — identical for every section so the stack reads evenly. */
-export const COMPACT_ROW_HEIGHT = 68;
+export const COMPACT_ROW_HEIGHT = 54;
 /** Consistent vertical spacing between stacked rows. */
-export const COMPACT_ROW_GAP = 10;
+export const COMPACT_ROW_GAP = 6;
 
 export function CompactBrickRow({
   title,
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     color: paper.ink,
   },
   secondary: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 12.5,
     lineHeight: 17,
     letterSpacing: 0.1,
