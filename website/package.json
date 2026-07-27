@@ -5,7 +5,7 @@
   "description": "Marketing landing page for Kindred — discoverkindred.com",
   "scripts": {
     "dev": "next dev -p 3200",
-    "build": "next build",
+    "build": "next build && node scripts/hoist-impact-meta.mjs",
     "start": "next start -p 3200",
     "lint": "next lint"
   },
