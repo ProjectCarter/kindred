@@ -52,6 +52,10 @@ export default function Footer() {
             </a>
           </p>
         </div>
+
+        <p className="mt-6 text-center text-xs text-ink-muted dark:text-[#8E8AA0]">
+          Impact-Site-Verification: 39ce7292-6354-4b3c-9be9-9d816bd78e73
+        </p>
       </div>
     </footer>
   );
