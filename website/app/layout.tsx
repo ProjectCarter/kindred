@@ -109,6 +109,13 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {/* Impact.com ownership verification — uses the non-standard `value` attribute */}
+        <meta
+          {...({
+            name: "impact-site-verification",
+            value: "bfef37af-963f-458d-a6e7-51fd36995549",
+          } as Record<string, string>)}
+        />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
