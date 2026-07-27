@@ -113,7 +113,7 @@ export default function RootLayout({
         <meta
           {...({
             name: "impact-site-verification",
-            value: "bfef37af-963f-458d-a6e7-51fd36995549",
+            value: "97c4ef62-a7eb-4a7f-8be8-5e7309e7517d",
           } as Record<string, string>)}
         />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
