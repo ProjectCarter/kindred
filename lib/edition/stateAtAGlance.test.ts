@@ -193,7 +193,10 @@ test("HistoryPlaceReader renders editorial state glance after Did You Know", () 
   assert.ok(glanceIdx > didYouKnowIdx);
   assert.ok(whyRememberIdx > glanceIdx);
   assert.equal(nearbyIdx, -1);
-  assert.match(source, /ArticleEditorialClosing/);
+  // The History Around Town reader ends cleanly with a single "Back to Homepage"
+  // link — no editorial colophon / "Continue Reading" closing block.
+  assert.match(source, /← Back to Homepage/);
+  assert.doesNotMatch(source, /ArticleEditorialClosing/);
 });
 
 test("editorial state symbol images scale from content width", () => {

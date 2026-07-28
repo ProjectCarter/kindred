@@ -39,7 +39,6 @@ import {
   GOOGLE_MAPS_ACTION_LABEL,
   openGoogleMapsDestination,
 } from "../lib/edition/googleMaps";
-import { ArticleEditorialClosing } from "./ArticleEditorialClosing";
 import { StateAtAGlanceSection } from "./StateAtAGlanceSection";
 
 type Props = {
@@ -374,10 +373,20 @@ export function HistoryPlaceReader({
             </View>
           ) : null}
 
-          <ArticleEditorialClosing
-            source={article.source}
-            onReturn={onBack}
-          />
+          <Pressable
+            onPress={onBack}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Back to Homepage"
+            style={({ pressed }) => [
+              styles.homeReturnRow,
+              pressed && styles.homeReturnPressed,
+            ]}
+          >
+            <Text style={styles.homeReturnLink} maxFontSizeMultiplier={1.15}>
+              ← Back to Homepage
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
@@ -577,5 +586,23 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     fontStyle: "italic",
     color: paper.ink,
+  },
+  homeReturnRow: {
+    marginTop: 36,
+    paddingVertical: 10,
+    minHeight: 44,
+    justifyContent: "center",
+    alignSelf: "flex-start",
+  },
+  homeReturnLink: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
+    fontStyle: "italic",
+    color: paper.terracotta,
+    letterSpacing: 0.15,
+  },
+  homeReturnPressed: {
+    opacity: press.opacity,
   },
 });
