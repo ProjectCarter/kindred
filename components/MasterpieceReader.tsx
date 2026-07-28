@@ -11,13 +11,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { SymbolView } from "expo-symbols";
+import { Ionicons } from "@expo/vector-icons";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
 import { formatArtworkCreditBlock } from "../lib/edition/heroArtwork/credits";
 import { masterpieceTitleLine, masterpieceOriginalTitle } from "../lib/edition/heroArtwork/formatTitle";
+import { resolveMasterpieceDisplayTitle } from "../lib/edition/heroArtwork/displayTitle";
+import { resolveArtworkYear } from "../lib/edition/heroArtwork/resolveYear";
 import { resolveMasterpieceDetail } from "../lib/edition/heroArtwork/detail";
 import { MasterpieceFrame } from "./MasterpieceFrame";
 import { kindredGold, masterpiece, paper, press } from "../lib/edition/newspaperTheme";
+import { shareContent } from "../lib/share/shareContent";
 import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
 
 export type MasterpieceReaderProps = {
@@ -167,6 +172,23 @@ export function MasterpieceReader({
   const titleWithYear = masterpieceTitleLine(morningHero);
   const originalTitle = masterpieceOriginalTitle(morningHero);
 
+  const { displayTitle } = resolveMasterpieceDisplayTitle(
+    morningHero.artworkTitle
+  );
+  const artworkYear = resolveArtworkYear(morningHero);
+
+  async function handleShare() {
+    // Failures resolve to an "error" result inside the helper — never throw
+    // and never crash the reader.
+    await shareContent({
+      contentType: "masterpiece",
+      title: displayTitle,
+      creator: morningHero.artist,
+      year: artworkYear,
+      contentId: morningHero.artworkId,
+    });
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <StatusBar style="light" />
@@ -196,9 +218,37 @@ export function MasterpieceReader({
         </View>
 
         <View style={[styles.body, { maxWidth: windowWidth }]}>
-          <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
-            🎨 TODAY'S MASTERPIECE
-          </Text>
+          <View style={styles.kickerRow}>
+            <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
+              🎨 TODAY'S MASTERPIECE
+            </Text>
+            <Pressable
+              onPress={() => void handleShare()}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Share this masterpiece"
+              style={({ pressed }) => [
+                styles.shareButton,
+                pressed && { opacity: press.opacity },
+              ]}
+            >
+              <SymbolView
+                name="square.and.arrow.up"
+                size={20}
+                weight="regular"
+                tintColor={kindredGold.primary}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+                fallback={
+                  <Ionicons
+                    name="share-outline"
+                    size={20}
+                    color={kindredGold.primary}
+                  />
+                }
+              />
+            </Pressable>
+          </View>
 
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
             {titleWithYear}
@@ -286,7 +336,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: masterpiece.edgeMargin,
     paddingTop: 20,
   },
+  kickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
   kicker: {
+    flexShrink: 1,
     fontFamily: "Georgia",
     fontSize: 11,
     lineHeight: 16,
@@ -294,7 +351,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     color: kindredGold.primary,
     fontWeight: "600",
-    marginBottom: 16,
+  },
+  shareButton: {
+    paddingLeft: 12,
+    paddingVertical: 2,
   },
   title: {
     fontFamily: "Georgia",
