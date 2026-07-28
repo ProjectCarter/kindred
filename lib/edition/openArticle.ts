@@ -23,7 +23,7 @@ import { trackArticleOpenedOnce } from "../analytics";
 export type OpenArticleOptions = {
   editionId?: string | null;
   companion?: ArticleCompanion | null;
-  /** e.g. "← Today's paper" */
+  /** e.g. "← Back to Homepage" */
   backLabel?: string;
 };
 
@@ -60,7 +60,7 @@ export function openKindredArticle(
     stashArticleCompanion(id, companion);
   }
 
-  const backLabel = options.backLabel?.trim() || "← Today’s paper";
+  const backLabel = options.backLabel?.trim() || "← Back to Homepage";
   const priorSession = getArticleSessionSync(withHero.id);
 
   stashArticleSession({

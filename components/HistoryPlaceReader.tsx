@@ -69,7 +69,7 @@ export function HistoryPlaceReader({
   article,
   place,
   onBack,
-  backLabel = "← Today's paper",
+  backLabel = "← Back to Homepage",
 }: Props) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();

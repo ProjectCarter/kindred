@@ -246,5 +246,5 @@ test("Story of reader ending omits Why we remember and redundant navigation", ()
     readerSource,
     /The rest of today’s morning paper is waiting\./
   );
-  assert.match(readerSource, /Return to Today’s Paper/);
+  assert.match(readerSource, /← Back to Homepage/);
 });

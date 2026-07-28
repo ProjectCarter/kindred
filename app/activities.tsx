@@ -37,7 +37,7 @@ export default function ActivitiesScreen() {
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
     title: "Activities",
-    backAccessibilityLabel: "Back to today’s paper",
+    backAccessibilityLabel: "Back to Homepage",
     onScrollOffset,
   });
 
@@ -73,7 +73,7 @@ export default function ActivitiesScreen() {
             persistNow();
             openKindredArticle(router, article, {
               editionId: getActiveEditionId(),
-              backLabel: "← Activities",
+              backLabel: "← Back to Homepage",
             });
           }}
         />

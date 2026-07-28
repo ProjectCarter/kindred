@@ -41,7 +41,7 @@ export default function EventsScreen() {
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
     title: "Local Events",
-    backAccessibilityLabel: "Back to today’s paper",
+    backAccessibilityLabel: "Back to Homepage",
     onScrollOffset,
   });
 
@@ -74,7 +74,7 @@ export default function EventsScreen() {
             persistNow();
             openKindredArticle(router, article, {
               editionId: getActiveEditionId(),
-              backLabel: "← Local Events",
+              backLabel: "← Back to Homepage",
             });
           }}
         />

@@ -150,7 +150,7 @@ function FullMasterpieceArticle({
 export function MasterpieceReader({
   morningHero,
   onBack,
-  backLabel = "← Today's paper",
+  backLabel = "← Back to Homepage",
 }: MasterpieceReaderProps) {
   const { width: windowWidth } = useWindowDimensions();
   const frameWidth = windowWidth - masterpiece.edgeMargin * 2;

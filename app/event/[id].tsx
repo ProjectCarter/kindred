@@ -60,7 +60,7 @@ export default function EventDetailScreen() {
   const back =
     typeof backLabel === "string" && backLabel.trim()
       ? decodeURIComponent(backLabel)
-      : "← Today’s paper";
+      : "← Back to Homepage";
 
   function handleBack() {
     router.back();

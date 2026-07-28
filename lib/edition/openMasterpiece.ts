@@ -28,7 +28,7 @@ export function openMasterpiece(
   const normalized =
     normalizeMorningHeroExperience(morningHero) ?? morningHero;
   const id = stashMasterpiece(normalized);
-  const backLabel = options.backLabel?.trim() || "← Today's paper";
+  const backLabel = options.backLabel?.trim() || "← Back to Homepage";
 
   router.push({
     pathname: "/masterpiece/[id]" as const,

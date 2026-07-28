@@ -17,7 +17,7 @@ export type MasterpieceLoadingProps = {
 
 /** Brief premium loading — never indefinite; caller must render article shell. */
 export function MasterpieceLoading({
-  backLabel = "← Today's paper",
+  backLabel = "← Back to Homepage",
   onBack,
 }: MasterpieceLoadingProps) {
   const insets = useSafeAreaInsets();

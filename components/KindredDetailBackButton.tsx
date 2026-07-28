@@ -11,7 +11,7 @@ type Props = {
  * Matches the article reader / masthead link styling.
  */
 export function KindredDetailBackButton({
-  label = "← Today’s paper",
+  label = "← Back to Homepage",
   onPress,
   accessibilityLabel,
 }: Props) {

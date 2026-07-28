@@ -54,7 +54,7 @@ export default function DealDetailScreen() {
   const back =
     typeof backLabel === "string" && backLabel.trim()
       ? decodeURIComponent(backLabel)
-      : "← Deals";
+      : "← Back to Homepage";
 
   function handleBack() {
     router.back();

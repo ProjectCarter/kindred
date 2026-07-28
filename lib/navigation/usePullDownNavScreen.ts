@@ -11,7 +11,7 @@ export type PullDownNavScreenOptions = {
   title?: string;
   /** Detail screens — item headline shown when space permits. */
   itemTitle?: string | null;
-  /** Back label on the page — e.g. "← Local Events". */
+  /** Back label on the page — e.g. "← Back to Homepage". */
   backLabel?: string;
   backAccessibilityLabel?: string;
   fallbackTitle?: string;

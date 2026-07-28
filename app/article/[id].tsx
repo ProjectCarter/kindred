@@ -124,11 +124,11 @@ export default function ArticleScreen() {
         <Pressable
           onPress={goBack}
           accessibilityRole="button"
-          accessibilityLabel="Back to today’s paper"
+          accessibilityLabel="Back to Homepage"
           hitSlop={12}
           style={({ pressed }) => pressed && { opacity: 0.55 }}
         >
-          <Text style={styles.backLink}>← Today’s paper</Text>
+          <Text style={styles.backLink}>← Back to Homepage</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -150,18 +150,18 @@ export default function ArticleScreen() {
         <Pressable
           onPress={goBack}
           accessibilityRole="button"
-          accessibilityLabel="Back to today’s paper"
+          accessibilityLabel="Back to Homepage"
           hitSlop={12}
           style={({ pressed }) => pressed && { opacity: 0.55 }}
         >
-          <Text style={styles.backLink}>← Today’s paper</Text>
+          <Text style={styles.backLink}>← Back to Homepage</Text>
         </Pressable>
       </SafeAreaView>
     );
   }
 
   const resolvedBack =
-    routeBackLabel?.trim() || session.backLabel || "← Today’s paper";
+    routeBackLabel?.trim() || session.backLabel || "← Back to Homepage";
   const resolvedEdition = routeEditionId || session.editionId || null;
 
   function openContinue(item: ContinueReadingItem) {

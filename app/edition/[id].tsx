@@ -255,14 +255,14 @@ export default function EditionScreen() {
                 openKindredArticle(router, article, {
                   editionId: typeof id === "string" ? id : null,
                   companion,
-                  backLabel: "← The paper",
+                  backLabel: "← Back to Homepage",
                 });
               }}
               onOpenEvent={(event) => {
                 persistNow();
                 openKindredEvent(router, event, {
                   editionId: typeof id === "string" ? id : null,
-                  backLabel: "← The paper",
+                  backLabel: "← Back to Homepage",
                 });
               }}
               knowledge={intelligence?.knowledge}

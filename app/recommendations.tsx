@@ -85,7 +85,7 @@ export default function RecommendationsScreen() {
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
     title: FOOD_DRINK_SECTION_TITLE,
-    backAccessibilityLabel: "Back to today’s paper",
+    backAccessibilityLabel: "Back to Homepage",
     onScrollOffset,
   });
 
@@ -132,7 +132,7 @@ export default function RecommendationsScreen() {
                   persistNow();
                   openKindredArticle(router, article, {
                     editionId: getActiveEditionId(),
-                    backLabel: `← ${FOOD_DRINK_SECTION_TITLE}`,
+                    backLabel: "← Back to Homepage",
                   });
                 }}
               />

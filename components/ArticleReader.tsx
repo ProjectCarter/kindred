@@ -118,7 +118,7 @@ export function ArticleReader({
   onBack,
   editionId,
   companion: companionProp,
-  backLabel = "← Today’s paper",
+  backLabel = "← Back to Homepage",
   initialScrollY = 0,
   onOpenContinue,
   instantEnter = false,
@@ -925,7 +925,7 @@ export function ArticleReader({
                 intro="The rest of today’s morning paper is waiting."
               >
                 <ActionLink
-                  label="Return to Today’s Paper"
+                  label="Back to Homepage"
                   onPress={handleBack}
                   prefix="← "
                 />
@@ -962,7 +962,7 @@ export function ArticleReader({
                   </View>
                 ) : null}
                 <ActionLink
-                  label="Return to Today’s Paper"
+                  label="Back to Homepage"
                   onPress={handleBack}
                   prefix="← "
                 />

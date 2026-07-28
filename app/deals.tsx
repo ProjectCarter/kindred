@@ -35,7 +35,7 @@ export default function DealsScreen() {
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
     title: "Deals",
-    backAccessibilityLabel: "Back to today’s paper",
+    backAccessibilityLabel: "Back to Homepage",
   });
 
   const byId = useMemo(() => {

@@ -4782,7 +4782,7 @@ export default function HomeScreen() {
                 persistHomeScrollNow();
                 openMasterpiece(router, hero, {
                   editionId,
-                  backLabel: "← Today's paper",
+                  backLabel: "← Back to Homepage",
                 });
               }}
               leadWhyThisMatters={intelligence?.leadWhyThisMatters}
@@ -4834,14 +4834,14 @@ export default function HomeScreen() {
                 openKindredArticle(router, article, {
                   editionId,
                   companion,
-                  backLabel: "← Today’s paper",
+                  backLabel: "← Back to Homepage",
                 });
               }}
               onOpenEvent={(event) => {
                 persistHomeScrollNow();
                 openKindredEvent(router, event, {
                   editionId,
-                  backLabel: "← Today’s paper",
+                  backLabel: "← Back to Homepage",
                 });
               }}
               onSeeAllEvents={() => {

@@ -41,7 +41,7 @@ export default function HistoryAroundTownScreen() {
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
     title: "History Around Town",
-    backAccessibilityLabel: "Back to today's paper",
+    backAccessibilityLabel: "Back to Homepage",
     onScrollOffset,
   });
 
@@ -72,7 +72,7 @@ export default function HistoryAroundTownScreen() {
             persistNow();
             openKindredArticle(router, article, {
               editionId: getActiveEditionId(),
-              backLabel: "← History Around Town",
+              backLabel: "← Back to Homepage",
             });
           }}
         />

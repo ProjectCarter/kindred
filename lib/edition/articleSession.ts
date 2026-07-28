@@ -15,7 +15,7 @@ export type ArticleSession = {
   article: KindredArticle;
   companion: ArticleCompanion | null;
   editionId: string | null;
-  /** Native back label — e.g. "← Today's paper" */
+  /** Native back label — e.g. "← Back to Homepage" */
   backLabel: string;
   scrollY: number;
   updatedAt: number;

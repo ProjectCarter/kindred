@@ -14,7 +14,7 @@ type Props = {
 export function ArticleEditorialClosing({
   source = "Kindred",
   onReturn,
-  returnLabel = "← Back to the Morning Paper",
+  returnLabel = "← Back to Homepage",
 }: Props) {
   return (
     <>

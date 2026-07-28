@@ -42,11 +42,7 @@ function buildSession(
       getArticleCompanion(articleId) ??
       (isGoldStandardArticleId(articleId) ? getGoldStandardCompanion() : null),
     editionId: editionId?.trim() ? editionId : null,
-    backLabel:
-      backLabel?.trim() ||
-      (articleId === GOLD_STANDARD_ARTICLE_ID
-        ? "← Today’s paper"
-        : "← Today’s paper"),
+    backLabel: backLabel?.trim() || "← Back to Homepage",
     scrollY,
     updatedAt: Date.now(),
   };
