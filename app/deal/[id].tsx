@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Linking,
   Pressable,
@@ -24,18 +25,19 @@ import { articleBackRowInsets } from "../../lib/navigation/articleBackLayout";
 import {
   dealCategory,
   dealMapsUrl,
-  getLocalDealById,
   LOCAL_DEALS_HOMEPAGE_ACCENT,
+  type LocalDeal,
 } from "../../lib/deals/localDeals";
+import { fetchDealById } from "../../lib/deals/dealsRepository";
 import { GOOGLE_MAPS_ACTION_LABEL } from "../../lib/edition/googleMaps";
 import { detailTint, toAboutParagraphs } from "../../lib/edition/detailHero";
 import { paper, press } from "../../lib/edition/newspaperTheme";
 
 /**
- * Local Deal — full article-style page. Hero imagery, the offer, how much you
- * save, the practical details, and clear actions (Maps, Website, Redeem). The
- * Redeem action is an intentional placeholder until a verified redemption path
- * ships — no monetization or affiliate logic runs here.
+ * Deal — full article-style page. Hero, the offer, how much you save, the
+ * practical details, and clear actions (Maps, Redeem). The deal is read from the
+ * published catalog by its public `deal_key`. Affiliate redirects happen only
+ * after tapping "Redeem Deal".
  */
 export default function DealDetailScreen() {
   const { id, backLabel } = useLocalSearchParams<{
@@ -46,10 +48,23 @@ export default function DealDetailScreen() {
   const insets = useSafeAreaInsets();
 
   const dealId = typeof id === "string" ? id : Array.isArray(id) ? id[0] : "";
-  const deal = useMemo(
-    () => (dealId ? getLocalDealById(decodeURIComponent(dealId)) : null),
-    [dealId]
-  );
+  const [deal, setDeal] = useState<LocalDeal | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const key = dealId ? decodeURIComponent(dealId) : "";
+      const found = key ? await fetchDealById(key) : null;
+      if (cancelled) return;
+      setDeal(found);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dealId]);
 
   const back =
     typeof backLabel === "string" && backLabel.trim()
@@ -68,6 +83,37 @@ export default function DealDetailScreen() {
     backAccessibilityLabel: back.replace(/^←\s*/, "Back to "),
   });
 
+  // ABOUT — one or two concise editorial paragraphs, deduped against the warm
+  // "Why you'll love it" line so the card never repeats itself.
+  const overviewParagraphs = useMemo(
+    () =>
+      deal
+        ? toAboutParagraphs(deal.description, {
+            maxParagraphs: 2,
+            maxWordsEach: 55,
+            avoid: deal.knownFor ?? null,
+          })
+        : [],
+    [deal]
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <StatusBar style="light" />
+        <Pressable
+          onPress={handleBack}
+          style={[styles.backRow, articleBackRowInsets(insets.top, { safeAreaAlreadyApplied: true })]}
+        >
+          <Text style={styles.back}>{back}</Text>
+        </Pressable>
+        <View style={styles.loadingBlock}>
+          <ActivityIndicator color={paper.terracotta} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!deal) {
     return (
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -84,13 +130,6 @@ export default function DealDetailScreen() {
   }
 
   const category = dealCategory(deal.category);
-  // ABOUT — one or two concise editorial paragraphs, deduped against the warm
-  // "Why you'll love it" line so the card never repeats itself.
-  const overviewParagraphs = toAboutParagraphs(deal.description, {
-    maxParagraphs: 2,
-    maxWordsEach: 55,
-    avoid: deal.knownFor ?? null,
-  });
   // Quick fact line — the offer and when it ends, so the warm "Known for" copy
   // can stay purely about why the place is worth a visit.
   const overviewMeta =
@@ -110,16 +149,23 @@ export default function DealDetailScreen() {
   function shareDeal() {
     if (!deal) return;
     const parts = [deal.title, deal.merchant];
-    parts.push("", deal.website || "From today’s Kindred edition");
+    parts.push("", deal.website || deal.redeemUrl || "From today’s D.R.O.P. edition");
     void Share.share({ message: parts.join("\n"), title: deal.title }).catch(
       () => {}
     );
   }
 
   function redeem() {
+    if (!deal) return;
+    // Affiliate redirect happens only here, on explicit intent.
+    const target = deal.redeemUrl?.trim() || deal.website?.trim() || "";
+    if (target) {
+      void Linking.openURL(target).catch(() => {});
+      return;
+    }
     Alert.alert(
       "Redeem in the app",
-      "Deal redemption opens when Deals goes live. This is a preview of how it will work."
+      "Deal redemption opens when this offer goes live. This is a preview of how it will work."
     );
   }
 
@@ -149,13 +195,13 @@ export default function DealDetailScreen() {
             style={styles.hero}
           />
 
-          {/* Like / Share — same row and placement as every detail page. Local
-              Deals are not saveable in V1, so only Share is shown here. */}
+          {/* Share — same row and placement as every detail page. Deals are not
+              saveable in V1, so only Share is shown here. */}
           <View style={styles.iconRow}>
             <ShareIconButton onPress={shareDeal} style={styles.iconButton} />
           </View>
 
-          {/* Google Maps + section action — standardized stacked buttons. */}
+          {/* Google Maps + Redeem — standardized stacked buttons. */}
           <DetailActionStack style={styles.actions}>
             <DetailActionButton
               label={GOOGLE_MAPS_ACTION_LABEL}
@@ -167,7 +213,7 @@ export default function DealDetailScreen() {
             <DetailActionButton
               label="Redeem Deal"
               variant="primary"
-              accessibilityLabel="Redeem deal — preview"
+              accessibilityLabel={`Redeem deal at ${deal.merchant}`}
               onPress={redeem}
             />
           </DetailActionStack>
@@ -183,10 +229,19 @@ export default function DealDetailScreen() {
             style={styles.aboutCard}
           >
             {deal.terms?.trim() ? (
-              <View style={styles.conditions}>
-                <Text style={styles.conditionsLabel}>GOOD TO KNOW</Text>
-                <Text style={styles.conditionsText} maxFontSizeMultiplier={1.3}>
+              <View style={styles.block}>
+                <Text style={styles.blockLabel}>GOOD TO KNOW</Text>
+                <Text style={styles.blockText} maxFontSizeMultiplier={1.3}>
                   {deal.terms.trim()}
+                </Text>
+              </View>
+            ) : null}
+
+            {deal.source?.trim() ? (
+              <View style={styles.block}>
+                <Text style={styles.blockLabel}>SOURCE</Text>
+                <Text style={styles.blockText} maxFontSizeMultiplier={1.3}>
+                  Offer provided via {deal.source.trim()}.
                 </Text>
               </View>
             ) : null}
@@ -204,8 +259,8 @@ export default function DealDetailScreen() {
               <Text style={styles.returnLink}>← Back to Homepage</Text>
             </Pressable>
             <Text style={styles.disclaimer} maxFontSizeMultiplier={1.25}>
-              Kindred summarizes trusted listings for quick local discovery. This
-              is not the publisher’s full listing.
+              D.R.O.P. summarizes trusted offers for quick local discovery. This
+              is not the merchant’s full listing.
             </Text>
           </View>
         </View>
@@ -231,6 +286,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: paper.terracotta,
     letterSpacing: 0.2,
+  },
+  loadingBlock: {
+    paddingTop: 64,
+    alignItems: "center",
   },
   missing: {
     fontFamily: "Georgia",
@@ -265,20 +324,20 @@ const styles = StyleSheet.create({
   aboutCard: {
     marginBottom: 24,
   },
-  conditions: {
+  block: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.border,
   },
-  conditionsLabel: {
+  blockLabel: {
     fontSize: 11,
     letterSpacing: 1.4,
     fontWeight: "700",
     color: paper.inkMuted,
     marginBottom: 6,
   },
-  conditionsText: {
+  blockText: {
     fontFamily: "Georgia",
     fontSize: 14,
     lineHeight: 22,

@@ -40,7 +40,14 @@ export type DealCategory = {
  * a fabricated photo. When authorized photography is available it slots straight
  * in here.
  */
+/** Where a deal applies — drives local vs nationwide/online filtering. */
+export type DealScope = "local" | "online" | "nationwide";
+
 export type LocalDeal = {
+  /**
+   * Route + analytics id. Sourced from `deals_published.deal_key` when backed by
+   * the catalog; equal to `id` for any in-memory seed.
+   */
   id: string;
   category: DealCategoryId;
   /** Most specific editorial emoji for this deal (homepage identifier). */
@@ -55,6 +62,12 @@ export type LocalDeal = {
   description: string;
   /** Plain-language savings summary shown on the detail page. */
   savingsDetail: string;
+  /** Local / online / nationwide — from the published projection. */
+  scope?: DealScope;
+  /** Affiliate network or "Direct Merchant" — shown in the detail Source block. */
+  source?: string | null;
+  /** Affiliate / tracking URL followed only after tapping "Redeem Deal". */
+  redeemUrl?: string | null;
   /**
    * Editorial "Known for" — the warm, local-friend reason to visit (roughly
    * 20–50 words). It answers "why would someone want to go here?", not what the
@@ -102,6 +115,20 @@ const CATEGORY_BY_ID: Record<DealCategoryId, DealCategory> = DEAL_CATEGORIES.red
 
 export function dealCategory(id: DealCategoryId): DealCategory {
   return CATEGORY_BY_ID[id];
+}
+
+/** True when a raw string is one of the known Kindred deal categories. */
+export function isDealCategoryId(id: string): id is DealCategoryId {
+  return Object.prototype.hasOwnProperty.call(CATEGORY_BY_ID, id);
+}
+
+/**
+ * Resolve a (possibly untrusted) category string to a `DealCategory`, falling
+ * back to a safe default so a new/unknown category from the feed never crashes
+ * the detail page.
+ */
+export function dealCategoryOrDefault(id: string): DealCategory {
+  return isDealCategoryId(id) ? CATEGORY_BY_ID[id] : CATEGORY_BY_ID.things_to_do;
 }
 
 /**
@@ -158,4 +185,89 @@ export function dealCardSubtitle(deal: LocalDeal): string {
 export function dealMapsUrl(deal: LocalDeal): string {
   const query = encodeURIComponent(`${deal.merchant}, ${deal.city}`);
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
+}
+
+// ---------------------------------------------------------------------------
+// Published-projection mapping
+//
+// Kept here (an import-free module) so it stays the single source of truth and
+// remains unit-testable without pulling in React Native or Supabase.
+// ---------------------------------------------------------------------------
+
+/** Shape of a row from the anon-readable `deals_published` table. */
+export type PublishedDealRow = {
+  id: string;
+  deal_key: string;
+  scope: string;
+  region_key: string | null;
+  category: string;
+  deal_type: string | null;
+  discount_type: string | null;
+  emoji: string;
+  merchant: string;
+  title: string;
+  savings_label: string;
+  description: string;
+  savings_detail: string | null;
+  known_for: string | null;
+  highlights: unknown;
+  city: string | null;
+  state: string | null;
+  lat: number | null;
+  lon: number | null;
+  website: string | null;
+  redeem_url: string | null;
+  source: string | null;
+  terms: string | null;
+  voucher_code: string | null;
+  image_url: string | null;
+  featured_rank: number | null;
+  quality_score: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
+};
+
+/** Columns the client reads — keeps payloads lean (never provider secrets). */
+export const PUBLISHED_DEAL_COLUMNS =
+  "id,deal_key,scope,region_key,category,deal_type,discount_type,emoji,merchant,title,savings_label,description,savings_detail,known_for,highlights,city,state,lat,lon,website,redeem_url,source,terms,voucher_code,image_url,featured_rank,quality_score,starts_at,ends_at";
+
+function toStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0
+  );
+  return out.length ? out : undefined;
+}
+
+function normalizeScope(scope: string): DealScope {
+  return scope === "online" || scope === "nationwide" ? scope : "local";
+}
+
+/**
+ * Map a `deals_published` row (snake_case) into the `LocalDeal` shape the UI
+ * renders. Pure; unknown categories fall back safely.
+ */
+export function mapPublishedDeal(row: PublishedDealRow): LocalDeal {
+  const category = dealCategoryOrDefault(row.category);
+  const city = row.city?.trim() || row.region_key?.trim() || "";
+  return {
+    id: row.deal_key,
+    category: category.id,
+    emoji: row.emoji?.trim() || category.emoji,
+    merchant: row.merchant,
+    title: row.title,
+    savingsLabel: row.savings_label,
+    description: row.description ?? "",
+    savingsDetail: row.savings_detail?.trim() || "",
+    scope: normalizeScope(row.scope),
+    source: row.source?.trim() || null,
+    redeemUrl: row.redeem_url?.trim() || null,
+    knownFor: row.known_for?.trim() || "",
+    highlights: toStringArray(row.highlights),
+    expiration: row.ends_at,
+    city,
+    website: row.website?.trim() || null,
+    terms: row.terms?.trim() || null,
+    imageUrl: row.image_url?.trim() || null,
+  };
 }

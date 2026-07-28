@@ -1,28 +1,30 @@
 import { useMemo } from "react";
 import { EditorialCardGrid, type EditorialGridCard } from "./EditorialCardGrid";
 import {
-  allLocalDeals,
   dealCardSubtitle,
-  featuredLocalDeals,
   LOCAL_DEALS_HOMEPAGE_ACCENT,
   type LocalDeal,
 } from "../lib/deals/localDeals";
+import { useFeaturedDeals } from "../lib/deals/useLocalDeals";
+import { dealsSeeAllLabel } from "../lib/deals/dealCounts";
 import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../lib/edition/editorialPublishing";
 
 type Props = {
   onOpenDeal?: (deal: LocalDeal) => void;
   onSeeAll?: () => void;
+  /** Reader's metro key — local deals for the metro plus nationwide/online. */
+  regionKey?: string | null;
 };
 
 /**
- * Local Deals — homepage desk. Emoji-first, text-only compact rows on the cream
- * page, identical in rhythm to Local Events, Activities, and Food & Drinks. No
- * photography on the front page (permanent Kindred homepage law); imagery appears
- * only after the reader taps "See all".
+ * Deals — homepage desk. Emoji-first, text-only compact rows on the cream page,
+ * identical in rhythm to Local Events, Activities, and Food & Drinks (same
+ * compact EditorialCardGrid, same spacing, own accent). Reads the published
+ * catalog via the featured hook; hides entirely when there are zero deals. No
+ * photography on the front page (permanent Kindred homepage law).
  */
-export function LocalDealsSection({ onOpenDeal, onSeeAll }: Props) {
-  const deals = useMemo(() => featuredLocalDeals(HOMEPAGE_INITIAL_RENDER_COUNT), []);
-  const totalCount = useMemo(() => allLocalDeals().length, []);
+export function LocalDealsSection({ onOpenDeal, onSeeAll, regionKey }: Props) {
+  const { deals, totalCount } = useFeaturedDeals({ regionKey });
 
   const byId = useMemo(() => {
     const map = new Map<string, LocalDeal>();
@@ -41,6 +43,7 @@ export function LocalDealsSection({ onOpenDeal, onSeeAll }: Props) {
     [deals]
   );
 
+  // 0 deals (or still loading) → render nothing: no header, no empty state.
   if (!cards.length) return null;
 
   return (
@@ -50,11 +53,10 @@ export function LocalDealsSection({ onOpenDeal, onSeeAll }: Props) {
       accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
       cards={cards}
       initialRenderCount={HOMEPAGE_INITIAL_RENDER_COUNT}
-      seeAllTotal={totalCount}
+      seeAllTotal={totalCount || cards.length}
       onSeeAll={onSeeAll}
-      seeAllLabel={(n) => `See all ${n} deals`}
+      seeAllLabel={dealsSeeAllLabel}
       analyticsSectionType="local_deals"
-      emptyCopy="Fresh local savings are on the way — check back tomorrow."
       onOpenCard={
         onOpenDeal
           ? (card) => {

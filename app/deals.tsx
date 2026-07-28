@@ -1,5 +1,13 @@
-import { useMemo } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo } from "react";
+import {
+  ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
@@ -11,6 +19,7 @@ import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { BanditCharacter } from "../components/BanditCharacter";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
 import { useLocalDeals } from "../lib/deals/useLocalDeals";
+import { formatDealCount } from "../lib/deals/dealCounts";
 import {
   dealCardSubtitle,
   LOCAL_DEALS_HOMEPAGE_ACCENT,
@@ -18,15 +27,19 @@ import {
 } from "../lib/deals/localDeals";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
+/** Trigger load-more this many px before the end of the list. */
+const LOAD_MORE_THRESHOLD = 480;
+
 /**
- * Local Deals — full list. A continuation of the homepage: the exact same
- * stacked compact card layout (via EditorialCardGrid `compact`), simply carrying
- * every deal rather than the front-page preview. No two-column grid, no listing
- * photography — imagery lives on the detail page, matching every other desk.
+ * Deals — full list. A continuation of the homepage: the same stacked compact
+ * card layout (EditorialCardGrid `compact`), carrying every deal rather than the
+ * front-page preview. Pages in 20–30 at a time and loads more while scrolling; no
+ * listing photography — imagery lives on the detail page, matching every desk.
  */
 export default function DealsScreen() {
   const router = useRouter();
-  const { status, deals } = useLocalDeals();
+  const { status, deals, hasMore, loadingMore, totalCount, loadMore } =
+    useLocalDeals();
 
   function handleBack() {
     router.back();
@@ -37,6 +50,18 @@ export default function DealsScreen() {
     title: "Deals",
     backAccessibilityLabel: "Back to Homepage",
   });
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      pullDownNavScreen.pullDownNav.onScroll(event);
+      const { layoutMeasurement, contentOffset, contentSize } =
+        event.nativeEvent;
+      const distanceToEnd =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distanceToEnd <= LOAD_MORE_THRESHOLD) loadMore();
+    },
+    [pullDownNavScreen.pullDownNav, loadMore]
+  );
 
   const byId = useMemo(() => {
     const map = new Map<string, LocalDeal>();
@@ -59,12 +84,18 @@ export default function DealsScreen() {
     router.push(`/deal/${encodeURIComponent(deal.id)}`);
   }
 
+  const countLabel =
+    status === "ready" && totalCount > 0
+      ? `${formatDealCount(totalCount)} ${totalCount === 1 ? "deal" : "deals"} near you`
+      : null;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         {...pullDownNavScreen.scrollProps}
+        onScroll={handleScroll}
       >
         <View style={styles.backRow}>
           <KindredDetailBackButton onPress={handleBack} />
@@ -76,6 +107,7 @@ export default function DealsScreen() {
           A handful of local ways to save — on the experiences, tables, and shops
           worth leaving the house for.
         </Text>
+        {countLabel ? <Text style={styles.count}>{countLabel}</Text> : null}
 
         {status === "loading" ? (
           <View style={styles.stateBlock}>
@@ -114,6 +146,12 @@ export default function DealsScreen() {
             }}
           />
         ) : null}
+
+        {loadingMore ? (
+          <View style={styles.loadMore}>
+            <ActivityIndicator color={paper.terracotta} />
+          </View>
+        ) : null}
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
@@ -151,8 +189,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 25,
     color: paper.inkBody,
-    marginBottom: 32,
+    marginBottom: 12,
     maxWidth: 420,
+  },
+  count: {
+    fontFamily: "Georgia",
+    fontSize: 13,
+    letterSpacing: 0.2,
+    color: paper.inkMuted,
+    marginBottom: 28,
   },
   stateBlock: {
     alignItems: "center",
@@ -176,5 +221,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     maxWidth: 320,
+  },
+  loadMore: {
+    paddingVertical: 24,
+    alignItems: "center",
   },
 });
