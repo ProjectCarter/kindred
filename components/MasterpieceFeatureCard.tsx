@@ -1,6 +1,5 @@
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
-import { homepageMasterpieceSummary } from "../lib/edition/heroArtwork/homeSummary";
 import { resolveMasterpieceDisplayTitle } from "../lib/edition/heroArtwork/displayTitle";
 import { resolveArtworkYear } from "../lib/edition/heroArtwork/resolveYear";
 import { paper } from "../lib/edition/newspaperTheme";
@@ -16,6 +15,37 @@ const MASTERPIECE_BORDER = "#7357DE";
 /** Subtle "tappable" affordance — quiet enough not to draw attention. */
 const CHEVRON_COLOR = "#75777F";
 
+/**
+ * Wide, short "hero" presentation ratio (width ÷ height). The homepage card is a
+ * teaser — a rectangular banner keeps the card compact so more Events/Activities
+ * stay on screen, while the full artwork lives on the detail screen. Tuned to the
+ * reference (~2:1). We never present *taller* than this: for tall/portrait art we
+ * crop to this banner; for art that is naturally wider we honor its true ratio
+ * (even shorter), so the frame is always at least this rectangular.
+ */
+const HERO_ASPECT_RATIO = 2;
+/**
+ * Safety cap so an unusually wide panorama can't get too short to read as a hero.
+ */
+const HERO_MAX_ASPECT_RATIO = 2.6;
+
+/**
+ * Presentation ratio for the banner: at least {@link HERO_ASPECT_RATIO} wide, and
+ * honoring naturally wider artwork up to {@link HERO_MAX_ASPECT_RATIO}. Responsive
+ * — paired with `width: "100%"` the height follows the card width on any device.
+ */
+function resolveHeroRatio(morningHero: MorningHeroExperience): number {
+  const { imageWidth, imageHeight, aspectRatio } = morningHero;
+  const naturalRatio =
+    imageWidth && imageHeight && imageWidth > 0 && imageHeight > 0
+      ? imageWidth / imageHeight
+      : aspectRatio && aspectRatio > 0
+        ? aspectRatio
+        : HERO_ASPECT_RATIO;
+
+  return Math.min(HERO_MAX_ASPECT_RATIO, Math.max(HERO_ASPECT_RATIO, naturalRatio));
+}
+
 export type MasterpieceFeatureCardProps = {
   morningHero: MorningHeroExperience;
   imageUri: string;
@@ -24,9 +54,10 @@ export type MasterpieceFeatureCardProps = {
 };
 
 /**
- * Today's Masterpiece — premium featured card: artwork on the left, stacked copy
- * on the right, a single chevron affordance, and the reserved Kindred purple
- * border/label. The entire card opens the full artwork reader.
+ * Today's Masterpiece — premium featured card: large artwork across the top,
+ * masterpiece copy stacked below (purple label, serif title, artist · year),
+ * a single chevron affordance, and the reserved Kindred purple border. The
+ * entire card opens the full artwork reader.
  */
 export function MasterpieceFeatureCard({
   morningHero,
@@ -38,47 +69,39 @@ export function MasterpieceFeatureCard({
   const year = resolveArtworkYear(morningHero);
   const byline = [morningHero.artist?.trim(), year?.trim()]
     .filter(Boolean)
-    .join(" • ");
-  const summary = homepageMasterpieceSummary(morningHero.aboutArtworkBody);
+    .join(" · ");
+  const ratio = resolveHeroRatio(morningHero);
 
   const inner = (
-    <View style={styles.row}>
+    <>
       <Image
         source={{ uri: imageUri }}
-        style={styles.artwork}
+        style={[styles.artwork, { aspectRatio: ratio }]}
         resizeMode="cover"
         onError={onImageError}
         accessibilityIgnoresInvertColors
       />
 
-      <View style={styles.textCol}>
-        <Text style={styles.label} maxFontSizeMultiplier={1.1}>
-          TODAY'S MASTERPIECE
-        </Text>
-        <Text style={styles.title} maxFontSizeMultiplier={1.15} numberOfLines={2}>
-          {displayTitle}
-        </Text>
-        {byline ? (
-          <Text style={styles.byline} maxFontSizeMultiplier={1.15} numberOfLines={1}>
-            {byline}
+      <View style={styles.textRow}>
+        <View style={styles.textCol}>
+          <Text style={styles.label} maxFontSizeMultiplier={1.1}>
+            TODAY'S MASTERPIECE
           </Text>
-        ) : null}
-        {summary ? (
-          <Text
-            style={styles.summary}
-            maxFontSizeMultiplier={1.15}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
-            {summary}
+          <Text style={styles.title} maxFontSizeMultiplier={1.15} numberOfLines={3}>
+            {displayTitle}
           </Text>
-        ) : null}
-      </View>
+          {byline ? (
+            <Text style={styles.byline} maxFontSizeMultiplier={1.15} numberOfLines={1}>
+              {byline}
+            </Text>
+          ) : null}
+        </View>
 
-      <Text style={styles.chevron} maxFontSizeMultiplier={1.1} accessibilityElementsHidden>
-        ›
-      </Text>
-    </View>
+        <Text style={styles.chevron} maxFontSizeMultiplier={1.1} accessibilityElementsHidden>
+          ›
+        </Text>
+      </View>
+    </>
   );
 
   if (onOpenMasterpiece) {
@@ -113,29 +136,24 @@ const styles = StyleSheet.create({
     borderColor: MASTERPIECE_BORDER,
     borderRadius: 18,
     backgroundColor: paper.cream,
-    paddingTop: 16,
-    paddingBottom: 14,
-    paddingLeft: 16,
-    paddingRight: 18,
+    padding: 8,
   },
   pressed: {
     opacity: 0.92,
   },
-  row: {
+  artwork: {
+    width: "100%",
+    borderRadius: 10,
+    backgroundColor: paper.creamDeep,
+  },
+  textRow: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  artwork: {
-    width: 166,
-    height: 172,
-    borderRadius: 12,
-    marginRight: 16,
-    backgroundColor: paper.creamDeep,
+    marginTop: 10,
+    paddingHorizontal: 2,
   },
   textCol: {
     flex: 1,
-    justifyContent: "center",
-    paddingRight: 4,
   },
   label: {
     fontFamily: "Georgia",
@@ -145,12 +163,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     fontWeight: "700",
     color: MASTERPIECE_ACCENT,
-    marginBottom: 6,
+    marginBottom: 3,
   },
   title: {
     fontFamily: "Georgia",
-    fontSize: 21,
-    lineHeight: 27,
+    fontSize: 24,
+    lineHeight: 30,
     letterSpacing: -0.3,
     fontWeight: "700",
     color: paper.ink,
@@ -162,16 +180,9 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: paper.inkMuted,
   },
-  summary: {
-    marginTop: 6,
-    fontFamily: "Georgia",
-    fontSize: 15,
-    lineHeight: 22,
-    color: paper.inkMuted,
-  },
   chevron: {
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 22,
+    lineHeight: 26,
     color: CHEVRON_COLOR,
     marginLeft: 12,
     alignSelf: "center",
