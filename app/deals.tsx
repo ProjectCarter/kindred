@@ -34,7 +34,7 @@ export default function DealsScreen() {
 
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
-    title: "Local Deals",
+    title: "Deals",
     backAccessibilityLabel: "Back to today’s paper",
   });
 
@@ -71,7 +71,7 @@ export default function DealsScreen() {
         </View>
 
         <Text style={styles.kicker}>Save while you explore</Text>
-        <Text style={styles.title}>Local Deals</Text>
+        <Text style={styles.title}>Deals</Text>
         <Text style={styles.subtitle}>
           A handful of local ways to save — on the experiences, tables, and shops
           worth leaving the house for.
@@ -93,14 +93,14 @@ export default function DealsScreen() {
             />
             <Text style={styles.stateHeadline}>Deals took the morning off</Text>
             <Text style={styles.stateText}>
-              We couldn’t load Local Deals just now. Please check back a little later.
+              We couldn’t load Deals just now. Please check back a little later.
             </Text>
           </View>
         ) : null}
 
         {status === "ready" || status === "empty" ? (
           <EditorialCardGrid
-            kicker="💰 Local Deals"
+            kicker="💰 Deals"
             compact
             accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
             cards={cards}

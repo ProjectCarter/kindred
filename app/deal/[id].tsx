@@ -55,7 +55,7 @@ export default function DealDetailScreen() {
   const back =
     typeof backLabel === "string" && backLabel.trim()
       ? decodeURIComponent(backLabel)
-      : "← Local Deals";
+      : "← Deals";
 
   function handleBack() {
     router.back();
@@ -65,7 +65,7 @@ export default function DealDetailScreen() {
     onBack: handleBack,
     backLabel: back,
     itemTitle: deal?.title ?? null,
-    fallbackTitle: "Local Deals",
+    fallbackTitle: "Deals",
     backAccessibilityLabel: back.replace(/^←\s*/, "Back to "),
   });
 
@@ -120,7 +120,7 @@ export default function DealDetailScreen() {
   function redeem() {
     Alert.alert(
       "Redeem in the app",
-      "Deal redemption opens when Local Deals goes live. This is a preview of how it will work."
+      "Deal redemption opens when Deals goes live. This is a preview of how it will work."
     );
   }
 

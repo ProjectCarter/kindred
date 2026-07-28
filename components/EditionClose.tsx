@@ -1,114 +1,85 @@
-import { Text, View, Pressable, StyleSheet, Share } from "react-native";
-import { paper, press, space } from "../lib/edition/newspaperTheme";
-import {
-  editionColophon,
-  editionFarewell,
-} from "../lib/edition/morningRitual";
-import { FolioReveal } from "./FolioReveal";
+import { StyleSheet, Text, View } from "react-native";
+import { paper } from "../lib/edition/newspaperTheme";
+
+/**
+ * Gold accent — the same warm tone as the app's "See all" links. Used for the
+ * highlighted D · R · O · P initials and the tagline beneath.
+ */
+const SIGNATURE_GOLD = paper.terracotta;
+/** Kindred purple accent — matches the "Today's Masterpiece" label. */
+const SIGNATURE_PURPLE = "#9B7BEA";
 
 type Props = {
   editionDateLabel?: string | null;
-  /** Optional custom share; defaults to a calm Share sheet. */
+  /** Retained for call-site stability; the branded footer takes no actions. */
   onShareEdition?: () => void;
   folioIndex?: number;
 };
 
 /**
- * Satisfying close to today’s paper — not an abrupt scroll stop.
+ * Kindred brand signature — the calm close to today's edition.
+ *
+ * Two centered lines that quietly reveal the D.R.O.P. wordmark: the initials of
+ * "Daily Recommended Offers & Places" are drawn in gold while the rest of each
+ * word sits in Kindred purple, so the acronym surfaces without ever being
+ * spelled out. Refined and timeless — no dividers, buttons, icons, or motion.
  */
-export function EditionClose({
-  editionDateLabel,
-  onShareEdition,
-  folioIndex = 12,
-}: Props) {
-  async function share() {
-    if (onShareEdition) {
-      onShareEdition();
-      return;
-    }
-    try {
-      const dateBit = editionDateLabel ? ` — ${editionDateLabel}` : "";
-      await Share.share({
-        message: `Today’s Kindred edition${dateBit}.`,
-      });
-    } catch {
-      /* reader cancelled */
-    }
-  }
-
+export function EditionClose(_props: Props) {
   return (
-    <FolioReveal index={folioIndex}>
-      <View style={styles.wrap} accessibilityRole="summary">
-        <View style={styles.rule} />
-        <Text style={styles.colophon}>{editionColophon()}</Text>
-        <Text style={styles.farewell}>{editionFarewell()}</Text>
-        <Text style={styles.sign}>— Bandit</Text>
+    <View style={styles.wrap}>
+      <Text
+        style={styles.signature}
+        maxFontSizeMultiplier={1.15}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        accessibilityLabel="Daily Recommended Offers and Places"
+      >
+        <Text style={styles.gold}>D</Text>
+        <Text style={styles.purple}>aily </Text>
+        <Text style={styles.gold}>R</Text>
+        <Text style={styles.purple}>ecommended </Text>
+        <Text style={styles.gold}>O</Text>
+        <Text style={styles.purple}>ffers </Text>
+        <Text style={styles.purple}>& </Text>
+        <Text style={styles.gold}>P</Text>
+        <Text style={styles.purple}>laces</Text>
+      </Text>
 
-        <Pressable
-          onPress={() => void share()}
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Share today’s edition"
-        >
-          <Text style={styles.actionText}>Share today’s edition</Text>
-        </Pressable>
-      </View>
-    </FolioReveal>
+      <Text style={styles.tagline} maxFontSizeMultiplier={1.15}>
+        Discover More. Spend Less.
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingTop: space.endPadding,
-    paddingBottom: 8,
+    paddingTop: 40,
+    paddingBottom: 28,
+    paddingHorizontal: 16,
     alignItems: "center",
   },
-  rule: {
-    width: 64,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: paper.inkMuted,
-    opacity: 0.35,
-    marginBottom: 26,
-  },
-  colophon: {
+  signature: {
     fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 24,
-    color: paper.inkMuted,
-    textAlign: "center",
-    marginBottom: 10,
-    maxWidth: 320,
-  },
-  farewell: {
-    fontFamily: "Georgia",
-    fontSize: 16,
-    lineHeight: 24,
-    fontStyle: "italic",
-    color: paper.ink,
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  sign: {
-    fontFamily: "Georgia",
-    fontSize: 14,
-    fontStyle: "italic",
-    color: paper.inkFaint,
+    fontSize: 17.5,
+    lineHeight: 25,
     letterSpacing: 0.2,
-    marginBottom: 24,
+    fontWeight: "600",
+    textAlign: "center",
   },
-  action: {
-    paddingVertical: 8,
-    minHeight: 40,
-    justifyContent: "center",
+  gold: {
+    color: SIGNATURE_GOLD,
   },
-  actionText: {
+  purple: {
+    color: SIGNATURE_PURPLE,
+  },
+  tagline: {
+    marginTop: 14,
     fontFamily: "Georgia",
-    fontSize: 15,
-    color: paper.terracotta,
-    fontStyle: "italic",
-    letterSpacing: 0.15,
-  },
-  pressed: {
-    opacity: press.opacity,
+    fontSize: 13,
+    lineHeight: 19,
+    letterSpacing: 0.3,
+    color: SIGNATURE_GOLD,
+    textAlign: "center",
   },
 });
