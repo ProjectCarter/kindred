@@ -262,6 +262,7 @@ export function MorningArrival({
       >
         <KindredFullMasthead
           eyebrow={null}
+          nameplateText="D.R.O.P."
           meta={[dateLabel, placeLabel].filter(Boolean).join("  ·  ")}
           trailing={mastheadTrailing}
           dense

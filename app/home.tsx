@@ -4620,6 +4620,7 @@ export default function HomeScreen() {
         {sections.length === 0 ? (
           <KindredFullMasthead
             dateLabel={today}
+            nameplateText="D.R.O.P."
             trailing={
               <MastheadLink
                 label="Library"

@@ -74,6 +74,13 @@ type FullProps = {
   leading?: ReactNode;
   scrollY?: Animated.Value;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Displayed wordmark text. Defaults to "Kindred". This is a visual/branding
+   * override only — the project, package, and code remain Kindred. The homepage
+   * passes "D.R.O.P." to show the consumer brand while everything internal
+   * (imports, components, routes, analytics) is unchanged.
+   */
+  nameplateText?: string;
   /** Tighter nameplate for the local-day arrival screen. */
   compact?: boolean;
   /**
@@ -98,6 +105,7 @@ export function KindredFullMasthead({
   leading,
   scrollY,
   style,
+  nameplateText = "Kindred",
   compact = false,
   dense = false,
 }: FullProps) {
@@ -140,7 +148,7 @@ export function KindredFullMasthead({
         ]}
         maxFontSizeMultiplier={1.15}
       >
-        Kindred
+        {nameplateText}
       </Text>
 
       <View
