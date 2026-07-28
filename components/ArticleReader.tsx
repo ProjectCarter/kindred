@@ -156,6 +156,10 @@ export function ArticleReader({
   // News, Lead, Knowledge, …), which keep their existing reader layout.
   const heroTheme = detailHeroThemeForArticle(article);
   const isListingDetail = Boolean(heroTheme);
+  // Story of Your City and Today in History end cleanly with a single
+  // "← Back to Homepage" action — no colophon, "Continue reading" block,
+  // or related-stories footer.
+  const isSimpleHistoricalClose = isProtectedHistoricalSection(article.section);
   const isEventListing =
     article.section === "local_events" || article.savedContentType === "event";
   // Quick Overview card: a "Name • City" title, a quick fact line (events →
@@ -884,7 +888,7 @@ export function ArticleReader({
               </Text>
             ) : null}
 
-            {!isListingDetail ? (
+            {!isListingDetail && !isSimpleHistoricalClose ? (
               <View style={styles.colophon}>
                 <View style={styles.footerRule} />
                 <Text style={styles.endMark}>◆</Text>
@@ -894,8 +898,11 @@ export function ArticleReader({
               </View>
             ) : null}
 
-            {/* 10. Related stories — suppressed on listing detail pages */}
-            {relatedItems.length > 0 && !isListingDetail ? (
+            {/* 10. Related stories — suppressed on listing detail pages and on
+                the simple historical close (Story of, Today in History) */}
+            {relatedItems.length > 0 &&
+            !isListingDetail &&
+            !isSimpleHistoricalClose ? (
               <EndMatterBlock
                 kicker="Related stories"
                 intro="Nearby threads from today’s paper — chosen to deepen the reading, not the scroll."
@@ -918,8 +925,10 @@ export function ArticleReader({
             ) : null}
 
             {/* 11. Continue Reading — full articles only. Listing detail pages
-                get a minimal Source → Return → disclaimer footer below. */}
-            {!isListingDetail ? (
+                get a minimal Source → Return → disclaimer footer below, and the
+                historical desks (Story of, Today in History) get a single
+                "← Back to Homepage" close instead. */}
+            {!isListingDetail && !isSimpleHistoricalClose ? (
               <EndMatterBlock
                 kicker="Continue reading"
                 intro="The rest of today’s morning paper is waiting."
@@ -932,8 +941,22 @@ export function ArticleReader({
               </EndMatterBlock>
             ) : null}
 
+            {/* Simple historical close — Story of Your City and Today in History
+                end with only the back link, no colophon or continue-reading. */}
+            {isSimpleHistoricalClose ? (
+              <View style={styles.historicalClose}>
+                <ActionLink
+                  label="Back to Homepage"
+                  onPress={handleBack}
+                  prefix="← "
+                />
+              </View>
+            ) : null}
+
             {/* 12. What's Special Right Now — suppressed on listing detail pages */}
-            {banditPickItems.length > 0 && !isListingDetail ? (
+            {banditPickItems.length > 0 &&
+            !isListingDetail &&
+            !isSimpleHistoricalClose ? (
               <EndMatterBlock
                 kicker="What's Special Right Now"
                 intro="What Bandit says not to miss today or this week."
@@ -1655,6 +1678,9 @@ const styles = StyleSheet.create({
     paddingTop: 36,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: paper.inkRule,
+  },
+  historicalClose: {
+    marginTop: 40,
   },
   endMatterKicker: {
     ...type.kicker,

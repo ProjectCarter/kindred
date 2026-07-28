@@ -242,9 +242,9 @@ test("Story of reader ending omits Why we remember and redundant navigation", ()
   assert.doesNotMatch(readerSource, /Back to the morning paper/);
   assert.doesNotMatch(readerSource, /This page/);
   assert.doesNotMatch(readerSource, /closingCadence/);
-  assert.match(
-    readerSource,
-    /The rest of today’s morning paper is waiting\./
-  );
+  // Story of Your City and Today in History end with a single
+  // "← Back to Homepage" action — no colophon or "Continue reading" block.
+  assert.match(readerSource, /isSimpleHistoricalClose/);
+  assert.match(readerSource, /styles\.historicalClose/);
   assert.match(readerSource, /← Back to Homepage/);
 });
