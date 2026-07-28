@@ -130,6 +130,9 @@ export default function DealDetailScreen() {
   }
 
   const category = dealCategory(deal.category);
+  // Google Maps only makes sense for a physical local business. Online and
+  // nationwide offers have no single location, so the Maps action is hidden.
+  const showMaps = deal.scope === "local" && Boolean(deal.city.trim());
   // Quick fact line — the offer and when it ends, so the warm "Known for" copy
   // can stay purely about why the place is worth a visit.
   const overviewMeta =
@@ -157,8 +160,9 @@ export default function DealDetailScreen() {
 
   function redeem() {
     if (!deal) return;
-    // Affiliate redirect happens only here, on explicit intent.
-    const target = deal.redeemUrl?.trim() || deal.website?.trim() || "";
+    // Affiliate redirect happens only here, on explicit intent, and opens only
+    // the stored redeem_url — never a fallback website.
+    const target = deal.redeemUrl?.trim() || "";
     if (target) {
       void Linking.openURL(target).catch(() => {});
       return;
@@ -201,15 +205,17 @@ export default function DealDetailScreen() {
             <ShareIconButton onPress={shareDeal} style={styles.iconButton} />
           </View>
 
-          {/* Google Maps + Redeem — standardized stacked buttons. */}
+          {/* Google Maps (local only) + Redeem — standardized stacked buttons. */}
           <DetailActionStack style={styles.actions}>
-            <DetailActionButton
-              label={GOOGLE_MAPS_ACTION_LABEL}
-              variant="secondary"
-              accessibilityRole="link"
-              accessibilityLabel={`Open ${deal.merchant} in Google Maps`}
-              onPress={openMaps}
-            />
+            {showMaps ? (
+              <DetailActionButton
+                label={GOOGLE_MAPS_ACTION_LABEL}
+                variant="secondary"
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${deal.merchant} in Google Maps`}
+                onPress={openMaps}
+              />
+            ) : null}
             <DetailActionButton
               label="Redeem Deal"
               variant="primary"
