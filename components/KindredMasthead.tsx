@@ -76,6 +76,13 @@ type FullProps = {
   style?: StyleProp<ViewStyle>;
   /** Tighter nameplate for the local-day arrival screen. */
   compact?: boolean;
+  /**
+   * Compresses the vertical rhythm between the Library row, nameplate, rule, and
+   * date/meta line — pulling the whole header upward — while KEEPING the full
+   * nameplate size. Used by the homepage arrival so Today's Masterpiece starts
+   * higher on screen. Independent of `compact` (which also shrinks the name).
+   */
+  dense?: boolean;
 };
 
 /**
@@ -92,16 +99,28 @@ export function KindredFullMasthead({
   scrollY,
   style,
   compact = false,
+  dense = false,
 }: FullProps) {
   const collapse = scrollY ? mastheadCollapse(scrollY) : null;
 
   const body = (
     <View
-      style={[styles.full, compact && styles.fullCompact, style]}
+      style={[
+        styles.full,
+        compact && styles.fullCompact,
+        dense && styles.fullDense,
+        style,
+      ]}
       accessibilityRole="header"
     >
       {(leading || trailing) && (
-        <View style={[styles.fullChrome, compact && styles.fullChromeCompact]}>
+        <View
+          style={[
+            styles.fullChrome,
+            compact && styles.fullChromeCompact,
+            dense && styles.fullChromeDense,
+          ]}
+        >
           <View style={styles.fullChromeSide}>{leading}</View>
           <View style={styles.fullChromeSideEnd}>{trailing}</View>
         </View>
@@ -114,13 +133,20 @@ export function KindredFullMasthead({
       ) : null}
 
       <Text
-        style={[styles.nameplate, compact && styles.nameplateCompact]}
+        style={[
+          styles.nameplate,
+          compact && styles.nameplateCompact,
+          dense && styles.nameplateDense,
+        ]}
         maxFontSizeMultiplier={1.15}
       >
         Kindred
       </Text>
 
-      <View style={styles.nameplateRule} accessibilityElementsHidden />
+      <View
+        style={[styles.nameplateRule, dense && styles.nameplateRuleDense]}
+        accessibilityElementsHidden
+      />
 
       {dateLabel ? (
         <Text style={styles.date} maxFontSizeMultiplier={1.25}>
@@ -135,7 +161,10 @@ export function KindredFullMasthead({
       ) : null}
 
       {meta ? (
-        <Text style={styles.meta} maxFontSizeMultiplier={1.2}>
+        <Text
+          style={[styles.meta, dense && styles.metaDense]}
+          maxFontSizeMultiplier={1.2}
+        >
           {meta}
         </Text>
       ) : null}
@@ -270,6 +299,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingBottom: 10,
   },
+  fullDense: {
+    marginBottom: 2,
+    paddingBottom: 10,
+  },
   fullChrome: {
     alignSelf: "stretch",
     flexDirection: "row",
@@ -280,6 +313,10 @@ const styles = StyleSheet.create({
   },
   fullChromeCompact: {
     marginBottom: 10,
+  },
+  fullChromeDense: {
+    marginBottom: 8,
+    minHeight: 22,
   },
   fullChromeSide: {
     flex: 1,
@@ -307,12 +344,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     marginBottom: 8,
   },
+  nameplateDense: {
+    marginBottom: 6,
+  },
   nameplateRule: {
     width: 40,
     height: 1,
     backgroundColor: paper.terracotta,
     opacity: 0.55,
     marginBottom: 12,
+  },
+  nameplateRuleDense: {
+    marginBottom: 8,
   },
   date: {
     ...type.nameplateMeta,
@@ -331,6 +374,9 @@ const styles = StyleSheet.create({
     color: paper.inkMuted,
     letterSpacing: 1.8,
     marginTop: 10,
+  },
+  metaDense: {
+    marginTop: 6,
   },
   stickyWrap: {
     position: "absolute",

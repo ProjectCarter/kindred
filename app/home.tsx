@@ -4962,7 +4962,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 28,
-    paddingTop: 22,
+    paddingTop: 10,
     paddingBottom: 96,
   },
   travelBanner: {

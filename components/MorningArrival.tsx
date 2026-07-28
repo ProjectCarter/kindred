@@ -26,7 +26,6 @@ import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
 import { preloadMorningHeroImage } from "../lib/edition/heroArtwork/preload";
 import { MasterpieceFeatureCard } from "./MasterpieceFeatureCard";
-import { morningSalutation } from "../lib/edition/morningRitual";
 import {
   KindredFullMasthead,
   mastheadCollapse,
@@ -61,7 +60,8 @@ type Props = {
 
 /**
  * Kindred signature opening — TIME density below, Kindred hero first.
- * Hero → weather / greeting / Bandit. Local Events follows in the folio.
+ * Masthead → weather / Bandit → Today's Masterpiece. Local Events follows in
+ * the folio. (No greeting line — the homepage opens straight into the edition.)
  */
 export function MorningArrival({
   editionDate,
@@ -89,7 +89,6 @@ export function MorningArrival({
   const dateLabel = resolveDisplayDate(editionDate);
   const placeLabel = formatPlace(locationCity);
   const weatherLine = usefulWeather(weatherHeadline, weatherBody);
-  const salutation = morningSalutation();
   const bandit = banditGreeting?.trim() || null;
 
   const fallbackScrollY = useRef(new Animated.Value(0)).current;
@@ -265,15 +264,12 @@ export function MorningArrival({
           eyebrow={null}
           meta={[dateLabel, placeLabel].filter(Boolean).join("  ·  ")}
           trailing={mastheadTrailing}
+          dense
         />
       </Animated.View>
 
-      {/* Greeting, compact weather, then Bandit — front-page morning flow. */}
+      {/* Compact weather, then Bandit — front-page morning flow (no greeting). */}
       <View style={styles.morningCopy}>
-        <Text style={styles.greeting} maxFontSizeMultiplier={1.25}>
-          {salutation}
-        </Text>
-
         {homepageWeather ? (
           <HomepageWeatherLines weather={homepageWeather} />
         ) : null}
@@ -363,18 +359,18 @@ function usefulWeather(
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 14,
+    marginBottom: 10,
   },
   masthead: {
-    marginBottom: 6,
-    paddingBottom: 4,
+    marginBottom: 4,
+    paddingBottom: 2,
   },
   heroBleed: {
     marginHorizontal: -FOLIO_GUTTER,
     marginBottom: 2,
   },
   masterpieceCard: {
-    marginTop: 10,
+    marginTop: 2,
     marginBottom: 6,
   },
   heroFrame: {
@@ -393,7 +389,7 @@ const styles = StyleSheet.create({
   },
   morningCopy: {
     paddingRight: 8,
-    marginTop: 8,
+    marginTop: 0,
     marginBottom: 2,
   },
   weather: {
@@ -402,16 +398,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
     color: paper.inkMuted,
     marginBottom: 10,
-  },
-  greeting: {
-    fontFamily: "Georgia",
-    fontSize: 28,
-    lineHeight: 36,
-    fontWeight: "600",
-    letterSpacing: -0.35,
-    color: paper.ink,
-    marginBottom: 8,
-    maxWidth: 520,
   },
   bandit: {
     fontFamily: "Georgia",
@@ -426,7 +412,7 @@ const styles = StyleSheet.create({
     color: paper.inkFaint,
   },
   endRule: {
-    marginTop: 16,
+    marginTop: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: paper.border,
   },
