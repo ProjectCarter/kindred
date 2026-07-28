@@ -61,6 +61,7 @@ export function DetailAboutCard({
   meta,
   body,
   knownFor,
+  highlights,
   tint,
   style,
   children,
@@ -74,6 +75,11 @@ export function DetailAboutCard({
   body?: string | string[];
   /** One or two warm "Why you'll love it" sentences — verified only, omitted when absent. */
   knownFor?: string;
+  /**
+   * "Why you'll love it" as 2–4 short verified highlights, rendered as a compact
+   * bulleted list. Takes precedence over `knownFor` when provided.
+   */
+  highlights?: string[];
   tint: string;
   style?: StyleProp<ViewStyle>;
   /** Section-specific extras. */
@@ -83,6 +89,9 @@ export function DetailAboutCard({
   const paragraphs = (Array.isArray(body) ? body : body ? [body] : [])
     .map((p) => p?.trim())
     .filter((p): p is string => Boolean(p));
+  const cleanHighlights = (highlights ?? [])
+    .map((h) => h?.trim())
+    .filter((h): h is string => Boolean(h));
   return (
     <View style={[styles.about, { backgroundColor: tint }, style]}>
       <Text style={styles.aboutLabel} maxFontSizeMultiplier={1.2}>
@@ -110,14 +119,33 @@ export function DetailAboutCard({
           {paragraph}
         </Text>
       ))}
-      {knownFor?.trim() ? (
+      {cleanHighlights.length || knownFor?.trim() ? (
         <View style={styles.knownFor}>
           <Text style={styles.knownForLabel} maxFontSizeMultiplier={1.2}>
             WHY YOU'LL LOVE IT
           </Text>
-          <Text style={styles.knownForText} maxFontSizeMultiplier={1.3}>
-            {knownFor.trim()}
-          </Text>
+          {cleanHighlights.length ? (
+            cleanHighlights.map((item, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.highlightRow,
+                  index > 0 && styles.highlightRowSpaced,
+                ]}
+              >
+                <Text style={styles.highlightBullet} maxFontSizeMultiplier={1.3}>
+                  {"\u2022"}
+                </Text>
+                <Text style={styles.highlightText} maxFontSizeMultiplier={1.3}>
+                  {item}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.knownForText} maxFontSizeMultiplier={1.3}>
+              {knownFor!.trim()}
+            </Text>
+          )}
         </View>
       ) : null}
       {children}
@@ -214,6 +242,27 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   knownForText: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
+    color: paper.inkBody,
+  },
+  highlightRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  highlightRowSpaced: {
+    marginTop: 6,
+  },
+  highlightBullet: {
+    fontFamily: "Georgia",
+    fontSize: 16,
+    lineHeight: 24,
+    color: paper.inkBody,
+    marginRight: 8,
+  },
+  highlightText: {
+    flex: 1,
     fontFamily: "Georgia",
     fontSize: 16,
     lineHeight: 24,

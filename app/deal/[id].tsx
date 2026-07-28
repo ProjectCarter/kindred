@@ -11,9 +11,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { ShareIconButton } from "../../components/ShareIconButton";
 import { DetailHeroCard, DetailAboutCard } from "../../components/DetailHeroCard";
 import {
   DetailActionButton,
@@ -153,28 +152,7 @@ export default function DealDetailScreen() {
           {/* Like / Share — same row and placement as every detail page. Local
               Deals are not saveable in V1, so only Share is shown here. */}
           <View style={styles.iconRow}>
-            <Pressable
-              onPress={shareDeal}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Share"
-              style={({ pressed }) => [
-                styles.iconButton,
-                pressed && { opacity: press.opacity },
-              ]}
-            >
-              <SymbolView
-                name="square.and.arrow.up"
-                size={19}
-                weight="regular"
-                tintColor={paper.inkMuted}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                fallback={
-                  <Ionicons name="share-outline" size={19} color={paper.inkMuted} />
-                }
-              />
-            </Pressable>
+            <ShareIconButton onPress={shareDeal} style={styles.iconButton} />
           </View>
 
           {/* Google Maps + section action — standardized stacked buttons. */}
@@ -220,10 +198,10 @@ export default function DealDetailScreen() {
               onPress={handleBack}
               hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel="Return to Today’s Paper"
+              accessibilityLabel="Back to Homepage"
               style={({ pressed }) => [pressed && { opacity: press.opacity }]}
             >
-              <Text style={styles.returnLink}>← Return to Today’s Paper</Text>
+              <Text style={styles.returnLink}>← Back to Homepage</Text>
             </Pressable>
             <Text style={styles.disclaimer} maxFontSizeMultiplier={1.25}>
               Kindred summarizes trusted listings for quick local discovery. This

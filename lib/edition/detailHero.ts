@@ -40,6 +40,40 @@ export function detailTint(accent: string): string {
   return `${accent}${DETAIL_TINT_ALPHA}`;
 }
 
+const STREET_SUFFIX =
+  "Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl|Terrace|Ter|Highway|Hwy|Parkway|Pkwy|Circle|Cir|Square|Sq|Trail|Trl|Route|Rte";
+
+const STREET_ADDRESS_RE = new RegExp(
+  "(?:\\b(?:located|situated)\\s+)?(?:\\b(?:at|on)\\s+|\\baddress:?\\s*)?" +
+    "\\d{1,6}\\s+(?:[A-Za-z0-9.'-]+\\s+){0,4}" +
+    "(?:" +
+    STREET_SUFFIX +
+    ")\\b\\.?" +
+    "(?:\\s*,?\\s*(?:Suite|Ste|Unit|Apt|#)\\s*[\\w-]+)?" +
+    "(?:\\s*,?\\s*\\d{5}(?:-\\d{4})?)?",
+  "gi"
+);
+
+/**
+ * Remove full street addresses from descriptive body copy. The "Open in Google
+ * Maps" button already handles navigation, so the text should never carry a
+ * street address. City names are deliberately preserved — they add useful
+ * context. Best-effort and non-destructive: it strips only the street portion
+ * (number + street + optional suite/zip) and tidies the punctuation left behind.
+ */
+export function stripStreetAddresses(text: string | null | undefined): string {
+  if (!text) return "";
+  return text
+    .replace(STREET_ADDRESS_RE, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:])/g, "$1")
+    .replace(/,\s*,/g, ",")
+    .replace(/\(\s*\)/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,;:.\-]+/, "")
+    .trim();
+}
+
 /**
  * Trim a source summary to a quick overview — whole sentences only, ~60 words
  * max, up to four sentences. This shortens for readability without inventing,
@@ -107,7 +141,7 @@ export function toKnownForBlurb(
   maxWords = 50
 ): string | null {
   if (!text) return null;
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = stripStreetAddresses(text).replace(/\s+/g, " ").trim();
   if (!clean) return null;
 
   const sentences =
@@ -157,7 +191,7 @@ export function toAboutParagraphs(
   const out: string[] = [];
   for (const paragraph of raw) {
     if (out.length >= maxParagraphs) break;
-    const trimmed = toShortOverview(paragraph, maxWordsEach);
+    const trimmed = toShortOverview(stripStreetAddresses(paragraph), maxWordsEach);
     if (!trimmed) continue;
     const norm = normalizeForCompare(trimmed);
     if (norm.length < 12) continue;

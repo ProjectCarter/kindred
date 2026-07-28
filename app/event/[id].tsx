@@ -10,10 +10,10 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { getStashedEvent } from "../../lib/edition/eventStore";
+import { buildEventHighlights } from "../../lib/edition/eventHighlights";
+import { ShareIconButton } from "../../components/ShareIconButton";
 import {
   resolveListingActionsForEvent,
   resolveListingSecondaryButton,
@@ -112,6 +112,11 @@ export default function EventDetailScreen() {
   const overviewKnownFor = event
     ? toKnownForBlurb(event.banditNote?.trim() ?? null)
     : null;
+  // "Why you'll love it" highlights — 2–4 short, benefit-first lines derived
+  // ONLY from verified structured signals (provider badges + inferred category).
+  // Never invented, and never the venue, address, or date. Falls back to the
+  // editorial "why go" blurb when there aren't enough verified signals.
+  const overviewHighlights = event ? buildEventHighlights(event) : [];
   // ABOUT — one or two concise editorial paragraphs (Editorial Constitution V2),
   // from Kindred's own editorial body. Deduped against the "Why you'll love it"
   // line so the card never repeats itself.
@@ -164,28 +169,7 @@ export default function EventDetailScreen() {
 
           {/* Like / Share — same row and placement as every detail page. */}
           <View style={styles.iconRow}>
-            <Pressable
-              onPress={shareEvent}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Share"
-              style={({ pressed }) => [
-                styles.iconButton,
-                pressed && { opacity: press.opacity },
-              ]}
-            >
-              <SymbolView
-                name="square.and.arrow.up"
-                size={19}
-                weight="regular"
-                tintColor={paper.inkMuted}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                fallback={
-                  <Ionicons name="share-outline" size={19} color={paper.inkMuted} />
-                }
-              />
-            </Pressable>
+            <ShareIconButton onPress={shareEvent} style={styles.iconButton} />
           </View>
 
           {/* Google Maps + section action — standardized stacked buttons. */}
@@ -226,7 +210,14 @@ export default function EventDetailScreen() {
             title={overviewTitle}
             meta={whenLine}
             body={overviewParagraphs.length ? overviewParagraphs : undefined}
-            knownFor={overviewKnownFor ?? undefined}
+            highlights={
+              overviewHighlights.length >= 2 ? overviewHighlights : undefined
+            }
+            knownFor={
+              overviewHighlights.length >= 2
+                ? undefined
+                : overviewKnownFor ?? undefined
+            }
             tint={detailTint(DETAIL_HERO_ACCENTS.event)}
             style={styles.aboutCard}
           />
@@ -245,10 +236,10 @@ export default function EventDetailScreen() {
               onPress={handleBack}
               hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel="Return to Today’s Paper"
+              accessibilityLabel="Back to Homepage"
               style={({ pressed }) => [pressed && { opacity: press.opacity }]}
             >
-              <Text style={styles.returnLink}>← Return to Today’s Paper</Text>
+              <Text style={styles.returnLink}>← Back to Homepage</Text>
             </Pressable>
             <Text style={styles.disclaimer} maxFontSizeMultiplier={1.25}>
               Kindred summarizes trusted listings for quick local discovery. This

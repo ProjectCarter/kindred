@@ -11,8 +11,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
 import type { MorningHeroExperience } from "../lib/edition/heroArtwork/types";
 import { heroFrameHeight } from "../lib/edition/heroArtwork/imageSpec";
 import { formatArtworkCreditBlock } from "../lib/edition/heroArtwork/credits";
@@ -21,6 +19,7 @@ import { resolveMasterpieceDisplayTitle } from "../lib/edition/heroArtwork/displ
 import { resolveArtworkYear } from "../lib/edition/heroArtwork/resolveYear";
 import { resolveMasterpieceDetail } from "../lib/edition/heroArtwork/detail";
 import { MasterpieceFrame } from "./MasterpieceFrame";
+import { ShareIconButton } from "./ShareIconButton";
 import { kindredGold, masterpiece, paper, press } from "../lib/edition/newspaperTheme";
 import { shareContent } from "../lib/share/shareContent";
 import { articleBackRowInsets } from "../lib/navigation/articleBackLayout";
@@ -222,32 +221,11 @@ export function MasterpieceReader({
             <Text style={styles.kicker} maxFontSizeMultiplier={1.1}>
               🎨 TODAY'S MASTERPIECE
             </Text>
-            <Pressable
+            <ShareIconButton
               onPress={() => void handleShare()}
-              hitSlop={10}
-              accessibilityRole="button"
               accessibilityLabel="Share this masterpiece"
-              style={({ pressed }) => [
-                styles.shareButton,
-                pressed && { opacity: press.opacity },
-              ]}
-            >
-              <SymbolView
-                name="square.and.arrow.up"
-                size={20}
-                weight="regular"
-                tintColor={kindredGold.primary}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                fallback={
-                  <Ionicons
-                    name="share-outline"
-                    size={20}
-                    color={kindredGold.primary}
-                  />
-                }
-              />
-            </Pressable>
+              style={styles.shareButton}
+            />
           </View>
 
           <Text style={styles.title} maxFontSizeMultiplier={1.2}>
@@ -301,9 +279,9 @@ export function MasterpieceReader({
               pressed && { opacity: press.opacity },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Return to today's paper"
+            accessibilityLabel="Back to Homepage"
           >
-            <Text style={styles.returnText}>Return to today's paper</Text>
+            <Text style={styles.returnText}>← Back to Homepage</Text>
           </Pressable>
         </View>
       </ScrollView>

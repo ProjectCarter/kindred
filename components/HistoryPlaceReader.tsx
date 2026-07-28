@@ -12,8 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
+import { ShareIconButton } from "./ShareIconButton";
 import type { KindredArticle } from "../lib/edition/article";
 import type { HistoryPlaceSnapshot } from "../lib/edition/historyAroundTown/types";
 import {
@@ -195,28 +194,10 @@ export function HistoryPlaceReader({
 
           {/* Share — the standard interaction row used on every detail page. */}
           <View style={styles.iconRow}>
-            <Pressable
+            <ShareIconButton
               onPress={() => void handleShare()}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Share"
-              style={({ pressed }) => [
-                styles.iconButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <SymbolView
-                name="square.and.arrow.up"
-                size={19}
-                weight="regular"
-                tintColor={paper.inkMuted}
-                accessibilityElementsHidden
-                importantForAccessibility="no"
-                fallback={
-                  <Ionicons name="share-outline" size={19} color={paper.inkMuted} />
-                }
-              />
-            </Pressable>
+              style={styles.iconButton}
+            />
           </View>
 
           {/* Google Maps + Learn More — the standardized outlined detail buttons. */}

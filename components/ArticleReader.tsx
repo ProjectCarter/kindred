@@ -18,8 +18,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SymbolView } from "expo-symbols";
-import { Ionicons } from "@expo/vector-icons";
+import { ShareIconButton } from "./ShareIconButton";
 import type { KindredArticle, ArticleFigure } from "../lib/edition/article";
 import {
   formatArticlePublishedAt,
@@ -676,32 +675,10 @@ export function ArticleReader({
           <View style={[styles.column, { width: readingWidth }]}>
             {/* Share — first interaction under the hero */}
             <View style={styles.heroActionsRow}>
-              <Pressable
+              <ShareIconButton
                 onPress={() => void handleShare()}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel="Share"
-                style={({ pressed }) => [
-                  styles.heroActionButton,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <SymbolView
-                  name="square.and.arrow.up"
-                  size={19}
-                  weight="regular"
-                  tintColor={paper.inkMuted}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no"
-                  fallback={
-                    <Ionicons
-                      name="share-outline"
-                      size={19}
-                      color={paper.inkMuted}
-                    />
-                  }
-                />
-              </Pressable>
+                style={styles.heroActionButton}
+              />
             </View>
 
             {/* Standardized detail actions — Google Maps then one section button,
