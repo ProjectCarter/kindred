@@ -19,9 +19,13 @@ export function formatDealCount(count: number): string {
   return String(n);
 }
 
-/** Full "See all N deals" label with correct singular/plural + bucketing. */
+/**
+ * Full "See all N offers" label with correct singular/plural + bucketing.
+ * (Reader-facing wording says "offers"; the internal function name keeps the
+ * stable "deals" identifier.)
+ */
 export function dealsSeeAllLabel(count: number): string {
   const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
-  if (n >= 100) return "See all 100+ deals";
-  return `See all ${n} ${n === 1 ? "deal" : "deals"}`;
+  if (n >= 100) return "See all 100+ offers";
+  return `See all ${n} ${n === 1 ? "offer" : "offers"}`;
 }

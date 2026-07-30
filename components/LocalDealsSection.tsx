@@ -48,7 +48,7 @@ export function LocalDealsSection({ onOpenDeal, onSeeAll, regionKey }: Props) {
 
   return (
     <EditorialCardGrid
-      kicker="💰 Deals"
+      kicker="💰 Offers"
       compact
       accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
       cards={cards}

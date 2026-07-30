@@ -24,9 +24,9 @@ test("formatDealCount buckets at 100", () => {
 });
 
 test("dealsSeeAllLabel pluralizes and buckets", () => {
-  assert.equal(dealsSeeAllLabel(1), "See all 1 deal");
-  assert.equal(dealsSeeAllLabel(2), "See all 2 deals");
-  assert.equal(dealsSeeAllLabel(99), "See all 99 deals");
-  assert.equal(dealsSeeAllLabel(100), "See all 100+ deals");
-  assert.equal(dealsSeeAllLabel(2184), "See all 100+ deals");
+  assert.equal(dealsSeeAllLabel(1), "See all 1 offer");
+  assert.equal(dealsSeeAllLabel(2), "See all 2 offers");
+  assert.equal(dealsSeeAllLabel(99), "See all 99 offers");
+  assert.equal(dealsSeeAllLabel(100), "See all 100+ offers");
+  assert.equal(dealsSeeAllLabel(2184), "See all 100+ offers");
 });

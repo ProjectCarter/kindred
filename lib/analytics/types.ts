@@ -9,6 +9,7 @@ export const ANALYTICS_EVENT_NAMES = [
   "external_link_opened",
   "maps_opened",
   "ticket_link_opened",
+  "offer_redeemed",
   "article_shared",
   "cache_cleared",
   "location_changed",

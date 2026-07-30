@@ -19,6 +19,7 @@ import type { KindredArticle } from "../lib/edition/article";
 import type { BanditsPick as BanditsPickData } from "../lib/edition/bandit";
 import { isBanditsPicksEnabled } from "../lib/edition/banditsPicksFeature";
 import { isNewsSectionsEnabled } from "../lib/edition/newsSectionsFeature";
+import { isOffersEnabled } from "../lib/edition/offersFeature";
 import {
   isActivitiesEnabled,
   isEventsEnabled,
@@ -1140,7 +1141,7 @@ function EditionReaderInner({
         </FolioReveal>
       ) : null}
 
-      {!isNewsSectionsEnabled() ? (
+      {isOffersEnabled() ? (
         <FolioReveal index={folioCursor++}>
           <LocalDealsSection onOpenDeal={onOpenDeal} onSeeAll={onSeeAllDeals} />
         </FolioReveal>

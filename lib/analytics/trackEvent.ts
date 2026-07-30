@@ -7,7 +7,11 @@ import {
   getAnonymousUserId,
   getAppVersion,
 } from "./identity";
-import { sanitizeEventProperties, sanitizeForDevLog } from "./sanitize";
+import {
+  extractDestinationDomain,
+  sanitizeEventProperties,
+  sanitizeForDevLog,
+} from "./sanitize";
 import type { AnalyticsEventName, AnalyticsEventProperties } from "./types";
 
 type TrackOptions = {
@@ -176,4 +180,25 @@ export function trackGenerationError(
 
 export function trackAppOpen(): void {
   trackEvent("app_open");
+}
+
+/**
+ * An affiliate offer was opened via "Redeem Offer". Reusable for every offer /
+ * affiliate network — only the destination hostname is stored, never the
+ * affiliate id, path, or query string (see `extractDestinationDomain`).
+ */
+export function trackOfferRedeemed(input: {
+  contentId: string;
+  contentTitle?: string | null;
+  url: string;
+  source?: string | null;
+  sectionType?: string | null;
+}): void {
+  trackEvent("offer_redeemed", {
+    section_type: input.sectionType ?? "local_deals",
+    content_id: input.contentId,
+    content_title: input.contentTitle ?? null,
+    destination_domain: extractDestinationDomain(input.url),
+    metadata: input.source ? { source: input.source } : {},
+  });
 }

@@ -47,7 +47,7 @@ export default function DealsScreen() {
 
   const pullDownNavScreen = usePullDownNavScreen({
     onBack: handleBack,
-    title: "Deals",
+    title: "Offers",
     backAccessibilityLabel: "Back to Homepage",
   });
 
@@ -86,7 +86,7 @@ export default function DealsScreen() {
 
   const countLabel =
     status === "ready" && totalCount > 0
-      ? `${formatDealCount(totalCount)} ${totalCount === 1 ? "deal" : "deals"} near you`
+      ? `${formatDealCount(totalCount)} ${totalCount === 1 ? "offer" : "offers"} near you`
       : null;
 
   return (
@@ -102,7 +102,7 @@ export default function DealsScreen() {
         </View>
 
         <Text style={styles.kicker}>Save while you explore</Text>
-        <Text style={styles.title}>Deals</Text>
+        <Text style={styles.title}>Offers</Text>
         <Text style={styles.subtitle}>
           A handful of local ways to save — on the experiences, tables, and shops
           worth leaving the house for.
@@ -112,7 +112,7 @@ export default function DealsScreen() {
         {status === "loading" ? (
           <View style={styles.stateBlock}>
             <ActivityIndicator color={paper.terracotta} />
-            <Text style={styles.stateText}>Gathering today’s deals…</Text>
+            <Text style={styles.stateText}>Gathering today’s offers…</Text>
           </View>
         ) : null}
 
@@ -121,18 +121,18 @@ export default function DealsScreen() {
             <BanditCharacter
               pose="standing-no-newspaper"
               size={96}
-              accessibilityLabel="Bandit, unable to fetch deals right now"
+              accessibilityLabel="Bandit, unable to fetch offers right now"
             />
-            <Text style={styles.stateHeadline}>Deals took the morning off</Text>
+            <Text style={styles.stateHeadline}>Offers took the morning off</Text>
             <Text style={styles.stateText}>
-              We couldn’t load Deals just now. Please check back a little later.
+              We couldn’t load Offers just now. Please check back a little later.
             </Text>
           </View>
         ) : null}
 
         {status === "ready" || status === "empty" ? (
           <EditorialCardGrid
-            kicker="💰 Deals"
+            kicker="💰 Offers"
             compact
             accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
             cards={cards}

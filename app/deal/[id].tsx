@@ -29,6 +29,7 @@ import {
   type LocalDeal,
 } from "../../lib/deals/localDeals";
 import { fetchDealById } from "../../lib/deals/dealsRepository";
+import { canRedeemOffer, redeemOffer } from "../../lib/deals/redeemOffer";
 import { GOOGLE_MAPS_ACTION_LABEL } from "../../lib/edition/googleMaps";
 import { detailTint, toAboutParagraphs } from "../../lib/edition/detailHero";
 import { paper, press } from "../../lib/edition/newspaperTheme";
@@ -79,7 +80,7 @@ export default function DealDetailScreen() {
     onBack: handleBack,
     backLabel: back,
     itemTitle: deal?.title ?? null,
-    fallbackTitle: "Deals",
+    fallbackTitle: "Offers",
     backAccessibilityLabel: back.replace(/^←\s*/, "Back to "),
   });
 
@@ -124,7 +125,7 @@ export default function DealDetailScreen() {
         >
           <Text style={styles.back}>{back}</Text>
         </Pressable>
-        <Text style={styles.missing}>This deal is no longer available.</Text>
+        <Text style={styles.missing}>This offer is no longer available.</Text>
       </SafeAreaView>
     );
   }
@@ -133,6 +134,8 @@ export default function DealDetailScreen() {
   // Google Maps only makes sense for a physical local business. Online and
   // nationwide offers have no single location, so the Maps action is hidden.
   const showMaps = deal.scope === "local" && Boolean(deal.city.trim());
+  // Redeem is shown only when the offer carries a safe, openable affiliate URL.
+  const canRedeem = canRedeemOffer(deal);
   // Quick fact line — the offer and when it ends, so the warm "Known for" copy
   // can stay purely about why the place is worth a visit.
   const overviewMeta =
@@ -158,19 +161,18 @@ export default function DealDetailScreen() {
     );
   }
 
-  function redeem() {
+  async function redeem() {
     if (!deal) return;
-    // Affiliate redirect happens only here, on explicit intent, and opens only
-    // the stored redeem_url — never a fallback website.
-    const target = deal.redeemUrl?.trim() || "";
-    if (target) {
-      void Linking.openURL(target).catch(() => {});
-      return;
+    // Affiliate redirect happens only here, on explicit intent. The reusable
+    // helper opens the EXACT stored redeem URL (tracking preserved) in the
+    // browser; it fails soft if the link can't be opened.
+    const opened = await redeemOffer(deal);
+    if (!opened) {
+      Alert.alert(
+        "Offer unavailable",
+        "This offer can’t be opened right now. Please try again later."
+      );
     }
-    Alert.alert(
-      "Redeem in the app",
-      "Deal redemption opens when this offer goes live. This is a preview of how it will work."
-    );
   }
 
   return (
@@ -205,28 +207,35 @@ export default function DealDetailScreen() {
             <ShareIconButton onPress={shareDeal} style={styles.iconButton} />
           </View>
 
-          {/* Google Maps (local only) + Redeem — standardized stacked buttons. */}
-          <DetailActionStack style={styles.actions}>
-            {showMaps ? (
-              <DetailActionButton
-                label={GOOGLE_MAPS_ACTION_LABEL}
-                variant="secondary"
-                accessibilityRole="link"
-                accessibilityLabel={`Open ${deal.merchant} in Google Maps`}
-                onPress={openMaps}
-              />
-            ) : null}
-            <DetailActionButton
-              label="Redeem Deal"
-              variant="primary"
-              accessibilityLabel={`Redeem deal at ${deal.merchant}`}
-              onPress={redeem}
-            />
-          </DetailActionStack>
+          {/* Google Maps (local only) + Redeem — standardized stacked buttons.
+              The Redeem button appears only when the offer has a valid
+              affiliate URL; the whole stack hides if neither action applies. */}
+          {showMaps || canRedeem ? (
+            <DetailActionStack style={styles.actions}>
+              {showMaps ? (
+                <DetailActionButton
+                  label={GOOGLE_MAPS_ACTION_LABEL}
+                  variant="secondary"
+                  accessibilityRole="link"
+                  accessibilityLabel={`Open ${deal.merchant} in Google Maps`}
+                  onPress={openMaps}
+                />
+              ) : null}
+              {canRedeem ? (
+                <DetailActionButton
+                  label="Redeem Offer"
+                  variant="primary"
+                  accessibilityRole="link"
+                  accessibilityLabel={`Redeem offer at ${deal.merchant}`}
+                  onPress={redeem}
+                />
+              ) : null}
+            </DetailActionStack>
+          ) : null}
 
           {/* Quick Overview — everything about the deal in one card. */}
           <DetailAboutCard
-            label="About this deal"
+            label="About this offer"
             title={overviewTitle}
             meta={overviewMeta ?? undefined}
             body={overviewParagraphs.length ? overviewParagraphs : undefined}

@@ -12,6 +12,7 @@ export {
   trackCacheCleared,
   trackLocationChanged,
   trackGenerationError,
+  trackOfferRedeemed,
 } from "./trackEvent";
 export {
   beginEditionLoadTracking,
