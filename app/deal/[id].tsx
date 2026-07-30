@@ -29,6 +29,7 @@ import {
   type LocalDeal,
 } from "../../lib/deals/localDeals";
 import { fetchDealById } from "../../lib/deals/dealsRepository";
+import { classifyOffer } from "../../lib/deals/offerClassification";
 import { canRedeemOffer, redeemOffer } from "../../lib/deals/redeemOffer";
 import { GOOGLE_MAPS_ACTION_LABEL } from "../../lib/edition/googleMaps";
 import { detailTint, toAboutParagraphs } from "../../lib/edition/detailHero";
@@ -131,9 +132,14 @@ export default function DealDetailScreen() {
   }
 
   const category = dealCategory(deal.category);
-  // Google Maps only makes sense for a physical local business. Online and
-  // nationwide offers have no single location, so the Maps action is hidden.
-  const showMaps = deal.scope === "local" && Boolean(deal.city.trim());
+  // The classification engine — not this component — decides the offer's scope.
+  // Google Maps and the city line only make sense for a physical Local offer;
+  // Travel and Online offers have no single visitable address, so both are
+  // hidden (no fabricated location).
+  const classification = classifyOffer(deal);
+  const isLocalOffer =
+    classification.ok && classification.classification.scope === "local";
+  const showMaps = isLocalOffer && Boolean(deal.city.trim());
   // Redeem is shown only when the offer carries a safe, openable affiliate URL.
   const canRedeem = canRedeemOffer(deal);
   // Quick fact line — the offer and when it ends, so the warm "Known for" copy
@@ -143,9 +149,8 @@ export default function DealDetailScreen() {
       .filter(Boolean)
       .join(" · ") || null;
   const cityShort = deal.city.split(",")[0].trim();
-  const overviewTitle = cityShort
-    ? `${deal.merchant} • ${cityShort}`
-    : deal.merchant;
+  const overviewTitle =
+    isLocalOffer && cityShort ? `${deal.merchant} • ${cityShort}` : deal.merchant;
 
   function openMaps() {
     if (!deal) return;

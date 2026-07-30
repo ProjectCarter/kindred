@@ -1,15 +1,13 @@
 import { useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   EditorialCardGrid,
   type EditorialGridCard,
@@ -18,7 +16,8 @@ import { KindredDetailBackButton } from "../components/KindredDetailBackButton";
 import { PullDownNavHeader } from "../components/PullDownNavHeader";
 import { BanditCharacter } from "../components/BanditCharacter";
 import { usePullDownNavScreen } from "../lib/navigation/usePullDownNavScreen";
-import { useLocalDeals } from "../lib/deals/useLocalDeals";
+import { useOfferSections } from "../lib/deals/useLocalDeals";
+import { scopeSectionDeals } from "../lib/deals/offerClassification";
 import { formatDealCount } from "../lib/deals/dealCounts";
 import {
   dealCardSubtitle,
@@ -27,19 +26,20 @@ import {
 } from "../lib/deals/localDeals";
 import { paper, type } from "../lib/edition/newspaperTheme";
 
-/** Trigger load-more this many px before the end of the list. */
-const LOAD_MORE_THRESHOLD = 480;
-
 /**
- * Deals — full list. A continuation of the homepage: the same stacked compact
- * card layout (EditorialCardGrid `compact`), carrying every deal rather than the
- * front-page preview. Pages in 20–30 at a time and loads more while scrolling; no
- * listing photography — imagery lives on the detail page, matching every desk.
+ * Offers — full list. A continuation of the homepage, organized into the same
+ * three layers the classification engine returns: Local, then Travel, then
+ * Online. Within each scope, offers are grouped by subcategory (only non-empty
+ * groups render). All scope/subcategory decisions come from the engine — this
+ * screen only maps sections to the shared compact card grid. No listing
+ * photography; imagery lives on the detail page, matching every desk.
  */
 export default function DealsScreen() {
   const router = useRouter();
-  const { status, deals, hasMore, loadingMore, totalCount, loadMore } =
-    useLocalDeals();
+  const { region } = useLocalSearchParams<{ region?: string }>();
+  const regionKey = typeof region === "string" ? region : null;
+
+  const { status, sections, totalCount } = useOfferSections(regionKey);
 
   function handleBack() {
     router.back();
@@ -51,43 +51,35 @@ export default function DealsScreen() {
     backAccessibilityLabel: "Back to Homepage",
   });
 
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      pullDownNavScreen.pullDownNav.onScroll(event);
-      const { layoutMeasurement, contentOffset, contentSize } =
-        event.nativeEvent;
-      const distanceToEnd =
-        contentSize.height - (contentOffset.y + layoutMeasurement.height);
-      if (distanceToEnd <= LOAD_MORE_THRESHOLD) loadMore();
+  const openDeal = useCallback(
+    (deal: LocalDeal) => {
+      router.push(`/deal/${encodeURIComponent(deal.id)}`);
     },
-    [pullDownNavScreen.pullDownNav, loadMore]
+    [router]
   );
 
   const byId = useMemo(() => {
     const map = new Map<string, LocalDeal>();
-    for (const deal of deals) map.set(deal.id, deal);
+    for (const section of sections) {
+      for (const deal of scopeSectionDeals(section)) map.set(deal.id, deal);
+    }
     return map;
-  }, [deals]);
+  }, [sections]);
 
-  const cards = useMemo<EditorialGridCard[]>(
-    () =>
-      deals.map((deal) => ({
-        id: deal.id,
-        categoryIcon: deal.emoji,
-        title: deal.title,
-        subtitle: dealCardSubtitle(deal),
-      })),
-    [deals]
+  const openCard = useCallback(
+    (card: EditorialGridCard) => {
+      const deal = byId.get(card.id);
+      if (deal) openDeal(deal);
+    },
+    [byId, openDeal]
   );
-
-  function openDeal(deal: LocalDeal) {
-    router.push(`/deal/${encodeURIComponent(deal.id)}`);
-  }
 
   const countLabel =
     status === "ready" && totalCount > 0
-      ? `${formatDealCount(totalCount)} ${totalCount === 1 ? "offer" : "offers"} near you`
+      ? `${formatDealCount(totalCount)} ${totalCount === 1 ? "offer" : "offers"} for you`
       : null;
+
+  const ready = status === "ready" || status === "empty";
 
   return (
     <SafeAreaView style={styles.container}>
@@ -95,7 +87,6 @@ export default function DealsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         {...pullDownNavScreen.scrollProps}
-        onScroll={handleScroll}
       >
         <View style={styles.backRow}>
           <KindredDetailBackButton onPress={handleBack} />
@@ -104,8 +95,8 @@ export default function DealsScreen() {
         <Text style={styles.kicker}>Save while you explore</Text>
         <Text style={styles.title}>Offers</Text>
         <Text style={styles.subtitle}>
-          A handful of local ways to save — on the experiences, tables, and shops
-          worth leaving the house for.
+          Local ways to save, destinations worth traveling for, and deals you can
+          redeem from anywhere.
         </Text>
         {countLabel ? <Text style={styles.count}>{countLabel}</Text> : null}
 
@@ -130,28 +121,70 @@ export default function DealsScreen() {
           </View>
         ) : null}
 
-        {status === "ready" || status === "empty" ? (
-          <EditorialCardGrid
-            kicker="💰 Offers"
-            compact
-            accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
-            cards={cards}
-            initialRenderCount={Math.max(cards.length, 1)}
-            analyticsSectionType="local_deals"
-            emptyCopy="Fresh local savings are on the way — check back tomorrow morning."
-            showBanditWhenEmpty
-            onOpenCard={(card) => {
-              const deal = byId.get(card.id);
-              if (deal) openDeal(deal);
-            }}
-          />
-        ) : null}
-
-        {loadingMore ? (
-          <View style={styles.loadMore}>
-            <ActivityIndicator color={paper.terracotta} />
+        {ready && totalCount === 0 ? (
+          <View style={styles.stateBlock}>
+            <BanditCharacter
+              pose="standing-no-newspaper"
+              size={96}
+              accessibilityLabel="Bandit, waiting with no offers to deliver yet"
+            />
+            <Text style={styles.stateHeadline}>Nothing to redeem just yet</Text>
+            <Text style={styles.stateText}>
+              Fresh savings are on the way — check back tomorrow morning.
+            </Text>
           </View>
         ) : null}
+
+        {ready && totalCount > 0
+          ? sections.map((section) => {
+              if (section.total === 0) {
+                // Travel / Online with nothing today simply don't render. Local
+                // gets a tasteful "coming soon" so readers know it exists.
+                if (section.scope !== "local") return null;
+                return (
+                  <View key={section.scope} style={styles.scopeBlock}>
+                    <Text style={styles.scopeHeading}>
+                      {section.emoji} {section.label}
+                    </Text>
+                    <Text style={styles.localEmpty}>
+                      Local offers are coming soon for your area.
+                    </Text>
+                  </View>
+                );
+              }
+
+              return (
+                <View key={section.scope} style={styles.scopeBlock}>
+                  <Text style={styles.scopeHeading}>
+                    {section.emoji} {section.label}
+                  </Text>
+                  <Text style={styles.scopeTagline}>{section.tagline}</Text>
+
+                  {section.groups.map((group) => {
+                    const cards: EditorialGridCard[] = group.deals.map(
+                      (deal) => ({
+                        id: deal.id,
+                        categoryIcon: deal.emoji,
+                        title: deal.title,
+                        subtitle: dealCardSubtitle(deal),
+                      })
+                    );
+                    return (
+                      <EditorialCardGrid
+                        key={group.subcategory.id}
+                        kicker={`${group.subcategory.emoji} ${group.subcategory.label}`}
+                        compact
+                        accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
+                        cards={cards}
+                        initialRenderCount={Math.max(cards.length, 1)}
+                        onOpenCard={openCard}
+                      />
+                    );
+                  })}
+                </View>
+              );
+            })
+          : null}
       </ScrollView>
       <PullDownNavHeader {...pullDownNavScreen.headerProps} />
     </SafeAreaView>
@@ -199,6 +232,34 @@ const styles = StyleSheet.create({
     color: paper.inkMuted,
     marginBottom: 28,
   },
+  scopeBlock: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  scopeHeading: {
+    ...type.display,
+    fontSize: 24,
+    lineHeight: 30,
+    color: paper.ink,
+    marginBottom: 4,
+  },
+  scopeTagline: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 22,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginBottom: 18,
+    maxWidth: 420,
+  },
+  localEmpty: {
+    fontFamily: "Georgia",
+    fontSize: 15,
+    lineHeight: 23,
+    fontStyle: "italic",
+    color: paper.inkMuted,
+    marginBottom: 8,
+  },
   stateBlock: {
     alignItems: "center",
     paddingVertical: 48,
@@ -221,9 +282,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     maxWidth: 320,
-  },
-  loadMore: {
-    paddingVertical: 24,
-    alignItems: "center",
   },
 });

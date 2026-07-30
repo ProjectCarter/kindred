@@ -62,8 +62,26 @@ export type LocalDeal = {
   description: string;
   /** Plain-language savings summary shown on the detail page. */
   savingsDetail: string;
-  /** Local / online / nationwide — from the published projection. */
+  /**
+   * Raw scope as stored in `deals_published` (local / online / nationwide).
+   * This is source data — the *presentation* scope (Local / Travel / Online)
+   * is decided entirely by the classification engine in `offerClassification.ts`,
+   * never by rendering components.
+   */
   scope?: DealScope;
+  /**
+   * Raw metro key from `deals_published.region_key` (e.g. "gilbert-az").
+   * Used only by the classification engine for local metro eligibility.
+   */
+  metroSlug?: string | null;
+  /** Raw state from the projection (e.g. "AZ"). Classification input only. */
+  state?: string | null;
+  /**
+   * Raw category string exactly as stored in `deals_published.category`, before
+   * it is coerced into a `DealCategoryId`. Preserved so the classification engine
+   * can read the merchant's original category without any UI-level assumptions.
+   */
+  sourceCategory?: string | null;
   /** Affiliate network or "Direct Merchant" — shown in the detail Source block. */
   source?: string | null;
   /** Affiliate / tracking URL followed only after tapping "Redeem Deal". */
@@ -260,6 +278,9 @@ export function mapPublishedDeal(row: PublishedDealRow): LocalDeal {
     description: row.description ?? "",
     savingsDetail: row.savings_detail?.trim() || "",
     scope: normalizeScope(row.scope),
+    metroSlug: row.region_key?.trim() || null,
+    state: row.state?.trim() || null,
+    sourceCategory: row.category?.trim() || null,
     source: row.source?.trim() || null,
     redeemUrl: row.redeem_url?.trim() || null,
     knownFor: row.known_for?.trim() || "",

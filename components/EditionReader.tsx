@@ -493,6 +493,15 @@ function EditionReaderInner({
     });
   }, [stableDiscovery, locationCity, locationState, locationRegion]);
 
+  // Reader's metro key for Offers — the classification engine uses this to decide
+  // which Local offers are eligible (Travel + Online are always nationwide).
+  const offersRegionKey = useMemo(() => {
+    const city = stableDiscovery?.location?.city ?? locationCity;
+    const state = stableDiscovery?.location?.state ?? locationState;
+    const region = stableDiscovery?.location?.region ?? locationRegion;
+    return city?.trim() ? metroKeyFromPlace({ city, state, region }) : null;
+  }, [stableDiscovery, locationCity, locationState, locationRegion]);
+
   const fullSectionAllocation = useMemo(
     () =>
       allocateDiscoverySections(stableDiscovery, stableDiscoveryItems, {
@@ -1143,7 +1152,11 @@ function EditionReaderInner({
 
       {isOffersEnabled() ? (
         <FolioReveal index={folioCursor++}>
-          <LocalDealsSection onOpenDeal={onOpenDeal} onSeeAll={onSeeAllDeals} />
+          <LocalDealsSection
+            onOpenDeal={onOpenDeal}
+            onSeeAll={onSeeAllDeals}
+            regionKey={offersRegionKey}
+          />
         </FolioReveal>
       ) : null}
 

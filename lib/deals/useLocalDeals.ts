@@ -1,143 +1,75 @@
 /**
- * Deals hooks — read the published catalog through the repository.
+ * Offers hook — reads the published catalog once, then hands it to the
+ * classification engine to produce the three-layer section model (Local /
+ * Travel / Online). Both the homepage desk and the See All screen use this same
+ * hook, so scope decisions and metro eligibility live entirely in
+ * `offerClassification.ts` — never in a component.
  *
- * `useLocalDeals` powers the See All screen: it loads the first page (20–30
- * deals) and appends more only as the reader scrolls. `useFeaturedDeals` powers
- * the homepage desk (up to 8). Both fail soft — an unconfigured backend or a read
- * error resolves to an empty catalog so the section simply hides.
+ * Fails soft: an unconfigured backend or a read error resolves to an empty
+ * catalog so the Offers section simply hides.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { LocalDeal } from "./localDeals";
+import { useEffect, useState } from "react";
+import { fetchPublishedOffers } from "./dealsRepository";
 import {
-  DEALS_FEATURED_LIMIT,
-  DEALS_PAGE_SIZE,
-  fetchDealsCount,
-  fetchDealsPage,
-  fetchFeaturedDeals,
-  type DealsQuery,
-} from "./dealsRepository";
+  buildOfferSections,
+  type OfferScopeSection,
+} from "./offerClassification";
 
-export type LocalDealsStatus = "loading" | "ready" | "empty" | "error";
+export type OfferSectionsStatus = "loading" | "ready" | "empty" | "error";
 
-export type LocalDealsState = {
-  status: LocalDealsStatus;
-  deals: LocalDeal[];
-  hasMore: boolean;
-  loadingMore: boolean;
-  /** Live deal count for the header label (0 / n / 100+ bucketed by caller). */
+export type OfferSectionsState = {
+  status: OfferSectionsStatus;
+  /** All three scopes, in order; each may have zero groups. */
+  sections: OfferScopeSection[];
+  /** Total eligible offers across every scope (for count labels). */
   totalCount: number;
-  loadMore: () => void;
 };
 
-const EMPTY_QUERY: DealsQuery = {};
+const EMPTY_SECTIONS: OfferScopeSection[] = [];
 
-/** See All Deals — paginated, load-more-on-scroll. */
-export function useLocalDeals(query: DealsQuery = EMPTY_QUERY): LocalDealsState {
-  const regionKey = query.regionKey ?? null;
-  const category = query.category ?? null;
+/**
+ * Build the Local / Travel / Online sections for the reader's metro.
+ *
+ * @param regionKey Reader's metro key (e.g. "gilbert-az"). When null/blank,
+ * Local offers are withheld (metro unknown) while Travel + Online still surface.
+ */
+export function useOfferSections(
+  regionKey?: string | null
+): OfferSectionsState {
+  const metro = regionKey?.trim() || null;
 
-  const [status, setStatus] = useState<LocalDealsStatus>("loading");
-  const [deals, setDeals] = useState<LocalDeal[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [totalCount, setTotalCount] = useState(0);
-
-  const offsetRef = useRef(0);
-  const loadingRef = useRef(false);
+  const [state, setState] = useState<OfferSectionsState>({
+    status: "loading",
+    sections: EMPTY_SECTIONS,
+    totalCount: 0,
+  });
 
   useEffect(() => {
     let cancelled = false;
-    const q: DealsQuery = { regionKey, category };
-    setStatus("loading");
-    setDeals([]);
-    setHasMore(false);
-    offsetRef.current = 0;
+    setState((prev) => ({ ...prev, status: "loading" }));
 
     (async () => {
-      const [page, count] = await Promise.all([
-        fetchDealsPage(q, 0, DEALS_PAGE_SIZE),
-        fetchDealsCount(q),
-      ]);
+      const { deals, error } = await fetchPublishedOffers();
       if (cancelled) return;
-      setTotalCount(count);
-      if (page.error) {
-        setStatus("error");
+
+      if (error) {
+        setState({ status: "error", sections: EMPTY_SECTIONS, totalCount: 0 });
         return;
       }
-      setDeals(page.deals);
-      setHasMore(page.hasMore);
-      offsetRef.current = page.deals.length;
-      setStatus(page.deals.length > 0 ? "ready" : "empty");
+
+      const sections = buildOfferSections(deals, metro);
+      const totalCount = sections.reduce((sum, s) => sum + s.total, 0);
+      setState({
+        status: totalCount > 0 ? "ready" : "empty",
+        sections,
+        totalCount,
+      });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [regionKey, category]);
+  }, [metro]);
 
-  const loadMore = useCallback(() => {
-    if (loadingRef.current || !hasMore) return;
-    loadingRef.current = true;
-    setLoadingMore(true);
-    const q: DealsQuery = { regionKey, category };
-    const offset = offsetRef.current;
-
-    (async () => {
-      const page = await fetchDealsPage(q, offset, DEALS_PAGE_SIZE);
-      if (!page.error) {
-        setDeals((prev) => {
-          const seen = new Set(prev.map((d) => d.id));
-          const next = page.deals.filter((d) => !seen.has(d.id));
-          offsetRef.current = offset + page.deals.length;
-          return [...prev, ...next];
-        });
-        setHasMore(page.hasMore);
-      }
-      loadingRef.current = false;
-      setLoadingMore(false);
-    })();
-  }, [hasMore, regionKey, category]);
-
-  return { status, deals, hasMore, loadingMore, totalCount, loadMore };
-}
-
-export type FeaturedDealsState = {
-  loading: boolean;
-  deals: LocalDeal[];
-  totalCount: number;
-};
-
-/** Homepage Deals desk — up to 8 featured deals plus the total live count. */
-export function useFeaturedDeals(
-  query: DealsQuery = EMPTY_QUERY
-): FeaturedDealsState {
-  const regionKey = query.regionKey ?? null;
-  const category = query.category ?? null;
-
-  const [loading, setLoading] = useState(true);
-  const [deals, setDeals] = useState<LocalDeal[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    const q: DealsQuery = { regionKey, category };
-    setLoading(true);
-
-    (async () => {
-      const [featured, count] = await Promise.all([
-        fetchFeaturedDeals(q, DEALS_FEATURED_LIMIT),
-        fetchDealsCount(q),
-      ]);
-      if (cancelled) return;
-      setDeals(featured);
-      setTotalCount(count);
-      setLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [regionKey, category]);
-
-  return { loading, deals, totalCount };
+  return state;
 }

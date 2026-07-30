@@ -5,66 +5,85 @@ import {
   LOCAL_DEALS_HOMEPAGE_ACCENT,
   type LocalDeal,
 } from "../lib/deals/localDeals";
-import { useFeaturedDeals } from "../lib/deals/useLocalDeals";
+import { useOfferSections } from "../lib/deals/useLocalDeals";
+import { scopeSectionDeals } from "../lib/deals/offerClassification";
 import { dealsSeeAllLabel } from "../lib/deals/dealCounts";
-import { HOMEPAGE_INITIAL_RENDER_COUNT } from "../lib/edition/editorialPublishing";
+
+/** Compact homepage preview per scope — See All carries the rest. */
+const PREVIEW_PER_SCOPE = 4;
 
 type Props = {
   onOpenDeal?: (deal: LocalDeal) => void;
   onSeeAll?: () => void;
-  /** Reader's metro key — local deals for the metro plus nationwide/online. */
+  /** Reader's metro key — decides which Local offers are eligible. */
   regionKey?: string | null;
 };
 
 /**
- * Deals — homepage desk. Emoji-first, text-only compact rows on the cream page,
- * identical in rhythm to Local Events, Activities, and Food & Drinks (same
- * compact EditorialCardGrid, same spacing, own accent). Reads the published
- * catalog via the featured hook; hides entirely when there are zero deals. No
- * photography on the front page (permanent Kindred homepage law).
+ * Offers — homepage desk. Renders the three-layer model (Local / Travel /
+ * Online) the classification engine returns: one compact, emoji-first
+ * EditorialCardGrid per non-empty scope, in the same rhythm as every other
+ * homepage desk. This component contains NO classification logic — it only maps
+ * the engine's sections to cards and renders them. Empty scopes are hidden on
+ * the compact front page; when every scope is empty the whole desk renders
+ * nothing (no header, no empty state). No photography on the front page
+ * (permanent Kindred homepage law).
  */
 export function LocalDealsSection({ onOpenDeal, onSeeAll, regionKey }: Props) {
-  const { deals, totalCount } = useFeaturedDeals({ regionKey });
+  const { sections } = useOfferSections(regionKey);
 
   const byId = useMemo(() => {
     const map = new Map<string, LocalDeal>();
-    for (const deal of deals) map.set(deal.id, deal);
+    for (const section of sections) {
+      for (const deal of scopeSectionDeals(section)) map.set(deal.id, deal);
+    }
     return map;
-  }, [deals]);
+  }, [sections]);
 
-  const cards = useMemo<EditorialGridCard[]>(
-    () =>
-      deals.map((deal) => ({
-        id: deal.id,
-        categoryIcon: deal.emoji,
-        title: deal.title,
-        subtitle: dealCardSubtitle(deal),
-      })),
-    [deals]
+  const visibleScopes = useMemo(
+    () => sections.filter((section) => section.total > 0),
+    [sections]
   );
 
-  // 0 deals (or still loading) → render nothing: no header, no empty state.
-  if (!cards.length) return null;
+  // Every scope empty (or still loading) → render nothing.
+  if (visibleScopes.length === 0) return null;
+
+  const openCard = onOpenDeal
+    ? (card: EditorialGridCard) => {
+        const deal = byId.get(card.id);
+        if (deal) onOpenDeal(deal);
+      }
+    : undefined;
 
   return (
-    <EditorialCardGrid
-      kicker="💰 Offers"
-      compact
-      accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
-      cards={cards}
-      initialRenderCount={HOMEPAGE_INITIAL_RENDER_COUNT}
-      seeAllTotal={totalCount || cards.length}
-      onSeeAll={onSeeAll}
-      seeAllLabel={dealsSeeAllLabel}
-      analyticsSectionType="local_deals"
-      onOpenCard={
-        onOpenDeal
-          ? (card) => {
-              const deal = byId.get(card.id);
-              if (deal) onOpenDeal(deal);
-            }
-          : undefined
-      }
-    />
+    <>
+      {visibleScopes.map((section) => {
+        const cards: EditorialGridCard[] = scopeSectionDeals(
+          section,
+          PREVIEW_PER_SCOPE
+        ).map((deal) => ({
+          id: deal.id,
+          categoryIcon: deal.emoji,
+          title: deal.title,
+          subtitle: dealCardSubtitle(deal),
+        }));
+
+        return (
+          <EditorialCardGrid
+            key={section.scope}
+            kicker={`${section.emoji} ${section.label}`}
+            compact
+            accentColor={LOCAL_DEALS_HOMEPAGE_ACCENT}
+            cards={cards}
+            initialRenderCount={PREVIEW_PER_SCOPE}
+            seeAllTotal={section.total}
+            onSeeAll={onSeeAll}
+            seeAllLabel={dealsSeeAllLabel}
+            analyticsSectionType="local_deals"
+            onOpenCard={openCard}
+          />
+        );
+      })}
+    </>
   );
 }

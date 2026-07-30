@@ -4906,7 +4906,14 @@ export default function HomeScreen() {
               }}
               onSeeAllDeals={() => {
                 persistHomeScrollNow();
-                router.push("/deals");
+                const offersRegion = activeLocation?.place
+                  ? metroKeyFromKindredPlace(activeLocation.place)
+                  : null;
+                router.push(
+                  offersRegion
+                    ? `/deals?region=${encodeURIComponent(offersRegion)}`
+                    : "/deals"
+                );
               }}
               onOpenDeal={(deal) => {
                 persistHomeScrollNow();
